@@ -12,8 +12,18 @@ interface FontCheckScreenProps {
 }
 
 const items = [
-  { label: 'Yes — they look like icons', value: true },
-  { label: 'No — I see boxes, question marks, or nothing', value: false },
+  {
+    label: 'Yes, I already have one',
+    value: 'have',
+  },
+  {
+    label: 'No, install one for me',
+    value: 'install',
+  },
+  {
+    label: 'No, use text symbols only',
+    value: 'none',
+  },
 ];
 
 export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps) {
@@ -21,12 +31,27 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
     if (key.escape) onBack();
   });
 
+  function handleSelect(item: { value: string }) {
+    switch (item.value) {
+      case 'have':
+        onNext({ hasNerdFont: true, nerdFontToInstall: null });
+        break;
+      case 'install':
+        // app.tsx will route to font_select step
+        onNext({ hasNerdFont: true, nerdFontToInstall: '__select__' });
+        break;
+      case 'none':
+        onNext({ hasNerdFont: false, nerdFontToInstall: null });
+        break;
+    }
+  }
+
   return (
     <WizardLayout state={state}>
       <Box flexDirection="column" gap={1}>
         <Text bold>Nerd Font check</Text>
         <Text color="gray">
-          Nerd Fonts add icons to your prompt. Can you see these symbols clearly?
+          Nerd Fonts add icons to your prompt. Do any of these render as icons?
         </Text>
 
         <Box
@@ -40,27 +65,24 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
         >
           <Box flexDirection="row" gap={2}>
             <Text> </Text>
-            <Text>folder icon</Text>
+            <Text color="gray">folder icon</Text>
           </Box>
           <Box flexDirection="row" gap={2}>
             <Text> </Text>
-            <Text>git branch icon</Text>
+            <Text color="gray">git branch icon</Text>
           </Box>
           <Box flexDirection="row" gap={2}>
             <Text> </Text>
-            <Text>node.js icon</Text>
+            <Text color="gray">node.js icon</Text>
           </Box>
           <Box flexDirection="row" gap={2}>
             <Text> </Text>
-            <Text>python icon</Text>
+            <Text color="gray">python icon</Text>
           </Box>
         </Box>
 
         <Box marginTop={1}>
-          <SelectInput
-            items={items}
-            onSelect={(item) => onNext({ hasNerdFont: item.value as boolean })}
-          />
+          <SelectInput items={items} onSelect={handleSelect} />
         </Box>
       </Box>
 

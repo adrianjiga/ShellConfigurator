@@ -5,17 +5,19 @@ import { PromptPreview } from './PromptPreview.js';
 
 const STEP_LABELS: Record<WizardStep, string> = {
   welcome:        '1. Welcome',
-  fontcheck:      '2. Font Check',
-  preset:         '3. Preset',
-  segments_left:  '4. Left Prompt',
-  segments_right: '5. Right Prompt',
-  style:          '6. Style',
-  shells:         '7. Shell',
+  fontcheck:      '2. Font',
+  font_select:    '3. Font Pick',
+  preset:         '4. Preset',
+  segments_left:  '5. Left',
+  segments_right: '6. Right',
+  style:          '7. Style',
+  shells:         '8. Shell',
+  installing:     '9. Installing',
   done:           '  Done',
 };
 
 const STEP_ORDER: WizardStep[] = [
-  'welcome', 'fontcheck', 'preset', 'segments_left', 'segments_right', 'style', 'shells', 'done',
+  'welcome', 'fontcheck', 'font_select', 'preset', 'segments_left', 'segments_right', 'style', 'shells', 'installing', 'done',
 ];
 
 interface WizardLayoutProps {
