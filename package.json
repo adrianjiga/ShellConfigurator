@@ -1,0 +1,25 @@
+{
+  "name": "shell-configurator",
+  "version": "1.0.0",
+  "description": "Interactive terminal wizard for configuring Starship prompt",
+  "type": "module",
+  "bin": {
+    "shell-configurator": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.tsx",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "ink": "^5.1.0",
+    "ink-select-input": "^6.0.0",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.3.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
