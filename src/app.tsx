@@ -2,20 +2,24 @@ import React, { useState } from 'react';
 import { WizardState, WizardStep, DEFAULT_STATE } from './types.js';
 import { WelcomeScreen } from './screens/WelcomeScreen.js';
 import { FontCheckScreen } from './screens/FontCheckScreen.js';
+import { FontSelectScreen } from './screens/FontSelectScreen.js';
 import { PresetScreen } from './screens/PresetScreen.js';
 import { SegmentsScreen } from './screens/SegmentsScreen.js';
 import { StyleScreen } from './screens/StyleScreen.js';
 import { ShellScreen } from './screens/ShellScreen.js';
+import { InstallingScreen } from './screens/InstallingScreen.js';
 import { DoneScreen } from './screens/DoneScreen.js';
 
 const STEP_ORDER: WizardStep[] = [
   'welcome',
   'fontcheck',
+  'font_select',
   'preset',
   'segments_left',
   'segments_right',
   'style',
   'shells',
+  'installing',
   'done',
 ];
 
@@ -31,54 +35,53 @@ export function App() {
   }
 
   function goNext(update?: Partial<WizardState>) {
+    const merged = { ...state, ...update };
     const currentIndex = STEP_ORDER.indexOf(state.step);
-    const nextStep = STEP_ORDER[currentIndex + 1];
-    if (nextStep) {
-      setState((prev) => ({ ...prev, ...update, step: nextStep }));
+    let nextStep = STEP_ORDER[currentIndex + 1];
+
+    if (!nextStep) return;
+
+    // Skip font_select if the user doesn't want to install a font
+    // (sentinel '__select__' means "go to font_select")
+    if (nextStep === 'font_select' && merged.nerdFontToInstall !== '__select__') {
+      nextStep = STEP_ORDER[currentIndex + 2]!;
     }
+
+    advanceTo(nextStep, update);
   }
 
   function goBack() {
     const currentIndex = STEP_ORDER.indexOf(state.step);
-    const prevStep = STEP_ORDER[currentIndex - 1];
-    if (prevStep) {
-      setState((prev) => ({ ...prev, step: prevStep }));
+    let prevIndex = currentIndex - 1;
+
+    // Skip font_select when going back if we didn't come from it
+    if (STEP_ORDER[prevIndex] === 'font_select' && state.nerdFontToInstall !== '__select__') {
+      prevIndex -= 1;
     }
+
+    const prevStep = STEP_ORDER[prevIndex];
+    if (prevStep) setState((prev) => ({ ...prev, step: prevStep }));
   }
 
   switch (state.step) {
     case 'welcome':
-      return (
-        <WelcomeScreen
-          state={state}
-          onNext={(u) => goNext(u)}
-        />
-      );
+      return <WelcomeScreen state={state} onNext={goNext} />;
 
     case 'fontcheck':
-      return (
-        <FontCheckScreen
-          state={state}
-          onNext={(u) => goNext(u)}
-          onBack={goBack}
-        />
-      );
+      return <FontCheckScreen state={state} onNext={goNext} onBack={goBack} />;
+
+    case 'font_select':
+      return <FontSelectScreen state={state} onNext={goNext} onBack={goBack} />;
 
     case 'preset':
-      return (
-        <PresetScreen
-          state={state}
-          onNext={(u) => goNext(u)}
-          onBack={goBack}
-        />
-      );
+      return <PresetScreen state={state} onNext={goNext} onBack={goBack} />;
 
     case 'segments_left':
       return (
         <SegmentsScreen
           state={state}
           side="left"
-          onNext={(u) => goNext(u)}
+          onNext={goNext}
           onUpdate={updateState}
           onBack={goBack}
         />
@@ -89,29 +92,27 @@ export function App() {
         <SegmentsScreen
           state={state}
           side="right"
-          onNext={(u) => goNext(u)}
+          onNext={goNext}
           onUpdate={updateState}
           onBack={goBack}
         />
       );
 
     case 'style':
-      return (
-        <StyleScreen
-          state={state}
-          onNext={(u) => goNext(u)}
-          onBack={goBack}
-        />
-      );
+      return <StyleScreen state={state} onNext={goNext} onBack={goBack} />;
 
     case 'shells':
       return (
         <ShellScreen
           state={state}
-          onNext={(u) => goNext(u)}
+          onNext={goNext}
+          onUpdate={updateState}
           onBack={goBack}
         />
       );
+
+    case 'installing':
+      return <InstallingScreen state={state} onNext={() => advanceTo('done')} />;
 
     case 'done':
       return <DoneScreen state={state} />;
