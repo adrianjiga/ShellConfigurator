@@ -81,6 +81,9 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
       <Box flexDirection="column" gap={1}>
         <Text bold>Select your shell(s)</Text>
         <Text color="gray">Which shells should be configured to use Starship?</Text>
+        <Text color="gray">
+          Press <Text color="cyan">D</Text> on any selected shell to make it your login shell (runs <Text color="cyan">chsh</Text>). Optional.
+        </Text>
 
         <Box flexDirection="column" marginTop={1}>
           {SHELLS.map((shell, i) => {
@@ -100,7 +103,7 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
                   <Text color={isInstalled ? 'green' : 'yellow'}>
                     {isInstalled ? '[installed]' : '[will install]'}
                   </Text>
-                  {isDefault && <Text color="cyan">[default]</Text>}
+                  {isDefault && <Text color="cyan">[will set as login shell]</Text>}
                 </Box>
                 {isActive && shell.rcFile && (
                   <Box marginLeft={4}>
@@ -125,7 +128,7 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
       <NavHints hints={[
         { key: '↑↓', label: 'navigate' },
         { key: 'Space', label: 'toggle' },
-        { key: 'D', label: 'set as default' },
+        { key: 'D', label: 'set as login shell' },
         { key: 'Enter', label: selected.size > 0 ? 'confirm' : '(select a shell first)' },
         { key: 'Esc', label: 'back' },
       ]} />
