@@ -16,7 +16,7 @@ interface ShellScreenProps {
 export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProps) {
   const [cursor, setCursor] = useState(0);
   const [selected, setSelected] = useState<Set<ShellId>>(() => new Set(state.selectedShells));
-  const [installedShells, setInstalledShells] = useState<ShellId[]>(state.installedShells);
+  const [installedShells, setInstalledShells] = useState<ShellId[] | null>(null);
   const [defaultShell, setDefaultShell] = useState<ShellId | null>(state.setDefaultShell);
 
   useEffect(() => {
@@ -68,7 +68,7 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
     if (key.return && selected.size > 0) {
       onNext({
         selectedShells: Array.from(selected),
-        installedShells,
+        installedShells: installedShells ?? [],
         setDefaultShell: defaultShell,
       });
     }
@@ -88,7 +88,7 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
           {SHELLS.map((shell, i) => {
             const isActive = i === cursor;
             const isChecked = selected.has(shell.id);
-            const isInstalled = installedShells.includes(shell.id);
+            const isInstalled = installedShells?.includes(shell.id) ?? false;
             const isDefault = defaultShell === shell.id;
 
             return (
@@ -99,9 +99,11 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
                   <Text color={isActive ? 'white' : 'gray'} bold={isActive}>
                     {shell.label}
                   </Text>
-                  <Text color={isInstalled ? 'green' : 'yellow'}>
-                    {isInstalled ? '[installed]' : '[will install]'}
-                  </Text>
+                  {isChecked && (
+                    <Text color={isInstalled ? 'green' : 'yellow'}>
+                      {isInstalled ? '[installed]' : '[will install]'}
+                    </Text>
+                  )}
                   {isDefault && <Text color="cyan">[will set as login shell]</Text>}
                 </Box>
                 {isActive && shell.rcFile && (
