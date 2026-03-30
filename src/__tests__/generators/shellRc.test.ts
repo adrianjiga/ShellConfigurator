@@ -123,4 +123,16 @@ describe('applyShellConfig', () => {
 
     expect(fs.mkdirSync).toHaveBeenCalled();
   });
+
+  it('still applies config when starship init appears only in a comment', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () => '# starship init was removed\n# See https://starship.rs',
+    );
+
+    const result = applyShellConfig('zsh');
+
+    expect(result.applied).toBe(true);
+    expect(fs.appendFileSync).toHaveBeenCalled();
+  });
 });

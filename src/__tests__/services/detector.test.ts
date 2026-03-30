@@ -71,6 +71,15 @@ describe('detectPackageManager', () => {
     expect(detectPackageManager()).toBe('pacman');
   });
 
+  it('returns apt for single-quoted ubuntu ID in os-release', () => {
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error();
+    });
+    mockReadFileSync.mockImplementation(() => "ID='ubuntu'\nNAME='Ubuntu'");
+
+    expect(detectPackageManager()).toBe('apt');
+  });
+
   it('returns script as fallback when nothing is detected', () => {
     mockExecFileSync.mockImplementation(() => {
       throw new Error();
