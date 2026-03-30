@@ -42,10 +42,14 @@ describe('PRESETS', () => {
     const validIds = new Set([...MODULES.map((m) => m.id), 'character']);
     for (const preset of PRESETS) {
       for (const id of preset.leftModules ?? []) {
-        expect(validIds.has(id), `${preset.id} leftModules contains unknown module '${id}'`).toBe(true);
+        expect(validIds.has(id), `${preset.id} leftModules contains unknown module '${id}'`).toBe(
+          true
+        );
       }
       for (const id of preset.rightModules ?? []) {
-        expect(validIds.has(id), `${preset.id} rightModules contains unknown module '${id}'`).toBe(true);
+        expect(validIds.has(id), `${preset.id} rightModules contains unknown module '${id}'`).toBe(
+          true
+        );
       }
     }
   });

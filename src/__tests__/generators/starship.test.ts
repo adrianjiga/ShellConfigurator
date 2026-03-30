@@ -92,13 +92,10 @@ describe('generateToml', () => {
     expect(toml).not.toContain('format       = "\\n"');
   });
 
-  it.each(MODULES.map((m) => [m.id, m.label]))(
-    'generates a module block for %s (%s)',
-    (id) => {
-      const toml = generateToml({ ...base, leftModules: [id], rightModules: [] });
-      expect(toml).toContain(`[${id}]`);
-    },
-  );
+  it.each(MODULES.map((m) => [m.id, m.label]))('generates a module block for %s (%s)', (id) => {
+    const toml = generateToml({ ...base, leftModules: [id], rightModules: [] });
+    expect(toml).toContain(`[${id}]`);
+  });
 
   it('generates a character module block', () => {
     const toml = generateToml({

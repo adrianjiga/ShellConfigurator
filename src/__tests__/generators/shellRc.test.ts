@@ -127,7 +127,7 @@ describe('applyShellConfig', () => {
   it('still applies config when starship init appears only in a comment', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(
-      () => '# starship init was removed\n# See https://starship.rs',
+      () => '# starship init was removed\n# See https://starship.rs'
     );
 
     const result = applyShellConfig('zsh');
