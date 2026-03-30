@@ -4,6 +4,9 @@ export type ColorScheme = 'default' | 'pastel' | 'minimal';
 export type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'script';
 export type InstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
+/** Sentinel value for nerdFontToInstall — means "route to font selection screen" */
+export const FONT_SELECT_SENTINEL = '__select__' as const;
+
 export interface InstallTask {
   id: string;
   label: string;
