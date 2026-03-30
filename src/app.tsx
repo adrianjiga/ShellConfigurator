@@ -55,7 +55,10 @@ export function App() {
     let prevIndex = currentIndex - 1;
 
     // Skip font_select when going back if we didn't come from it
-    if (STEP_ORDER[prevIndex] === 'font_select' && state.nerdFontToInstall !== FONT_SELECT_SENTINEL) {
+    if (
+      STEP_ORDER[prevIndex] === 'font_select' &&
+      state.nerdFontToInstall !== FONT_SELECT_SENTINEL
+    ) {
       prevIndex -= 1;
     }
 
