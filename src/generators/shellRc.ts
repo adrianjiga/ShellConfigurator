@@ -31,7 +31,10 @@ export function applyShellConfig(shellId: ShellId): { applied: boolean; note?: s
     try {
       fs.mkdirSync(rcDir, { recursive: true });
     } catch (err) {
-      throw new Error(`Cannot create directory ${rcDir}: ${err instanceof Error ? err.message : err}`);
+      throw new Error(
+        `Cannot create directory ${rcDir}: ${err instanceof Error ? err.message : err}`,
+        { cause: err },
+      );
     }
   }
 
