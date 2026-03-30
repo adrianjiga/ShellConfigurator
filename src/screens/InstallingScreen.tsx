@@ -8,10 +8,7 @@ import {
   installNerdFont,
   setDefaultShell,
 } from '../services/installer.js';
-import {
-  writeStarshipConfig,
-  applyShellConfig,
-} from '../generators/shellRc.js';
+import { writeStarshipConfig, applyShellConfig } from '../generators/shellRc.js';
 import { generateToml } from '../generators/starship.js';
 import { isStarshipInstalled } from '../services/detector.js';
 
@@ -23,16 +20,16 @@ interface InstallingScreenProps {
 const STATUS_ICONS: Record<InstallStatus, string> = {
   pending: '[ ]',
   running: '[~]',
-  done:    '[✓]',
-  failed:  '[✗]',
+  done: '[✓]',
+  failed: '[✗]',
   skipped: '[–]',
 };
 
 const STATUS_COLORS: Record<InstallStatus, string> = {
   pending: 'gray',
   running: 'yellow',
-  done:    'green',
-  failed:  'red',
+  done: 'green',
+  failed: 'red',
   skipped: 'gray',
 };
 
@@ -56,7 +53,11 @@ function buildTaskList(state: WizardState): InstallTask[] {
 
   // Set default shell
   if (state.setDefaultShell) {
-    tasks.push({ id: 'chsh', label: `Set ${state.setDefaultShell} as default shell`, status: 'pending' });
+    tasks.push({
+      id: 'chsh',
+      label: `Set ${state.setDefaultShell} as default shell`,
+      status: 'pending',
+    });
   }
 
   // Config write
@@ -73,9 +74,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const ran = useRef(false);
 
   function updateTask(id: string, patch: Partial<InstallTask>) {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...patch } : t))
-    );
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   }
 
   useEffect(() => {
@@ -88,7 +87,10 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
       try {
         const check = isStarshipInstalled();
         if (check.installed) {
-          updateTask('starship', { status: 'skipped', label: `Starship (${check.version ?? 'installed'})` });
+          updateTask('starship', {
+            status: 'skipped',
+            label: `Starship (${check.version ?? 'installed'})`,
+          });
         } else {
           await installStarship(state.packageManager);
           updateTask('starship', { status: 'done' });
@@ -159,7 +161,9 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
     })();
   }, []);
 
-  const allDone = tasks.every((t) => t.status === 'done' || t.status === 'skipped' || t.status === 'failed');
+  const allDone = tasks.every(
+    (t) => t.status === 'done' || t.status === 'skipped' || t.status === 'failed'
+  );
 
   return (
     <WizardLayout state={state} hidePreview>
@@ -171,17 +175,19 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
           {tasks.map((task) => (
             <Box key={task.id} flexDirection="column">
               <Box flexDirection="row" gap={1}>
-                <Text color={STATUS_COLORS[task.status]}>
-                  {STATUS_ICONS[task.status]}
-                </Text>
-                <Text color={task.status === 'running' ? 'white' : STATUS_COLORS[task.status]}
-                      bold={task.status === 'running'}>
+                <Text color={STATUS_COLORS[task.status]}>{STATUS_ICONS[task.status]}</Text>
+                <Text
+                  color={task.status === 'running' ? 'white' : STATUS_COLORS[task.status]}
+                  bold={task.status === 'running'}
+                >
                   {task.label}
                 </Text>
               </Box>
               {task.error && (
                 <Box marginLeft={4}>
-                  <Text color="red" italic>{task.error}</Text>
+                  <Text color="red" italic>
+                    {task.error}
+                  </Text>
                 </Box>
               )}
             </Box>

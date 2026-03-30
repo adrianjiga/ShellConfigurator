@@ -86,11 +86,13 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
         </Box>
       </Box>
 
-      <NavHints hints={[
-        { key: '↑↓', label: 'navigate' },
-        { key: 'Enter', label: 'select' },
-        { key: 'Esc', label: 'back' },
-      ]} />
+      <NavHints
+        hints={[
+          { key: '↑↓', label: 'navigate' },
+          { key: 'Enter', label: 'select' },
+          { key: 'Esc', label: 'back' },
+        ]}
+      />
     </WizardLayout>
   );
 }

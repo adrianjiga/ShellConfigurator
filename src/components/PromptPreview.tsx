@@ -4,33 +4,36 @@ import { WizardState, ColorScheme, CharacterSymbol } from '../types.js';
 import { getModule } from '../config/modules.js';
 
 const CHAR_SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> = {
-  arrow:  { success: '❯', error: '❯' },
+  arrow: { success: '❯', error: '❯' },
   lambda: { success: 'λ', error: 'λ' },
   dollar: { success: '$', error: '$' },
 };
 
-const SCHEME_COLORS: Record<ColorScheme, { dir: string; branch: string; status: string; char: string }> = {
-  default: { dir: 'blue',    branch: 'magenta', status: 'red',    char: 'green' },
-  pastel:  { dir: 'cyan',    branch: 'magenta', status: 'yellow', char: 'green' },
-  minimal: { dir: 'white',   branch: 'white',   status: 'red',    char: 'green' },
+const SCHEME_COLORS: Record<
+  ColorScheme,
+  { dir: string; branch: string; status: string; char: string }
+> = {
+  default: { dir: 'blue', branch: 'magenta', status: 'red', char: 'green' },
+  pastel: { dir: 'cyan', branch: 'magenta', status: 'yellow', char: 'green' },
+  minimal: { dir: 'white', branch: 'white', status: 'red', char: 'green' },
 };
 
 const MODULE_COLORS: Record<string, string> = {
-  directory:      'blue',
-  git_branch:     'magenta',
-  git_status:     'red',
-  nodejs:         'green',
-  python:         'yellow',
-  rust:           'red',
+  directory: 'blue',
+  git_branch: 'magenta',
+  git_status: 'red',
+  nodejs: 'green',
+  python: 'yellow',
+  rust: 'red',
   docker_context: 'blue',
-  kubernetes:     'cyan',
-  aws:            'yellow',
-  time:           'white',
-  battery:        'yellow',
-  cmd_duration:   'yellow',
-  username:       'yellow',
-  hostname:       'green',
-  jobs:           'blue',
+  kubernetes: 'cyan',
+  aws: 'yellow',
+  time: 'white',
+  battery: 'yellow',
+  cmd_duration: 'yellow',
+  username: 'yellow',
+  hostname: 'green',
+  jobs: 'blue',
 };
 
 interface SegmentProps {
@@ -40,7 +43,11 @@ interface SegmentProps {
 }
 
 function Segment({ text, color, bold }: SegmentProps) {
-  return <Text color={color} bold={bold}>{text} </Text>;
+  return (
+    <Text color={color} bold={bold}>
+      {text}{' '}
+    </Text>
+  );
 }
 
 interface PromptPreviewProps {
@@ -66,33 +73,24 @@ export function PromptPreview({ state }: PromptPreviewProps) {
       );
     }
 
-    const color = id === 'directory'
-      ? colors.dir
-      : id === 'git_branch'
-        ? colors.branch
-        : id === 'git_status'
-          ? colors.status
-          : MODULE_COLORS[id] ?? 'white';
+    const color =
+      id === 'directory'
+        ? colors.dir
+        : id === 'git_branch'
+          ? colors.branch
+          : id === 'git_status'
+            ? colors.status
+            : (MODULE_COLORS[id] ?? 'white');
 
-    return (
-      <Segment
-        key={id}
-        text={def.previewSegment(hasNerdFont)}
-        color={color}
-      />
-    );
+    return <Segment key={id} text={def.previewSegment(hasNerdFont)} color={color} />;
   }
 
   return (
     <Box flexDirection="column">
-      <Text bold color="gray">Preview</Text>
-      <Box
-        borderStyle="round"
-        borderColor="gray"
-        padding={1}
-        flexDirection="column"
-        marginTop={1}
-      >
+      <Text bold color="gray">
+        Preview
+      </Text>
+      <Box borderStyle="round" borderColor="gray" padding={1} flexDirection="column" marginTop={1}>
         {/* Simulated previous command output */}
         <Text color="gray">$ some-command</Text>
         <Text color="gray">output line...</Text>
@@ -106,7 +104,9 @@ export function PromptPreview({ state }: PromptPreviewProps) {
         {/* Right prompt (dimmed, shown below for simplicity) */}
         {rightModules.length > 0 && (
           <Box flexDirection="row" marginTop={1}>
-            <Text color="gray" italic>right: </Text>
+            <Text color="gray" italic>
+              right:{' '}
+            </Text>
             {rightModules.map((id) => renderModule(id))}
           </Box>
         )}
@@ -114,7 +114,8 @@ export function PromptPreview({ state }: PromptPreviewProps) {
 
       <Box marginTop={1} flexDirection="column">
         <Text color="gray" italic>
-          {leftModules.filter(m => m !== 'character').length} left segment{leftModules.filter(m => m !== 'character').length !== 1 ? 's' : ''}
+          {leftModules.filter((m) => m !== 'character').length} left segment
+          {leftModules.filter((m) => m !== 'character').length !== 1 ? 's' : ''}
           {rightModules.length > 0 ? `, ${rightModules.length} right` : ''}
         </Text>
       </Box>

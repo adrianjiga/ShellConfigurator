@@ -25,18 +25,18 @@ npm run dev
 
 ### Wizard steps
 
-| Step | Description |
-|------|-------------|
-| Welcome | Detects your package manager and Starship install status |
-| Font check | Checks whether you have a Nerd Font already |
-| Font pick | Choose a Nerd Font to install (skipped if not needed) |
-| Preset | Pick a starting preset |
-| Left segments | Choose modules for the left side of your prompt |
-| Right segments | Choose modules for the right side |
-| Style | Color scheme and character symbol |
-| Shell select | Pick which shells to configure (shows install status per shell) |
-| Installing | Runs all installs and writes config |
-| Done | Summary of everything that was applied |
+| Step           | Description                                                     |
+| -------------- | --------------------------------------------------------------- |
+| Welcome        | Detects your package manager and Starship install status        |
+| Font check     | Checks whether you have a Nerd Font already                     |
+| Font pick      | Choose a Nerd Font to install (skipped if not needed)           |
+| Preset         | Pick a starting preset                                          |
+| Left segments  | Choose modules for the left side of your prompt                 |
+| Right segments | Choose modules for the right side                               |
+| Style          | Color scheme and character symbol                               |
+| Shell select   | Pick which shells to configure (shows install status per shell) |
+| Installing     | Runs all installs and writes config                             |
+| Done           | Summary of everything that was applied                          |
 
 ## What gets installed / configured
 
@@ -52,12 +52,12 @@ JetBrains Mono, Fira Code, Hack, Cascadia Code, Meslo LG, Source Code Pro
 
 ## Supported Shells
 
-| Shell | RC file |
-|-------|---------|
-| zsh | `~/.zshrc` |
-| bash | `~/.bashrc` |
-| fish | `~/.config/fish/config.fish` |
-| nushell | manual (see note after install) |
+| Shell      | RC file                         |
+| ---------- | ------------------------------- |
+| zsh        | `~/.zshrc`                      |
+| bash       | `~/.bashrc`                     |
+| fish       | `~/.config/fish/config.fish`    |
+| nushell    | manual (see note after install) |
 | PowerShell | manual (see note after install) |
 
 ## Project structure

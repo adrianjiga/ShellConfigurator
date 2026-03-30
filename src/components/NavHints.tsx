@@ -15,7 +15,9 @@ export function NavHints({ hints }: NavHintsProps) {
     <Box marginTop={1}>
       {hints.map((h, i) => (
         <Box key={i} marginRight={2}>
-          <Text bold color="cyan">{h.key}</Text>
+          <Text bold color="cyan">
+            {h.key}
+          </Text>
           <Text color="gray"> {h.label}</Text>
         </Box>
       ))}

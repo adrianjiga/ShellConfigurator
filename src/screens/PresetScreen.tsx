@@ -13,9 +13,7 @@ interface PresetScreenProps {
 }
 
 export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
-  const compatible = PRESETS.filter(
-    (p) => !p.requiresNerdFont || state.hasNerdFont
-  );
+  const compatible = PRESETS.filter((p) => !p.requiresNerdFont || state.hasNerdFont);
 
   const items = compatible.map((p) => ({
     label: p.requiresNerdFont ? `${p.label} ★` : p.label,
@@ -43,7 +41,9 @@ export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
         <Text color="gray">
           Select a preset theme to start from.{' '}
           {state.hasNerdFont && <Text color="gray">★ = requires Nerd Font</Text>}
-          {!state.hasNerdFont && <Text color="yellow">Nerd Font presets hidden (no Nerd Font detected)</Text>}
+          {!state.hasNerdFont && (
+            <Text color="yellow">Nerd Font presets hidden (no Nerd Font detected)</Text>
+          )}
         </Text>
 
         <Box marginTop={1} flexDirection="column">
@@ -58,11 +58,13 @@ export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
         </Box>
       </Box>
 
-      <NavHints hints={[
-        { key: '↑↓', label: 'navigate' },
-        { key: 'Enter', label: 'select' },
-        { key: 'Esc', label: 'back' },
-      ]} />
+      <NavHints
+        hints={[
+          { key: '↑↓', label: 'navigate' },
+          { key: 'Enter', label: 'select' },
+          { key: 'Esc', label: 'back' },
+        ]}
+      />
     </WizardLayout>
   );
 }
