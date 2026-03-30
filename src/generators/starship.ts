@@ -1,4 +1,5 @@
 import { WizardState, ColorScheme, CharacterSymbol } from '../types.js';
+import type { ModuleId } from '../config/modules.js';
 
 const SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> = {
   arrow: { success: '[❯](green)', error: '[❯](red)' },
@@ -18,7 +19,7 @@ function buildFormatString(modules: string[]): string {
   return parts;
 }
 
-function moduleBlock(id: string, state: WizardState): string {
+function moduleBlock(id: ModuleId, state: WizardState): string {
   const { hasNerdFont, colorScheme } = state;
   const c = COLOR_STYLES[colorScheme];
 
@@ -167,10 +168,10 @@ disabled = false
 }
 
 export function generateToml(state: WizardState): string {
-  const leftFormat = buildFormatString(state.leftModules);
+  const leftFormat = buildFormatString(state.leftModules) || '$character';
   const rightFormat = buildFormatString(state.rightModules);
 
-  const allModules = [...new Set([...state.leftModules, ...state.rightModules])];
+  const allModules = [...new Set([...state.leftModules, ...state.rightModules])] as ModuleId[];
 
   const blocks = allModules.map((id) => moduleBlock(id, state)).join('\n\n');
 
