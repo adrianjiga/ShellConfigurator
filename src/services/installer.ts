@@ -75,21 +75,24 @@ export async function installNerdFont(fontId: string): Promise<void> {
   const fontsDir = path.join(os.homedir(), '.local', 'share', 'fonts');
   fs.mkdirSync(fontsDir, { recursive: true });
 
-  const zipPath = path.join(os.tmpdir(), font.zipName);
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-font-'));
+  const zipPath = path.join(tmpDir, font.zipName);
   const url = `${NERD_FONTS_BASE_URL}/${font.zipName}`;
 
-  // Download
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to download font: HTTP ${response.status}`);
+  try {
+    // Download
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to download font: HTTP ${response.status}`);
 
-  const buffer = await response.arrayBuffer();
-  fs.writeFileSync(zipPath, Buffer.from(buffer));
+    const buffer = await response.arrayBuffer();
+    fs.writeFileSync(zipPath, Buffer.from(buffer));
 
-  // Extract with unzip
-  runCommand(['unzip', '-o', '-q', zipPath, '-d', fontsDir]);
-
-  // Clean up zip
-  fs.unlinkSync(zipPath);
+    // Extract with unzip
+    runCommand(['unzip', '-o', '-q', zipPath, '-d', fontsDir]);
+  } finally {
+    // Clean up temp files
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 
   // Refresh font cache
   runCommand(['fc-cache', '-fv']);
