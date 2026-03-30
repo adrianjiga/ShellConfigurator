@@ -1,4 +1,4 @@
-import { execSync, spawnSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -18,7 +18,7 @@ const INSTALL_CMDS: Record<PackageManager, (pkg: string) => string[]> = {
   apt: (pkg) => ['sudo', 'apt-get', 'install', '-y', pkg],
   dnf: (pkg) => ['sudo', 'dnf', 'install', '-y', pkg],
   brew: (pkg) => ['brew', 'install', pkg],
-  curl: (_) => [],
+  script: (_) => [],
 };
 
 // Nerd Font definitions: id → GitHub release zip name
@@ -48,7 +48,7 @@ function runCommand(args: string[]): void {
 }
 
 export async function installStarship(pm: PackageManager): Promise<void> {
-  if (pm === 'curl') {
+  if (pm === 'script') {
     // Official install script — installs to ~/.local/bin, no sudo needed
     runCommand(['sh', '-c', 'curl -sS https://starship.rs/install.sh | sh -s -- --yes']);
     return;
@@ -63,7 +63,7 @@ export async function installShell(shellId: ShellId, pm: PackageManager): Promis
   const pkg = SHELL_PACKAGES[shellId][pm];
   if (!pkg) throw new Error(`No package for ${shellId} on ${pm}`);
 
-  if (pm === 'curl') throw new Error(`Cannot auto-install ${shellId} without a package manager`);
+  if (pm === 'script') throw new Error(`Cannot auto-install ${shellId} without a package manager`);
 
   runCommand(INSTALL_CMDS[pm](pkg));
 }
@@ -108,7 +108,7 @@ export async function setDefaultShell(shellId: ShellId): Promise<void> {
   let shellPath: string;
 
   try {
-    shellPath = execSync(`which ${binary}`, { encoding: 'utf8', stdio: 'pipe' }).trim();
+    shellPath = execFileSync('which', [binary], { encoding: 'utf8', stdio: 'pipe' }).trim();
   } catch {
     throw new Error(`${binary} not found in PATH`);
   }

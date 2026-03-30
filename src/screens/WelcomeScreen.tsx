@@ -21,7 +21,7 @@ const PM_LABELS: Record<PackageManager, string> = {
   apt: 'apt (Debian/Ubuntu)',
   dnf: 'dnf (Fedora)',
   brew: 'Homebrew (macOS)',
-  curl: 'curl (no package manager detected)',
+  script: 'install script (no package manager detected)',
 };
 
 export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {

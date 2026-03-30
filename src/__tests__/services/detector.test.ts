@@ -1,11 +1,13 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
-const { mockExecSync, mockReadFileSync } = vi.hoisted(() => ({
+const { mockExecFileSync, mockExecSync, mockReadFileSync } = vi.hoisted(() => ({
+  mockExecFileSync: vi.fn(),
   mockExecSync: vi.fn(),
   mockReadFileSync: vi.fn(),
 }));
 
 vi.mock('child_process', () => ({
+  execFileSync: mockExecFileSync,
   execSync: mockExecSync,
 }));
 
@@ -28,14 +30,14 @@ describe('detectPackageManager', () => {
   });
 
   it('returns brew when brew is installed', () => {
-    mockExecSync.mockImplementation(() => '');
+    mockExecFileSync.mockImplementation(() => '');
 
     expect(detectPackageManager()).toBe('brew');
   });
 
   it('returns pacman when brew is absent and pacman is installed', () => {
-    mockExecSync.mockImplementation((cmd: string) => {
-      if (cmd === 'which brew') throw new Error();
+    mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === 'brew') throw new Error();
       return '';
     });
 
@@ -43,7 +45,7 @@ describe('detectPackageManager', () => {
   });
 
   it('returns apt for ubuntu via os-release', () => {
-    mockExecSync.mockImplementation(() => {
+    mockExecFileSync.mockImplementation(() => {
       throw new Error();
     });
     mockReadFileSync.mockImplementation(() => 'ID=ubuntu\nNAME="Ubuntu"');
@@ -52,7 +54,7 @@ describe('detectPackageManager', () => {
   });
 
   it('returns dnf for fedora via os-release', () => {
-    mockExecSync.mockImplementation(() => {
+    mockExecFileSync.mockImplementation(() => {
       throw new Error();
     });
     mockReadFileSync.mockImplementation(() => 'ID=fedora\nNAME="Fedora"');
@@ -61,7 +63,7 @@ describe('detectPackageManager', () => {
   });
 
   it('returns pacman for arch via os-release', () => {
-    mockExecSync.mockImplementation(() => {
+    mockExecFileSync.mockImplementation(() => {
       throw new Error();
     });
     mockReadFileSync.mockImplementation(() => 'ID=arch\nNAME="Arch Linux"');
@@ -69,12 +71,12 @@ describe('detectPackageManager', () => {
     expect(detectPackageManager()).toBe('pacman');
   });
 
-  it('returns curl as fallback when nothing is detected', () => {
-    mockExecSync.mockImplementation(() => {
+  it('returns script as fallback when nothing is detected', () => {
+    mockExecFileSync.mockImplementation(() => {
       throw new Error();
     });
 
-    expect(detectPackageManager()).toBe('curl');
+    expect(detectPackageManager()).toBe('script');
   });
 });
 
@@ -106,8 +108,8 @@ describe('detectInstalledShells', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('returns shells whose binaries exist', () => {
-    mockExecSync.mockImplementation((cmd: string) => {
-      if (cmd === 'which bash' || cmd === 'which zsh') return '/usr/bin/bash';
+    mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === 'bash' || args[0] === 'zsh') return '/usr/bin/bash';
       throw new Error();
     });
 
@@ -120,7 +122,7 @@ describe('detectInstalledShells', () => {
   });
 
   it('returns empty array when no shells are found', () => {
-    mockExecSync.mockImplementation(() => {
+    mockExecFileSync.mockImplementation(() => {
       throw new Error();
     });
 
@@ -128,7 +130,7 @@ describe('detectInstalledShells', () => {
   });
 
   it('returns all shells when all binaries exist', () => {
-    mockExecSync.mockImplementation(() => '/usr/bin/shell');
+    mockExecFileSync.mockImplementation(() => '/usr/bin/shell');
 
     const shells = detectInstalledShells();
 
