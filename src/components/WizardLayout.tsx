@@ -4,20 +4,29 @@ import { WizardState, WizardStep } from '../types.js';
 import { PromptPreview } from './PromptPreview.js';
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  welcome:        '1. Welcome',
-  fontcheck:      '2. Font',
-  font_select:    '3. Font Pick',
-  preset:         '4. Preset',
-  segments_left:  '5. Left',
+  welcome: '1. Welcome',
+  fontcheck: '2. Font',
+  font_select: '3. Font Pick',
+  preset: '4. Preset',
+  segments_left: '5. Left',
   segments_right: '6. Right',
-  style:          '7. Style',
-  shells:         '8. Shell',
-  installing:     '9. Installing',
-  done:           '  Done',
+  style: '7. Style',
+  shells: '8. Shell',
+  installing: '9. Installing',
+  done: '  Done',
 };
 
 const STEP_ORDER: WizardStep[] = [
-  'welcome', 'fontcheck', 'font_select', 'preset', 'segments_left', 'segments_right', 'style', 'shells', 'installing', 'done',
+  'welcome',
+  'fontcheck',
+  'font_select',
+  'preset',
+  'segments_left',
+  'segments_right',
+  'style',
+  'shells',
+  'installing',
+  'done',
 ];
 
 interface WizardLayoutProps {
@@ -33,7 +42,9 @@ export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps
     <Box flexDirection="column" padding={1}>
       {/* Header */}
       <Box marginBottom={1} flexDirection="row" gap={1}>
-        <Text bold color="cyan">ShellConfigurator</Text>
+        <Text bold color="cyan">
+          ShellConfigurator
+        </Text>
         <Text color="gray">—</Text>
         <Text color="gray">Starship prompt wizard</Text>
       </Box>
@@ -44,11 +55,7 @@ export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps
           const isActive = i === currentIndex;
           const isDone = i < currentIndex;
           return (
-            <Text
-              key={step}
-              color={isActive ? 'cyan' : isDone ? 'green' : 'gray'}
-              bold={isActive}
-            >
+            <Text key={step} color={isActive ? 'cyan' : isDone ? 'green' : 'gray'} bold={isActive}>
               {isDone ? '●' : isActive ? '◉' : '○'}
             </Text>
           );

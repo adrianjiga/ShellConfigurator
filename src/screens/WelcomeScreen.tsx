@@ -18,10 +18,10 @@ interface Detection {
 
 const PM_LABELS: Record<PackageManager, string> = {
   pacman: 'pacman (Arch)',
-  apt:    'apt (Debian/Ubuntu)',
-  dnf:    'dnf (Fedora)',
-  brew:   'Homebrew (macOS)',
-  curl:   'curl (no package manager detected)',
+  apt: 'apt (Debian/Ubuntu)',
+  dnf: 'dnf (Fedora)',
+  brew: 'Homebrew (macOS)',
+  curl: 'curl (no package manager detected)',
 };
 
 export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
@@ -59,10 +59,14 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
   return (
     <WizardLayout state={state} hidePreview>
       <Box flexDirection="column" gap={1}>
-        <Text bold color="cyan">Welcome to ShellConfigurator</Text>
+        <Text bold color="cyan">
+          Welcome to ShellConfigurator
+        </Text>
         <Text color="gray">
           An interactive wizard for setting up your{' '}
-          <Text color="cyan" bold>Starship</Text>{' '}
+          <Text color="cyan" bold>
+            Starship
+          </Text>{' '}
           cross-shell prompt.
         </Text>
         <Text color="gray">Works with zsh, bash, fish, nushell, and powershell.</Text>
@@ -81,7 +85,7 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
                 <Box flexDirection="column">
                   <Text color="green">✓ Starship is installed</Text>
                   {detection.starship.version && (
-                    <Text color="gray">  {detection.starship.version}</Text>
+                    <Text color="gray"> {detection.starship.version}</Text>
                   )}
                 </Box>
               ) : (
@@ -95,9 +99,7 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
         </Box>
       </Box>
 
-      {detection?.starship.installed && (
-        <NavHints hints={[{ key: 'Enter', label: 'continue' }]} />
-      )}
+      {detection?.starship.installed && <NavHints hints={[{ key: 'Enter', label: 'continue' }]} />}
     </WizardLayout>
   );
 }

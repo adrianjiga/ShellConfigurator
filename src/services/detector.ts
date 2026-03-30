@@ -50,14 +50,12 @@ export function isStarshipInstalled(): { installed: boolean; version?: string } 
 
 export function detectInstalledShells(): ShellId[] {
   const checks: Array<{ id: ShellId; binary: string }> = [
-    { id: 'bash',       binary: 'bash'  },
-    { id: 'zsh',        binary: 'zsh'   },
-    { id: 'fish',       binary: 'fish'  },
-    { id: 'nushell',    binary: 'nu'    },
-    { id: 'powershell', binary: 'pwsh'  },
+    { id: 'bash', binary: 'bash' },
+    { id: 'zsh', binary: 'zsh' },
+    { id: 'fish', binary: 'fish' },
+    { id: 'nushell', binary: 'nu' },
+    { id: 'powershell', binary: 'pwsh' },
   ];
 
-  return checks
-    .filter(({ binary }) => commandExists(binary))
-    .map(({ id }) => id);
+  return checks.filter(({ binary }) => commandExists(binary)).map(({ id }) => id);
 }

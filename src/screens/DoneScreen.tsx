@@ -21,7 +21,9 @@ export function DoneScreen({ state }: DoneScreenProps) {
   return (
     <WizardLayout state={state} hidePreview>
       <Box flexDirection="column" gap={1}>
-        <Text bold color="green">All done!</Text>
+        <Text bold color="green">
+          All done!
+        </Text>
 
         <Box flexDirection="column" marginTop={1} gap={1}>
           <Box flexDirection="row" gap={1}>
@@ -33,7 +35,9 @@ export function DoneScreen({ state }: DoneScreenProps) {
           {state.nerdFontToInstall && (
             <Box flexDirection="row" gap={1}>
               <Text color="green">✓</Text>
-              <Text>Nerd Font installed: <Text color="cyan">{state.nerdFontToInstall}</Text></Text>
+              <Text>
+                Nerd Font installed: <Text color="cyan">{state.nerdFontToInstall}</Text>
+              </Text>
             </Box>
           )}
 
@@ -55,7 +59,9 @@ export function DoneScreen({ state }: DoneScreenProps) {
           {state.setDefaultShell && (
             <Box flexDirection="row" gap={1}>
               <Text color="green">✓</Text>
-              <Text>Default shell set to <Text color="cyan">{state.setDefaultShell}</Text></Text>
+              <Text>
+                Default shell set to <Text color="cyan">{state.setDefaultShell}</Text>
+              </Text>
             </Box>
           )}
         </Box>
@@ -64,7 +70,8 @@ export function DoneScreen({ state }: DoneScreenProps) {
           <Text color="gray">Restart your terminal to see the new prompt.</Text>
           {state.nerdFontToInstall && (
             <Text color="yellow">
-              Remember to set <Text color="cyan">{state.nerdFontToInstall} Nerd Font</Text> in your terminal emulator settings.
+              Remember to set <Text color="cyan">{state.nerdFontToInstall} Nerd Font</Text> in your
+              terminal emulator settings.
             </Text>
           )}
           <Text color="gray">

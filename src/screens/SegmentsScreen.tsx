@@ -78,9 +78,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
   return (
     <WizardLayout state={state}>
       <Box flexDirection="column" gap={1}>
-        <Text bold>
-          {side === 'left' ? 'Left prompt segments' : 'Right prompt segments'}
-        </Text>
+        <Text bold>{side === 'left' ? 'Left prompt segments' : 'Right prompt segments'}</Text>
         <Text color="gray">
           {side === 'left'
             ? 'Choose which info appears on the left of your prompt.'
@@ -98,17 +96,16 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
             const isChecked = enabled.has(mod.id);
             return (
               <Box key={mod.id} flexDirection="row" gap={1}>
-                <Text color={isActive ? 'cyan' : 'gray'}>
-                  {isActive ? '›' : ' '}
-                </Text>
-                <Text color={isChecked ? 'green' : 'gray'}>
-                  {isChecked ? '[✓]' : '[ ]'}
-                </Text>
+                <Text color={isActive ? 'cyan' : 'gray'}>{isActive ? '›' : ' '}</Text>
+                <Text color={isChecked ? 'green' : 'gray'}>{isChecked ? '[✓]' : '[ ]'}</Text>
                 <Text color={isActive ? 'white' : 'gray'} bold={isActive}>
                   {mod.label}
                 </Text>
                 {isActive && (
-                  <Text color="gray" italic> — {mod.description}</Text>
+                  <Text color="gray" italic>
+                    {' '}
+                    — {mod.description}
+                  </Text>
                 )}
               </Box>
             );
@@ -116,12 +113,14 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
         </Box>
       </Box>
 
-      <NavHints hints={[
-        { key: '↑↓', label: 'navigate' },
-        { key: 'Space', label: 'toggle' },
-        { key: 'Enter', label: side === 'right' ? 'confirm / skip' : 'next' },
-        { key: 'Esc', label: 'back' },
-      ]} />
+      <NavHints
+        hints={[
+          { key: '↑↓', label: 'navigate' },
+          { key: 'Space', label: 'toggle' },
+          { key: 'Enter', label: side === 'right' ? 'confirm / skip' : 'next' },
+          { key: 'Esc', label: 'back' },
+        ]}
+      />
     </WizardLayout>
   );
 }

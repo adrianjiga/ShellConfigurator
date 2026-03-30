@@ -6,33 +6,32 @@ import { ShellId, PackageManager } from '../types.js';
 
 // Package names per shell per package manager
 const SHELL_PACKAGES: Record<ShellId, Partial<Record<PackageManager, string>>> = {
-  bash:       { pacman: 'bash',        apt: 'bash',        dnf: 'bash',        brew: 'bash'        },
-  zsh:        { pacman: 'zsh',         apt: 'zsh',         dnf: 'zsh',         brew: 'zsh'         },
-  fish:       { pacman: 'fish',        apt: 'fish',        dnf: 'fish',        brew: 'fish'        },
-  nushell:    { pacman: 'nushell',     apt: 'nushell',     dnf: 'nushell',     brew: 'nushell'     },
-  powershell: { pacman: 'powershell',  apt: 'powershell',  dnf: 'powershell',  brew: 'powershell'  },
+  bash: { pacman: 'bash', apt: 'bash', dnf: 'bash', brew: 'bash' },
+  zsh: { pacman: 'zsh', apt: 'zsh', dnf: 'zsh', brew: 'zsh' },
+  fish: { pacman: 'fish', apt: 'fish', dnf: 'fish', brew: 'fish' },
+  nushell: { pacman: 'nushell', apt: 'nushell', dnf: 'nushell', brew: 'nushell' },
+  powershell: { pacman: 'powershell', apt: 'powershell', dnf: 'powershell', brew: 'powershell' },
 };
 
 const INSTALL_CMDS: Record<PackageManager, (pkg: string) => string[]> = {
   pacman: (pkg) => ['sudo', 'pacman', '-S', '--noconfirm', pkg],
-  apt:    (pkg) => ['sudo', 'apt-get', 'install', '-y', pkg],
-  dnf:    (pkg) => ['sudo', 'dnf', 'install', '-y', pkg],
-  brew:   (pkg) => ['brew', 'install', pkg],
-  curl:   (_)   => [],
+  apt: (pkg) => ['sudo', 'apt-get', 'install', '-y', pkg],
+  dnf: (pkg) => ['sudo', 'dnf', 'install', '-y', pkg],
+  brew: (pkg) => ['brew', 'install', pkg],
+  curl: (_) => [],
 };
 
 // Nerd Font definitions: id → GitHub release zip name
 export const NERD_FONTS: Array<{ id: string; label: string; zipName: string }> = [
-  { id: 'JetBrainsMono', label: 'JetBrains Mono',  zipName: 'JetBrainsMono.zip'  },
-  { id: 'FiraCode',      label: 'Fira Code',        zipName: 'FiraCode.zip'       },
-  { id: 'Hack',          label: 'Hack',             zipName: 'Hack.zip'           },
-  { id: 'CascadiaCode',  label: 'Cascadia Code',    zipName: 'CascadiaCode.zip'   },
-  { id: 'Meslo',         label: 'Meslo LG',         zipName: 'Meslo.zip'          },
-  { id: 'SourceCodePro', label: 'Source Code Pro',  zipName: 'SourceCodePro.zip'  },
+  { id: 'JetBrainsMono', label: 'JetBrains Mono', zipName: 'JetBrainsMono.zip' },
+  { id: 'FiraCode', label: 'Fira Code', zipName: 'FiraCode.zip' },
+  { id: 'Hack', label: 'Hack', zipName: 'Hack.zip' },
+  { id: 'CascadiaCode', label: 'Cascadia Code', zipName: 'CascadiaCode.zip' },
+  { id: 'Meslo', label: 'Meslo LG', zipName: 'Meslo.zip' },
+  { id: 'SourceCodePro', label: 'Source Code Pro', zipName: 'SourceCodePro.zip' },
 ];
 
-const NERD_FONTS_BASE_URL =
-  'https://github.com/ryanoasis/nerd-fonts/releases/latest/download';
+const NERD_FONTS_BASE_URL = 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download';
 
 // Runs a command with stdio: 'inherit' so sudo password prompts appear in terminal.
 // Ink pauses while this runs (it's synchronous/blocking).
@@ -98,10 +97,10 @@ export async function installNerdFont(fontId: string): Promise<void> {
 
 export async function setDefaultShell(shellId: ShellId): Promise<void> {
   const binaries: Record<ShellId, string> = {
-    bash:       'bash',
-    zsh:        'zsh',
-    fish:       'fish',
-    nushell:    'nu',
+    bash: 'bash',
+    zsh: 'zsh',
+    fish: 'fish',
+    nushell: 'nu',
     powershell: 'pwsh',
   };
 

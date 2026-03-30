@@ -11,15 +11,15 @@ interface StyleScreenProps {
 }
 
 const CHAR_OPTIONS: { value: CharacterSymbol; label: string; preview: string }[] = [
-  { value: 'arrow',  label: 'Arrow',  preview: '❯' },
+  { value: 'arrow', label: 'Arrow', preview: '❯' },
   { value: 'lambda', label: 'Lambda', preview: 'λ' },
   { value: 'dollar', label: 'Dollar', preview: '$' },
 ];
 
 const COLOR_OPTIONS: { value: ColorScheme; label: string; description: string }[] = [
   { value: 'default', label: 'Default', description: 'Bold blues, purples, greens' },
-  { value: 'pastel',  label: 'Pastel',  description: 'Softer cyans and magentas'  },
-  { value: 'minimal', label: 'Minimal', description: 'White and muted tones'      },
+  { value: 'pastel', label: 'Pastel', description: 'Softer cyans and magentas' },
+  { value: 'minimal', label: 'Minimal', description: 'White and muted tones' },
 ];
 
 type FocusSection = 'char' | 'color';
@@ -77,7 +77,7 @@ export function StyleScreen({ state, onNext, onBack }: StyleScreenProps) {
                 {focus === 'char' && i === charIdx ? '›' : ' '}
               </Text>
               <Text color={i === charIdx ? 'white' : 'gray'} bold={i === charIdx}>
-                {opt.preview}  {opt.label}
+                {opt.preview} {opt.label}
               </Text>
             </Box>
           ))}
@@ -96,18 +96,23 @@ export function StyleScreen({ state, onNext, onBack }: StyleScreenProps) {
               <Text color={i === colorIdx ? 'white' : 'gray'} bold={i === colorIdx}>
                 {opt.label}
               </Text>
-              <Text color="gray" italic> — {opt.description}</Text>
+              <Text color="gray" italic>
+                {' '}
+                — {opt.description}
+              </Text>
             </Box>
           ))}
         </Box>
       </Box>
 
-      <NavHints hints={[
-        { key: '↑↓', label: 'navigate' },
-        { key: 'Tab', label: 'switch section' },
-        { key: 'Enter', label: 'confirm' },
-        { key: 'Esc', label: 'back' },
-      ]} />
+      <NavHints
+        hints={[
+          { key: '↑↓', label: 'navigate' },
+          { key: 'Tab', label: 'switch section' },
+          { key: 'Enter', label: 'confirm' },
+          { key: 'Esc', label: 'back' },
+        ]}
+      />
     </WizardLayout>
   );
 }

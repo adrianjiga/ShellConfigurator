@@ -15,9 +15,7 @@ interface ShellScreenProps {
 
 export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProps) {
   const [cursor, setCursor] = useState(0);
-  const [selected, setSelected] = useState<Set<ShellId>>(
-    () => new Set(state.selectedShells)
-  );
+  const [selected, setSelected] = useState<Set<ShellId>>(() => new Set(state.selectedShells));
   const [installedShells, setInstalledShells] = useState<ShellId[]>(state.installedShells);
   const [defaultShell, setDefaultShell] = useState<ShellId | null>(state.setDefaultShell);
 
@@ -82,7 +80,8 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
         <Text bold>Select your shell(s)</Text>
         <Text color="gray">Which shells should be configured to use Starship?</Text>
         <Text color="gray">
-          Press <Text color="cyan">D</Text> on any selected shell to make it your login shell (runs <Text color="cyan">chsh</Text>). Optional.
+          Press <Text color="cyan">D</Text> on any selected shell to make it your login shell (runs{' '}
+          <Text color="cyan">chsh</Text>). Optional.
         </Text>
 
         <Box flexDirection="column" marginTop={1}>
@@ -107,12 +106,16 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
                 </Box>
                 {isActive && shell.rcFile && (
                   <Box marginLeft={4}>
-                    <Text color="gray" italic>→ {shell.rcFile}</Text>
+                    <Text color="gray" italic>
+                      → {shell.rcFile}
+                    </Text>
                   </Box>
                 )}
                 {isActive && shell.manualNote && (
                   <Box marginLeft={4}>
-                    <Text color="yellow" italic>⚠ {shell.manualNote}</Text>
+                    <Text color="yellow" italic>
+                      ⚠ {shell.manualNote}
+                    </Text>
                   </Box>
                 )}
               </Box>
@@ -121,17 +124,21 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
         </Box>
 
         {selected.size === 0 && (
-          <Text color="yellow" italic>Select at least one shell to continue.</Text>
+          <Text color="yellow" italic>
+            Select at least one shell to continue.
+          </Text>
         )}
       </Box>
 
-      <NavHints hints={[
-        { key: '↑↓', label: 'navigate' },
-        { key: 'Space', label: 'toggle' },
-        { key: 'D', label: 'set as login shell' },
-        { key: 'Enter', label: selected.size > 0 ? 'confirm' : '(select a shell first)' },
-        { key: 'Esc', label: 'back' },
-      ]} />
+      <NavHints
+        hints={[
+          { key: '↑↓', label: 'navigate' },
+          { key: 'Space', label: 'toggle' },
+          { key: 'D', label: 'set as login shell' },
+          { key: 'Enter', label: selected.size > 0 ? 'confirm' : '(select a shell first)' },
+          { key: 'Esc', label: 'back' },
+        ]}
+      />
     </WizardLayout>
   );
 }
