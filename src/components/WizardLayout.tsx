@@ -36,7 +36,7 @@ interface WizardLayoutProps {
 }
 
 export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps) {
-  const currentIndex = STEP_ORDER.indexOf(state.step);
+  const currentIndex = Math.max(0, STEP_ORDER.indexOf(state.step));
 
   return (
     <Box flexDirection="column" padding={1}>

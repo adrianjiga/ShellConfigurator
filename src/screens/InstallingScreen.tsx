@@ -73,13 +73,16 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const [tasks, setTasks] = useState<InstallTask[]>(() => buildTaskList(state));
   const ran = useRef(false);
 
-  function updateTask(id: string, patch: Partial<InstallTask>) {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-  }
-
   useEffect(() => {
     if (ran.current) return;
     ran.current = true;
+
+    let cancelled = false;
+
+    function updateTask(id: string, patch: Partial<InstallTask>) {
+      if (cancelled) return;
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    }
 
     (async () => {
       // --- Starship ---
@@ -157,8 +160,12 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
       // Advance after a brief pause so the user can see the final state
       await new Promise((r) => setTimeout(r, 1200));
-      onNext();
+      if (!cancelled) onNext();
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const allDone = tasks.every(

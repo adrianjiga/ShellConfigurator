@@ -28,17 +28,23 @@ export function applyShellConfig(shellId: ShellId): { applied: boolean; note?: s
   // Ensure parent directory exists (important for fish)
   const rcDir = path.dirname(rcPath);
   if (!fs.existsSync(rcDir)) {
-    fs.mkdirSync(rcDir, { recursive: true });
+    try {
+      fs.mkdirSync(rcDir, { recursive: true });
+    } catch (err) {
+      throw new Error(
+        `Cannot create directory ${rcDir}: ${err instanceof Error ? err.message : err}`,
+        { cause: err }
+      );
+    }
   }
 
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
 
-  // Idempotent: skip if already configured
-  if (existing.includes('starship init')) {
+  // Idempotent: skip if already configured (check for exact init line)
+  const addition = `\n# Added by ShellConfigurator\n${shell.initLine}\n`;
+  if (existing.includes(shell.initLine)) {
     return { applied: false, note: 'already configured' };
   }
-
-  const addition = `\n# Added by ShellConfigurator\n${shell.initLine}\n`;
   fs.appendFileSync(rcPath, addition, 'utf8');
 
   return { applied: true };

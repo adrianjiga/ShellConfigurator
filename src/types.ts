@@ -1,8 +1,11 @@
 export type ShellId = 'zsh' | 'bash' | 'fish' | 'nushell' | 'powershell';
 export type CharacterSymbol = 'arrow' | 'lambda' | 'dollar';
 export type ColorScheme = 'default' | 'pastel' | 'minimal';
-export type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'curl';
+export type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'script';
 export type InstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
+
+/** Sentinel value for nerdFontToInstall — means "route to font selection screen" */
+export const FONT_SELECT_SENTINEL = '__select__' as const;
 
 export interface InstallTask {
   id: string;
@@ -49,7 +52,7 @@ export const DEFAULT_STATE: WizardState = {
   characterSymbol: 'arrow',
   colorScheme: 'default',
   selectedShells: [],
-  packageManager: 'curl',
+  packageManager: 'script',
   installedShells: [],
   nerdFontToInstall: null,
   setDefaultShell: null,

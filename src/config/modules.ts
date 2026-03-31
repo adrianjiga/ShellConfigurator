@@ -1,3 +1,21 @@
+export type ModuleId =
+  | 'username'
+  | 'hostname'
+  | 'directory'
+  | 'git_branch'
+  | 'git_status'
+  | 'nodejs'
+  | 'python'
+  | 'rust'
+  | 'docker_context'
+  | 'kubernetes'
+  | 'aws'
+  | 'time'
+  | 'battery'
+  | 'cmd_duration'
+  | 'jobs'
+  | 'character';
+
 export interface ModuleDef {
   id: string;
   label: string;

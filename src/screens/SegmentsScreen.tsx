@@ -32,12 +32,12 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
     } else {
       onUpdate({ rightModules: ordered });
     }
-  }, [enabled]);
+  }, [enabled, side]);
 
   function saveAndProceed() {
     const ordered = CONFIGURABLE.filter((m) => enabled.has(m.id)).map((m) => m.id);
     if (side === 'left') {
-      onNext({ leftModules: [...ordered, 'character'] });
+      onNext({ leftModules: [...new Set([...ordered, 'character'])] });
     } else {
       onNext({ rightModules: ordered });
     }
@@ -117,7 +117,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
         hints={[
           { key: '↑↓', label: 'navigate' },
           { key: 'Space', label: 'toggle' },
-          { key: 'Enter', label: side === 'right' ? 'confirm / skip' : 'next' },
+          { key: 'Enter/Tab/→', label: side === 'right' ? 'confirm / skip' : 'next' },
           { key: 'Esc', label: 'back' },
         ]}
       />

@@ -6,6 +6,9 @@
   "bin": {
     "shell-configurator": "./dist/index.js"
   },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "tsx src/index.tsx",
     "build": "tsc",
@@ -14,7 +17,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepare": "npm run build"
   },
   "dependencies": {
     "ink": "^6.8.0",

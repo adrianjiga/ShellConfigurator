@@ -47,7 +47,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
             return (
               <Box key={shellId} flexDirection="row" gap={1}>
                 <Text color="green">✓</Text>
-                <Text>{shell?.label ?? shellId}:</Text>
+                <Text>{shell?.label ?? shellId.charAt(0).toUpperCase() + shellId.slice(1)}:</Text>
                 {!wasInstalled && <Text color="cyan">installed + </Text>}
                 <Text color="gray">
                   {shell?.rcFile ? `init line added to ${shell.rcFile}` : shell?.manualNote}

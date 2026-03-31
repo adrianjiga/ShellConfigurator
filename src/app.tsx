@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { WizardState, WizardStep, DEFAULT_STATE } from './types.js';
+import { WizardState, WizardStep, DEFAULT_STATE, FONT_SELECT_SENTINEL } from './types.js';
 import { WelcomeScreen } from './screens/WelcomeScreen.js';
 import { FontCheckScreen } from './screens/FontCheckScreen.js';
 import { FontSelectScreen } from './screens/FontSelectScreen.js';
@@ -36,14 +36,14 @@ export function App() {
 
   function goNext(update?: Partial<WizardState>) {
     const merged = { ...state, ...update };
-    const currentIndex = STEP_ORDER.indexOf(state.step);
+    const currentIndex = STEP_ORDER.indexOf(merged.step);
     let nextStep = STEP_ORDER[currentIndex + 1];
 
     if (!nextStep) return;
 
     // Skip font_select if the user doesn't want to install a font
-    // (sentinel '__select__' means "go to font_select")
-    if (nextStep === 'font_select' && merged.nerdFontToInstall !== '__select__') {
+    // (sentinel FONT_SELECT_SENTINEL means "go to font_select")
+    if (nextStep === 'font_select' && merged.nerdFontToInstall !== FONT_SELECT_SENTINEL) {
       nextStep = STEP_ORDER[currentIndex + 2]!;
     }
 
@@ -55,7 +55,10 @@ export function App() {
     let prevIndex = currentIndex - 1;
 
     // Skip font_select when going back if we didn't come from it
-    if (STEP_ORDER[prevIndex] === 'font_select' && state.nerdFontToInstall !== '__select__') {
+    if (
+      STEP_ORDER[prevIndex] === 'font_select' &&
+      state.nerdFontToInstall !== FONT_SELECT_SENTINEL
+    ) {
       prevIndex -= 1;
     }
 

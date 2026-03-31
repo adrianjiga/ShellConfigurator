@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import { WizardState } from '../types.js';
@@ -14,6 +14,7 @@ interface PresetScreenProps {
 
 export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
   const compatible = PRESETS.filter((p) => !p.requiresNerdFont || state.hasNerdFont);
+  const [highlightedId, setHighlightedId] = useState<string>(compatible[0]?.id ?? '');
 
   const items = compatible.map((p) => ({
     label: p.requiresNerdFont ? `${p.label} ★` : p.label,
@@ -47,13 +48,18 @@ export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
         </Text>
 
         <Box marginTop={1} flexDirection="column">
-          <SelectInput items={items} onSelect={handleSelect} limit={8} />
+          <SelectInput
+            items={items}
+            onSelect={handleSelect}
+            onHighlight={(item) => setHighlightedId(item.value)}
+            limit={8}
+          />
         </Box>
 
         {/* Description of highlighted preset */}
         <Box marginTop={1}>
           <Text color="gray" italic>
-            {compatible[0]?.description}
+            {compatible.find((p) => p.id === highlightedId)?.description}
           </Text>
         </Box>
       </Box>

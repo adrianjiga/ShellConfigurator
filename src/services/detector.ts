@@ -1,10 +1,10 @@
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import * as fs from 'fs';
 import { ShellId, PackageManager } from '../types.js';
 
 function commandExists(cmd: string): boolean {
   try {
-    execSync(`which ${cmd}`, { stdio: 'pipe' });
+    execFileSync('which', [cmd], { stdio: 'pipe' });
     return true;
   } catch {
     return false;
@@ -16,7 +16,7 @@ function readOsReleaseId(): string | null {
     const content = fs.readFileSync('/etc/os-release', 'utf8');
     const match = content.match(/^ID=(.+)$/m);
     if (!match) return null;
-    return match[1]!.replace(/"/g, '').toLowerCase().trim();
+    return match[1]!.replace(/["']/g, '').toLowerCase().trim();
   } catch {
     return null;
   }
@@ -36,7 +36,7 @@ export function detectPackageManager(): PackageManager {
   if (commandExists('apt-get')) return 'apt';
   if (commandExists('dnf')) return 'dnf';
 
-  return 'curl';
+  return 'script';
 }
 
 export function isStarshipInstalled(): { installed: boolean; version?: string } {
