@@ -14,7 +14,10 @@ const COLOR_STYLES: Record<ColorScheme, { dir: string; branch: string; status: s
 };
 
 function buildFormatString(modules: string[]): string {
-  const parts = modules.filter((m) => m !== 'character').map((m) => `$${m}`).join('');
+  const parts = modules
+    .filter((m) => m !== 'character')
+    .map((m) => `$${m}`)
+    .join('');
   return parts;
 }
 
