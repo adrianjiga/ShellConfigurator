@@ -4,7 +4,7 @@ import type { ModuleId } from '../config/modules.js';
 const SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> = {
   arrow: { success: '[❯](green)', error: '[❯](red)' },
   lambda: { success: '[λ](green)', error: '[λ](red)' },
-  dollar: { success: '[$](green)', error: '[$](red)' },
+  dollar: { success: '[\\$](green)', error: '[\\$](red)' },
 };
 
 const COLOR_STYLES: Record<ColorScheme, { dir: string; branch: string; status: string }> = {
@@ -27,8 +27,8 @@ function moduleBlock(id: ModuleId, state: WizardState): string {
     case 'character':
       return `
 [character]
-success_symbol = "${SYMBOLS[state.characterSymbol].success}"
-error_symbol   = "${SYMBOLS[state.characterSymbol].error}"
+success_symbol = '${SYMBOLS[state.characterSymbol].success}'
+error_symbol   = '${SYMBOLS[state.characterSymbol].error}'
 `.trim();
 
     case 'directory':

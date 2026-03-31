@@ -68,7 +68,7 @@ describe('generateToml', () => {
       leftModules: ['character'],
       characterSymbol: 'dollar',
     });
-    expect(toml).toContain('[$](green)');
+    expect(toml).toContain('[\\$](green)');
   });
 
   it('does not emit duplicate module blocks when a module appears on both sides', () => {
