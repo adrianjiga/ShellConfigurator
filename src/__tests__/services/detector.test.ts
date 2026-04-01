@@ -1,14 +1,12 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
-const { mockExecFileSync, mockExecSync, mockReadFileSync } = vi.hoisted(() => ({
+const { mockExecFileSync, mockReadFileSync } = vi.hoisted(() => ({
   mockExecFileSync: vi.fn(),
-  mockExecSync: vi.fn(),
   mockReadFileSync: vi.fn(),
 }));
 
 vi.mock('child_process', () => ({
   execFileSync: mockExecFileSync,
-  execSync: mockExecSync,
 }));
 
 vi.mock('fs', () => ({
@@ -93,7 +91,7 @@ describe('isStarshipInstalled', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('returns installed true with version string', () => {
-    mockExecSync.mockReturnValue('starship 1.20.0');
+    mockExecFileSync.mockReturnValue('starship 1.20.0');
 
     const result = isStarshipInstalled();
 
@@ -102,7 +100,7 @@ describe('isStarshipInstalled', () => {
   });
 
   it('returns installed false when starship is not found', () => {
-    mockExecSync.mockImplementation(() => {
+    mockExecFileSync.mockImplementation(() => {
       throw new Error('command not found');
     });
 
