@@ -29,6 +29,17 @@ describe('generateToml', () => {
     expect(toml).not.toContain('right_format');
   });
 
+  it('includes [fill] block with space symbol when right modules are present', () => {
+    const toml = generateToml(base);
+    expect(toml).toContain('[fill]');
+    expect(toml).toContain('symbol = " "');
+  });
+
+  it('omits [fill] block when right modules are empty', () => {
+    const toml = generateToml({ ...base, rightModules: [] });
+    expect(toml).not.toContain('[fill]');
+  });
+
   it('uses nerd font symbol for git_branch when hasNerdFont is true', () => {
     const toml = generateToml({ ...base, hasNerdFont: true });
     expect(toml).toContain('symbol = " "');
