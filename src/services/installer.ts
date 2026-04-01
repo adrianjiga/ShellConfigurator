@@ -42,6 +42,9 @@ function runCommand(args: string[]): void {
   const result = spawnSync(cmd, rest, { stdio: 'inherit' });
 
   if (result.error) throw result.error;
+  if (result.signal) {
+    throw new Error(`Command killed by signal ${result.signal}: ${args.join(' ')}`);
+  }
   if (result.status !== 0) {
     throw new Error(`Command failed with exit code ${result.status}: ${args.join(' ')}`);
   }
