@@ -236,6 +236,11 @@ function isStarshipInstalled(): { installed: boolean; version?: string };
 
 function detectInstalledShells(): ShellId[];
 // Returns array of shells found in PATH
+
+// Async versions (non-blocking for Ink render loop)
+function detectPackageManagerAsync(): Promise<PackageManager>;
+function isStarshipInstalledAsync(): Promise<{ installed: boolean; version?: string }>;
+function detectInstalledShellsAsync(): Promise<ShellId[]>;
 ```
 
 ### installer.ts

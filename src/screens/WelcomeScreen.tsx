@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import { WizardState, PackageManager } from '../types.js';
-import { detectPackageManager, isStarshipInstalled } from '../services/detector.js';
+import { detectPackageManagerAsync, isStarshipInstalledAsync } from '../services/detector.js';
 import { WizardLayout } from '../components/WizardLayout.js';
 import { NavHints } from '../components/NavHints.js';
 
@@ -28,14 +28,20 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
   const [detection, setDetection] = useState<Detection | null>(null);
   const [showManualHelp, setShowManualHelp] = useState(false);
 
-  function runDetection() {
-    const pm = detectPackageManager();
-    const starship = isStarshipInstalled();
-    setDetection({ pm, starship });
-  }
-
   useEffect(() => {
-    runDetection();
+    let cancelled = false;
+
+    (async () => {
+      const [pm, starship] = await Promise.all([
+        detectPackageManagerAsync(),
+        isStarshipInstalledAsync(),
+      ]);
+      if (!cancelled) setDetection({ pm, starship });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useInput((_, key) => {
@@ -67,12 +73,16 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
     }
   }
 
-  function handleManualChoice(item: { value: string }) {
+  async function handleManualChoice(item: { value: string }) {
     if (!detection) return;
     if (item.value === 'recheck') {
       setShowManualHelp(false);
       setDetection(null);
-      runDetection();
+      const [pm, starship] = await Promise.all([
+        detectPackageManagerAsync(),
+        isStarshipInstalledAsync(),
+      ]);
+      setDetection({ pm, starship });
     }
     if (item.value === 'continue') {
       onNext({ starshipInstalled: false, packageManager: detection.pm });

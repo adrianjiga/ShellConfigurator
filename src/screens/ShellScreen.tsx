@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { WizardState, ShellId } from '../types.js';
 import { SHELLS } from '../config/shells.js';
-import { detectInstalledShells } from '../services/detector.js';
+import { detectInstalledShellsAsync } from '../services/detector.js';
 import { WizardLayout } from '../components/WizardLayout.js';
 import { NavHints } from '../components/NavHints.js';
 
@@ -22,9 +22,19 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
   defaultShellRef.current = defaultShell;
 
   useEffect(() => {
-    const detected = detectInstalledShells();
-    setInstalledShells(detected);
-    onUpdate({ installedShells: detected });
+    let cancelled = false;
+
+    (async () => {
+      const detected = await detectInstalledShellsAsync();
+      if (!cancelled) {
+        setInstalledShells(detected);
+        onUpdate({ installedShells: detected });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useInput((char, key) => {

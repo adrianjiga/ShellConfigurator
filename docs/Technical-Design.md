@@ -280,6 +280,18 @@ Returns an array of `ShellId` values for shells found in PATH.
 
 Used by both WelcomeScreen (to show status) and InstallingScreen (to skip installation).
 
+### Async Detection
+
+All detection functions have async counterparts (`detectPackageManagerAsync`, `isStarshipInstalledAsync`, `detectInstalledShellsAsync`) that use `promisify(execFile)` instead of `execFileSync`. This prevents blocking Ink's render loop during detection.
+
+Key differences from the sync versions:
+
+- **`detectPackageManagerAsync`**: Parallelizes independent checks — `brew` + `pacman` run together, then `apt-get` + `dnf` together — while preserving priority order
+- **`detectInstalledShellsAsync`**: Runs all 5 shell checks in parallel via `Promise.all` (biggest performance win — wall-clock time drops from 5 sequential forks to 1 parallel batch)
+- **`isStarshipInstalledAsync`**: Single async `execFile` call
+
+WelcomeScreen and ShellScreen use the async versions. InstallingScreen keeps the sync `isStarshipInstalled()` since it runs inside an already-blocking install pipeline.
+
 ---
 
 ## Error Handling Strategy
