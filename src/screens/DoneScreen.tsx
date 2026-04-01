@@ -1,9 +1,10 @@
 import React from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
-import { WizardState } from '../types.js';
+import { WizardState, FONT_SELECT_SENTINEL } from '../types.js';
 import { WizardLayout } from '../components/WizardLayout.js';
 import { getConfigPath } from '../generators/shellRc.js';
 import { getShell } from '../config/shells.js';
+import { NERD_FONTS } from '../services/installer.js';
 
 interface DoneScreenProps {
   state: WizardState;
@@ -11,6 +12,10 @@ interface DoneScreenProps {
 
 export function DoneScreen({ state }: DoneScreenProps) {
   const { exit } = useApp();
+  const fontInstalled = state.nerdFontToInstall && state.nerdFontToInstall !== FONT_SELECT_SENTINEL;
+  const fontLabel = fontInstalled
+    ? (NERD_FONTS.find((f) => f.id === state.nerdFontToInstall)?.label ?? state.nerdFontToInstall)
+    : null;
 
   useInput((char, key) => {
     if (key.return || key.escape || char.toLowerCase() === 'q') {
@@ -32,11 +37,11 @@ export function DoneScreen({ state }: DoneScreenProps) {
             <Text color="cyan">{getConfigPath()}</Text>
           </Box>
 
-          {state.nerdFontToInstall && (
+          {fontInstalled && (
             <Box flexDirection="row" gap={1}>
               <Text color="green">✓</Text>
               <Text>
-                Nerd Font installed: <Text color="cyan">{state.nerdFontToInstall}</Text>
+                Nerd Font installed: <Text color="cyan">{fontLabel}</Text>
               </Text>
             </Box>
           )}
@@ -68,10 +73,10 @@ export function DoneScreen({ state }: DoneScreenProps) {
 
         <Box marginTop={1} flexDirection="column">
           <Text color="gray">Restart your terminal to see the new prompt.</Text>
-          {state.nerdFontToInstall && (
+          {fontInstalled && (
             <Text color="yellow">
-              Remember to set <Text color="cyan">{state.nerdFontToInstall} Nerd Font</Text> in your
-              terminal emulator settings.
+              Remember to set <Text color="cyan">{fontLabel} Nerd Font</Text> in your terminal
+              emulator settings.
             </Text>
           )}
           <Text color="gray">
