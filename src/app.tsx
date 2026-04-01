@@ -35,19 +35,22 @@ export function App() {
   }
 
   function goNext(update?: Partial<WizardState>) {
-    const merged = { ...state, ...update };
-    const currentIndex = STEP_ORDER.indexOf(merged.step);
-    let nextStep = STEP_ORDER[currentIndex + 1];
+    setState((prev) => {
+      const merged = { ...prev, ...update };
+      const currentIndex = STEP_ORDER.indexOf(merged.step);
+      let nextStep = STEP_ORDER[currentIndex + 1];
 
-    if (!nextStep) return;
+      if (!nextStep) return prev;
 
-    // Skip font_select if the user doesn't want to install a font
-    // (sentinel FONT_SELECT_SENTINEL means "go to font_select")
-    if (nextStep === 'font_select' && merged.nerdFontToInstall !== FONT_SELECT_SENTINEL) {
-      nextStep = STEP_ORDER[currentIndex + 2]!;
-    }
+      // Skip font_select if the user doesn't want to install a font
+      if (nextStep === 'font_select' && merged.nerdFontToInstall !== FONT_SELECT_SENTINEL) {
+        const skipped = STEP_ORDER[currentIndex + 2];
+        if (!skipped) return prev;
+        nextStep = skipped;
+      }
 
-    advanceTo(nextStep, update);
+      return { ...merged, step: nextStep };
+    });
   }
 
   function goBack() {
