@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { WizardState, ShellId } from '../types.js';
 import { SHELLS } from '../config/shells.js';
@@ -18,6 +18,8 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
   const [selected, setSelected] = useState<Set<ShellId>>(() => new Set(state.selectedShells));
   const [installedShells, setInstalledShells] = useState<ShellId[] | null>(null);
   const [defaultShell, setDefaultShell] = useState<ShellId | null>(state.setDefaultShell);
+  const defaultShellRef = useRef(defaultShell);
+  defaultShellRef.current = defaultShell;
 
   useEffect(() => {
     const detected = detectInstalledShells();
@@ -48,7 +50,7 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
         if (next.has(shellId)) {
           next.delete(shellId);
           // Clear default shell if deselected
-          if (defaultShell === shellId) setDefaultShell(null);
+          if (defaultShellRef.current === shellId) setDefaultShell(null);
         } else {
           next.add(shellId);
         }
