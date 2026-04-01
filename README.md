@@ -41,7 +41,7 @@ npm run dev
 ## What gets installed / configured
 
 - **Starship** — via your package manager, or `curl` if none is detected
-- **Nerd Font** — downloaded from the official nerd-fonts GitHub release, installed to `~/.local/share/fonts/`
+- **Nerd Font** — downloaded from the official nerd-fonts GitHub release, installed to `~/Library/Fonts/` (macOS) or `~/.local/share/fonts/` (Linux)
 - **Shells** — installed via your package manager if not already present
 - **`~/.config/starship.toml`** — generated from your wizard choices
 - **Shell RC files** — `starship init` line appended idempotently to each selected shell's config

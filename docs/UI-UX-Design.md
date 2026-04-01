@@ -259,10 +259,10 @@ Keys are styled cyan, labels are gray. Each screen customizes its hints to match
 
 ## Interaction Patterns
 
-| Pattern                        | Screens                       | Implementation                                       |
-| ------------------------------ | ----------------------------- | ---------------------------------------------------- |
-| **SelectInput** (Ink built-in) | FontCheck, FontSelect, Preset | `<SelectInput>` with `onSelect` and `onHighlight`    |
-| **Custom checklist**           | Segments, Shell               | Manual cursor + `useInput` with `↑↓ Space`           |
-| **Multi-section focus**        | Style                         | `Tab` switches focus, `↑↓` navigates within section  |
-| **Async detection**            | Welcome, Shell                | `useEffect` runs detection, updates UI on completion |
-| **Auto-advance**               | Installing                    | No input; advances after task completion + delay     |
+| Pattern                        | Screens                       | Implementation                                        |
+| ------------------------------ | ----------------------------- | ----------------------------------------------------- |
+| **SelectInput** (Ink built-in) | FontCheck, FontSelect, Preset | `<SelectInput>` with `onSelect` and `onHighlight`     |
+| **Custom checklist**           | Segments, Shell               | Manual cursor + `useInput` with `↑↓ Space`            |
+| **Multi-section focus**        | Style                         | `Tab` switches focus, `↑↓` navigates within section   |
+| **Async detection**            | Welcome, Shell                | Async `useEffect` with `cancelled` flag; non-blocking |
+| **Auto-advance**               | Installing                    | No input; advances after task completion + delay      |
