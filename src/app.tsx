@@ -110,7 +110,7 @@ export function App() {
       return <ShellScreen state={state} onNext={goNext} onUpdate={updateState} onBack={goBack} />;
 
     case 'installing':
-      return <InstallingScreen state={state} onNext={() => advanceTo('done')} />;
+      return <InstallingScreen state={state} onNext={(update) => advanceTo('done', update)} />;
 
     case 'done':
       return <DoneScreen state={state} />;

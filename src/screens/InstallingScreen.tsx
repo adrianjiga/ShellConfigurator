@@ -15,7 +15,7 @@ import { isStarshipInstalled } from '../services/detector.js';
 
 interface InstallingScreenProps {
   state: WizardState;
-  onNext: () => void;
+  onNext: (update?: Partial<WizardState>) => void;
 }
 
 const STATUS_ICONS: Record<InstallStatus, string> = {
@@ -74,6 +74,7 @@ function buildTaskList(state: WizardState): InstallTask[] {
 
 export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const [tasks, setTasks] = useState<InstallTask[]>(() => buildTaskList(state));
+  const tasksRef = useRef(tasks);
   const ran = useRef(false);
 
   useEffect(() => {
@@ -84,7 +85,11 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
     function updateTask(id: string, patch: Partial<InstallTask>) {
       if (cancelled) return;
-      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+      setTasks((prev) => {
+        const next = prev.map((t) => (t.id === id ? { ...t, ...patch } : t));
+        tasksRef.current = next;
+        return next;
+      });
     }
 
     (async () => {
@@ -163,7 +168,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
       // Advance after a brief pause so the user can see the final state
       await new Promise((r) => setTimeout(r, 1200));
-      if (!cancelled) onNext();
+      if (!cancelled) onNext({ installResults: tasksRef.current });
     })();
 
     return () => {

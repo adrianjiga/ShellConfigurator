@@ -10,6 +10,15 @@ interface DoneScreenProps {
   state: WizardState;
 }
 
+function taskStatus(state: WizardState, id: string) {
+  const task = state.installResults.find((t) => t.id === id);
+  return task?.status ?? 'done';
+}
+
+function taskError(state: WizardState, id: string) {
+  return state.installResults.find((t) => t.id === id)?.error;
+}
+
 export function DoneScreen({ state }: DoneScreenProps) {
   const { exit } = useApp();
   const fontInstalled = state.nerdFontToInstall && state.nerdFontToInstall !== FONT_SELECT_SENTINEL;
@@ -17,55 +26,99 @@ export function DoneScreen({ state }: DoneScreenProps) {
     ? (NERD_FONTS.find((f) => f.id === state.nerdFontToInstall)?.label ?? state.nerdFontToInstall)
     : null;
 
+  const failures = state.installResults.filter((t) => t.status === 'failed');
+  const hasFailures = failures.length > 0;
+
   useInput((char, key) => {
     if (key.return || key.escape || char.toLowerCase() === 'q') {
       exit();
     }
   });
 
+  const configOk = taskStatus(state, 'config') !== 'failed';
+  const fontOk = taskStatus(state, 'font') !== 'failed';
+  const rcOk = taskStatus(state, 'rc') !== 'failed';
+
   return (
     <WizardLayout state={state} hidePreview>
       <Box flexDirection="column" gap={1}>
-        <Text bold color="green">
-          All done!
+        <Text bold color={hasFailures ? 'yellow' : 'green'}>
+          {hasFailures ? 'Finished with errors' : 'All done!'}
         </Text>
 
         <Box flexDirection="column" marginTop={1} gap={1}>
-          <Box flexDirection="row" gap={1}>
-            <Text color="green">✓</Text>
-            <Text>Config written to</Text>
-            <Text color="cyan">{getConfigPath()}</Text>
+          <Box flexDirection="column">
+            <Box flexDirection="row" gap={1}>
+              <Text color={configOk ? 'green' : 'red'}>{configOk ? '✓' : '✗'}</Text>
+              <Text>Config written to</Text>
+              <Text color="cyan">{getConfigPath()}</Text>
+            </Box>
+            {!configOk && (
+              <Box marginLeft={3}>
+                <Text color="red" italic>
+                  {taskError(state, 'config')}
+                </Text>
+              </Box>
+            )}
           </Box>
 
           {fontInstalled && (
-            <Box flexDirection="row" gap={1}>
-              <Text color="green">✓</Text>
-              <Text>
-                Nerd Font installed: <Text color="cyan">{fontLabel}</Text>
-              </Text>
+            <Box flexDirection="column">
+              <Box flexDirection="row" gap={1}>
+                <Text color={fontOk ? 'green' : 'red'}>{fontOk ? '✓' : '✗'}</Text>
+                <Text>
+                  Nerd Font {fontOk ? 'installed' : 'failed'}: <Text color="cyan">{fontLabel}</Text>
+                </Text>
+              </Box>
+              {!fontOk && (
+                <Box marginLeft={3}>
+                  <Text color="red" italic>
+                    {taskError(state, 'font')}
+                  </Text>
+                </Box>
+              )}
             </Box>
           )}
 
           {state.selectedShells.map((shellId) => {
             const shell = getShell(shellId);
             const wasInstalled = state.installedShells.includes(shellId);
+            const shellOk = taskStatus(state, `shell_${shellId}`) !== 'failed';
             return (
-              <Box key={shellId} flexDirection="row" gap={1}>
-                <Text color="green">✓</Text>
-                <Text>{shell?.label ?? shellId.charAt(0).toUpperCase() + shellId.slice(1)}:</Text>
-                {!wasInstalled && <Text color="cyan">installed + </Text>}
-                <Text color="gray">
-                  {shell?.rcFile ? `init line added to ${shell.rcFile}` : shell?.manualNote}
-                </Text>
+              <Box key={shellId} flexDirection="column">
+                <Box flexDirection="row" gap={1}>
+                  <Text color={rcOk ? 'green' : 'red'}>{rcOk ? '✓' : '✗'}</Text>
+                  <Text>{shell?.label ?? shellId.charAt(0).toUpperCase() + shellId.slice(1)}:</Text>
+                  {!wasInstalled && (
+                    <Text color={shellOk ? 'cyan' : 'red'}>
+                      {shellOk ? 'installed + ' : 'install failed'}
+                    </Text>
+                  )}
+                  {(wasInstalled || shellOk) && (
+                    <Text color="gray">
+                      {shell?.rcFile ? `init line added to ${shell.rcFile}` : shell?.manualNote}
+                    </Text>
+                  )}
+                </Box>
+                {!shellOk && !wasInstalled && (
+                  <Box marginLeft={3}>
+                    <Text color="red" italic>
+                      {taskError(state, `shell_${shellId}`)}
+                    </Text>
+                  </Box>
+                )}
               </Box>
             );
           })}
 
           {state.setDefaultShell && (
             <Box flexDirection="row" gap={1}>
-              <Text color="green">✓</Text>
+              <Text color={taskStatus(state, 'chsh') !== 'failed' ? 'green' : 'red'}>
+                {taskStatus(state, 'chsh') !== 'failed' ? '✓' : '✗'}
+              </Text>
               <Text>
-                Default shell set to <Text color="cyan">{state.setDefaultShell}</Text>
+                Default shell {taskStatus(state, 'chsh') !== 'failed' ? 'set to' : 'failed to set'}{' '}
+                <Text color="cyan">{state.setDefaultShell}</Text>
               </Text>
             </Box>
           )}
@@ -73,7 +126,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
 
         <Box marginTop={1} flexDirection="column">
           <Text color="gray">Restart your terminal to see the new prompt.</Text>
-          {fontInstalled && (
+          {fontInstalled && fontOk && (
             <Text color="yellow">
               Remember to set <Text color="cyan">{fontLabel} Nerd Font</Text> in your terminal
               emulator settings.
