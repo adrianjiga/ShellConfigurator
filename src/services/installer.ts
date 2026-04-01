@@ -75,7 +75,10 @@ export async function installNerdFont(fontId: string): Promise<void> {
   const font = NERD_FONTS.find((f) => f.id === fontId);
   if (!font) throw new Error(`Unknown font: ${fontId}`);
 
-  const fontsDir = path.join(os.homedir(), '.local', 'share', 'fonts');
+  const fontsDir =
+    process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Fonts')
+      : path.join(os.homedir(), '.local', 'share', 'fonts');
   fs.mkdirSync(fontsDir, { recursive: true });
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-font-'));
@@ -97,8 +100,10 @@ export async function installNerdFont(fontId: string): Promise<void> {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 
-  // Refresh font cache
-  runCommand(['fc-cache', '-fv']);
+  // Refresh font cache (Linux only — macOS picks up ~/Library/Fonts automatically)
+  if (process.platform !== 'darwin') {
+    runCommand(['fc-cache', '-fv']);
+  }
 }
 
 export async function setDefaultShell(shellId: ShellId): Promise<void> {
