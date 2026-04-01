@@ -25,11 +25,17 @@ const COLOR_OPTIONS: { value: ColorScheme; label: string; description: string }[
 type FocusSection = 'char' | 'color';
 
 export function StyleScreen({ state, onNext, onBack }: StyleScreenProps) {
-  const [charIdx, setCharIdx] = useState(
-    () => CHAR_OPTIONS.findIndex((o) => o.value === state.characterSymbol) ?? 0
+  const [charIdx, setCharIdx] = useState(() =>
+    Math.max(
+      0,
+      CHAR_OPTIONS.findIndex((o) => o.value === state.characterSymbol)
+    )
   );
-  const [colorIdx, setColorIdx] = useState(
-    () => COLOR_OPTIONS.findIndex((o) => o.value === state.colorScheme) ?? 0
+  const [colorIdx, setColorIdx] = useState(() =>
+    Math.max(
+      0,
+      COLOR_OPTIONS.findIndex((o) => o.value === state.colorScheme)
+    )
   );
   const [focus, setFocus] = useState<FocusSection>('char');
 

@@ -1,4 +1,4 @@
-import { execFileSync, execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import { ShellId, PackageManager } from '../types.js';
 
@@ -41,7 +41,10 @@ export function detectPackageManager(): PackageManager {
 
 export function isStarshipInstalled(): { installed: boolean; version?: string } {
   try {
-    const version = execSync('starship --version', { encoding: 'utf8', stdio: 'pipe' }).trim();
+    const version = execFileSync('starship', ['--version'], {
+      encoding: 'utf8',
+      stdio: 'pipe',
+    }).trim();
     return { installed: true, version };
   } catch {
     return { installed: false };

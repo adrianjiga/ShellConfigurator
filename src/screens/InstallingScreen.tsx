@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text } from 'ink';
-import { WizardState, InstallTask, InstallStatus } from '../types.js';
+import { WizardState, InstallTask, InstallStatus, FONT_SELECT_SENTINEL } from '../types.js';
 import { WizardLayout } from '../components/WizardLayout.js';
 import {
   installStarship,
   installShell,
   installNerdFont,
   setDefaultShell,
+  NERD_FONTS,
 } from '../services/installer.js';
 import { writeStarshipConfig, applyShellConfig } from '../generators/shellRc.js';
 import { generateToml } from '../generators/starship.js';
@@ -14,7 +15,7 @@ import { isStarshipInstalled } from '../services/detector.js';
 
 interface InstallingScreenProps {
   state: WizardState;
-  onNext: () => void;
+  onNext: (update?: Partial<WizardState>) => void;
 }
 
 const STATUS_ICONS: Record<InstallStatus, string> = {
@@ -39,9 +40,11 @@ function buildTaskList(state: WizardState): InstallTask[] {
   // Starship
   tasks.push({ id: 'starship', label: 'Starship', status: 'pending' });
 
-  // Nerd Font
-  if (state.nerdFontToInstall) {
-    tasks.push({ id: 'font', label: `Nerd Font (${state.nerdFontToInstall})`, status: 'pending' });
+  // Nerd Font (skip sentinel value)
+  if (state.nerdFontToInstall && state.nerdFontToInstall !== FONT_SELECT_SENTINEL) {
+    const fontLabel =
+      NERD_FONTS.find((f) => f.id === state.nerdFontToInstall)?.label ?? state.nerdFontToInstall;
+    tasks.push({ id: 'font', label: `Nerd Font (${fontLabel})`, status: 'pending' });
   }
 
   // Shells that need installing
@@ -71,6 +74,7 @@ function buildTaskList(state: WizardState): InstallTask[] {
 
 export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const [tasks, setTasks] = useState<InstallTask[]>(() => buildTaskList(state));
+  const tasksRef = useRef(tasks);
   const ran = useRef(false);
 
   useEffect(() => {
@@ -81,7 +85,11 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
     function updateTask(id: string, patch: Partial<InstallTask>) {
       if (cancelled) return;
-      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+      setTasks((prev) => {
+        const next = prev.map((t) => (t.id === id ? { ...t, ...patch } : t));
+        tasksRef.current = next;
+        return next;
+      });
     }
 
     (async () => {
@@ -102,8 +110,8 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
         updateTask('starship', { status: 'failed', error: String(err) });
       }
 
-      // --- Nerd Font ---
-      if (state.nerdFontToInstall) {
+      // --- Nerd Font (skip sentinel value) ---
+      if (state.nerdFontToInstall && state.nerdFontToInstall !== FONT_SELECT_SENTINEL) {
         updateTask('font', { status: 'running' });
         try {
           await installNerdFont(state.nerdFontToInstall);
@@ -160,7 +168,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
       // Advance after a brief pause so the user can see the final state
       await new Promise((r) => setTimeout(r, 1200));
-      if (!cancelled) onNext();
+      if (!cancelled) onNext({ installResults: tasksRef.current });
     })();
 
     return () => {

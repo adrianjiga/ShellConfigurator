@@ -26,11 +26,16 @@ const PM_LABELS: Record<PackageManager, string> = {
 
 export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
   const [detection, setDetection] = useState<Detection | null>(null);
+  const [showManualHelp, setShowManualHelp] = useState(false);
 
-  useEffect(() => {
+  function runDetection() {
     const pm = detectPackageManager();
     const starship = isStarshipInstalled();
     setDetection({ pm, starship });
+  }
+
+  useEffect(() => {
+    runDetection();
   }, []);
 
   useInput((_, key) => {
@@ -47,13 +52,31 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
     { label: "I'll install it manually", value: 'manual' },
   ];
 
+  const manualItems = [
+    { label: 'Re-check (I installed it)', value: 'recheck' },
+    { label: 'Continue without Starship', value: 'continue' },
+  ];
+
   function handleInstallChoice(item: { value: string }) {
     if (!detection) return;
     if (item.value === 'auto') {
-      // Mark not installed — InstallingScreen will handle it
       onNext({ starshipInstalled: false, packageManager: detection.pm });
     }
-    // 'manual' — stay on screen, show instructions
+    if (item.value === 'manual') {
+      setShowManualHelp(true);
+    }
+  }
+
+  function handleManualChoice(item: { value: string }) {
+    if (!detection) return;
+    if (item.value === 'recheck') {
+      setShowManualHelp(false);
+      setDetection(null);
+      runDetection();
+    }
+    if (item.value === 'continue') {
+      onNext({ starshipInstalled: false, packageManager: detection.pm });
+    }
   }
 
   return (
@@ -91,7 +114,23 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
               ) : (
                 <Box flexDirection="column" gap={1}>
                   <Text color="yellow">✗ Starship is not installed</Text>
-                  <SelectInput items={installItems} onSelect={handleInstallChoice} />
+                  {showManualHelp ? (
+                    <Box flexDirection="column" gap={1}>
+                      <Text color="gray">
+                        Install Starship:{' '}
+                        <Text color="cyan">curl -sS https://starship.rs/install.sh | sh</Text>
+                      </Text>
+                      <Text color="gray">
+                        Or see{' '}
+                        <Text color="cyan" underline>
+                          https://starship.rs/guide/#step-1-install-starship
+                        </Text>
+                      </Text>
+                      <SelectInput items={manualItems} onSelect={handleManualChoice} />
+                    </Box>
+                  ) : (
+                    <SelectInput items={installItems} onSelect={handleInstallChoice} />
+                  )}
                 </Box>
               )}
             </>

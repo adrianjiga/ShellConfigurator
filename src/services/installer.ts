@@ -9,8 +9,8 @@ const SHELL_PACKAGES: Record<ShellId, Partial<Record<PackageManager, string>>> =
   bash: { pacman: 'bash', apt: 'bash', dnf: 'bash', brew: 'bash' },
   zsh: { pacman: 'zsh', apt: 'zsh', dnf: 'zsh', brew: 'zsh' },
   fish: { pacman: 'fish', apt: 'fish', dnf: 'fish', brew: 'fish' },
-  nushell: { pacman: 'nushell', apt: 'nushell', dnf: 'nushell', brew: 'nushell' },
-  powershell: { pacman: 'powershell', apt: 'powershell', dnf: 'powershell', brew: 'powershell' },
+  nushell: { pacman: 'nushell', brew: 'nushell' },
+  powershell: { pacman: 'powershell', brew: 'powershell' },
 };
 
 const INSTALL_CMDS: Record<PackageManager, (pkg: string) => string[]> = {
@@ -42,6 +42,9 @@ function runCommand(args: string[]): void {
   const result = spawnSync(cmd, rest, { stdio: 'inherit' });
 
   if (result.error) throw result.error;
+  if (result.signal) {
+    throw new Error(`Command killed by signal ${result.signal}: ${args.join(' ')}`);
+  }
   if (result.status !== 0) {
     throw new Error(`Command failed with exit code ${result.status}: ${args.join(' ')}`);
   }
@@ -72,7 +75,10 @@ export async function installNerdFont(fontId: string): Promise<void> {
   const font = NERD_FONTS.find((f) => f.id === fontId);
   if (!font) throw new Error(`Unknown font: ${fontId}`);
 
-  const fontsDir = path.join(os.homedir(), '.local', 'share', 'fonts');
+  const fontsDir =
+    process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Fonts')
+      : path.join(os.homedir(), '.local', 'share', 'fonts');
   fs.mkdirSync(fontsDir, { recursive: true });
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-font-'));
@@ -94,8 +100,10 @@ export async function installNerdFont(fontId: string): Promise<void> {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 
-  // Refresh font cache
-  runCommand(['fc-cache', '-fv']);
+  // Refresh font cache (Linux only — macOS picks up ~/Library/Fonts automatically)
+  if (process.platform !== 'darwin') {
+    runCommand(['fc-cache', '-fv']);
+  }
 }
 
 export async function setDefaultShell(shellId: ShellId): Promise<void> {
