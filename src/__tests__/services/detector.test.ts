@@ -169,21 +169,21 @@ describe('detectInstalledShells', () => {
 
 function execFileSucceeds(stdout = '') {
   mockExecFile.mockImplementation((...args: unknown[]) => {
-    const cb = args[args.length - 1] as Function;
+    const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
     cb(null, stdout, '');
   });
 }
 
 function execFileFails() {
   mockExecFile.mockImplementation((...args: unknown[]) => {
-    const cb = args[args.length - 1] as Function;
+    const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
     cb(new Error('command not found'), '', '');
   });
 }
 
 function execFileByArg(match: (arg: string) => boolean, stdout = '/usr/bin/cmd') {
   mockExecFile.mockImplementation((...args: unknown[]) => {
-    const cb = args[args.length - 1] as Function;
+    const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
     const cmdArgs = args[1] as string[];
     if (match(cmdArgs[0]!)) {
       cb(null, stdout, '');
@@ -195,14 +195,14 @@ function execFileByArg(match: (arg: string) => boolean, stdout = '/usr/bin/cmd')
 
 function readFileAsyncReturns(content: string) {
   mockReadFile.mockImplementation((...args: unknown[]) => {
-    const cb = args[args.length - 1] as Function;
+    const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
     cb(null, content);
   });
 }
 
 function readFileAsyncFails() {
   mockReadFile.mockImplementation((...args: unknown[]) => {
-    const cb = args[args.length - 1] as Function;
+    const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
     cb(new Error('no os-release'));
   });
 }
