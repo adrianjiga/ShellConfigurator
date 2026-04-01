@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { WizardState } from '../types.js';
 import { MODULES } from '../config/modules.js';
@@ -23,9 +23,14 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
     () => new Set(currentModules.filter((m) => m !== 'character'))
   );
   const [cursor, setCursor] = useState(0);
+  const isInitialMount = useRef(true);
 
-  // Push live updates to parent state so preview stays in sync
+  // Push live updates to parent state so preview stays in sync (skip initial mount)
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
     const ordered = CONFIGURABLE.filter((m) => enabled.has(m.id)).map((m) => m.id);
     if (side === 'left') {
       onUpdate({ leftModules: [...ordered, 'character'] });
