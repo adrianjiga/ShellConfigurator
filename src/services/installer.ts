@@ -9,8 +9,8 @@ const SHELL_PACKAGES: Record<ShellId, Partial<Record<PackageManager, string>>> =
   bash: { pacman: 'bash', apt: 'bash', dnf: 'bash', brew: 'bash' },
   zsh: { pacman: 'zsh', apt: 'zsh', dnf: 'zsh', brew: 'zsh' },
   fish: { pacman: 'fish', apt: 'fish', dnf: 'fish', brew: 'fish' },
-  nushell: { pacman: 'nushell', apt: 'nushell', dnf: 'nushell', brew: 'nushell' },
-  powershell: { pacman: 'powershell', apt: 'powershell', dnf: 'powershell', brew: 'powershell' },
+  nushell: { pacman: 'nushell', brew: 'nushell' },
+  powershell: { pacman: 'powershell', brew: 'powershell' },
 };
 
 const INSTALL_CMDS: Record<PackageManager, (pkg: string) => string[]> = {
