@@ -77,7 +77,7 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
       return;
     }
 
-    if (key.return && selected.size > 0) {
+    if (key.return && selected.size > 0 && installedShells !== null) {
       onNext({
         selectedShells: Array.from(selected),
         installedShells: installedShells ?? [],
@@ -137,7 +137,12 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
           })}
         </Box>
 
-        {selected.size === 0 && (
+        {installedShells === null && (
+          <Text color="yellow" italic>
+            Detecting installed shells…
+          </Text>
+        )}
+        {selected.size === 0 && installedShells !== null && (
           <Text color="yellow" italic>
             Select at least one shell to continue.
           </Text>
@@ -149,7 +154,15 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
           { key: '↑↓', label: 'navigate' },
           { key: 'Space', label: 'toggle' },
           { key: 'D', label: 'set as login shell' },
-          { key: 'Enter', label: selected.size > 0 ? 'confirm' : '(select a shell first)' },
+          {
+            key: 'Enter',
+            label:
+              installedShells === null
+                ? '(detecting shells…)'
+                : selected.size > 0
+                  ? 'confirm'
+                  : '(select a shell first)',
+          },
           { key: 'Esc', label: 'back' },
         ]}
       />
