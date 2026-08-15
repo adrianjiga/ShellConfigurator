@@ -84,6 +84,7 @@ export function App() {
     case 'segments_left':
       return (
         <SegmentsScreen
+          key="left"
           state={state}
           side="left"
           onNext={goNext}
@@ -95,6 +96,7 @@ export function App() {
     case 'segments_right':
       return (
         <SegmentsScreen
+          key="right"
           state={state}
           side="right"
           onNext={goNext}
