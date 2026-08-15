@@ -157,20 +157,27 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
         updateTask('config', { status: 'failed', error: String(err) });
       }
 
-      // --- Apply shell RC files ---
-      updateTask('rc', { status: 'running' });
-      const rcErrors: string[] = [];
-      for (const shellId of state.selectedShells) {
-        try {
-          applyShellConfig(shellId);
-        } catch (err) {
-          rcErrors.push(`${shellId}: ${err instanceof Error ? err.message : err}`);
-        }
-      }
-      if (rcErrors.length > 0) {
-        updateTask('rc', { status: 'failed', error: rcErrors.join('; ') });
+      // --- Apply shell RC files (skipped until Starship is installed) ---
+      if (state.skipStarshipInstall) {
+        updateTask('rc', {
+          status: 'skipped',
+          label: 'Apply shell configs (skipped — install Starship first)',
+        });
       } else {
-        updateTask('rc', { status: 'done' });
+        updateTask('rc', { status: 'running' });
+        const rcErrors: string[] = [];
+        for (const shellId of state.selectedShells) {
+          try {
+            applyShellConfig(shellId);
+          } catch (err) {
+            rcErrors.push(`${shellId}: ${err instanceof Error ? err.message : err}`);
+          }
+        }
+        if (rcErrors.length > 0) {
+          updateTask('rc', { status: 'failed', error: rcErrors.join('; ') });
+        } else {
+          updateTask('rc', { status: 'done' });
+        }
       }
 
       // Advance after a brief pause so the user can see the final state
