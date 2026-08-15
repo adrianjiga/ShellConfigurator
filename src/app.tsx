@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
-import {
-  WizardState,
-  WizardStep,
-  DEFAULT_STATE,
-  STEP_ORDER,
-  shouldVisitFontSelect,
-} from './types.js';
+import { WizardState, WizardStep, DEFAULT_STATE } from './types.js';
+import { getNextStep, getPrevStep } from './stepMachine.js';
 import { WelcomeScreen } from './screens/WelcomeScreen.js';
 import { FontCheckScreen } from './screens/FontCheckScreen.js';
 import { FontSelectScreen } from './screens/FontSelectScreen.js';
@@ -28,40 +23,11 @@ export function App() {
   }
 
   function goNext(update?: Partial<WizardState>) {
-    setState((prev) => {
-      const merged = { ...prev, ...update };
-      const currentIndex = STEP_ORDER.indexOf(merged.step);
-      let nextStep = STEP_ORDER[currentIndex + 1];
-
-      if (!nextStep) return prev;
-
-      // Skip font_select if the user doesn't want to install a font
-      if (nextStep === 'font_select' && !shouldVisitFontSelect(merged.nerdFontToInstall)) {
-        const skipped = STEP_ORDER[currentIndex + 2];
-        if (!skipped) return prev;
-        nextStep = skipped;
-      }
-
-      return { ...merged, step: nextStep };
-    });
+    setState((prev) => getNextStep(prev, update));
   }
 
   function goBack() {
-    setState((prev) => {
-      const currentIndex = STEP_ORDER.indexOf(prev.step);
-      let prevIndex = currentIndex - 1;
-
-      // Skip font_select when going back if we never intended to visit it
-      if (
-        STEP_ORDER[prevIndex] === 'font_select' &&
-        !shouldVisitFontSelect(prev.nerdFontToInstall)
-      ) {
-        prevIndex -= 1;
-      }
-
-      const prevStep = STEP_ORDER[prevIndex];
-      return prevStep ? { ...prev, step: prevStep } : prev;
-    });
+    setState((prev) => getPrevStep(prev));
   }
 
   switch (state.step) {
