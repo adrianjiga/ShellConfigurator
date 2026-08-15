@@ -52,7 +52,7 @@ function runCommand(args: string[]): void {
 
 function hasBinary(cmd: string): boolean {
   try {
-    execFileSync('which', [cmd], { stdio: 'pipe' });
+    execFileSync('sh', ['-c', `command -v ${cmd}`], { stdio: 'pipe' });
     return true;
   } catch {
     return false;
@@ -181,7 +181,10 @@ export async function setDefaultShell(shellId: ShellId): Promise<void> {
   let shellPath: string;
 
   try {
-    shellPath = execFileSync('which', [binary], { encoding: 'utf8', stdio: 'pipe' }).trim();
+    shellPath = execFileSync('sh', ['-c', `command -v ${binary}`], {
+      encoding: 'utf8',
+      stdio: 'pipe',
+    }).trim();
   } catch {
     throw new Error(`${binary} not found in PATH`);
   }

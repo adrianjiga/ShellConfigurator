@@ -8,7 +8,7 @@ const readFileP = promisify(fs.readFile);
 
 function commandExists(cmd: string): boolean {
   try {
-    execFileSync('which', [cmd], { stdio: 'pipe' });
+    execFileSync('sh', ['-c', `command -v ${cmd}`], { stdio: 'pipe' });
     return true;
   } catch {
     return false;
@@ -71,7 +71,7 @@ export function detectInstalledShells(): ShellId[] {
 
 async function commandExistsAsync(cmd: string): Promise<boolean> {
   try {
-    await execFileP('which', [cmd]);
+    await execFileP('sh', ['-c', `command -v ${cmd}`]);
     return true;
   } catch {
     return false;
