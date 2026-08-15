@@ -106,7 +106,7 @@ export function App() {
       );
 
     case 'style':
-      return <StyleScreen state={state} onNext={goNext} onBack={goBack} />;
+      return <StyleScreen state={state} onNext={goNext} onUpdate={updateState} onBack={goBack} />;
 
     case 'shells':
       return <ShellScreen state={state} onNext={goNext} onUpdate={updateState} onBack={goBack} />;
