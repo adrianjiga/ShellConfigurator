@@ -71,14 +71,17 @@ export async function installShell(shellId: ShellId, pm: PackageManager): Promis
   runCommand(INSTALL_CMDS[pm](pkg));
 }
 
+export function getNerdFontsDir(): string {
+  return process.platform === 'darwin'
+    ? path.join(os.homedir(), 'Library', 'Fonts')
+    : path.join(os.homedir(), '.local', 'share', 'fonts');
+}
+
 export async function installNerdFont(fontId: string): Promise<void> {
   const font = NERD_FONTS.find((f) => f.id === fontId);
   if (!font) throw new Error(`Unknown font: ${fontId}`);
 
-  const fontsDir =
-    process.platform === 'darwin'
-      ? path.join(os.homedir(), 'Library', 'Fonts')
-      : path.join(os.homedir(), '.local', 'share', 'fonts');
+  const fontsDir = getNerdFontsDir();
   fs.mkdirSync(fontsDir, { recursive: true });
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-font-'));
