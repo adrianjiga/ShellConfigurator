@@ -45,6 +45,7 @@ interface WizardState {
   installedShells: ShellId[]; // Shells already on system
   nerdFontToInstall: string | null; // Font ID, sentinel, or null
   setDefaultShell: ShellId | null; // Shell to set via chsh
+  skipStarshipInstall: boolean; // "Continue without Starship" — skips install + RC steps
   installResults: InstallTask[]; // Final task statuses from InstallingScreen
 }
 ```
@@ -66,9 +67,31 @@ interface InstallTask {
 
 ```typescript
 const FONT_SELECT_SENTINEL = '__select__' as const;
+
+function shouldVisitFontSelect(nerdFontToInstall: string | null): boolean;
+// Returns true unless nerdFontToInstall is null (user declined a font)
+
+const STEP_ORDER: WizardStep[];
+// welcome → fontcheck → font_select → preset → segments_left → segments_right → style → shells → installing → done
 ```
 
-Sentinel value stored in `nerdFontToInstall` to signal that the user chose to install a font but hasn't picked which one yet. The step machine uses this to decide whether to show `font_select`.
+Sentinel value stored in `nerdFontToInstall` to signal that the user chose to install a font but hasn't picked which one yet. `shouldVisitFontSelect` is the single predicate used by the step machine in both directions to decide whether to show `font_select`.
+
+### Step Machine
+
+**File**: `src/stepMachine.ts`
+
+```typescript
+function getNextStep(state: WizardState, update?: Partial<WizardState>): WizardState;
+// Merges update, advances to the next step, skipping font_select when not wanted.
+// Returns the original state unchanged if there is no next step.
+
+function getPrevStep(state: WizardState): WizardState;
+// Moves back a step, skipping font_select when it was never intended.
+// Returns the original state unchanged if there is no previous step.
+```
+
+Pure functions — `src/app.tsx` wraps them in `goNext`/`goBack` state setters.
 
 ---
 
@@ -110,7 +133,6 @@ interface ModuleDef {
   defaultLeft: boolean; // Included in left prompt by default
   defaultRight: boolean; // Included in right prompt by default
   previewSegment: (hasNerdFont: boolean) => string; // Text for PromptPreview
-  formatKey: string; // Starship format string key
 }
 ```
 
@@ -131,7 +153,6 @@ The `MODULES` array is the single registry. All module-aware code reads from it.
   description: 'Active git branch name',
   defaultLeft: true,
   defaultRight: false,
-  formatKey: 'git_branch',
   previewSegment: (nf) => `${nf ? ' ' : 'on '}main`,
 }
 ```
@@ -258,9 +279,41 @@ function installNerdFont(fontId: string): Promise<void>;
 
 function setDefaultShell(shellId: ShellId): Promise<void>;
 // Runs chsh -s <binary_path>
+
+function getNerdFontsDir(): string;
+// Platform fonts directory: ~/Library/Fonts on darwin, ~/.local/share/fonts elsewhere
 ```
 
 All installer functions use `spawnSync` with `stdio: 'inherit'` — they block execution and pass terminal I/O through for sudo prompts.
+
+### installTasks.ts
+
+```typescript
+function buildTaskList(state: WizardState): InstallTask[];
+// Pure — builds the task queue (starship, font, shells, chsh, config, rc)
+
+interface InstallTaskDeps {
+  isStarshipInstalled: () => Promise<{ installed: boolean; version?: string }>;
+  installStarship: (pm: PackageManager) => Promise<void>;
+  installNerdFont: (fontId: string) => Promise<void>;
+  installShell: (shellId: ShellId, pm: PackageManager) => Promise<void>;
+  setDefaultShell: (shellId: ShellId) => Promise<void>;
+  generateToml: (state: WizardState) => string;
+  writeStarshipConfig: (toml: string) => void;
+  applyShellConfig: (shellId: ShellId) => { applied: boolean; note?: string };
+}
+
+const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps;
+// Wires the real installer/generator/detector functions
+
+function runInstallTasks(
+  state: WizardState,
+  deps: InstallTaskDeps,
+  onUpdate: (id: string, patch: Partial<InstallTask>) => void
+): Promise<InstallTask[]>;
+// Executes every task sequentially, reporting status changes via onUpdate and
+// returning the final task list. Per-task failures don't halt the pipeline.
+```
 
 ---
 
@@ -277,7 +330,6 @@ All installer functions use `spawnSync` with `stdio: 'inherit'` — they block e
      description: 'Lua version',
      defaultLeft: false,
      defaultRight: false,
-     formatKey: 'lua',
      previewSegment: (nf) => `${nf ? '🌙 ' : 'lua '}5.4.0`,
    }
    ```

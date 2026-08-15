@@ -145,7 +145,7 @@ The idempotency check uses a simple `string.includes()` — it only matches the 
 
 ## Installer Task System
 
-**Files**: `src/screens/InstallingScreen.tsx` + `src/services/installer.ts`
+**Files**: `src/services/installTasks.ts` (orchestration) + `src/services/installer.ts` (commands) + `src/screens/InstallingScreen.tsx` (rendering)
 
 ### Task Construction
 
@@ -153,12 +153,14 @@ The idempotency check uses a simple `string.includes()` — it only matches the 
 
 | Task        | Condition                                                       | Action                             |
 | ----------- | --------------------------------------------------------------- | ---------------------------------- |
-| Starship    | Always                                                          | Install if not already present     |
+| Starship    | Not `skipStarshipInstall`                                       | Install if not already present     |
 | Nerd Font   | `nerdFontToInstall` is set and is not the sentinel `__select__` | Download and install font          |
 | Shell(s)    | Selected shell not in `installedShells`                         | Install via package manager        |
 | Set default | `setDefaultShell` is set                                        | Run `chsh -s <path>`               |
 | Config      | Always                                                          | Generate and write `starship.toml` |
-| RC files    | Always                                                          | Append init lines to shell configs |
+| RC files    | Not `skipStarshipInstall`                                       | Append init lines to shell configs |
+
+Choosing "Continue without Starship" sets `skipStarshipInstall`, so both the Starship task and the RC step are omitted — writing `eval "$(starship init …)"` lines for a shell without Starship would error on every new shell.
 
 ### Task Lifecycle
 
@@ -183,7 +185,9 @@ Status is displayed with icons:
 
 ### Execution Flow
 
-Tasks run sequentially in a `useEffect` with a `useRef` guard to prevent double-execution during React strict mode / dev re-renders:
+Orchestration lives in `src/services/installTasks.ts` as `runInstallTasks(state, deps, onUpdate)` — a dependency-injected service. The installer, generators, and detector functions are passed in as `InstallTaskDeps` (the real wiring is `DEFAULT_INSTALL_TASK_DEPS`); tests inject fakes. The function tracks an internal task list, reports every status change through `onUpdate(id, patch)`, and returns the final `InstallTask[]`.
+
+`InstallingScreen` calls it from a `useEffect` with a `useRef` guard to prevent double-execution during React strict mode / dev re-renders:
 
 ```typescript
 const ran = useRef(false);
@@ -191,16 +195,16 @@ useEffect(() => {
   if (ran.current) return;
   ran.current = true;
   let cancelled = false;
-  // ... run tasks ...
+  // ... runInstallTasks(state, DEFAULT_INSTALL_TASK_DEPS, updateTask) ...
   return () => {
     cancelled = true;
   };
 }, []);
 ```
 
-Each task is wrapped in try-catch. Failures are recorded but do **not** halt the pipeline — remaining tasks still execute.
+Each task is wrapped in try-catch. Failures are recorded but do **not** halt the pipeline — remaining tasks still execute. The RC step additionally collects per-shell errors (e.g. `fish: Cannot create directory …`) so one shell's failure doesn't block the rest.
 
-After all tasks complete, a 1200ms delay lets the user see the final state before auto-advancing to the Done screen. The final task list is passed to DoneScreen via `installResults` in `WizardState`, so DoneScreen can display actual success/failure status for each task.
+After all tasks complete, a 1200ms delay lets the user see the final state before auto-advancing to the Done screen. The final task list returned by `runInstallTasks` is passed to DoneScreen via `installResults` in `WizardState`, so DoneScreen can display actual success/failure status for each task.
 
 ### Command Execution
 
@@ -227,21 +231,21 @@ The `runCommand` helper checks three failure modes in order: spawn errors (`resu
 
 ### Package Manager Detection
 
-`detectPackageManager()` runs a prioritized detection chain:
+`detectPackageManager()` runs a prioritized detection chain. Binary checks use `sh -c 'command -v <cmd>'` (a POSIX shell builtin) rather than `which`, which is absent on minimal/Fedora/Alpine images:
 
 ```
-1. which brew       → 'brew'      (macOS / Linuxbrew)
-2. which pacman     → 'pacman'    (Arch-based)
+1. command -v brew     → 'brew'      (macOS / Linuxbrew)
+2. command -v pacman   → 'pacman'    (Arch-based)
 3. /etc/os-release  → ID match:
    ├── ubuntu, debian, linuxmint, pop, elementary → 'apt'
    ├── fedora, rhel, centos, rocky, alma          → 'dnf'
    └── arch, manjaro, endeavouros, cachyos, garuda → 'pacman'
-4. which apt-get    → 'apt'       (fallback binary check)
-5. which dnf        → 'dnf'       (fallback binary check)
-6. fallback         → 'script'    (curl install script)
+4. command -v apt-get  → 'apt'       (fallback binary check)
+5. command -v dnf      → 'dnf'       (fallback binary check)
+6. fallback            → 'script'    (curl install script)
 ```
 
-**Why command checks come first**: Homebrew can be installed on Linux, and `which brew` is faster than reading `/etc/os-release`. Pacman is checked early because Arch-based distros don't always have a predictable OS ID.
+**Why command checks come first**: Homebrew can be installed on Linux, and `command -v brew` is faster than reading `/etc/os-release`. Pacman is checked early because Arch-based distros don't always have a predictable OS ID.
 
 **Why binary fallback exists (steps 4-5)**: Some minimal containers or custom distros don't have `/etc/os-release` but do have `apt-get` or `dnf` in PATH.
 
@@ -259,7 +263,7 @@ Handles both quoted and unquoted values.
 
 ### Shell Detection
 
-`detectInstalledShells()` checks for each shell binary via `which`:
+`detectInstalledShells()` checks for each shell binary via `sh -c 'command -v <binary>'`:
 
 | Shell ID   | Binary Checked |
 | ---------- | -------------- |
@@ -290,7 +294,11 @@ Key differences from the sync versions:
 - **`detectInstalledShellsAsync`**: Runs all 5 shell checks in parallel via `Promise.all` (biggest performance win — wall-clock time drops from 5 sequential forks to 1 parallel batch)
 - **`isStarshipInstalledAsync`**: Single async `execFile` call
 
-WelcomeScreen and ShellScreen use the async versions. InstallingScreen keeps the sync `isStarshipInstalled()` since it runs inside an already-blocking install pipeline.
+WelcomeScreen and ShellScreen use the async versions. InstallingScreen runs its detection through the `installTasks` service, which uses `isStarshipInstalledAsync` to avoid blocking the Ink render loop.
+
+### Cross-Distro Smoke Testing
+
+The `.github/workflows/ci.yml` `distro-smoke` job runs the non-destructive parts — `detectPackageManager`, `detectInstalledShells`, `isStarshipInstalled`, `generateToml` (parsed as TOML for every preset), and `applyShellConfig` idempotency against a scratch `HOME` — inside Ubuntu, Debian, Fedora, and Arch containers (`scripts/docker-smoke.mjs`). This exercises the detection chain against real `/etc/os-release` and package-manager layouts without a VM matrix. It caught the `which`-absence issue on Fedora that led to the `command -v` change above.
 
 ---
 
