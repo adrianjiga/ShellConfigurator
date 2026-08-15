@@ -152,5 +152,16 @@ export async function setDefaultShell(shellId: ShellId): Promise<void> {
   }
 
   // chsh prompts for current user's password itself — run with stdio: 'inherit'
-  runCommand(['chsh', '-s', shellPath]);
+  try {
+    runCommand(['chsh', '-s', shellPath]);
+  } catch (err) {
+    // Brew-installed shells usually aren't listed in /etc/shells, so chsh rejects
+    // them. Surface an actionable hint instead of the raw chsh error.
+    throw new Error(
+      `Could not set ${binary} as the default shell. If ${shellPath} isn't listed in ` +
+        `/etc/shells, add it first (e.g. 'echo ${shellPath} | sudo tee -a /etc/shells'). ` +
+        `Cause: ${err instanceof Error ? err.message : err}`,
+      { cause: err }
+    );
+  }
 }
