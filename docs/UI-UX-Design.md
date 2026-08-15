@@ -49,7 +49,7 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 - If not: SelectInput with "Install automatically" / "I'll install manually"
   - "Install manually" shows install instructions (package manager command + docs link) and offers:
     - **Re-check**: re-runs detection (for when user installs in another terminal)
-    - **Continue without Starship**: proceeds to the wizard (Starship will be installed during the Installing step)
+    - **Continue without Starship**: proceeds to the wizard without installing Starship — the Installing step skips the Starship install and the RC config writes, so no `eval "$(starship init …)"` lines end up in shell configs for a shell that has no Starship
 
 **Keys**: `Enter` (continue, if Starship detected)
 
@@ -76,7 +76,7 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 
 **Purpose**: Choose which Nerd Font to install.
 
-**Layout**: SelectInput list of 6 fonts. Shows install path hint (`~/.local/share/fonts/`).
+**Layout**: SelectInput list of 6 fonts. Shows the platform-specific install path hint (`~/Library/Fonts` on macOS, `~/.local/share/fonts` on Linux).
 
 **Only shown when**: User chose "install one for me" on Font Check.
 
@@ -182,6 +182,8 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 ```
 
 Error details appear indented below failed tasks in red italic.
+
+If the user chose "Continue without Starship", the Starship task is omitted entirely and "Apply shell configs" is skipped with an "install Starship first" note — no init lines are written without Starship present.
 
 **No user input** — fully automated. Auto-advances to Done after 1200ms.
 

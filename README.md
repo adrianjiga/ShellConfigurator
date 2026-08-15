@@ -67,10 +67,11 @@ src/
   config/        # Module, preset, and shell definitions
   generators/    # TOML config builder and shell RC updater
   screens/       # One file per wizard step
-  services/      # System detection (detector.ts) and installation (installer.ts)
+  services/      # Detection (detector.ts), installation (installer.ts), task orchestration (installTasks.ts)
   components/    # WizardLayout, PromptPreview, NavHints
-  types.ts       # Shared types and default state
-  app.tsx        # Router / step machine
+  stepMachine.ts # Pure step navigation (getNextStep / getPrevStep)
+  types.ts       # Shared types, STEP_ORDER, default state
+  app.tsx        # State owner + step router
   index.tsx      # Entry point
 ```
 
@@ -81,4 +82,9 @@ npm run dev       # Run with tsx (no build step)
 npm run build     # Compile to dist/
 npm start         # Run compiled output
 npx tsc --noEmit  # Type-check without building
+npm test          # Run unit tests (vitest)
+npm run test:coverage  # Unit tests + coverage report (v8)
+npm run lint      # ESLint
+npm run format:check   # Prettier check
+npm run format    # Prettier write
 ```
