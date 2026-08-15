@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { WizardState, WizardStep } from '../types.js';
+import { WizardState, WizardStep, STEP_ORDER } from '../types.js';
 import { PromptPreview } from './PromptPreview.js';
 
 const STEP_LABELS: Record<WizardStep, string> = {
@@ -13,21 +13,8 @@ const STEP_LABELS: Record<WizardStep, string> = {
   style: '7. Style',
   shells: '8. Shell',
   installing: '9. Installing',
-  done: '  Done',
+  done: '10. Done',
 };
-
-const STEP_ORDER: WizardStep[] = [
-  'welcome',
-  'fontcheck',
-  'font_select',
-  'preset',
-  'segments_left',
-  'segments_right',
-  'style',
-  'shells',
-  'installing',
-  'done',
-];
 
 interface WizardLayoutProps {
   state: WizardState;

@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
-import { WizardState, WizardStep, DEFAULT_STATE, FONT_SELECT_SENTINEL } from './types.js';
+import {
+  WizardState,
+  WizardStep,
+  DEFAULT_STATE,
+  FONT_SELECT_SENTINEL,
+  STEP_ORDER,
+} from './types.js';
 import { WelcomeScreen } from './screens/WelcomeScreen.js';
 import { FontCheckScreen } from './screens/FontCheckScreen.js';
 import { FontSelectScreen } from './screens/FontSelectScreen.js';
@@ -9,19 +15,6 @@ import { StyleScreen } from './screens/StyleScreen.js';
 import { ShellScreen } from './screens/ShellScreen.js';
 import { InstallingScreen } from './screens/InstallingScreen.js';
 import { DoneScreen } from './screens/DoneScreen.js';
-
-const STEP_ORDER: WizardStep[] = [
-  'welcome',
-  'fontcheck',
-  'font_select',
-  'preset',
-  'segments_left',
-  'segments_right',
-  'style',
-  'shells',
-  'installing',
-  'done',
-];
 
 export function App() {
   const [state, setState] = useState<WizardState>(DEFAULT_STATE);

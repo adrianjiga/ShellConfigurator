@@ -26,6 +26,19 @@ export type WizardStep =
   | 'installing'
   | 'done';
 
+export const STEP_ORDER: WizardStep[] = [
+  'welcome',
+  'fontcheck',
+  'font_select',
+  'preset',
+  'segments_left',
+  'segments_right',
+  'style',
+  'shells',
+  'installing',
+  'done',
+];
+
 export interface WizardState {
   step: WizardStep;
   starshipInstalled: boolean;
