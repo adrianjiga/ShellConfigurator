@@ -135,4 +135,38 @@ describe('applyShellConfig', () => {
     expect(result.applied).toBe(true);
     expect(fs.appendFileSync).toHaveBeenCalled();
   });
+
+  it('appends the ShellConfigurator banner before the init line', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => '');
+
+    const result = applyShellConfig('zsh');
+
+    expect(result.applied).toBe(true);
+    const appendedContent = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
+    expect(appendedContent).toContain('# Added by ShellConfigurator');
+    expect(appendedContent).toContain('eval "$(starship init zsh)"');
+  });
+
+  it('throws with a helpful message when the rc directory cannot be created', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.mocked(fs.mkdirSync).mockImplementation(() => {
+      throw new Error('EACCES: permission denied');
+    });
+
+    expect(() => applyShellConfig('zsh')).toThrow('Cannot create directory');
+    expect(() => applyShellConfig('zsh')).toThrow('EACCES: permission denied');
+    expect(fs.appendFileSync).not.toHaveBeenCalled();
+  });
+
+  it('is idempotent for fish', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => 'starship init fish | source');
+
+    const result = applyShellConfig('fish');
+
+    expect(result.applied).toBe(false);
+    expect(result.note).toBe('already configured');
+    expect(fs.appendFileSync).not.toHaveBeenCalled();
+  });
 });
