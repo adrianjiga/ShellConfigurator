@@ -63,10 +63,21 @@ export async function installStarship(pm: PackageManager): Promise<void> {
 }
 
 export async function installShell(shellId: ShellId, pm: PackageManager): Promise<void> {
-  const pkg = SHELL_PACKAGES[shellId][pm];
-  if (!pkg) throw new Error(`No package for ${shellId} on ${pm}`);
+  if (pm === 'script') {
+    throw new Error(
+      `Cannot auto-install ${shellId}: no package manager detected. ` +
+        `Install ${shellId} manually (e.g. check your distro's package repo or the ` +
+        `${shellId} documentation), then re-run the wizard.`
+    );
+  }
 
-  if (pm === 'script') throw new Error(`Cannot auto-install ${shellId} without a package manager`);
+  const pkg = SHELL_PACKAGES[shellId][pm];
+  if (!pkg) {
+    throw new Error(
+      `No package for ${shellId} on ${pm}. Install ${shellId} manually ` +
+        `(check the ${shellId} official docs for install instructions), then re-run the wizard.`
+    );
+  }
 
   runCommand(INSTALL_CMDS[pm](pkg));
 }
