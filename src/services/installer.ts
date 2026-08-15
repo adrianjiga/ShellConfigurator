@@ -93,17 +93,44 @@ export async function installNerdFont(fontId: string): Promise<void> {
     const buffer = await response.arrayBuffer();
     fs.writeFileSync(zipPath, Buffer.from(buffer));
 
-    // Extract with unzip
-    runCommand(['unzip', '-o', '-q', zipPath, '-d', fontsDir]);
+    // Extract into the temp dir, then copy only font files so non-font
+    // payloads (LICENSE.md, readme.md) don't land in the fonts dir.
+    runCommand(['unzip', '-o', '-q', zipPath, '-d', tmpDir]);
+
+    const fontFiles = collectFontFiles(tmpDir);
+    if (fontFiles.length === 0) {
+      throw new Error(`No font files found in ${font.zipName}`);
+    }
+    for (const file of fontFiles) {
+      fs.copyFileSync(file, path.join(fontsDir, path.basename(file)));
+    }
   } finally {
     // Clean up temp files
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 
-  // Refresh font cache (Linux only — macOS picks up ~/Library/Fonts automatically)
+  // Refresh font cache (Linux only — macOS picks up ~/Library/Fonts automatically).
+  // Non-fatal: fc-cache may be absent on minimal systems.
   if (process.platform !== 'darwin') {
-    runCommand(['fc-cache', '-fv']);
+    try {
+      runCommand(['fc-cache', '-f']);
+    } catch {
+      // ignore — cache refresh is best-effort
+    }
   }
+}
+
+function collectFontFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...collectFontFiles(full));
+    } else if (/\.(ttf|otf|woff2?)$/i.test(entry.name)) {
+      out.push(full);
+    }
+  }
+  return out;
 }
 
 export async function setDefaultShell(shellId: ShellId): Promise<void> {
