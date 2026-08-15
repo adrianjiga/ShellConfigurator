@@ -50,8 +50,23 @@ function runCommand(args: string[]): void {
   }
 }
 
+function hasBinary(cmd: string): boolean {
+  try {
+    execFileSync('which', [cmd], { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function installStarship(pm: PackageManager): Promise<void> {
   if (pm === 'script') {
+    if (!hasBinary('curl')) {
+      throw new Error(
+        'Cannot download Starship: "curl" is not installed. Install curl and try again, ' +
+          'or install Starship manually (see https://starship.rs/install).'
+      );
+    }
     // Official install script — installs to ~/.local/bin, no sudo needed
     runCommand(['sh', '-c', 'curl -sS https://starship.rs/install.sh | sh -s -- --yes']);
     return;
@@ -63,22 +78,36 @@ export async function installStarship(pm: PackageManager): Promise<void> {
 }
 
 export async function installShell(shellId: ShellId, pm: PackageManager): Promise<void> {
-  const pkg = SHELL_PACKAGES[shellId][pm];
-  if (!pkg) throw new Error(`No package for ${shellId} on ${pm}`);
+  if (pm === 'script') {
+    throw new Error(
+      `Cannot auto-install ${shellId}: no package manager detected. ` +
+        `Install ${shellId} manually (e.g. check your distro's package repo or the ` +
+        `${shellId} documentation), then re-run the wizard.`
+    );
+  }
 
-  if (pm === 'script') throw new Error(`Cannot auto-install ${shellId} without a package manager`);
+  const pkg = SHELL_PACKAGES[shellId][pm];
+  if (!pkg) {
+    throw new Error(
+      `No package for ${shellId} on ${pm}. Install ${shellId} manually ` +
+        `(check the ${shellId} official docs for install instructions), then re-run the wizard.`
+    );
+  }
 
   runCommand(INSTALL_CMDS[pm](pkg));
+}
+
+export function getNerdFontsDir(): string {
+  return process.platform === 'darwin'
+    ? path.join(os.homedir(), 'Library', 'Fonts')
+    : path.join(os.homedir(), '.local', 'share', 'fonts');
 }
 
 export async function installNerdFont(fontId: string): Promise<void> {
   const font = NERD_FONTS.find((f) => f.id === fontId);
   if (!font) throw new Error(`Unknown font: ${fontId}`);
 
-  const fontsDir =
-    process.platform === 'darwin'
-      ? path.join(os.homedir(), 'Library', 'Fonts')
-      : path.join(os.homedir(), '.local', 'share', 'fonts');
+  const fontsDir = getNerdFontsDir();
   fs.mkdirSync(fontsDir, { recursive: true });
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-font-'));
@@ -95,6 +124,12 @@ export async function installNerdFont(fontId: string): Promise<void> {
 
     // Extract into the temp dir, then copy only font files so non-font
     // payloads (LICENSE.md, readme.md) don't land in the fonts dir.
+    if (!hasBinary('unzip')) {
+      throw new Error(
+        'Cannot extract the font: "unzip" is not installed. ' +
+          `Install it (e.g. ${process.platform === 'darwin' ? 'brew install unzip' : 'sudo apt-get install unzip'}) and try again.`
+      );
+    }
     runCommand(['unzip', '-o', '-q', zipPath, '-d', tmpDir]);
 
     const fontFiles = collectFontFiles(tmpDir);

@@ -11,7 +11,7 @@ import {
 } from '../services/installer.js';
 import { writeStarshipConfig, applyShellConfig } from '../generators/shellRc.js';
 import { generateToml } from '../generators/starship.js';
-import { isStarshipInstalled } from '../services/detector.js';
+import { isStarshipInstalledAsync } from '../services/detector.js';
 
 interface InstallingScreenProps {
   state: WizardState;
@@ -79,6 +79,11 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const tasksRef = useRef(tasks);
   const ran = useRef(false);
 
+  // Keep the ref in sync with the latest tasks so the async flow can read them
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
   useEffect(() => {
     if (ran.current) return;
     ran.current = true;
@@ -87,18 +92,14 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
     function updateTask(id: string, patch: Partial<InstallTask>) {
       if (cancelled) return;
-      setTasks((prev) => {
-        const next = prev.map((t) => (t.id === id ? { ...t, ...patch } : t));
-        tasksRef.current = next;
-        return next;
-      });
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
     }
 
     (async () => {
       // --- Starship (task omitted entirely when skipStarshipInstall) ---
       updateTask('starship', { status: 'running' });
       try {
-        const check = isStarshipInstalled();
+        const check = await isStarshipInstalledAsync();
         if (check.installed) {
           updateTask('starship', {
             status: 'skipped',
@@ -157,15 +158,27 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
         updateTask('config', { status: 'failed', error: String(err) });
       }
 
-      // --- Apply shell RC files ---
-      updateTask('rc', { status: 'running' });
-      try {
+      // --- Apply shell RC files (skipped until Starship is installed) ---
+      if (state.skipStarshipInstall) {
+        updateTask('rc', {
+          status: 'skipped',
+          label: 'Apply shell configs (skipped — install Starship first)',
+        });
+      } else {
+        updateTask('rc', { status: 'running' });
+        const rcErrors: string[] = [];
         for (const shellId of state.selectedShells) {
-          applyShellConfig(shellId);
+          try {
+            applyShellConfig(shellId);
+          } catch (err) {
+            rcErrors.push(`${shellId}: ${err instanceof Error ? err.message : err}`);
+          }
         }
-        updateTask('rc', { status: 'done' });
-      } catch (err) {
-        updateTask('rc', { status: 'failed', error: String(err) });
+        if (rcErrors.length > 0) {
+          updateTask('rc', { status: 'failed', error: rcErrors.join('; ') });
+        } else {
+          updateTask('rc', { status: 'done' });
+        }
       }
 
       // Advance after a brief pause so the user can see the final state

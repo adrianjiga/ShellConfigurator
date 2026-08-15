@@ -7,6 +7,11 @@ export type InstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped
 /** Sentinel value for nerdFontToInstall — means "route to font selection screen" */
 export const FONT_SELECT_SENTINEL = '__select__' as const;
 
+/** Whether the wizard should show the font selection step for this choice */
+export function shouldVisitFontSelect(nerdFontToInstall: string | null): boolean {
+  return nerdFontToInstall !== null;
+}
+
 export interface InstallTask {
   id: string;
   label: string;

@@ -126,6 +126,13 @@ export function DoneScreen({ state }: DoneScreenProps) {
 
         <Box marginTop={1} flexDirection="column">
           <Text color="gray">Restart your terminal to see the new prompt.</Text>
+          {state.skipStarshipInstall && (
+            <Text color="yellow">
+              Starship is not installed, so shell init lines were not added. Install it (e.g.{' '}
+              <Text color="cyan">curl -sS https://starship.rs/install.sh | sh</Text>), then re-run
+              the wizard to configure your shells.
+            </Text>
+          )}
           {fontInstalled && fontOk && (
             <Text color="yellow">
               Remember to set <Text color="cyan">{fontLabel} Nerd Font</Text> in your terminal

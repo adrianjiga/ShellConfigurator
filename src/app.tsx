@@ -3,8 +3,8 @@ import {
   WizardState,
   WizardStep,
   DEFAULT_STATE,
-  FONT_SELECT_SENTINEL,
   STEP_ORDER,
+  shouldVisitFontSelect,
 } from './types.js';
 import { WelcomeScreen } from './screens/WelcomeScreen.js';
 import { FontCheckScreen } from './screens/FontCheckScreen.js';
@@ -36,7 +36,7 @@ export function App() {
       if (!nextStep) return prev;
 
       // Skip font_select if the user doesn't want to install a font
-      if (nextStep === 'font_select' && merged.nerdFontToInstall !== FONT_SELECT_SENTINEL) {
+      if (nextStep === 'font_select' && !shouldVisitFontSelect(merged.nerdFontToInstall)) {
         const skipped = STEP_ORDER[currentIndex + 2];
         if (!skipped) return prev;
         nextStep = skipped;
@@ -52,7 +52,10 @@ export function App() {
       let prevIndex = currentIndex - 1;
 
       // Skip font_select when going back if we never intended to visit it
-      if (STEP_ORDER[prevIndex] === 'font_select' && prev.nerdFontToInstall === null) {
+      if (
+        STEP_ORDER[prevIndex] === 'font_select' &&
+        !shouldVisitFontSelect(prev.nerdFontToInstall)
+      ) {
         prevIndex -= 1;
       }
 
