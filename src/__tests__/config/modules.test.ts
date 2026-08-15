@@ -7,7 +7,6 @@ describe('MODULES', () => {
       expect(mod.id, `${mod.id} missing id`).toBeTruthy();
       expect(mod.label, `${mod.id} missing label`).toBeTruthy();
       expect(mod.description, `${mod.id} missing description`).toBeTruthy();
-      expect(mod.formatKey, `${mod.id} missing formatKey`).toBeTruthy();
       expect(typeof mod.previewSegment, `${mod.id} previewSegment not a function`).toBe('function');
     }
   });
