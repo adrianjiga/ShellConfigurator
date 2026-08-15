@@ -79,6 +79,11 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const tasksRef = useRef(tasks);
   const ran = useRef(false);
 
+  // Keep the ref in sync with the latest tasks so the async flow can read them
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
   useEffect(() => {
     if (ran.current) return;
     ran.current = true;
@@ -87,11 +92,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
     function updateTask(id: string, patch: Partial<InstallTask>) {
       if (cancelled) return;
-      setTasks((prev) => {
-        const next = prev.map((t) => (t.id === id ? { ...t, ...patch } : t));
-        tasksRef.current = next;
-        return next;
-      });
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
     }
 
     (async () => {
