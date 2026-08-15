@@ -11,7 +11,7 @@ import {
 } from '../services/installer.js';
 import { writeStarshipConfig, applyShellConfig } from '../generators/shellRc.js';
 import { generateToml } from '../generators/starship.js';
-import { isStarshipInstalled } from '../services/detector.js';
+import { isStarshipInstalledAsync } from '../services/detector.js';
 
 interface InstallingScreenProps {
   state: WizardState;
@@ -98,7 +98,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
       // --- Starship (task omitted entirely when skipStarshipInstall) ---
       updateTask('starship', { status: 'running' });
       try {
-        const check = isStarshipInstalled();
+        const check = await isStarshipInstalledAsync();
         if (check.installed) {
           updateTask('starship', {
             status: 'skipped',
