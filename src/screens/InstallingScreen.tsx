@@ -159,13 +159,18 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
       // --- Apply shell RC files ---
       updateTask('rc', { status: 'running' });
-      try {
-        for (const shellId of state.selectedShells) {
+      const rcErrors: string[] = [];
+      for (const shellId of state.selectedShells) {
+        try {
           applyShellConfig(shellId);
+        } catch (err) {
+          rcErrors.push(`${shellId}: ${err instanceof Error ? err.message : err}`);
         }
+      }
+      if (rcErrors.length > 0) {
+        updateTask('rc', { status: 'failed', error: rcErrors.join('; ') });
+      } else {
         updateTask('rc', { status: 'done' });
-      } catch (err) {
-        updateTask('rc', { status: 'failed', error: String(err) });
       }
 
       // Advance after a brief pause so the user can see the final state
