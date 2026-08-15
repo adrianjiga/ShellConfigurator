@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import * as toml from '@iarna/toml';
 import { generateToml } from '../../generators/starship.js';
 import { DEFAULT_STATE, WizardState } from '../../types.js';
 import { MODULES } from '../../config/modules.js';
+import { PRESETS } from '../../config/presets.js';
 
 const base: WizardState = {
   ...DEFAULT_STATE,
@@ -117,5 +119,52 @@ describe('generateToml', () => {
     expect(toml).toContain('[character]');
     expect(toml).toContain('success_symbol');
     expect(toml).toContain('error_symbol');
+  });
+
+  it('does not duplicate character in the format string from module lists', () => {
+    const toml = generateToml({ ...base, leftModules: ['character', 'directory'] });
+    const occurrences = (toml.match(/format\s*=.*\$character/g) ?? [])[0] ?? '';
+    const count = occurrences.match(/\$character/g)?.length ?? 0;
+    expect(count).toBe(1);
+  });
+
+  it('handles empty leftModules with right modules present', () => {
+    const toml = generateToml({ ...base, leftModules: [], rightModules: ['cmd_duration'] });
+    expect(toml).toContain('$fill$cmd_duration');
+  });
+
+  it('generates parseable TOML for every preset', () => {
+    for (const preset of PRESETS) {
+      const state: WizardState = {
+        ...DEFAULT_STATE,
+        leftModules: preset.leftModules ?? ['directory'],
+        rightModules: preset.rightModules ?? [],
+      };
+      const parsed = toml.parse(generateToml(state));
+      expect(parsed, `${preset.id} produced invalid TOML`).toBeTruthy();
+    }
+  });
+
+  it.each(['default', 'pastel', 'minimal'] as const)(
+    'generates parseable TOML for the %s color scheme',
+    (colorScheme) => {
+      const parsed = toml.parse(generateToml({ ...base, colorScheme }));
+      expect(parsed).toBeTruthy();
+    }
+  );
+
+  it.each(['arrow', 'lambda', 'dollar'] as const)(
+    'generates parseable TOML for the %s character symbol',
+    (characterSymbol) => {
+      const parsed = toml.parse(generateToml({ ...base, characterSymbol }));
+      expect(parsed).toBeTruthy();
+    }
+  );
+
+  it('parsed TOML keeps the fill block and format intact', () => {
+    const parsed = toml.parse(generateToml(base)) as Record<string, unknown>;
+    expect(parsed['format']).toContain('$fill');
+    expect(parsed['add_newline']).toBe(true);
+    expect(parsed['fill']).toEqual({ symbol: ' ' });
   });
 });

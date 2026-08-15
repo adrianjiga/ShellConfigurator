@@ -34,7 +34,7 @@ const STATUS_COLORS: Record<InstallStatus, string> = {
   skipped: 'gray',
 };
 
-function buildTaskList(state: WizardState): InstallTask[] {
+export function buildTaskList(state: WizardState): InstallTask[] {
   const tasks: InstallTask[] = [];
 
   // Starship (skipped when the user chose "Continue without Starship")
