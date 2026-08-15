@@ -40,6 +40,7 @@ export interface WizardState {
   installedShells: ShellId[];
   nerdFontToInstall: string | null;
   setDefaultShell: ShellId | null;
+  skipStarshipInstall: boolean;
   installResults: InstallTask[];
 }
 
@@ -57,5 +58,6 @@ export const DEFAULT_STATE: WizardState = {
   installedShells: [],
   nerdFontToInstall: null,
   setDefaultShell: null,
+  skipStarshipInstall: false,
   installResults: [],
 };

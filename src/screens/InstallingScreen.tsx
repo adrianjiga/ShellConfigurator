@@ -37,8 +37,10 @@ const STATUS_COLORS: Record<InstallStatus, string> = {
 function buildTaskList(state: WizardState): InstallTask[] {
   const tasks: InstallTask[] = [];
 
-  // Starship
-  tasks.push({ id: 'starship', label: 'Starship', status: 'pending' });
+  // Starship (skipped when the user chose "Continue without Starship")
+  if (!state.skipStarshipInstall) {
+    tasks.push({ id: 'starship', label: 'Starship', status: 'pending' });
+  }
 
   // Nerd Font (skip sentinel value)
   if (state.nerdFontToInstall && state.nerdFontToInstall !== FONT_SELECT_SENTINEL) {
@@ -93,7 +95,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
     }
 
     (async () => {
-      // --- Starship ---
+      // --- Starship (task omitted entirely when skipStarshipInstall) ---
       updateTask('starship', { status: 'running' });
       try {
         const check = isStarshipInstalled();

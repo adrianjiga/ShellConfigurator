@@ -85,7 +85,7 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
       setDetection({ pm, starship });
     }
     if (item.value === 'continue') {
-      onNext({ starshipInstalled: false, packageManager: detection.pm });
+      onNext({ starshipInstalled: false, packageManager: detection.pm, skipStarshipInstall: true });
     }
   }
 
