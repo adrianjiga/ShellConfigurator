@@ -71,20 +71,16 @@ afterEach(() => {
 describe('installStarship', () => {
   it('installs via apt', async () => {
     await installStarship('apt');
-    expect(mockSpawnSync).toHaveBeenCalledWith(
-      'sudo',
-      ['apt-get', 'install', '-y', 'starship'],
-      { stdio: 'inherit' }
-    );
+    expect(mockSpawnSync).toHaveBeenCalledWith('sudo', ['apt-get', 'install', '-y', 'starship'], {
+      stdio: 'inherit',
+    });
   });
 
   it('installs via dnf', async () => {
     await installStarship('dnf');
-    expect(mockSpawnSync).toHaveBeenCalledWith(
-      'sudo',
-      ['dnf', 'install', '-y', 'starship'],
-      { stdio: 'inherit' }
-    );
+    expect(mockSpawnSync).toHaveBeenCalledWith('sudo', ['dnf', 'install', '-y', 'starship'], {
+      stdio: 'inherit',
+    });
   });
 
   it('installs via pacman', async () => {
@@ -145,11 +141,9 @@ describe('installStarship', () => {
 describe('installShell', () => {
   it('installs zsh via apt', async () => {
     await installShell('zsh', 'apt');
-    expect(mockSpawnSync).toHaveBeenCalledWith(
-      'sudo',
-      ['apt-get', 'install', '-y', 'zsh'],
-      { stdio: 'inherit' }
-    );
+    expect(mockSpawnSync).toHaveBeenCalledWith('sudo', ['apt-get', 'install', '-y', 'zsh'], {
+      stdio: 'inherit',
+    });
   });
 
   it('installs fish via brew', async () => {
@@ -161,11 +155,9 @@ describe('installShell', () => {
 
   it('installs nushell via apt', async () => {
     await installShell('nushell', 'apt');
-    expect(mockSpawnSync).toHaveBeenCalledWith(
-      'sudo',
-      ['apt-get', 'install', '-y', 'nushell'],
-      { stdio: 'inherit' }
-    );
+    expect(mockSpawnSync).toHaveBeenCalledWith('sudo', ['apt-get', 'install', '-y', 'nushell'], {
+      stdio: 'inherit',
+    });
   });
 
   it('throws a clear error on the script fallback (no package manager)', async () => {
@@ -241,9 +233,7 @@ describe('installNerdFont', () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'linux' });
     try {
-      mockSpawnSync
-        .mockReturnValueOnce({ status: 0 })
-        .mockReturnValueOnce({ status: 1 });
+      mockSpawnSync.mockReturnValueOnce({ status: 0 }).mockReturnValueOnce({ status: 1 });
       mockReaddirSync.mockReturnValue([dirent('FiraCodeNerdFont.ttf')]);
 
       await expect(installNerdFont('FiraCode')).resolves.toBeUndefined();
@@ -277,9 +267,7 @@ describe('setDefaultShell', () => {
     mockExecFileSync.mockReturnValue('/opt/homebrew/bin/zsh\n');
     mockSpawnSync.mockReturnValue({ status: 1 });
 
-    await expect(setDefaultShell('zsh')).rejects.toThrow(
-      '/etc/shells'
-    );
+    await expect(setDefaultShell('zsh')).rejects.toThrow('/etc/shells');
     await expect(setDefaultShell('zsh')).rejects.toThrow('sudo tee -a /etc/shells');
   });
 });
