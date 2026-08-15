@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { WizardState, CharacterSymbol, ColorScheme } from '../types.js';
 import { WizardLayout } from '../components/WizardLayout.js';
@@ -7,6 +7,7 @@ import { NavHints } from '../components/NavHints.js';
 interface StyleScreenProps {
   state: WizardState;
   onNext: (update: Partial<WizardState>) => void;
+  onUpdate: (update: Partial<WizardState>) => void;
   onBack: () => void;
 }
 
@@ -24,7 +25,7 @@ const COLOR_OPTIONS: { value: ColorScheme; label: string; description: string }[
 
 type FocusSection = 'char' | 'color';
 
-export function StyleScreen({ state, onNext, onBack }: StyleScreenProps) {
+export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProps) {
   const [charIdx, setCharIdx] = useState(() =>
     Math.max(
       0,
@@ -38,6 +39,19 @@ export function StyleScreen({ state, onNext, onBack }: StyleScreenProps) {
     )
   );
   const [focus, setFocus] = useState<FocusSection>('char');
+  const isInitialMount = useRef(true);
+
+  // Push live updates to parent state so preview stays in sync (skip initial mount)
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    onUpdate({
+      characterSymbol: CHAR_OPTIONS[charIdx]!.value,
+      colorScheme: COLOR_OPTIONS[colorIdx]!.value,
+    });
+  }, [charIdx, colorIdx]);
 
   useInput((_, key) => {
     if (key.escape) {

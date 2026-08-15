@@ -26,6 +26,19 @@ export type WizardStep =
   | 'installing'
   | 'done';
 
+export const STEP_ORDER: WizardStep[] = [
+  'welcome',
+  'fontcheck',
+  'font_select',
+  'preset',
+  'segments_left',
+  'segments_right',
+  'style',
+  'shells',
+  'installing',
+  'done',
+];
+
 export interface WizardState {
   step: WizardStep;
   starshipInstalled: boolean;
@@ -40,6 +53,7 @@ export interface WizardState {
   installedShells: ShellId[];
   nerdFontToInstall: string | null;
   setDefaultShell: ShellId | null;
+  skipStarshipInstall: boolean;
   installResults: InstallTask[];
 }
 
@@ -57,5 +71,6 @@ export const DEFAULT_STATE: WizardState = {
   installedShells: [],
   nerdFontToInstall: null,
   setDefaultShell: null,
+  skipStarshipInstall: false,
   installResults: [],
 };
