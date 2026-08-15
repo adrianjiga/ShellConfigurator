@@ -33,6 +33,7 @@
     "@types/react": "^19.2.14",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.1.0",
+    "ink-testing-library": "^4.0.0",
     "prettier": "^3.8.1",
     "tsx": "^4.22.4",
     "typescript": "^6.0.2",
