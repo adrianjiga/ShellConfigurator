@@ -50,8 +50,23 @@ function runCommand(args: string[]): void {
   }
 }
 
+function hasBinary(cmd: string): boolean {
+  try {
+    execFileSync('which', [cmd], { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function installStarship(pm: PackageManager): Promise<void> {
   if (pm === 'script') {
+    if (!hasBinary('curl')) {
+      throw new Error(
+        'Cannot download Starship: "curl" is not installed. Install curl and try again, ' +
+          'or install Starship manually (see https://starship.rs/install).'
+      );
+    }
     // Official install script — installs to ~/.local/bin, no sudo needed
     runCommand(['sh', '-c', 'curl -sS https://starship.rs/install.sh | sh -s -- --yes']);
     return;
@@ -109,6 +124,12 @@ export async function installNerdFont(fontId: string): Promise<void> {
 
     // Extract into the temp dir, then copy only font files so non-font
     // payloads (LICENSE.md, readme.md) don't land in the fonts dir.
+    if (!hasBinary('unzip')) {
+      throw new Error(
+        'Cannot extract the font: "unzip" is not installed. ' +
+          `Install it (e.g. ${process.platform === 'darwin' ? 'brew install unzip' : 'sudo apt-get install unzip'}) and try again.`
+      );
+    }
     runCommand(['unzip', '-o', '-q', zipPath, '-d', tmpDir]);
 
     const fontFiles = collectFontFiles(tmpDir);
