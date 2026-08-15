@@ -55,7 +55,7 @@ describe('detectPackageManager', () => {
 
   it('returns pacman when brew is absent and pacman is installed', () => {
     mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-      if (args[0] === 'brew') throw new Error();
+      if (args[1] === 'command -v brew') throw new Error();
       return '';
     });
 
@@ -136,7 +136,7 @@ describe('detectInstalledShells', () => {
 
   it('returns shells whose binaries exist', () => {
     mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-      if (args[0] === 'bash' || args[0] === 'zsh') return '/usr/bin/bash';
+      if (args[1] === 'command -v bash' || args[1] === 'command -v zsh') return '/usr/bin/bash';
       throw new Error();
     });
 
@@ -185,7 +185,7 @@ function execFileByArg(match: (arg: string) => boolean, stdout = '/usr/bin/cmd')
   mockExecFile.mockImplementation((...args: unknown[]) => {
     const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
     const cmdArgs = args[1] as string[];
-    if (match(cmdArgs[0]!)) {
+    if (match(cmdArgs[1]!)) {
       cb(null, stdout, '');
     } else {
       cb(new Error('not found'), '', '');
@@ -219,7 +219,7 @@ describe('detectPackageManagerAsync', () => {
   });
 
   it('returns pacman when brew is absent and pacman is installed', async () => {
-    execFileByArg((arg) => arg !== 'brew');
+    execFileByArg((arg) => arg !== 'command -v brew');
     expect(await detectPackageManagerAsync()).toBe('pacman');
   });
 
@@ -275,7 +275,7 @@ describe('detectInstalledShellsAsync', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('returns shells whose binaries exist', async () => {
-    execFileByArg((arg) => arg === 'bash' || arg === 'zsh');
+    execFileByArg((arg) => arg === 'command -v bash' || arg === 'command -v zsh');
     const shells = await detectInstalledShellsAsync();
     expect(shells).toContain('bash');
     expect(shells).toContain('zsh');

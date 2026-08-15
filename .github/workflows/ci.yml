@@ -56,3 +56,29 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run test:coverage
+
+  distro-smoke:
+    name: Distro smoke (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:24.04
+            package-manager: apt
+          - image: debian:bookworm-slim
+            package-manager: apt
+          - image: fedora:41
+            package-manager: dnf
+          - image: archlinux:latest
+            package-manager: pacman
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Run non-destructive smoke test in ${{ matrix.image }}
+        run: |
+          docker run --rm \
+            -v "$PWD":/app \
+            -w /app \
+            -e EXPECTED_PM=${{ matrix.package-manager }} \
+            ${{ matrix.image }} \
+            bash -euxo pipefail -c "bash scripts/ci/distro-setup.sh && HOME=/tmp/smoke-home npm ci && HOME=/tmp/smoke-home node scripts/docker-smoke.mjs"
