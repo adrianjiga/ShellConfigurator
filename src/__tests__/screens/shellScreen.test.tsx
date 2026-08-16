@@ -138,3 +138,32 @@ describe('ShellScreen', () => {
     expect(onBack).toHaveBeenCalled();
   });
 });
+
+describe('selection order', () => {
+  const DOWN = '\u001B[B';
+  const UP = '\u001B[A';
+
+  it('returns selected shells in SHELLS order, not click order', async () => {
+    const { instance, onNext } = setup();
+    await flush();
+
+    // Select fish (index 2) first, then zsh (index 0) — reverse of the table order.
+    instance.stdin.write(DOWN);
+    await flush();
+    instance.stdin.write(DOWN);
+    await flush();
+    instance.stdin.write(' ');
+    await flush();
+    instance.stdin.write(UP);
+    await flush();
+    instance.stdin.write(UP);
+    await flush();
+    instance.stdin.write(' ');
+    await flush();
+    instance.stdin.write('\r');
+    await flush();
+
+    const selected = onNext.mock.calls[0]?.[0]?.selectedShells;
+    expect(selected).toEqual(['zsh', 'fish']);
+  });
+});

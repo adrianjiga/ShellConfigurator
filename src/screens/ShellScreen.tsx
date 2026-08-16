@@ -18,8 +18,13 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
   const [selected, setSelected] = useState<Set<ShellId>>(() => new Set(state.selectedShells));
   const [installedShells, setInstalledShells] = useState<ShellId[] | null>(null);
   const [defaultShell, setDefaultShell] = useState<ShellId | null>(state.setDefaultShell);
+  // Both pieces of state read inside useInput go through refs. Ink re-registers the
+  // handler each render so a direct read usually works, but mixing the two styles
+  // invites a stale-closure bug the next time this handler changes.
   const defaultShellRef = useRef(defaultShell);
   defaultShellRef.current = defaultShell;
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
 
   useEffect(() => {
     let cancelled = false;
@@ -71,15 +76,17 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
 
     if (char === 'd' || char === 'D') {
       const shellId = SHELLS[cursor]!.id;
-      if (selected.has(shellId)) {
+      if (selectedRef.current.has(shellId)) {
         setDefaultShell((prev) => (prev === shellId ? null : shellId));
       }
       return;
     }
 
-    if (key.return && selected.size > 0 && installedShells !== null) {
+    if (key.return && selectedRef.current.size > 0 && installedShells !== null) {
       onNext({
-        selectedShells: Array.from(selected),
+        // Sorted against SHELLS rather than click order, so install order and the
+        // Done-screen rows are deterministic.
+        selectedShells: SHELLS.filter((s) => selectedRef.current.has(s.id)).map((s) => s.id),
         installedShells: installedShells ?? [],
         setDefaultShell: defaultShell,
       });
