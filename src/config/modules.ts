@@ -1,3 +1,5 @@
+import { tomlBasic } from '../generators/toml.ts';
+
 /**
  * Style values the generator resolves from the chosen colour scheme and hands to
  * each module's `toml` builder. Kept structural so config does not depend on the
@@ -62,7 +64,7 @@ style    = "bold green"
     toml: ({ style }) =>
       `
 [directory]
-style             = "${style.dir}"
+style             = "${tomlBasic(style.dir)}"
 truncation_length = 3
 truncate_to_repo  = true
 `.trim(),
@@ -78,7 +80,7 @@ truncate_to_repo  = true
       `
 [git_branch]
 symbol = "${hasNerdFont ? ' ' : 'on '}"
-style  = "${style.branch}"
+style  = "${tomlBasic(style.branch)}"
 `.trim(),
   },
   git_status: {
@@ -91,7 +93,7 @@ style  = "${style.branch}"
     toml: ({ style }) =>
       `
 [git_status]
-style     = "${style.status}"
+style     = "${tomlBasic(style.status)}"
 ahead     = "⇡\${count}"
 behind    = "⇣\${count}"
 diverged  = "⇕⇡\${ahead_count}⇣\${behind_count}"

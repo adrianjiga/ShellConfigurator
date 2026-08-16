@@ -1,5 +1,6 @@
 import { WizardState, ColorScheme, CharacterSymbol } from '../types.ts';
 import { getModule, type ModuleId } from '../config/modules.ts';
+import { tomlLiteral } from './toml.ts';
 
 const SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> = {
   arrow: { success: '[❯](green)', error: '[❯](red)' },
@@ -28,8 +29,8 @@ function moduleBlock(id: ModuleId, state: WizardState): string {
   if (id === 'character') {
     return `
 [character]
-success_symbol = '${SYMBOLS[state.characterSymbol].success}'
-error_symbol   = '${SYMBOLS[state.characterSymbol].error}'
+success_symbol = ${tomlLiteral(SYMBOLS[state.characterSymbol].success)}
+error_symbol   = ${tomlLiteral(SYMBOLS[state.characterSymbol].error)}
 `.trim();
   }
 
