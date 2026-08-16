@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { WizardState } from '../types.js';
-import { MODULES } from '../config/modules.js';
+import { MODULES, ConfigurableModuleId, ModuleId } from '../config/modules.js';
 import { WizardLayout } from '../components/WizardLayout.js';
 import { NavHints } from '../components/NavHints.js';
 
@@ -13,13 +13,14 @@ interface SegmentsScreenProps {
   onBack: () => void;
 }
 
-// 'character' is always added automatically at the end of left prompt
-const CONFIGURABLE = MODULES.filter((m) => m.id !== 'character');
+// 'character' is always added automatically at the end of the left prompt and is
+// not a ConfigurableModuleId, so MODULES already excludes it.
+const CONFIGURABLE = MODULES;
 
 export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: SegmentsScreenProps) {
   const currentModules = side === 'left' ? state.leftModules : state.rightModules;
 
-  const [enabled, setEnabled] = useState<Set<string>>(
+  const [enabled, setEnabled] = useState<Set<ConfigurableModuleId>>(
     () => new Set(currentModules.filter((m) => m !== 'character'))
   );
   const [cursor, setCursor] = useState(0);
@@ -42,7 +43,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
   function saveAndProceed() {
     const ordered = CONFIGURABLE.filter((m) => enabled.has(m.id)).map((m) => m.id);
     if (side === 'left') {
-      onNext({ leftModules: [...new Set([...ordered, 'character'])] });
+      onNext({ leftModules: [...new Set<ModuleId>([...ordered, 'character'])] });
     } else {
       onNext({ rightModules: ordered });
     }

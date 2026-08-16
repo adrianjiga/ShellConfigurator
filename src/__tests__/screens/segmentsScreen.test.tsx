@@ -2,12 +2,12 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import React, { act } from 'react';
 import { render, cleanup } from 'ink-testing-library';
 import { SegmentsScreen } from '../../screens/SegmentsScreen.js';
-import { DEFAULT_STATE } from '../../types.js';
+import { DEFAULT_STATE, WizardState } from '../../types.js';
 
 afterEach(cleanup);
 
-function setup(overrides = {}) {
-  const state = {
+function setup(overrides: Partial<WizardState> = {}) {
+  const state: WizardState = {
     ...DEFAULT_STATE,
     leftModules: ['directory', 'git_branch', 'character'],
     rightModules: [],

@@ -16,8 +16,13 @@ export type ModuleId =
   | 'jobs'
   | 'character';
 
+/** Every module the user can place in a prompt side. The prompt character is
+ *  not one of these: it is always rendered last and is configured on the Style
+ *  screen, so it has no entry here. */
+export type ConfigurableModuleId = Exclude<ModuleId, 'character'>;
+
 export interface ModuleDef {
-  id: string;
+  id: ConfigurableModuleId;
   label: string;
   description: string;
   defaultLeft: boolean;
@@ -26,9 +31,8 @@ export interface ModuleDef {
   previewSegment: (hasNerdFont: boolean) => string;
 }
 
-export const MODULES: ModuleDef[] = [
-  {
-    id: 'username',
+const MODULE_DEFS: Record<ConfigurableModuleId, Omit<ModuleDef, 'id'>> = {
+  username: {
     label: 'Username',
     description: 'Current user (shown when SSH or root)',
     defaultLeft: false,
@@ -36,8 +40,7 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: () => 'user',
   },
-  {
-    id: 'hostname',
+  hostname: {
     label: 'Hostname',
     description: 'Machine hostname (shown when SSH)',
     defaultLeft: false,
@@ -45,8 +48,7 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: () => 'host',
   },
-  {
-    id: 'directory',
+  directory: {
     label: 'Directory',
     description: 'Current directory path',
     defaultLeft: true,
@@ -54,8 +56,7 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: () => '~/projects/myapp',
   },
-  {
-    id: 'git_branch',
+  git_branch: {
     label: 'Git Branch',
     description: 'Active git branch name',
     defaultLeft: true,
@@ -63,8 +64,7 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: (nf) => `${nf ? ' ' : 'on '}main`,
   },
-  {
-    id: 'git_status',
+  git_status: {
     label: 'Git Status',
     description: 'Staged, modified, and untracked file counts',
     defaultLeft: true,
@@ -72,8 +72,7 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: () => '+1',
   },
-  {
-    id: 'nodejs',
+  nodejs: {
     label: 'Node.js',
     description: 'Node version (shown in JS/TS projects)',
     defaultLeft: false,
@@ -81,8 +80,7 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: (nf) => `${nf ? ' ' : 'node '}v22.0.0`,
   },
-  {
-    id: 'python',
+  python: {
     label: 'Python',
     description: 'Python version (shown in Python projects)',
     defaultLeft: false,
@@ -90,8 +88,7 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: (nf) => `${nf ? ' ' : 'py '}3.12.0`,
   },
-  {
-    id: 'rust',
+  rust: {
     label: 'Rust',
     description: 'Rust version (shown in Rust projects)',
     defaultLeft: false,
@@ -99,8 +96,7 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: (nf) => `${nf ? '🦀 ' : 'rs '}1.80.0`,
   },
-  {
-    id: 'docker_context',
+  docker_context: {
     label: 'Docker',
     description: 'Docker context name',
     defaultLeft: false,
@@ -108,8 +104,7 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: (nf) => `${nf ? '🐳 ' : 'docker:'}default`,
   },
-  {
-    id: 'kubernetes',
+  kubernetes: {
     label: 'Kubernetes',
     description: 'K8s cluster context and namespace',
     defaultLeft: false,
@@ -117,8 +112,7 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: (nf) => `${nf ? '☸ ' : 'k8s:'}prod`,
   },
-  {
-    id: 'aws',
+  aws: {
     label: 'AWS',
     description: 'AWS region and profile',
     defaultLeft: false,
@@ -126,8 +120,7 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: (nf) => `${nf ? '☁️ ' : 'aws:'}us-east-1`,
   },
-  {
-    id: 'time',
+  time: {
     label: 'Time',
     description: 'Current time',
     defaultLeft: false,
@@ -135,8 +128,7 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: () => '12:34',
   },
-  {
-    id: 'battery',
+  battery: {
     label: 'Battery',
     description: 'Battery percentage (shown when below threshold)',
     defaultLeft: false,
@@ -144,8 +136,7 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: (nf) => `${nf ? '🔋' : ''}85%`,
   },
-  {
-    id: 'cmd_duration',
+  cmd_duration: {
     label: 'Command Duration',
     description: 'Time taken by the last command',
     defaultLeft: false,
@@ -153,8 +144,7 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: () => '2s',
   },
-  {
-    id: 'jobs',
+  jobs: {
     label: 'Background Jobs',
     description: 'Number of background jobs',
     defaultLeft: false,
@@ -162,7 +152,15 @@ export const MODULES: ModuleDef[] = [
 
     previewSegment: () => '2',
   },
-];
+};
+
+/**
+ * Derived from MODULE_DEFS so the compiler enforces one entry per module id —
+ * a new ModuleId with no definition is a build error, not a runtime undefined.
+ */
+export const MODULES: readonly ModuleDef[] = (
+  Object.keys(MODULE_DEFS) as ConfigurableModuleId[]
+).map((id) => ({ id, ...MODULE_DEFS[id] }));
 
 export function getModule(id: string): ModuleDef | undefined {
   return MODULES.find((m) => m.id === id);

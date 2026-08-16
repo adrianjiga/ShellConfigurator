@@ -1,11 +1,13 @@
+import type { ModuleId } from './modules.js';
+
 export interface PresetDef {
   id: string;
   label: string;
   description: string;
   requiresNerdFont: boolean;
   // Overrides for left/right modules when this preset is selected
-  leftModules?: string[];
-  rightModules?: string[];
+  leftModules?: ModuleId[];
+  rightModules?: ModuleId[];
 }
 
 export const PRESETS: PresetDef[] = [

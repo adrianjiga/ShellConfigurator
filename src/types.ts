@@ -1,3 +1,5 @@
+import type { ModuleId } from './config/modules.js';
+
 export type ShellId = 'zsh' | 'bash' | 'fish' | 'nushell' | 'powershell';
 export type CharacterSymbol = 'arrow' | 'lambda' | 'dollar';
 export type ColorScheme = 'default' | 'pastel' | 'minimal';
@@ -51,8 +53,8 @@ export interface WizardState {
   starshipInstalled: boolean;
   hasNerdFont: boolean;
   preset: string | null;
-  leftModules: string[];
-  rightModules: string[];
+  leftModules: ModuleId[];
+  rightModules: ModuleId[];
   characterSymbol: CharacterSymbol;
   colorScheme: ColorScheme;
   selectedShells: ShellId[];

@@ -45,7 +45,9 @@ describe('PromptPreview', () => {
   });
 
   it('ignores an unknown module id', () => {
-    expect(frame({ leftModules: ['not_a_module', 'character'] })).toContain('❯');
+    // Cast: the type forbids this, but state could still be malformed at runtime.
+    const bogus = ['not_a_module', 'character'] as unknown as WizardState['leftModules'];
+    expect(frame({ leftModules: bogus })).toContain('❯');
   });
 
   it('switches git branch glyphs with the nerd font flag', () => {
