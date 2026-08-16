@@ -10,6 +10,8 @@ const {
   mockCopyFileSync,
   mockReaddirSync,
   mockRmSync,
+  mockExistsSync,
+  mockStatSync,
 } = vi.hoisted(() => ({
   mockSpawnSync: vi.fn(),
   mockExecFileSync: vi.fn(),
@@ -19,6 +21,8 @@ const {
   mockCopyFileSync: vi.fn(),
   mockReaddirSync: vi.fn(),
   mockRmSync: vi.fn(),
+  mockExistsSync: vi.fn(),
+  mockStatSync: vi.fn(),
 }));
 
 vi.mock('child_process', () => ({
@@ -33,6 +37,8 @@ vi.mock('fs', () => ({
   copyFileSync: mockCopyFileSync,
   readdirSync: mockReaddirSync,
   rmSync: mockRmSync,
+  existsSync: mockExistsSync,
+  statSync: mockStatSync,
 }));
 
 import {
@@ -41,6 +47,8 @@ import {
   installNerdFont,
   setDefaultShell,
   getNerdFontsDir,
+  getMissingStarshipPathDir,
+  SCRIPT_INSTALL_BIN_DIR,
 } from '../../services/installer.js';
 
 function dirent(name: string, isDirectory = false) {
@@ -61,6 +69,8 @@ beforeEach(() => {
   mockWriteFileSync.mockImplementation(() => undefined);
   mockCopyFileSync.mockImplementation(() => undefined);
   mockRmSync.mockImplementation(() => undefined);
+  mockExistsSync.mockReturnValue(true);
+  mockStatSync.mockReturnValue({ size: 1024 });
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okResponse()));
 });
 
@@ -99,13 +109,47 @@ describe('installStarship', () => {
     });
   });
 
-  it('uses the official install script when no package manager is detected', async () => {
+  it('downloads the install script to a file and runs it separately', async () => {
     await installStarship('script');
+
+    // Downloading and running are separate commands so a failed download is not
+    // masked by the exit status of the shell reading from the pipe.
     expect(mockSpawnSync).toHaveBeenCalledWith(
-      'sh',
-      ['-c', expect.stringContaining('https://starship.rs/install.sh')],
+      'curl',
+      ['-fsS', '-o', expect.stringContaining('install.sh'), 'https://starship.rs/install.sh'],
       { stdio: 'inherit' }
     );
+    expect(mockSpawnSync).toHaveBeenCalledWith(
+      'sh',
+      [expect.stringContaining('install.sh'), '--yes'],
+      { stdio: 'inherit' }
+    );
+  });
+
+  it('fails when the download fails instead of reporting success', async () => {
+    mockSpawnSync.mockImplementation((cmd: string) =>
+      cmd === 'curl' ? { status: 22 } : { status: 0 }
+    );
+
+    await expect(installStarship('script')).rejects.toThrow('exit code 22');
+    // The script must never be executed after a failed download.
+    expect(mockSpawnSync).not.toHaveBeenCalledWith('sh', expect.anything(), expect.anything());
+  });
+
+  it('fails when the downloaded script is empty', async () => {
+    mockStatSync.mockReturnValue({ size: 0 });
+
+    await expect(installStarship('script')).rejects.toThrow('empty install script');
+  });
+
+  it('cleans up the temp dir even when the install fails', async () => {
+    mockSpawnSync.mockReturnValue({ status: 1 });
+
+    await expect(installStarship('script')).rejects.toThrow();
+    expect(mockRmSync).toHaveBeenCalledWith(expect.any(String), {
+      recursive: true,
+      force: true,
+    });
   });
 
   it('throws a clear error when curl is missing for the script path', async () => {
@@ -269,5 +313,31 @@ describe('setDefaultShell', () => {
 
     await expect(setDefaultShell('zsh')).rejects.toThrow('/etc/shells');
     await expect(setDefaultShell('zsh')).rejects.toThrow('sudo tee -a /etc/shells');
+  });
+});
+
+describe('getMissingStarshipPathDir', () => {
+  it('returns null when starship is already on PATH', () => {
+    mockExecFileSync.mockReturnValue('');
+    expect(getMissingStarshipPathDir()).toBeNull();
+  });
+
+  it('returns the script install dir when the binary is there but unreachable', () => {
+    // command -v starship fails, but ~/.local/bin/starship exists
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error('not found');
+    });
+    mockExistsSync.mockReturnValue(true);
+
+    expect(getMissingStarshipPathDir()).toBe(SCRIPT_INSTALL_BIN_DIR);
+  });
+
+  it('returns null when starship is neither on PATH nor in the script install dir', () => {
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error('not found');
+    });
+    mockExistsSync.mockReturnValue(false);
+
+    expect(getMissingStarshipPathDir()).toBeNull();
   });
 });

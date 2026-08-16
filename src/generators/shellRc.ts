@@ -47,7 +47,15 @@ export function writeStarshipConfig(toml: string): WriteConfigResult {
   return { path: configPath, backedUpTo };
 }
 
-export function applyShellConfig(shellId: ShellId): { applied: boolean; note?: string } {
+export interface ApplyShellConfigOptions {
+  /** Directory to prepend to PATH ahead of the init line, when starship is not reachable. */
+  ensurePathDir?: string | null;
+}
+
+export function applyShellConfig(
+  shellId: ShellId,
+  options: ApplyShellConfigOptions = {}
+): { applied: boolean; note?: string } {
   const shell = getShell(shellId);
   if (!shell) return { applied: false };
 
@@ -73,12 +81,22 @@ export function applyShellConfig(shellId: ShellId): { applied: boolean; note?: s
 
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
 
+  // The PATH line must come before the init line, or `starship init` cannot resolve.
+  const pathDir = options.ensurePathDir;
+  const pathLine = pathDir && shell.pathLine ? shell.pathLine(pathDir) : null;
+
   // Idempotent: skip if already configured (check for exact init line)
-  const addition = `\n# Added by ShellConfigurator\n${shell.initLine}\n`;
   if (existing.includes(shell.initLine)) {
     return { applied: false, note: 'already configured' };
   }
+
+  const lines =
+    pathLine && !existing.includes(pathLine) ? [pathLine, shell.initLine] : [shell.initLine];
+  const addition = `\n# Added by ShellConfigurator\n${lines.join('\n')}\n`;
   fs.appendFileSync(rcPath, addition, 'utf8');
 
-  return { applied: true };
+  return {
+    applied: true,
+    note: pathLine ? `${pathDir} added to PATH` : undefined,
+  };
 }

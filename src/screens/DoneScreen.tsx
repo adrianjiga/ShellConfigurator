@@ -171,6 +171,13 @@ export function DoneScreen({ state }: DoneScreenProps) {
                     </Text>
                   </Box>
                 )}
+                {rcStatus === 'done' && rcNote && (
+                  <Box marginLeft={3}>
+                    <Text color="gray" italic>
+                      {rcNote}
+                    </Text>
+                  </Box>
+                )}
                 {/* Shells with no rc file (nushell, powershell) need the init line run by hand */}
                 {rcStatus === 'skipped' && !shell?.rcFile && shell?.initLine && (
                   <Box marginLeft={3}>

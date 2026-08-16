@@ -8,6 +8,8 @@ export interface ShellDef {
   rcFile: string | null;
   initLine: string;
   manualNote?: string;
+  /** Renders a PATH addition in this shell's own syntax, when one is needed. */
+  pathLine?: (dir: string) => string;
 }
 
 export const SHELLS: ShellDef[] = [
@@ -16,18 +18,21 @@ export const SHELLS: ShellDef[] = [
     label: 'Zsh',
     rcFile: path.join(os.homedir(), '.zshrc'),
     initLine: 'eval "$(starship init zsh)"',
+    pathLine: (dir) => `export PATH="${dir}:$PATH"`,
   },
   {
     id: 'bash',
     label: 'Bash',
     rcFile: path.join(os.homedir(), '.bashrc'),
     initLine: 'eval "$(starship init bash)"',
+    pathLine: (dir) => `export PATH="${dir}:$PATH"`,
   },
   {
     id: 'fish',
     label: 'Fish',
     rcFile: path.join(os.homedir(), '.config', 'fish', 'config.fish'),
     initLine: 'starship init fish | source',
+    pathLine: (dir) => `fish_add_path ${dir}`,
   },
   {
     id: 'nushell',

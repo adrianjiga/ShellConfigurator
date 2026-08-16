@@ -83,15 +83,7 @@ describe('buildTaskList', () => {
       setDefaultShell: 'zsh',
     });
     const ids = tasks.map((t) => t.id);
-    expect(ids).toEqual([
-      'starship',
-      'font',
-      'shell_bash',
-      'chsh',
-      'config',
-      'rc_zsh',
-      'rc_bash',
-    ]);
+    expect(ids).toEqual(['starship', 'font', 'shell_bash', 'chsh', 'config', 'rc_zsh', 'rc_bash']);
     expect(tasks.every((t) => t.status === 'pending')).toBe(true);
   });
 });

@@ -18,6 +18,7 @@ function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
     generateToml: vi.fn(() => 'format = "$character"'),
     writeStarshipConfig: vi.fn(() => ({ path: '/home/u/.config/starship.toml' })),
     applyShellConfig: vi.fn(() => ({ applied: true })),
+    getMissingStarshipPathDir: vi.fn(() => null),
     ...overrides,
   };
 }

@@ -59,6 +59,11 @@ function hasBinary(cmd: string): boolean {
   }
 }
 
+/** Where the official install script puts the binary when run without sudo. */
+export const SCRIPT_INSTALL_BIN_DIR = path.join(os.homedir(), '.local', 'bin');
+
+const STARSHIP_INSTALL_URL = 'https://starship.rs/install.sh';
+
 export async function installStarship(pm: PackageManager): Promise<void> {
   if (pm === 'script') {
     if (!hasBinary('curl')) {
@@ -67,14 +72,43 @@ export async function installStarship(pm: PackageManager): Promise<void> {
           'or install Starship manually (see https://starship.rs/install).'
       );
     }
-    // Official install script — installs to ~/.local/bin, no sudo needed
-    runCommand(['sh', '-c', 'curl -sS https://starship.rs/install.sh | sh -s -- --yes']);
+
+    // Downloaded to a file rather than piped into sh: a pipeline reports only the
+    // last command's exit status, so a failed curl would look like a clean install.
+    // -f also turns an HTTP error into a curl failure instead of an HTML error page.
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-starship-'));
+    const scriptPath = path.join(tmpDir, 'install.sh');
+    try {
+      runCommand(['curl', '-fsS', '-o', scriptPath, STARSHIP_INSTALL_URL]);
+      if (!fs.existsSync(scriptPath) || fs.statSync(scriptPath).size === 0) {
+        throw new Error(`Downloaded an empty install script from ${STARSHIP_INSTALL_URL}`);
+      }
+      // Installs to ~/.local/bin, no sudo needed
+      runCommand(['sh', scriptPath, '--yes']);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
     return;
   }
 
   const cmdArgs = INSTALL_CMDS[pm]('starship');
   if (cmdArgs.length === 0) throw new Error(`No install method for package manager: ${pm}`);
   runCommand(cmdArgs);
+}
+
+/**
+ * Returns the directory that must be added to PATH for `starship` to be runnable,
+ * or null when it is already reachable.
+ *
+ * The install script drops the binary in ~/.local/bin, which is not on PATH by
+ * default on Debian/Ubuntu or in minimal environments — without this the rc init
+ * line resolves to `starship: command not found` on every prompt.
+ */
+export function getMissingStarshipPathDir(): string | null {
+  if (hasBinary('starship')) return null;
+  return fs.existsSync(path.join(SCRIPT_INSTALL_BIN_DIR, 'starship'))
+    ? SCRIPT_INSTALL_BIN_DIR
+    : null;
 }
 
 export async function installShell(shellId: ShellId, pm: PackageManager): Promise<void> {

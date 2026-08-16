@@ -227,6 +227,52 @@ describe('applyShellConfig', () => {
     expect(fs.appendFileSync).not.toHaveBeenCalled();
   });
 
+  it('adds a PATH line before the init line when starship is not reachable', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => '');
+
+    const result = applyShellConfig('zsh', { ensurePathDir: '/home/u/.local/bin' });
+
+    const appended = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
+    expect(appended).toContain('export PATH="/home/u/.local/bin:$PATH"');
+    // Order matters: `starship init` cannot resolve before PATH is set.
+    expect(appended.indexOf('export PATH')).toBeLessThan(appended.indexOf('starship init'));
+    expect(result.note).toContain('/home/u/.local/bin');
+  });
+
+  it('uses fish syntax for the PATH line', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => '');
+
+    applyShellConfig('fish', { ensurePathDir: '/home/u/.local/bin' });
+
+    const appended = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
+    expect(appended).toContain('fish_add_path /home/u/.local/bin');
+    expect(appended).not.toContain('export PATH');
+  });
+
+  it('omits the PATH line when starship is already reachable', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => '');
+
+    const result = applyShellConfig('zsh', { ensurePathDir: null });
+
+    const appended = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
+    expect(appended).not.toContain('export PATH');
+    expect(result.note).toBeUndefined();
+  });
+
+  it('does not duplicate a PATH line that is already present', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => 'export PATH="/home/u/.local/bin:$PATH"');
+
+    applyShellConfig('zsh', { ensurePathDir: '/home/u/.local/bin' });
+
+    const appended = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
+    expect(appended).not.toContain('export PATH');
+    expect(appended).toContain('starship init zsh');
+  });
+
   it('is idempotent for fish', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() => 'starship init fish | source');

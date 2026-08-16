@@ -12,6 +12,7 @@ function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
     generateToml: vi.fn(() => 'format = "$character"'),
     writeStarshipConfig: vi.fn(() => ({ path: '/home/u/.config/starship.toml' })),
     applyShellConfig: vi.fn(() => ({ applied: true })),
+    getMissingStarshipPathDir: vi.fn(() => null),
     ...overrides,
   };
 }
@@ -153,12 +154,34 @@ describe('runInstallTasks', () => {
       vi.fn()
     );
 
-    expect(deps.applyShellConfig).toHaveBeenCalledWith('bash');
-    expect(deps.applyShellConfig).toHaveBeenCalledWith('fish');
+    expect(deps.applyShellConfig).toHaveBeenCalledWith('bash', expect.anything());
+    expect(deps.applyShellConfig).toHaveBeenCalledWith('fish', expect.anything());
     expect(results.find((t) => t.id === 'rc_bash')?.status).toBe('done');
     const fish = results.find((t) => t.id === 'rc_fish');
     expect(fish?.status).toBe('failed');
     expect(fish?.error).toContain('mkdir failed');
+  });
+
+  it('passes the missing PATH directory through to the rc step', async () => {
+    const deps = fakeDeps({
+      getMissingStarshipPathDir: vi.fn(() => '/home/u/.local/bin'),
+    });
+    await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    expect(deps.applyShellConfig).toHaveBeenCalledWith('zsh', {
+      ensurePathDir: '/home/u/.local/bin',
+    });
+  });
+
+  it('does not probe for a PATH fix when starship was skipped', async () => {
+    const deps = fakeDeps({ getMissingStarshipPathDir: vi.fn(() => '/home/u/.local/bin') });
+    await runInstallTasks(
+      state({ skipStarshipInstall: true, selectedShells: ['zsh'] }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.getMissingStarshipPathDir).not.toHaveBeenCalled();
   });
 
   it('records a shell that needs manual setup as skipped and keeps its note', async () => {

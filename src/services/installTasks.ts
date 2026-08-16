@@ -11,9 +11,15 @@ import {
   installShell,
   installNerdFont,
   setDefaultShell,
+  getMissingStarshipPathDir,
 } from './installer.js';
 import { generateToml } from '../generators/starship.js';
-import { writeStarshipConfig, applyShellConfig, WriteConfigResult } from '../generators/shellRc.js';
+import {
+  writeStarshipConfig,
+  applyShellConfig,
+  WriteConfigResult,
+  ApplyShellConfigOptions,
+} from '../generators/shellRc.js';
 import { isStarshipInstalledAsync } from './detector.js';
 
 export interface InstallTaskDeps {
@@ -24,7 +30,11 @@ export interface InstallTaskDeps {
   setDefaultShell: (shellId: ShellId) => Promise<void>;
   generateToml: (state: WizardState) => string;
   writeStarshipConfig: (toml: string) => WriteConfigResult;
-  applyShellConfig: (shellId: ShellId) => { applied: boolean; note?: string };
+  applyShellConfig: (
+    shellId: ShellId,
+    options?: ApplyShellConfigOptions
+  ) => { applied: boolean; note?: string };
+  getMissingStarshipPathDir: () => string | null;
 }
 
 export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
@@ -36,6 +46,7 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   generateToml,
   writeStarshipConfig,
   applyShellConfig,
+  getMissingStarshipPathDir,
 };
 
 export function buildTaskList(state: WizardState): InstallTask[] {
@@ -165,6 +176,10 @@ export async function runInstallTasks(
   }
 
   // --- Apply shell RC files (skipped until Starship is installed) ---
+  // Checked once, after the install, so the rc lines can fix up PATH if the
+  // script install put the binary somewhere the shell will not look.
+  const ensurePathDir = state.skipStarshipInstall ? null : deps.getMissingStarshipPathDir();
+
   for (const shellId of state.selectedShells) {
     const taskId = rcTaskId(shellId);
 
@@ -178,9 +193,9 @@ export async function runInstallTasks(
 
     update(taskId, { status: 'running' });
     try {
-      const result = deps.applyShellConfig(shellId);
+      const result = deps.applyShellConfig(shellId, { ensurePathDir });
       if (result.applied) {
-        update(taskId, { status: 'done' });
+        update(taskId, { status: 'done', note: result.note });
       } else if (result.note) {
         // Not an error: the shell was already configured, or it needs manual
         // setup (nushell, powershell). Either way no rc file was written.
