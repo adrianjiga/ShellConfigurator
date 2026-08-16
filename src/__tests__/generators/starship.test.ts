@@ -4,13 +4,15 @@ import { generateToml } from '../../generators/starship.ts';
 import { DEFAULT_STATE, WizardState } from '../../types.ts';
 import { MODULES } from '../../config/modules.ts';
 import { PRESETS } from '../../config/presets.ts';
+import { PALETTES } from '../../config/palettes.ts';
 
 const base: WizardState = {
   ...DEFAULT_STATE,
   leftModules: ['directory', 'git_branch'],
   rightModules: ['cmd_duration'],
   hasNerdFont: false,
-  colorScheme: 'default',
+  palette: 'default',
+  powerline: false,
   characterSymbol: 'arrow',
 };
 
@@ -52,19 +54,19 @@ describe('generateToml', () => {
     expect(toml).toContain('symbol = "on "');
   });
 
-  it('applies default color scheme to directory', () => {
-    const toml = generateToml({ ...base, colorScheme: 'default' });
-    expect(toml).toContain('style             = "bold blue"');
+  it('styles modules by palette colour name and emits the palette table', () => {
+    const generated = generateToml({ ...base, palette: 'tokyo-night' });
+    expect(generated).toContain('palette      = "tokyo-night"');
+    expect(generated).toContain('style  = "bold directory"');
+    expect(generated).toContain('[palettes.tokyo-night]');
+    expect(generated).toContain('directory      = "#7aa2f7"');
   });
 
-  it('applies pastel color scheme to directory', () => {
-    const toml = generateToml({ ...base, colorScheme: 'pastel' });
-    expect(toml).toContain('style             = "bold cyan"');
-  });
-
-  it('applies minimal color scheme to directory', () => {
-    const toml = generateToml({ ...base, colorScheme: 'minimal' });
-    expect(toml).toContain('style             = "white"');
+  it('gives each palette its own colours, so no two presets render alike', () => {
+    const tokyo = generateToml({ ...base, palette: 'tokyo-night' });
+    const gruvbox = generateToml({ ...base, palette: 'gruvbox' });
+    expect(tokyo).not.toEqual(gruvbox);
+    expect(gruvbox).toContain('directory      = "#83a598"');
   });
 
   it('uses lambda character symbol', () => {
@@ -73,7 +75,7 @@ describe('generateToml', () => {
       leftModules: ['character'],
       characterSymbol: 'lambda',
     });
-    expect(toml).toContain('[λ](green)');
+    expect(toml).toContain('[λ](bold ok)');
   });
 
   it('uses dollar character symbol', () => {
@@ -82,7 +84,7 @@ describe('generateToml', () => {
       leftModules: ['character'],
       characterSymbol: 'dollar',
     });
-    expect(toml).toContain('[\\$](green)');
+    expect(toml).toContain('[\\$](bold ok)');
   });
 
   it('does not emit duplicate module blocks when a module appears on both sides', () => {
@@ -145,13 +147,12 @@ describe('generateToml', () => {
     }
   });
 
-  it.each(['default', 'pastel', 'minimal'] as const)(
-    'generates parseable TOML for the %s color scheme',
-    (colorScheme) => {
-      const parsed = toml.parse(generateToml({ ...base, colorScheme }));
-      expect(parsed).toBeTruthy();
-    }
-  );
+  it.each(PALETTES.map((p) => p.id))('generates parseable TOML for the %s palette', (palette) => {
+    const parsed = toml.parse(
+      generateToml({ ...base, palette: palette as WizardState['palette'] })
+    );
+    expect(parsed).toBeTruthy();
+  });
 
   it.each(['arrow', 'lambda', 'dollar'] as const)(
     'generates parseable TOML for the %s character symbol',
