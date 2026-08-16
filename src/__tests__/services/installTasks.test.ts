@@ -252,6 +252,48 @@ describe('runInstallTasks', () => {
     expect(rc?.label).toContain('install Starship first');
   });
 
+  it('stops the chain and marks unrun tasks as cancelled when aborted', async () => {
+    const controller = new AbortController();
+    const deps = fakeDeps({
+      installStarship: vi.fn(async () => {
+        controller.abort();
+      }),
+    });
+
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh'], installedShells: [] }),
+      deps,
+      vi.fn(),
+      controller.signal
+    );
+
+    // Nothing after the abort point may run.
+    expect(deps.installShell).not.toHaveBeenCalled();
+    expect(deps.writeStarshipConfig).not.toHaveBeenCalled();
+    expect(deps.applyShellConfig).not.toHaveBeenCalled();
+
+    // And no unrun task may be left looking successful.
+    expect(results.find((t) => t.id === 'config')?.status).toBe('failed');
+    expect(results.find((t) => t.id === 'config')?.error).toBe('Cancelled');
+    expect(results.find((t) => t.id === 'rc_zsh')?.status).toBe('failed');
+    expect(results.every((t) => t.status !== 'pending')).toBe(true);
+  });
+
+  it('runs to completion when the signal never aborts', async () => {
+    const controller = new AbortController();
+    const deps = fakeDeps();
+
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh'], installedShells: ['zsh'] }),
+      deps,
+      vi.fn(),
+      controller.signal
+    );
+
+    expect(deps.writeStarshipConfig).toHaveBeenCalled();
+    expect(results.find((t) => t.id === 'rc_zsh')?.status).toBe('done');
+  });
+
   it('reports every task transition through onUpdate', async () => {
     const deps = fakeDeps();
     const onUpdate = vi.fn();

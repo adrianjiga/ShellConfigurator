@@ -96,16 +96,36 @@ export function rcTaskId(shellId: ShellId): string {
   return `rc_${shellId}`;
 }
 
+/** Raised when the user aborts the install phase. */
+export class InstallCancelledError extends Error {
+  constructor() {
+    super('Install cancelled');
+    this.name = 'InstallCancelledError';
+  }
+}
+
 export async function runInstallTasks(
   state: WizardState,
   deps: InstallTaskDeps,
-  onUpdate: (id: string, patch: Partial<InstallTask>) => void
+  onUpdate: (id: string, patch: Partial<InstallTask>) => void,
+  signal?: AbortSignal
 ): Promise<InstallTask[]> {
   let tasks = buildTaskList(state);
 
   function update(id: string, patch: Partial<InstallTask>) {
     tasks = tasks.map((t) => (t.id === id ? { ...t, ...patch } : t));
     onUpdate(id, patch);
+  }
+
+  const cancelled = () => signal?.aborted === true;
+
+  /** Marks every task that never ran, so the summary never implies they succeeded. */
+  function markRemainingCancelled() {
+    for (const task of tasks) {
+      if (task.status === 'pending' || task.status === 'running') {
+        update(task.id, { status: 'failed', error: 'Cancelled' });
+      }
+    }
   }
 
   // --- Starship (task omitted entirely when skipStarshipInstall) ---
@@ -127,6 +147,11 @@ export async function runInstallTasks(
     }
   }
 
+  if (cancelled()) {
+    markRemainingCancelled();
+    return tasks;
+  }
+
   // --- Nerd Font (skip sentinel value) ---
   let fontInstallFailed = false;
   if (state.nerdFontToInstall && state.nerdFontToInstall !== FONT_SELECT_SENTINEL) {
@@ -140,9 +165,15 @@ export async function runInstallTasks(
     }
   }
 
+  if (cancelled()) {
+    markRemainingCancelled();
+    return tasks;
+  }
+
   // --- Missing shells ---
   for (const shellId of state.selectedShells) {
     if (state.installedShells.includes(shellId)) continue;
+    if (cancelled()) break;
     const taskId = `shell_${shellId}`;
     update(taskId, { status: 'running' });
     try {
@@ -151,6 +182,11 @@ export async function runInstallTasks(
     } catch (err) {
       update(taskId, { status: 'failed', error: String(err) });
     }
+  }
+
+  if (cancelled()) {
+    markRemainingCancelled();
+    return tasks;
   }
 
   // --- chsh ---
@@ -162,6 +198,11 @@ export async function runInstallTasks(
     } catch (err) {
       update('chsh', { status: 'failed', error: String(err) });
     }
+  }
+
+  if (cancelled()) {
+    markRemainingCancelled();
+    return tasks;
   }
 
   // --- Write starship.toml ---
