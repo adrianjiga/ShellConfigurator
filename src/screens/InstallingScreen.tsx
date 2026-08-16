@@ -7,6 +7,7 @@ import {
   runInstallTasks,
   DEFAULT_INSTALL_TASK_DEPS,
 } from '../services/installTasks.js';
+import { isUiSuspended, subscribeToUiSuspension } from '../services/tty.js';
 
 interface InstallingScreenProps {
   state: WizardState;
@@ -31,7 +32,12 @@ const STATUS_COLORS: Record<InstallStatus, string> = {
 
 export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const [tasks, setTasks] = useState<InstallTask[]>(() => buildTaskList(state));
+  const [uiSuspended, setUiSuspended] = useState(() => isUiSuspended());
   const ran = useRef(false);
+
+  // While an interactive child (sudo, chsh) owns the terminal this screen renders
+  // nothing, so Ink's next frame cannot paint over its password prompt.
+  useEffect(() => subscribeToUiSuspension(setUiSuspended), []);
 
   useEffect(() => {
     if (ran.current) return;
@@ -60,6 +66,9 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const allDone = tasks.every(
     (t) => t.status === 'done' || t.status === 'skipped' || t.status === 'failed'
   );
+
+  // The child process is drawing to this terminal — stay out of its way.
+  if (uiSuspended) return null;
 
   return (
     <WizardLayout state={state} hidePreview>
