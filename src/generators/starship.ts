@@ -13,8 +13,8 @@ const SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> = {
  * Powerline separators, U+E0B0 and U+E0B2. These live in the Nerd Font private use
  * area, so a powerline prompt is only ever generated when a Nerd Font is present.
  */
-const SEPARATOR_RIGHT = '';
-const SEPARATOR_LEFT = '';
+const SEPARATOR_RIGHT = '\ue0b0';
+const SEPARATOR_LEFT = '\ue0b2';
 
 /**
  * A style expression for a palette colour.

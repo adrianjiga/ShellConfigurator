@@ -11,8 +11,8 @@ const CHAR_SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> 
 };
 
 /** The same separators the generator emits (U+E0B0 / U+E0B2). */
-const SEPARATOR_RIGHT = '';
-const SEPARATOR_LEFT = '';
+const SEPARATOR_RIGHT = '\ue0b0';
+const SEPARATOR_LEFT = '\ue0b2';
 
 interface PromptPreviewProps {
   state: WizardState;
