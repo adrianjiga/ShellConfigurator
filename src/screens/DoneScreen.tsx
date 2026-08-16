@@ -100,6 +100,13 @@ export function DoneScreen({ state }: DoneScreenProps) {
                 </Text>
               </Box>
             )}
+            {taskNote(state, 'config') && (
+              <Box marginLeft={3}>
+                <Text color="gray" italic>
+                  {taskNote(state, 'config')}
+                </Text>
+              </Box>
+            )}
           </Box>
 
           {fontInstalled && (

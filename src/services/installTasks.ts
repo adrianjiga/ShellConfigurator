@@ -13,7 +13,7 @@ import {
   setDefaultShell,
 } from './installer.js';
 import { generateToml } from '../generators/starship.js';
-import { writeStarshipConfig, applyShellConfig } from '../generators/shellRc.js';
+import { writeStarshipConfig, applyShellConfig, WriteConfigResult } from '../generators/shellRc.js';
 import { isStarshipInstalledAsync } from './detector.js';
 
 export interface InstallTaskDeps {
@@ -23,7 +23,7 @@ export interface InstallTaskDeps {
   installShell: (shellId: ShellId, pm: PackageManager) => Promise<void>;
   setDefaultShell: (shellId: ShellId) => Promise<void>;
   generateToml: (state: WizardState) => string;
-  writeStarshipConfig: (toml: string) => void;
+  writeStarshipConfig: (toml: string) => WriteConfigResult;
   applyShellConfig: (shellId: ShellId) => { applied: boolean; note?: string };
 }
 
@@ -155,8 +155,11 @@ export async function runInstallTasks(
   update('config', { status: 'running' });
   try {
     const toml = deps.generateToml(state);
-    deps.writeStarshipConfig(toml);
-    update('config', { status: 'done' });
+    const written = deps.writeStarshipConfig(toml);
+    update('config', {
+      status: 'done',
+      note: written?.backedUpTo ? `previous config saved to ${written.backedUpTo}` : undefined,
+    });
   } catch (err) {
     update('config', { status: 'failed', error: String(err) });
   }

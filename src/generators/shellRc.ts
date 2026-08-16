@@ -4,14 +4,47 @@ import * as os from 'os';
 import { ShellId } from '../types.js';
 import { getShell } from '../config/shells.js';
 
-const STARSHIP_CONFIG_DIR = path.join(os.homedir(), '.config');
-const STARSHIP_CONFIG_PATH = path.join(STARSHIP_CONFIG_DIR, 'starship.toml');
+export interface WriteConfigResult {
+  /** Where the config was actually written. */
+  path: string;
+  /** Set when an existing config was copied aside first. */
+  backedUpTo?: string;
+}
 
-export function writeStarshipConfig(toml: string): void {
-  if (!fs.existsSync(STARSHIP_CONFIG_DIR)) {
-    fs.mkdirSync(STARSHIP_CONFIG_DIR, { recursive: true });
+/**
+ * Mirrors Starship's own config resolution order:
+ * $STARSHIP_CONFIG, else $XDG_CONFIG_HOME/starship.toml, else ~/.config/starship.toml.
+ * Resolved per call rather than at module load so the environment is read live.
+ */
+export function getConfigPath(): string {
+  const explicit = process.env.STARSHIP_CONFIG?.trim();
+  if (explicit) return explicit;
+
+  const xdg = process.env.XDG_CONFIG_HOME?.trim();
+  const baseDir = xdg ? xdg : path.join(os.homedir(), '.config');
+  return path.join(baseDir, 'starship.toml');
+}
+
+export function writeStarshipConfig(toml: string): WriteConfigResult {
+  const configPath = getConfigPath();
+  const configDir = path.dirname(configPath);
+
+  if (!fs.existsSync(configDir)) {
+    fs.mkdirSync(configDir, { recursive: true });
   }
-  fs.writeFileSync(STARSHIP_CONFIG_PATH, toml, 'utf8');
+
+  // Overwriting is the one irreversible step in the wizard, so keep a copy of any
+  // hand-tuned config the user already had.
+  let backedUpTo: string | undefined;
+  if (fs.existsSync(configPath)) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    backedUpTo = `${configPath}.bak-${stamp}`;
+    fs.copyFileSync(configPath, backedUpTo);
+  }
+
+  fs.writeFileSync(configPath, toml, 'utf8');
+
+  return { path: configPath, backedUpTo };
 }
 
 export function applyShellConfig(shellId: ShellId): { applied: boolean; note?: string } {
@@ -48,8 +81,4 @@ export function applyShellConfig(shellId: ShellId): { applied: boolean; note?: s
   fs.appendFileSync(rcPath, addition, 'utf8');
 
   return { applied: true };
-}
-
-export function getConfigPath(): string {
-  return STARSHIP_CONFIG_PATH;
 }

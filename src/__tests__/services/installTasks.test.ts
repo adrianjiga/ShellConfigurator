@@ -10,7 +10,7 @@ function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
     installShell: vi.fn().mockResolvedValue(undefined),
     setDefaultShell: vi.fn().mockResolvedValue(undefined),
     generateToml: vi.fn(() => 'format = "$character"'),
-    writeStarshipConfig: vi.fn(),
+    writeStarshipConfig: vi.fn(() => ({ path: '/home/u/.config/starship.toml' })),
     applyShellConfig: vi.fn(() => ({ applied: true })),
     ...overrides,
   };
@@ -126,6 +126,18 @@ describe('runInstallTasks', () => {
     expect(deps.generateToml).toHaveBeenCalledWith(expect.objectContaining({ step: 'welcome' }));
     expect(deps.writeStarshipConfig).toHaveBeenCalledWith('format = "$character"');
     expect(results.find((t) => t.id === 'config')?.status).toBe('done');
+  });
+
+  it('reports the backup path when an existing config was replaced', async () => {
+    const deps = fakeDeps({
+      writeStarshipConfig: vi.fn(() => ({
+        path: '/home/u/.config/starship.toml',
+        backedUpTo: '/home/u/.config/starship.toml.bak-2026',
+      })),
+    });
+    const results = await runInstallTasks(state(), deps, vi.fn());
+
+    expect(results.find((t) => t.id === 'config')?.note).toContain('starship.toml.bak-2026');
   });
 
   it('isolates rc failures to the shell that failed', async () => {
