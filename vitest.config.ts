@@ -7,11 +7,17 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
+      // Without `include`, v8 only reports files the tests happen to import, so an
+      // entirely untested file is omitted from the denominator instead of counted as 0%.
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/__tests__/**'],
+      // Set just under the measured numbers so a regression trips the gate.
+      // Ratchet these up as the untested screens gain tests.
       thresholds: {
-        statements: 70,
-        branches: 60,
-        functions: 70,
-        lines: 70,
+        statements: 76,
+        branches: 67,
+        functions: 69,
+        lines: 79,
       },
     },
   },
