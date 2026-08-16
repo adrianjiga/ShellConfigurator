@@ -59,9 +59,8 @@ export function PromptPreview({ state }: PromptPreviewProps) {
   const colors = SCHEME_COLORS[colorScheme];
 
   function renderModule(id: string) {
-    const def = getModule(id);
-    if (!def) return null;
-
+    // The prompt character has no MODULES entry (it is not user-configurable as a
+    // segment), so this must be checked before the lookup below.
     if (id === 'character') {
       return (
         <Segment
@@ -72,6 +71,9 @@ export function PromptPreview({ state }: PromptPreviewProps) {
         />
       );
     }
+
+    const def = getModule(id);
+    if (!def) return null;
 
     const color =
       id === 'directory'
