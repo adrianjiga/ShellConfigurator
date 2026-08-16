@@ -126,7 +126,8 @@ interface WizardState {
   leftModules: string[];
   rightModules: string[];
   characterSymbol: CharacterSymbol;
-  colorScheme: ColorScheme;
+  palette: PaletteId;
+  powerline: boolean;
   selectedShells: ShellId[];
   packageManager: PackageManager;
   installedShells: ShellId[];
@@ -161,7 +162,7 @@ App (owns state)
 | PresetScreen           | `preset`, `leftModules`, `rightModules`                                   |
 | SegmentsScreen (left)  | `leftModules` (live via `onUpdate`)                                       |
 | SegmentsScreen (right) | `rightModules` (live via `onUpdate`)                                      |
-| StyleScreen            | `characterSymbol`, `colorScheme`                                          |
+| StyleScreen            | `characterSymbol`, `palette`, `powerline`                                 |
 | ShellScreen            | `selectedShells`, `installedShells`, `setDefaultShell`                    |
 | InstallingScreen       | `installResults` (final task list passed via `advanceTo('done', update)`) |
 | DoneScreen             | (reads `installResults` for status display)                               |

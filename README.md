@@ -7,9 +7,11 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/) 
 - **Live preview** — see your prompt update in real time as you make choices
 - **Cross-shell** — configure zsh, bash, fish, nushell, and PowerShell in one run
 - **Automated installation** — installs Starship, Nerd Fonts, and any missing shells for you
-- **12 presets** — from minimal plain-text to Powerline and Tokyo Night themes
+- **12 presets** — from minimal plain-text to Tokyo Night, Gruvbox Rainbow, and Catppuccin
+- **12 colour palettes** — one behind every preset, and any of them usable with any preset
+- **Powerline prompts** — interlocking coloured blocks with Nerd Font separators
 - **Segment picker** — choose exactly which modules appear on the left and right of your prompt
-- **Style tuning** — color scheme and character symbol selection
+- **Style tuning** — palette, segment style, and character symbol selection
 
 ## Requirements
 

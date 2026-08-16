@@ -236,8 +236,12 @@ Each module calls `previewSegment(hasNerdFont)` from its definition to get displ
 
 Colors come from two sources:
 
-1. **Scheme colors** (from `colorScheme`): applied to `directory`, `git_branch`, `git_status`, and `character`
-2. **Module colors** (hardcoded map): applied to runtime modules like `nodejs` (green), `python` (yellow), `rust` (red), etc.
+1. **Palette colors** (from `palette`): every module is drawn in the palette entry of
+   the same name, and the prompt character in `ok`. There are twelve palettes, one
+   seeded by each preset.
+2. **Powerline blocks** (from `powerline`): each segment is drawn as `fg` text on its
+   own colour as a background, followed (or preceded) by a separator tinted with its
+   neighbour's colour. The preview mirrors the generator so both show the same prompt.
 
 ### Update Behavior
 

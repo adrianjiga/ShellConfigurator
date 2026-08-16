@@ -38,18 +38,38 @@ Line 2: ❯ _
 
 ### Stage 3: Module Block Generation
 
-`moduleBlock(id, state)` produces the TOML `[section]` for each module. Blocks adapt to two state values:
+`moduleBlock(id, ctx)` produces the TOML `[section]` for each module. The generator
+composes `style` and `format` itself from the module's `content` and its palette
+colour; each module supplies only its remaining keys via `settings`, so powerline is
+a one-place change rather than a per-module one. Blocks adapt to three state values:
 
 - **`hasNerdFont`**: switches between icon symbols and text fallbacks
-- **`colorScheme`**: applies color styles from `COLOR_STYLES` to directory, git_branch, and git_status
+- **`palette`**: every module is styled with the palette colour of the same name, so
+  the generated config refers to colours by name and carries a `[palettes.<id>]` table
+- **`powerline`**: wraps each module's content in separator glyphs and swaps its style
+  for an `fg:fg bg:<module>` pair, so segments render as interlocking coloured blocks.
+  Requires `hasNerdFont`; without it the plain layout is generated instead
 
-Example output for `git_branch` with Nerd Font and default colors:
+Example output for `git_branch` with a Nerd Font, on the default palette:
 
 ```toml
 [git_branch]
+style  = "bold git_branch"
 symbol = " "
-style  = "bold purple"
 ```
+
+The same module under a powerline prompt, with `git_status` following it:
+
+```toml
+[git_branch]
+style  = "bold fg:fg bg:git_branch"
+format = "([ $symbol$branch ]($style)[](fg:git_branch bg:git_status))"
+symbol = " "
+```
+
+The surrounding `(…)` is a starship conditional group: it is dropped when every
+variable inside is empty, so a module with nothing to show collapses instead of
+leaving an empty coloured block and a stray separator in the prompt.
 
 ### Dollar Sign Escaping
 

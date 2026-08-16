@@ -9,7 +9,6 @@
 ```typescript
 type ShellId = 'zsh' | 'bash' | 'fish' | 'nushell' | 'powershell';
 type CharacterSymbol = 'arrow' | 'lambda' | 'dollar';
-type ColorScheme = 'default' | 'pastel' | 'minimal';
 type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'script';
 type InstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
@@ -39,7 +38,8 @@ interface WizardState {
   leftModules: string[]; // Module IDs for left prompt
   rightModules: string[]; // Module IDs for right prompt
   characterSymbol: CharacterSymbol;
-  colorScheme: ColorScheme;
+  palette: PaletteId; // Colour theme; one per preset, changeable on StyleScreen
+  powerline: boolean; // Draw segments as interlocking coloured blocks
   selectedShells: ShellId[]; // Shells to configure
   packageManager: PackageManager; // Detected package manager
   installedShells: ShellId[]; // Shells already on system
@@ -371,12 +371,12 @@ No other files need changes. PresetScreen reads from the `PRESETS` array directl
 3. **`src/services/installer.ts`** — add package name mappings to `SHELL_PACKAGES` and binary name to `setDefaultShell()`
 4. **`src/services/detector.ts`** — add binary check to `detectInstalledShells()`
 
-### Adding a Color Scheme
+### Adding a Palette
 
-1. **`src/types.ts`** — add to `ColorScheme` union
-2. **`src/generators/starship.ts`** — add to `COLOR_STYLES`
-3. **`src/components/PromptPreview.tsx`** — add to `SCHEME_COLORS`
-4. **`src/screens/StyleScreen.tsx`** — add to `COLOR_OPTIONS` array
+1. **`src/config/palettes.ts`** — add an entry to `PALETTE_DEFS` with a colour for
+   every `PaletteColorName`. That is the only step: `PaletteId`, the `PALETTES`
+   list, the StyleScreen picker, and the generated `[palettes.<id>]` table are all
+   derived from it.
 
 ### Adding a Character Symbol
 
