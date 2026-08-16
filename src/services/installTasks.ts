@@ -128,12 +128,14 @@ export async function runInstallTasks(
   }
 
   // --- Nerd Font (skip sentinel value) ---
+  let fontInstallFailed = false;
   if (state.nerdFontToInstall && state.nerdFontToInstall !== FONT_SELECT_SENTINEL) {
     update('font', { status: 'running' });
     try {
       await deps.installNerdFont(state.nerdFontToInstall);
       update('font', { status: 'done' });
     } catch (err) {
+      fontInstallFailed = true;
       update('font', { status: 'failed', error: String(err) });
     }
   }
@@ -165,11 +167,21 @@ export async function runInstallTasks(
   // --- Write starship.toml ---
   update('config', { status: 'running' });
   try {
-    const toml = deps.generateToml(state);
+    // hasNerdFont is set optimistically when the user opts into an install. If that
+    // install failed, generating with it still true would write a config full of
+    // glyphs the terminal cannot render.
+    const configState = fontInstallFailed ? { ...state, hasNerdFont: false } : state;
+    const toml = deps.generateToml(configState);
     const written = deps.writeStarshipConfig(toml);
+
+    const notes = [
+      written?.backedUpTo ? `previous config saved to ${written.backedUpTo}` : null,
+      fontInstallFailed ? 'written without Nerd Font glyphs — the font install failed' : null,
+    ].filter(Boolean);
+
     update('config', {
       status: 'done',
-      note: written?.backedUpTo ? `previous config saved to ${written.backedUpTo}` : undefined,
+      note: notes.length > 0 ? notes.join('; ') : undefined,
     });
   } catch (err) {
     update('config', { status: 'failed', error: String(err) });

@@ -141,6 +141,31 @@ describe('runInstallTasks', () => {
     expect(results.find((t) => t.id === 'config')?.note).toContain('starship.toml.bak-2026');
   });
 
+  it('regenerates the config without nerd font glyphs when the font install fails', async () => {
+    const deps = fakeDeps({
+      installNerdFont: vi.fn().mockRejectedValue(new Error('no network')),
+    });
+    const results = await runInstallTasks(
+      state({ nerdFontToInstall: 'JetBrainsMono', hasNerdFont: true }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.generateToml).toHaveBeenCalledWith(expect.objectContaining({ hasNerdFont: false }));
+    expect(results.find((t) => t.id === 'config')?.note).toContain('without Nerd Font glyphs');
+  });
+
+  it('keeps nerd font glyphs when the font install succeeds', async () => {
+    const deps = fakeDeps();
+    await runInstallTasks(
+      state({ nerdFontToInstall: 'JetBrainsMono', hasNerdFont: true }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.generateToml).toHaveBeenCalledWith(expect.objectContaining({ hasNerdFont: true }));
+  });
+
   it('isolates rc failures to the shell that failed', async () => {
     const deps = fakeDeps({
       applyShellConfig: vi.fn().mockImplementation((shellId: string) => {
