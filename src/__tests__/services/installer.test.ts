@@ -55,8 +55,14 @@ function dirent(name: string, isDirectory = false) {
   return { name, isDirectory: () => isDirectory };
 }
 
-function okResponse() {
-  return { ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(0) };
+/** Minimal stand-in for the parts of Response that installNerdFont actually uses. */
+function okResponse(overrides: Partial<Response> = {}): Response {
+  return {
+    ok: true,
+    status: 200,
+    arrayBuffer: async () => new ArrayBuffer(0),
+    ...overrides,
+  } as unknown as Response;
 }
 
 beforeEach(() => {
@@ -224,7 +230,7 @@ describe('installNerdFont', () => {
   });
 
   it('throws when the download fails and still cleans up temp files', async () => {
-    vi.mocked(fetch).mockResolvedValue({ ...okResponse(), ok: false, status: 404 });
+    vi.mocked(fetch).mockResolvedValue(okResponse({ ok: false, status: 404 }));
 
     await expect(installNerdFont('FiraCode')).rejects.toThrow('Failed to download font: HTTP 404');
     expect(mockRmSync).toHaveBeenCalledWith('/tmp/shellconf-font-test', {
