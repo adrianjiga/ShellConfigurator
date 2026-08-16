@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import { promisify } from 'util';
-import { ShellId, PackageManager } from '../types.js';
-import { commandExistsAsync, runCapture } from './exec.js';
-import { SHELLS } from '../config/shells.js';
+import { ShellId, PackageManager } from '../types.ts';
+import { commandExistsAsync, runCapture } from './exec.ts';
+import { SHELLS } from '../config/shells.ts';
 
 const readFileP = promisify(fs.readFile);
 

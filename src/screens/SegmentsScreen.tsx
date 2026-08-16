@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { WizardState } from '../types.js';
-import { MODULES, ConfigurableModuleId, ModuleId } from '../config/modules.js';
-import { WizardLayout } from '../components/WizardLayout.js';
-import { NavHints } from '../components/NavHints.js';
+import { WizardState } from '../types.ts';
+import { MODULES, ConfigurableModuleId, ModuleId } from '../config/modules.ts';
+import { WizardLayout } from '../components/WizardLayout.tsx';
+import { NavHints } from '../components/NavHints.tsx';
 
 interface SegmentsScreenProps {
   state: WizardState;

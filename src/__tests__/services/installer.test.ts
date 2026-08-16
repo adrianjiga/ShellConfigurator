@@ -54,7 +54,7 @@ import {
   getNerdFontsDir,
   getMissingStarshipPathDir,
   SCRIPT_INSTALL_BIN_DIR,
-} from '../../services/installer.js';
+} from '../../services/installer.ts';
 
 function dirent(name: string, isDirectory = false) {
   return { name, isDirectory: () => isDirectory };

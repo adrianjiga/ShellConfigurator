@@ -1,10 +1,10 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import React from 'react';
 import { render, cleanup } from 'ink-testing-library';
-import { DoneScreen } from '../../screens/DoneScreen.js';
-import { runInstallTasks, InstallTaskDeps } from '../../services/installTasks.js';
-import { DEFAULT_STATE, WizardState } from '../../types.js';
-import { applyShellConfig } from '../../generators/shellRc.js';
+import { DoneScreen } from '../../screens/DoneScreen.tsx';
+import { runInstallTasks, InstallTaskDeps } from '../../services/installTasks.ts';
+import { DEFAULT_STATE, WizardState } from '../../types.ts';
+import { applyShellConfig } from '../../generators/shellRc.ts';
 
 afterEach(cleanup);
 

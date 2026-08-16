@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { WizardState, InstallTask, InstallStatus } from '../types.js';
-import { WizardLayout } from '../components/WizardLayout.js';
+import { WizardState, InstallTask, InstallStatus } from '../types.ts';
+import { WizardLayout } from '../components/WizardLayout.tsx';
 import {
   buildTaskList,
   runInstallTasks,
   DEFAULT_INSTALL_TASK_DEPS,
-} from '../services/installTasks.js';
-import { isUiSuspended, subscribeToUiSuspension } from '../services/tty.js';
-import { killActiveCommand } from '../services/exec.js';
+} from '../services/installTasks.ts';
+import { isUiSuspended, subscribeToUiSuspension } from '../services/tty.ts';
+import { killActiveCommand } from '../services/exec.ts';
 
 interface InstallingScreenProps {
   state: WizardState;

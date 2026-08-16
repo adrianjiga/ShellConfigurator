@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { PRESETS } from '../../config/presets.js';
-import { MODULES } from '../../config/modules.js';
+import { PRESETS } from '../../config/presets.ts';
+import { MODULES } from '../../config/modules.ts';
 
 describe('PRESETS', () => {
   it('all presets have required fields', () => {

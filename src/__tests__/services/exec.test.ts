@@ -20,8 +20,8 @@ import {
   runCommand,
   killActiveCommand,
   CommandCancelledError,
-} from '../../services/exec.js';
-import { isUiSuspended, resetUiSuspension } from '../../services/tty.js';
+} from '../../services/exec.ts';
+import { isUiSuspended, resetUiSuspension } from '../../services/tty.ts';
 
 interface SpawnOutcome {
   status?: number | null;

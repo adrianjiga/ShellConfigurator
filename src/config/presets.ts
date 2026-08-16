@@ -1,4 +1,4 @@
-import type { ModuleId } from './modules.js';
+import type { ModuleId } from './modules.ts';
 
 export interface PresetDef {
   id: string;

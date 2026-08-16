@@ -4,7 +4,7 @@ import {
   FONT_SELECT_SENTINEL,
   PackageManager,
   ShellId,
-} from '../types.js';
+} from '../types.ts';
 import {
   NERD_FONTS,
   installStarship,
@@ -12,15 +12,15 @@ import {
   installNerdFont,
   setDefaultShell,
   getMissingStarshipPathDir,
-} from './installer.js';
-import { generateToml } from '../generators/starship.js';
+} from './installer.ts';
+import { generateToml } from '../generators/starship.ts';
 import {
   writeStarshipConfig,
   applyShellConfig,
   WriteConfigResult,
   ApplyShellConfigOptions,
-} from '../generators/shellRc.js';
-import { isStarshipInstalledAsync } from './detector.js';
+} from '../generators/shellRc.ts';
+import { isStarshipInstalledAsync } from './detector.ts';
 
 export interface InstallTaskDeps {
   isStarshipInstalled: () => Promise<{ installed: boolean; version?: string }>;

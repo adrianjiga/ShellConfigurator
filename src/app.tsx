@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { WizardState, WizardStep, DEFAULT_STATE } from './types.js';
-import { getNextStep, getPrevStep } from './stepMachine.js';
-import { WelcomeScreen } from './screens/WelcomeScreen.js';
-import { FontCheckScreen } from './screens/FontCheckScreen.js';
-import { FontSelectScreen } from './screens/FontSelectScreen.js';
-import { PresetScreen } from './screens/PresetScreen.js';
-import { SegmentsScreen } from './screens/SegmentsScreen.js';
-import { StyleScreen } from './screens/StyleScreen.js';
-import { ShellScreen } from './screens/ShellScreen.js';
-import { InstallingScreen } from './screens/InstallingScreen.js';
-import { DoneScreen } from './screens/DoneScreen.js';
+import { WizardState, WizardStep, DEFAULT_STATE } from './types.ts';
+import { getNextStep, getPrevStep } from './stepMachine.ts';
+import { WelcomeScreen } from './screens/WelcomeScreen.tsx';
+import { FontCheckScreen } from './screens/FontCheckScreen.tsx';
+import { FontSelectScreen } from './screens/FontSelectScreen.tsx';
+import { PresetScreen } from './screens/PresetScreen.tsx';
+import { SegmentsScreen } from './screens/SegmentsScreen.tsx';
+import { StyleScreen } from './screens/StyleScreen.tsx';
+import { ShellScreen } from './screens/ShellScreen.tsx';
+import { InstallingScreen } from './screens/InstallingScreen.tsx';
+import { DoneScreen } from './screens/DoneScreen.tsx';
 
 export function App() {
   const [state, setState] = useState<WizardState>(DEFAULT_STATE);

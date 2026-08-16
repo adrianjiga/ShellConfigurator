@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MODULES, getModule } from '../../config/modules.js';
+import { MODULES, getModule } from '../../config/modules.ts';
 
 describe('MODULES', () => {
   it('all modules have required fields', () => {

@@ -24,7 +24,7 @@ Interactive Ink (React) TUI that walks users through configuring Starship. Node 
 
 ## Conventions
 
-- ESM: all relative imports end in `.js` even in TS source (e.g. `from './types.js'`); `moduleResolution: bundler`.
+- ESM: relative imports name the real source file (e.g. `from './types.ts'`, `from './App.tsx'`). `rewriteRelativeImportExtensions` rewrites them to `.js` on emit, so `dist/` stays valid for Node's ESM resolver. Never write `.js` in source.
 - Package manager detection order matters and is asserted in tests: brew → pacman → os-release distro id → apt-get/dnf binary → `script`.
 - Binary checks use `sh -c 'command -v …'`, never `which` — `which` is absent on minimal/Fedora/Alpine images. Both `detector.ts` and `installer.ts` follow this; the CI `distro-smoke` job guards it.
 - `detector.test.ts` shows the required mocking pattern: `vi.hoisted` mocks plus a `Symbol.for('nodejs.util.promisify.custom')` stub so promisified `execFile` resolves correctly. Follow it when adding detection tests.

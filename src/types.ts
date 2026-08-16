@@ -1,4 +1,4 @@
-import type { ModuleId } from './config/modules.js';
+import type { ModuleId } from './config/modules.ts';
 
 export type ShellId = 'zsh' | 'bash' | 'fish' | 'nushell' | 'powershell';
 export type CharacterSymbol = 'arrow' | 'lambda' | 'dollar';

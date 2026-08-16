@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { runInstallTasks, InstallTaskDeps } from '../../services/installTasks.js';
-import { DEFAULT_STATE, FONT_SELECT_SENTINEL, WizardState, InstallTask } from '../../types.js';
+import { runInstallTasks, InstallTaskDeps } from '../../services/installTasks.ts';
+import { DEFAULT_STATE, FONT_SELECT_SENTINEL, WizardState, InstallTask } from '../../types.ts';
 
 function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
   return {

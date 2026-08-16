@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildTaskList } from '../../services/installTasks.js';
-import { DEFAULT_STATE, FONT_SELECT_SENTINEL } from '../../types.js';
+import { buildTaskList } from '../../services/installTasks.ts';
+import { DEFAULT_STATE, FONT_SELECT_SENTINEL } from '../../types.ts';
 
 describe('buildTaskList', () => {
   it('includes starship and config tasks by default', () => {

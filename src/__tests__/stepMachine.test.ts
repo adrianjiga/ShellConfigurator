@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getNextStep, getPrevStep } from '../stepMachine.js';
-import { DEFAULT_STATE, FONT_SELECT_SENTINEL } from '../types.js';
+import { getNextStep, getPrevStep } from '../stepMachine.ts';
+import { DEFAULT_STATE, FONT_SELECT_SENTINEL } from '../types.ts';
 
 function stateWith(step: Parameters<typeof getNextStep>[0]['step'], overrides: object = {}) {
   return { ...DEFAULT_STATE, step, ...overrides };

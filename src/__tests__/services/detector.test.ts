@@ -30,7 +30,7 @@ import {
   detectPackageManagerAsync,
   isStarshipInstalledAsync,
   detectInstalledShellsAsync,
-} from '../../services/detector.js';
+} from '../../services/detector.ts';
 
 function execFileSucceeds(stdout = '') {
   mockExecFile.mockImplementation((...args: unknown[]) => {

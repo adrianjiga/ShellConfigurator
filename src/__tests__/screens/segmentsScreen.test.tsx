@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import React, { act } from 'react';
 import { render, cleanup } from 'ink-testing-library';
-import { SegmentsScreen } from '../../screens/SegmentsScreen.js';
-import { DEFAULT_STATE, WizardState } from '../../types.js';
+import { SegmentsScreen } from '../../screens/SegmentsScreen.tsx';
+import { DEFAULT_STATE, WizardState } from '../../types.ts';
 
 afterEach(cleanup);
 

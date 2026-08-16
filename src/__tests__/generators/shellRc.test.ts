@@ -12,7 +12,7 @@ vi.mock('fs', () => ({
 }));
 
 import * as fs from 'fs';
-import { applyShellConfig, writeStarshipConfig, getConfigPath } from '../../generators/shellRc.js';
+import { applyShellConfig, writeStarshipConfig, getConfigPath } from '../../generators/shellRc.ts';
 
 const expectedConfigPath = path.join(os.homedir(), '.config', 'starship.toml');
 const expectedConfigDir = path.join(os.homedir(), '.config');

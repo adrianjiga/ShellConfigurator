@@ -1,5 +1,5 @@
-import { WizardState, ColorScheme, CharacterSymbol } from '../types.js';
-import type { ModuleId } from '../config/modules.js';
+import { WizardState, ColorScheme, CharacterSymbol } from '../types.ts';
+import type { ModuleId } from '../config/modules.ts';
 
 const SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> = {
   arrow: { success: '[❯](green)', error: '[❯](red)' },

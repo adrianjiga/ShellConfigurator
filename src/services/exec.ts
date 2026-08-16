@@ -1,6 +1,6 @@
 import { execFile, execFileSync, spawn, ChildProcess } from 'child_process';
 import { promisify } from 'util';
-import { suspendUi, resumeUi } from './tty.js';
+import { suspendUi, resumeUi } from './tty.ts';
 
 const execFileP = promisify(execFile);
 

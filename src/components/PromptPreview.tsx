@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { WizardState, ColorScheme, CharacterSymbol } from '../types.js';
-import { getModule } from '../config/modules.js';
+import { WizardState, ColorScheme, CharacterSymbol } from '../types.ts';
+import { getModule } from '../config/modules.ts';
 
 const CHAR_SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> = {
   arrow: { success: '❯', error: '❯' },

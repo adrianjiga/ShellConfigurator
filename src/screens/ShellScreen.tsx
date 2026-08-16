@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { WizardState, ShellId } from '../types.js';
-import { SHELLS } from '../config/shells.js';
-import { detectInstalledShellsAsync } from '../services/detector.js';
-import { WizardLayout } from '../components/WizardLayout.js';
-import { NavHints } from '../components/NavHints.js';
+import { WizardState, ShellId } from '../types.ts';
+import { SHELLS } from '../config/shells.ts';
+import { detectInstalledShellsAsync } from '../services/detector.ts';
+import { WizardLayout } from '../components/WizardLayout.tsx';
+import { NavHints } from '../components/NavHints.tsx';
 
 interface ShellScreenProps {
   state: WizardState;

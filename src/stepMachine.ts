@@ -1,4 +1,4 @@
-import { WizardState, STEP_ORDER, shouldVisitFontSelect } from './types.js';
+import { WizardState, STEP_ORDER, shouldVisitFontSelect } from './types.ts';
 
 /**
  * Returns the state advanced to the next step, honoring the conditional

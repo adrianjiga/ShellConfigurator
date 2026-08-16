@@ -1,6 +1,6 @@
 import * as os from 'os';
 import * as path from 'path';
-import { ShellId } from '../types.js';
+import { ShellId } from '../types.ts';
 
 export interface ShellDef {
   id: ShellId;

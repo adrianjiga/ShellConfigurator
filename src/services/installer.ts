@@ -1,9 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { ShellId, PackageManager } from '../types.js';
-import { commandExists, commandPath, runCommand } from './exec.js';
-import { getShellBinary } from '../config/shells.js';
+import { ShellId, PackageManager } from '../types.ts';
+import { commandExists, commandPath, runCommand } from './exec.ts';
+import { getShellBinary } from '../config/shells.ts';
 
 // Package names per shell per package manager
 const SHELL_PACKAGES: Record<ShellId, Partial<Record<PackageManager, string>>> = {

@@ -1,9 +1,9 @@
 import React from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import { WizardState, FONT_SELECT_SENTINEL } from '../types.js';
-import { WizardLayout } from '../components/WizardLayout.js';
-import { NavHints } from '../components/NavHints.js';
+import { WizardState, FONT_SELECT_SENTINEL } from '../types.ts';
+import { WizardLayout } from '../components/WizardLayout.tsx';
+import { NavHints } from '../components/NavHints.tsx';
 
 interface FontCheckScreenProps {
   state: WizardState;

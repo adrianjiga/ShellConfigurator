@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import React from 'react';
 import { render, cleanup } from 'ink-testing-library';
 import { Text } from 'ink';
-import { ErrorBoundary } from '../../components/ErrorBoundary.js';
+import { ErrorBoundary } from '../../components/ErrorBoundary.tsx';
 
 afterEach(cleanup);
 

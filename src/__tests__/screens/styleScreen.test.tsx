@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import React, { act } from 'react';
 import { render, cleanup } from 'ink-testing-library';
-import { StyleScreen } from '../../screens/StyleScreen.js';
-import { DEFAULT_STATE } from '../../types.js';
+import { StyleScreen } from '../../screens/StyleScreen.tsx';
+import { DEFAULT_STATE } from '../../types.ts';
 
 afterEach(cleanup);
 

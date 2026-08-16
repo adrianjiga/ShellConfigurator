@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import React from 'react';
 import { render } from 'ink';
-import { App } from './app.js';
-import { ErrorBoundary } from './components/ErrorBoundary.js';
+import { App } from './app.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 
 /**
  * Ink puts the terminal in raw mode and hides the cursor; if the process dies
