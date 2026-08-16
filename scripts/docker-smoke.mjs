@@ -66,7 +66,10 @@ await check('generateToml produces parseable TOML for every preset', () => {
       leftModules: preset.leftModules ?? [],
       rightModules: preset.rightModules ?? [],
       characterSymbol: 'lambda',
-      colorScheme: 'pastel',
+      // Exercise each preset's own theme rather than a fixed one, so a palette
+      // or powerline format that breaks the TOML is caught here.
+      palette: preset.palette,
+      powerline: preset.powerline,
     };
     const toml = generateToml(state);
     assert.ok(toml.includes('format'), `preset ${preset.id} missing format line`);

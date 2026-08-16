@@ -1,8 +1,8 @@
 import type { ModuleId } from './config/modules.ts';
+import type { PaletteId } from './config/palettes.ts';
 
 export type ShellId = 'zsh' | 'bash' | 'fish' | 'nushell' | 'powershell';
 export type CharacterSymbol = 'arrow' | 'lambda' | 'dollar';
-export type ColorScheme = 'default' | 'pastel' | 'minimal';
 export type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'script';
 export type InstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
@@ -70,7 +70,13 @@ export interface WizardState {
   leftModules: ModuleId[];
   rightModules: ModuleId[];
   characterSymbol: CharacterSymbol;
-  colorScheme: ColorScheme;
+  /** The colour theme the config is generated in. Seeded by the preset, then
+   *  freely changeable on the Style screen. */
+  palette: PaletteId;
+  /** Whether segments are drawn as interlocking coloured blocks. Requires a Nerd
+   *  Font for the separator glyphs, so the generator falls back to the plain
+   *  layout when one is missing. */
+  powerline: boolean;
   selectedShells: ShellId[];
   packageManager: PackageManager;
   installedShells: ShellId[];
@@ -88,7 +94,8 @@ export const DEFAULT_STATE: WizardState = {
   leftModules: ['directory', 'git_branch', 'git_status', 'character'],
   rightModules: [],
   characterSymbol: 'arrow',
-  colorScheme: 'default',
+  palette: 'default',
+  powerline: false,
   selectedShells: [],
   packageManager: 'script',
   installedShells: [],
