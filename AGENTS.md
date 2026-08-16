@@ -19,7 +19,7 @@ Interactive Ink (React) TUI that walks users through configuring Starship. Node 
 - `starship.ts` deliberately uses `$fill` (inline) instead of `right_format` for right-side modules — `right_format` pins to the cursor line and misaligns two-line prompts. Do not "fix" this; `starship.test.ts` asserts its absence.
 - `services/detector.ts` exposes only `*Async` detection functions, so nothing blocks the Ink render loop. `scripts/docker-smoke.mjs` awaits them via top-level `await`.
 - Install orchestration lives in `services/installTasks.ts` as `runInstallTasks(state, deps, onUpdate, signal?)` with injected deps (`InstallTaskDeps`, real wiring in `DEFAULT_INSTALL_TASK_DEPS`) so it's unit-testable; screens pass real deps, tests pass fakes. The optional `AbortSignal` halts the chain at phase boundaries and marks unrun tasks failed — never silently done.
-- Generators/services (`generators/`, `services/`, `config/`) are unit-tested; key screen key-handling is covered via `ink-testing-library` (`src/__tests__/screens/`), and remaining edge cases by the manual test plan (`Manual-Testing-Plan.md`).
+- Generators/services (`generators/`, `services/`, `config/`) are unit-tested; key screen key-handling is covered via `ink-testing-library` (`src/__tests__/screens/`), and remaining edge cases by a manual test plan the maintainer keeps locally (not in the repo).
 - Docs live in `docs/` (Architecture, Technical-Design, API-Interface-Design, UI-UX-Design) and are a good source for wiring details.
 
 ## Conventions
