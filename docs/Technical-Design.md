@@ -151,14 +151,14 @@ The idempotency check uses a simple `string.includes()` — it only matches the 
 
 `buildTaskList(state)` creates the task queue from wizard state:
 
-| Task        | Condition                                                       | Action                             |
-| ----------- | --------------------------------------------------------------- | ---------------------------------- |
-| Starship    | Not `skipStarshipInstall`                                       | Install if not already present     |
-| Nerd Font   | `nerdFontToInstall` is set and is not the sentinel `__select__` | Download and install font          |
-| Shell(s)    | Selected shell not in `installedShells`                         | Install via package manager        |
-| Set default | `setDefaultShell` is set                                        | Run `chsh -s <path>`               |
-| Config      | Always                                                          | Generate and write `starship.toml` |
-| RC files    | Not `skipStarshipInstall`                                       | Append init lines to shell configs |
+| Task        | Condition                               | Action                             |
+| ----------- | --------------------------------------- | ---------------------------------- |
+| Starship    | Not `skipStarshipInstall`               | Install if not already present     |
+| Nerd Font   | `nerdFontToInstall.kind === 'install'`  | Download and install font          |
+| Shell(s)    | Selected shell not in `installedShells` | Install via package manager        |
+| Set default | `setDefaultShell` is set                | Run `chsh -s <path>`               |
+| Config      | Always                                  | Generate and write `starship.toml` |
+| RC files    | Not `skipStarshipInstall`               | Append init lines to shell configs |
 
 Choosing "Continue without Starship" sets `skipStarshipInstall`, so both the Starship task and the RC step are omitted — writing `eval "$(starship init …)"` lines for a shell without Starship would error on every new shell.
 
