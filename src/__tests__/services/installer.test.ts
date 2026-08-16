@@ -347,3 +347,22 @@ describe('getMissingStarshipPathDir', () => {
     expect(getMissingStarshipPathDir()).toBeNull();
   });
 });
+
+describe('installNerdFont download guards', () => {
+  it('aborts the download if it hangs', async () => {
+    await installNerdFont('FiraCode');
+    const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('refuses an archive whose declared size is implausible', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      okResponse({
+        headers: { get: () => String(500 * 1024 * 1024) },
+      } as unknown as Partial<Response>)
+    );
+
+    await expect(installNerdFont('FiraCode')).rejects.toThrow('exceeds the');
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+  });
+});

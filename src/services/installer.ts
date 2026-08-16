@@ -33,8 +33,15 @@ export const NERD_FONTS: Array<{ id: string; label: string; zipName: string }> =
 
 const NERD_FONTS_BASE_URL = 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download';
 
+/** Cap on how long the font download may hang before it is aborted. */
+const FONT_DOWNLOAD_TIMEOUT_MS = 60_000;
+
+/** Nerd Font archives run to tens of MB; anything far past that is not a font archive. */
+const MAX_FONT_ARCHIVE_BYTES = 200 * 1024 * 1024;
+
 // Runs a command with stdio: 'inherit' so sudo password prompts appear in terminal.
-// Ink pauses while this runs (it's synchronous/blocking).
+// This blocks the event loop, so Ink cannot repaint until the child exits — the UI
+// is frozen rather than paused, and the child writes to the same TTY Ink draws on.
 function runCommand(args: string[]): void {
   const [cmd, ...rest] = args;
   if (!cmd) throw new Error('Empty command');
@@ -149,12 +156,27 @@ export async function installNerdFont(fontId: string): Promise<void> {
   const url = `${NERD_FONTS_BASE_URL}/${font.zipName}`;
 
   try {
-    // Download
-    const response = await fetch(url);
+    // Download. A hung connection would otherwise block the whole install phase
+    // with no way to cancel, so the request carries its own timeout.
+    const response = await fetch(url, { signal: AbortSignal.timeout(FONT_DOWNLOAD_TIMEOUT_MS) });
     if (!response.ok) throw new Error(`Failed to download font: HTTP ${response.status}`);
 
-    const buffer = await response.arrayBuffer();
-    fs.writeFileSync(zipPath, Buffer.from(buffer));
+    const declaredSize = Number(response.headers?.get?.('content-length') ?? 0);
+    if (declaredSize > MAX_FONT_ARCHIVE_BYTES) {
+      throw new Error(
+        `Refusing to download ${font.zipName}: ${declaredSize} bytes exceeds the ` +
+          `${MAX_FONT_ARCHIVE_BYTES} byte limit.`
+      );
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.byteLength > MAX_FONT_ARCHIVE_BYTES) {
+      throw new Error(
+        `Refusing to install ${font.zipName}: archive is larger than ` +
+          `${MAX_FONT_ARCHIVE_BYTES} bytes.`
+      );
+    }
+    fs.writeFileSync(zipPath, buffer);
 
     // Extract into the temp dir, then copy only font files so non-font
     // payloads (LICENSE.md, readme.md) don't land in the fonts dir.
