@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { ShellId, PackageManager } from '../types.ts';
+import { unzipSync } from 'fflate';
 import { commandExists, commandPath, runCommand } from './exec.ts';
 import { getShellBinary } from '../config/shells.ts';
 
@@ -36,6 +37,8 @@ const NERD_FONTS_BASE_URL = 'https://github.com/ryanoasis/nerd-fonts/releases/la
 
 /** Cap on how long the font download may hang before it is aborted. */
 const FONT_DOWNLOAD_TIMEOUT_MS = 60_000;
+
+const FONT_FILE_RE = /\.(ttf|otf|woff2?)$/i;
 
 /** Nerd Font archives run to tens of MB; anything far past that is not a font archive. */
 const MAX_FONT_ARCHIVE_BYTES = 200 * 1024 * 1024;
@@ -125,56 +128,54 @@ export async function installNerdFont(fontId: string): Promise<void> {
   const fontsDir = getNerdFontsDir();
   fs.mkdirSync(fontsDir, { recursive: true });
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-font-'));
-  const zipPath = path.join(tmpDir, font.zipName);
   const url = `${NERD_FONTS_BASE_URL}/${font.zipName}`;
 
+  // Download. A hung connection would otherwise block the whole install phase
+  // with no way to cancel, so the request carries its own timeout.
+  const response = await fetch(url, { signal: AbortSignal.timeout(FONT_DOWNLOAD_TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`Failed to download font: HTTP ${response.status}`);
+
+  const declaredSize = Number(response.headers?.get?.('content-length') ?? 0);
+  if (declaredSize > MAX_FONT_ARCHIVE_BYTES) {
+    throw new Error(
+      `Refusing to download ${font.zipName}: ${declaredSize} bytes exceeds the ` +
+        `${MAX_FONT_ARCHIVE_BYTES} byte limit.`
+    );
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.byteLength > MAX_FONT_ARCHIVE_BYTES) {
+    throw new Error(
+      `Refusing to install ${font.zipName}: archive is larger than ` +
+        `${MAX_FONT_ARCHIVE_BYTES} bytes.`
+    );
+  }
+
+  // Extracted in-process rather than by shelling out to `unzip`, which is absent
+  // on minimal systems and needed its own detection and platform-specific error.
+  // Only font files are taken, so non-font payloads (LICENSE.md, readme.md) stay out.
+  let entries: Record<string, Uint8Array>;
   try {
-    // Download. A hung connection would otherwise block the whole install phase
-    // with no way to cancel, so the request carries its own timeout.
-    const response = await fetch(url, { signal: AbortSignal.timeout(FONT_DOWNLOAD_TIMEOUT_MS) });
-    if (!response.ok) throw new Error(`Failed to download font: HTTP ${response.status}`);
+    entries = unzipSync(new Uint8Array(buffer), {
+      filter: (file) => FONT_FILE_RE.test(file.name),
+    });
+  } catch (err) {
+    throw new Error(
+      `Could not extract ${font.zipName}: ${err instanceof Error ? err.message : err}`,
+      { cause: err }
+    );
+  }
 
-    const declaredSize = Number(response.headers?.get?.('content-length') ?? 0);
-    if (declaredSize > MAX_FONT_ARCHIVE_BYTES) {
-      throw new Error(
-        `Refusing to download ${font.zipName}: ${declaredSize} bytes exceeds the ` +
-          `${MAX_FONT_ARCHIVE_BYTES} byte limit.`
-      );
-    }
+  const names = Object.keys(entries);
+  if (names.length === 0) {
+    throw new Error(`No font files found in ${font.zipName}`);
+  }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.byteLength > MAX_FONT_ARCHIVE_BYTES) {
-      throw new Error(
-        `Refusing to install ${font.zipName}: archive is larger than ` +
-          `${MAX_FONT_ARCHIVE_BYTES} bytes.`
-      );
-    }
-    fs.writeFileSync(zipPath, buffer);
-
-    // Extract into the temp dir, then copy only font files so non-font
-    // payloads (LICENSE.md, readme.md) don't land in the fonts dir.
-    if (!commandExists('unzip')) {
-      throw new Error(
-        'Cannot extract the font: "unzip" is not installed. ' +
-          `Install it (e.g. ${process.platform === 'darwin' ? 'brew install unzip' : 'sudo apt-get install unzip'}) and try again.`
-      );
-    }
-    await runCommand(['unzip', '-o', '-q', zipPath, '-d', tmpDir]);
-
-    const fontFiles = collectFontFiles(tmpDir);
-    if (fontFiles.length === 0) {
-      throw new Error(`No font files found in ${font.zipName}`);
-    }
-    for (const file of fontFiles) {
-      // path.basename is load-bearing, not cosmetic: it strips any directory
-      // component from the unverified archive's entries, so a crafted zip cannot
-      // write outside fontsDir. Do not replace it with the relative path.
-      fs.copyFileSync(file, path.join(fontsDir, path.basename(file)));
-    }
-  } finally {
-    // Clean up temp files
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+  for (const name of names) {
+    // path.basename is load-bearing, not cosmetic: it strips any directory
+    // component from the unverified archive's entries, so a crafted zip cannot
+    // write outside fontsDir. Do not replace it with the entry path.
+    fs.writeFileSync(path.join(fontsDir, path.basename(name)), entries[name]!);
   }
 
   // Refresh font cache (Linux only — macOS picks up ~/Library/Fonts automatically).
@@ -186,19 +187,6 @@ export async function installNerdFont(fontId: string): Promise<void> {
       // ignore — cache refresh is best-effort
     }
   }
-}
-
-function collectFontFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      out.push(...collectFontFiles(full));
-    } else if (/\.(ttf|otf|woff2?)$/i.test(entry.name)) {
-      out.push(full);
-    }
-  }
-  return out;
 }
 
 export async function setDefaultShell(shellId: ShellId): Promise<void> {

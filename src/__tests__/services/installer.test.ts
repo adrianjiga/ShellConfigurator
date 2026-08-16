@@ -1,6 +1,7 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'path';
 import { EventEmitter } from 'events';
+import { zipSync } from 'fflate';
 
 const {
   mockSpawn,
@@ -55,10 +56,6 @@ import {
   getMissingStarshipPathDir,
   SCRIPT_INSTALL_BIN_DIR,
 } from '../../services/installer.ts';
-
-function dirent(name: string, isDirectory = false) {
-  return { name, isDirectory: () => isDirectory };
-}
 
 interface SpawnOutcome {
   status?: number | null;
@@ -246,74 +243,120 @@ describe('installShell', () => {
 });
 
 describe('installNerdFont', () => {
+  /** Builds a real zip so the extraction path is exercised, not mocked. */
+  function zipWith(files: Record<string, string>): ArrayBuffer {
+    const entries: Record<string, Uint8Array> = {};
+    for (const [name, content] of Object.entries(files)) {
+      entries[name] = new TextEncoder().encode(content);
+    }
+    const zipped = zipSync(entries);
+    return zipped.buffer.slice(
+      zipped.byteOffset,
+      zipped.byteOffset + zipped.byteLength
+    ) as ArrayBuffer;
+  }
+
+  function respondWithZip(files: Record<string, string>) {
+    vi.mocked(fetch).mockResolvedValue(okResponse({ arrayBuffer: async () => zipWith(files) }));
+  }
+
   it('throws for an unknown font id', async () => {
     await expect(installNerdFont('NotAFont')).rejects.toThrow('Unknown font: NotAFont');
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
 
-  it('throws when the download fails and still cleans up temp files', async () => {
+  it('throws when the download fails', async () => {
     vi.mocked(fetch).mockResolvedValue(okResponse({ ok: false, status: 404 }));
 
     await expect(installNerdFont('FiraCode')).rejects.toThrow('Failed to download font: HTTP 404');
-    expect(mockRmSync).toHaveBeenCalledWith('/tmp/shellconf-font-test', {
-      recursive: true,
-      force: true,
-    });
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
-  it('throws a clear error when unzip is missing and still cleans up', async () => {
-    mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-      if (args[3] === 'unzip') throw new Error('command not found');
-      return '';
-    });
+  it('throws when the archive contains no font files', async () => {
+    respondWithZip({ 'README.md': 'nothing to see' });
 
-    await expect(installNerdFont('FiraCode')).rejects.toThrow('"unzip" is not installed');
-    expect(mockRmSync).toHaveBeenCalled();
+    await expect(installNerdFont('FiraCode')).rejects.toThrow('No font files found');
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
-  it('throws when the zip contains no font files', async () => {
-    mockReaddirSync.mockReturnValue([dirent('LICENSE.md'), dirent('readme.md')]);
-
-    await expect(installNerdFont('FiraCode')).rejects.toThrow(
-      'No font files found in FiraCode.zip'
+  it('throws a clear error when the archive is not a valid zip', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      okResponse({ arrayBuffer: async () => new TextEncoder().encode('not a zip').buffer })
     );
-    expect(mockCopyFileSync).not.toHaveBeenCalled();
+
+    await expect(installNerdFont('FiraCode')).rejects.toThrow('Could not extract');
   });
 
-  it('copies only font files into the fonts dir', async () => {
-    mockReaddirSync.mockReturnValue([
-      dirent('FiraCodeNerdFont.ttf'),
-      dirent('FiraCodeNerdFont-Italic.otf'),
-      dirent('LICENSE.md'),
-    ]);
+  it('writes only font files into the fonts dir', async () => {
+    respondWithZip({
+      'FiraCodeNerdFont-Regular.ttf': 'font-a',
+      'FiraCodeNerdFont-Bold.otf': 'font-b',
+      'LICENSE.md': 'license',
+      'readme.md': 'readme',
+    });
 
     await installNerdFont('FiraCode');
 
+    const written = mockWriteFileSync.mock.calls.map((c) => c[0] as string);
     const fontsDir = getNerdFontsDir();
-    expect(mockCopyFileSync).toHaveBeenCalledTimes(2);
-    expect(mockCopyFileSync).toHaveBeenCalledWith(
-      path.join('/tmp/shellconf-font-test', 'FiraCodeNerdFont.ttf'),
-      path.join(fontsDir, 'FiraCodeNerdFont.ttf')
-    );
-    expect(mockCopyFileSync).not.toHaveBeenCalledWith(
-      expect.anything(),
-      path.join(fontsDir, 'LICENSE.md')
-    );
+    expect(written).toContain(path.join(fontsDir, 'FiraCodeNerdFont-Regular.ttf'));
+    expect(written).toContain(path.join(fontsDir, 'FiraCodeNerdFont-Bold.otf'));
+    expect(written.some((f) => f.includes('LICENSE'))).toBe(false);
+    expect(written.some((f) => f.toLowerCase().includes('readme'))).toBe(false);
+  });
+
+  it('flattens nested entries so a crafted archive cannot escape the fonts dir', async () => {
+    respondWithZip({ '../../evil/Pwned.ttf': 'font' });
+
+    await installNerdFont('FiraCode');
+
+    const written = mockWriteFileSync.mock.calls.map((c) => c[0] as string);
+    expect(written).toEqual([path.join(getNerdFontsDir(), 'Pwned.ttf')]);
+    expect(written[0]).not.toContain('..');
+  });
+
+  it('never shells out to unzip', async () => {
+    respondWithZip({ 'FiraCodeNerdFont-Regular.ttf': 'font' });
+
+    await installNerdFont('FiraCode');
+
+    expect(mockSpawn).not.toHaveBeenCalledWith('unzip', expect.anything(), expect.anything());
   });
 
   it('ignores fc-cache failures on linux (non-fatal)', async () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'linux' });
     try {
-      mockSpawn
-        .mockImplementationOnce(() => childFor({ status: 0 }))
-        .mockImplementationOnce(() => childFor({ status: 1 }));
-      mockReaddirSync.mockReturnValue([dirent('FiraCodeNerdFont.ttf')]);
+      respondWithZip({ 'FiraCodeNerdFont-Regular.ttf': 'font' });
+      spawnOutcome({ status: 1 });
 
       await expect(installNerdFont('FiraCode')).resolves.toBeUndefined();
     } finally {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     }
+  });
+});
+
+describe('installNerdFont download guards', () => {
+  it('aborts the download if it hangs', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      okResponse({ arrayBuffer: async () => zipSync({ 'a.ttf': new Uint8Array([1]) }).buffer })
+    );
+
+    await installNerdFont('FiraCode').catch(() => {});
+    const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('refuses an archive whose declared size is implausible', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      okResponse({
+        headers: { get: () => String(500 * 1024 * 1024) },
+      } as unknown as Partial<Response>)
+    );
+
+    await expect(installNerdFont('FiraCode')).rejects.toThrow('exceeds the');
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 });
 
@@ -369,24 +412,5 @@ describe('getMissingStarshipPathDir', () => {
     mockExistsSync.mockReturnValue(false);
 
     expect(getMissingStarshipPathDir()).toBeNull();
-  });
-});
-
-describe('installNerdFont download guards', () => {
-  it('aborts the download if it hangs', async () => {
-    await installNerdFont('FiraCode');
-    const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit | undefined;
-    expect(init?.signal).toBeInstanceOf(AbortSignal);
-  });
-
-  it('refuses an archive whose declared size is implausible', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      okResponse({
-        headers: { get: () => String(500 * 1024 * 1024) },
-      } as unknown as Partial<Response>)
-    );
-
-    await expect(installNerdFont('FiraCode')).rejects.toThrow('exceeds the');
-    expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 });
