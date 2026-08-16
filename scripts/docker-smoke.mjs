@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { parse } from '@iarna/toml';
 import {
-  detectPackageManager,
-  detectInstalledShells,
-  isStarshipInstalled,
+  detectPackageManagerAsync,
+  detectInstalledShellsAsync,
+  isStarshipInstalledAsync,
 } from '../dist/services/detector.js';
 import { generateToml } from '../dist/generators/starship.js';
 import { applyShellConfig } from '../dist/generators/shellRc.js';
@@ -15,9 +15,9 @@ import { DEFAULT_STATE } from '../dist/types.js';
 const expectedPm = process.env.EXPECTED_PM;
 let failures = 0;
 
-function check(name, fn) {
+async function check(name, fn) {
   try {
-    fn();
+    await fn();
     console.log(`PASS ${name}`);
   } catch (err) {
     failures += 1;
@@ -27,21 +27,21 @@ function check(name, fn) {
 
 // --- Detection (non-destructive reads) ---
 
-const pm = detectPackageManager();
+const pm = await detectPackageManagerAsync();
 console.log(`detectPackageManager -> ${pm}`);
 if (expectedPm) {
-  check(`package manager is ${expectedPm}`, () => assert.equal(pm, expectedPm));
+  await check(`package manager is ${expectedPm}`, () => assert.equal(pm, expectedPm));
 } else {
   console.log(`WARN EXPECTED_PM not set; skipping package manager assertion`);
 }
 
-check('detects at least bash as an installed shell', () => {
-  const shells = detectInstalledShells();
+await check('detects at least bash as an installed shell', async () => {
+  const shells = await detectInstalledShellsAsync();
   assert.ok(shells.includes('bash'), `expected bash in ${shells.join(', ')}`);
 });
 
-check('does not detect starship in a fresh container', () => {
-  assert.equal(isStarshipInstalled().installed, false);
+await check('does not detect starship in a fresh container', async () => {
+  assert.equal((await isStarshipInstalledAsync()).installed, false);
 });
 
 // --- Config generation (pure) ---
@@ -57,7 +57,7 @@ const osReleaseId = (() => {
 })();
 console.log(`os-release ID -> ${osReleaseId ?? '(unknown)'}`);
 
-check('generateToml produces parseable TOML for every preset', () => {
+await check('generateToml produces parseable TOML for every preset', () => {
   for (const preset of PRESETS) {
     const state = {
       ...DEFAULT_STATE,
@@ -77,7 +77,7 @@ check('generateToml produces parseable TOML for every preset', () => {
 
 // --- RC generation against a scratch HOME (filesystem integration) ---
 
-check('applyShellConfig writes banner + init line and is idempotent', () => {
+await check('applyShellConfig writes banner + init line and is idempotent', () => {
   const rcPath = `${process.env.HOME}/.bashrc`;
   if (existsSync(rcPath)) {
     throw new Error(`${rcPath} already exists; refusing to run against an unclean HOME`);
