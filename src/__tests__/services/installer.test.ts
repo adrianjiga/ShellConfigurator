@@ -1,8 +1,9 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'path';
+import { EventEmitter } from 'events';
 
 const {
-  mockSpawnSync,
+  mockSpawn,
   mockExecFileSync,
   mockMkdirSync,
   mockMkdtempSync,
@@ -13,7 +14,7 @@ const {
   mockExistsSync,
   mockStatSync,
 } = vi.hoisted(() => ({
-  mockSpawnSync: vi.fn(),
+  mockSpawn: vi.fn(),
   mockExecFileSync: vi.fn(),
   mockMkdirSync: vi.fn(),
   mockMkdtempSync: vi.fn(),
@@ -27,7 +28,7 @@ const {
 
 vi.mock('child_process', () => ({
   execFileSync: mockExecFileSync,
-  spawnSync: mockSpawnSync,
+  spawn: mockSpawn,
   // exec.ts promisifies execFile; unused here but must exist on the mock.
   execFile: Object.assign(vi.fn(), {
     [Symbol.for('nodejs.util.promisify.custom')]: vi.fn(),
@@ -59,6 +60,27 @@ function dirent(name: string, isDirectory = false) {
   return { name, isDirectory: () => isDirectory };
 }
 
+interface SpawnOutcome {
+  status?: number | null;
+  signal?: string | null;
+  error?: Error;
+}
+
+/** A stand-in for the async child returned by spawn(), settling on the next tick. */
+function childFor(outcome: SpawnOutcome) {
+  const child = new EventEmitter() as EventEmitter & { kill: ReturnType<typeof vi.fn> };
+  child.kill = vi.fn();
+  setImmediate(() => {
+    if (outcome.error) child.emit('error', outcome.error);
+    else child.emit('close', outcome.status ?? 0, outcome.signal ?? null);
+  });
+  return child;
+}
+
+function spawnOutcome(outcome: SpawnOutcome) {
+  mockSpawn.mockImplementation(() => childFor(outcome));
+}
+
 /** Minimal stand-in for the parts of Response that installNerdFont actually uses. */
 function okResponse(overrides: Partial<Response> = {}): Response {
   return {
@@ -72,7 +94,7 @@ function okResponse(overrides: Partial<Response> = {}): Response {
 beforeEach(() => {
   vi.clearAllMocks();
   // Defaults: commands succeed, all binaries exist, fetch succeeds
-  mockSpawnSync.mockReturnValue({ status: 0 });
+  spawnOutcome({ status: 0 });
   mockExecFileSync.mockReturnValue('');
   mockMkdirSync.mockImplementation(() => undefined);
   mockMkdtempSync.mockReturnValue('/tmp/shellconf-font-test');
@@ -91,30 +113,28 @@ afterEach(() => {
 describe('installStarship', () => {
   it('installs via apt', async () => {
     await installStarship('apt');
-    expect(mockSpawnSync).toHaveBeenCalledWith('sudo', ['apt-get', 'install', '-y', 'starship'], {
+    expect(mockSpawn).toHaveBeenCalledWith('sudo', ['apt-get', 'install', '-y', 'starship'], {
       stdio: 'inherit',
     });
   });
 
   it('installs via dnf', async () => {
     await installStarship('dnf');
-    expect(mockSpawnSync).toHaveBeenCalledWith('sudo', ['dnf', 'install', '-y', 'starship'], {
+    expect(mockSpawn).toHaveBeenCalledWith('sudo', ['dnf', 'install', '-y', 'starship'], {
       stdio: 'inherit',
     });
   });
 
   it('installs via pacman', async () => {
     await installStarship('pacman');
-    expect(mockSpawnSync).toHaveBeenCalledWith(
-      'sudo',
-      ['pacman', '-S', '--noconfirm', 'starship'],
-      { stdio: 'inherit' }
-    );
+    expect(mockSpawn).toHaveBeenCalledWith('sudo', ['pacman', '-S', '--noconfirm', 'starship'], {
+      stdio: 'inherit',
+    });
   });
 
   it('installs via brew without sudo', async () => {
     await installStarship('brew');
-    expect(mockSpawnSync).toHaveBeenCalledWith('brew', ['install', 'starship'], {
+    expect(mockSpawn).toHaveBeenCalledWith('brew', ['install', 'starship'], {
       stdio: 'inherit',
     });
   });
@@ -124,26 +144,24 @@ describe('installStarship', () => {
 
     // Downloading and running are separate commands so a failed download is not
     // masked by the exit status of the shell reading from the pipe.
-    expect(mockSpawnSync).toHaveBeenCalledWith(
+    expect(mockSpawn).toHaveBeenCalledWith(
       'curl',
       ['-fsS', '-o', expect.stringContaining('install.sh'), 'https://starship.rs/install.sh'],
       { stdio: 'inherit' }
     );
-    expect(mockSpawnSync).toHaveBeenCalledWith(
-      'sh',
-      [expect.stringContaining('install.sh'), '--yes'],
-      { stdio: 'inherit' }
-    );
+    expect(mockSpawn).toHaveBeenCalledWith('sh', [expect.stringContaining('install.sh'), '--yes'], {
+      stdio: 'inherit',
+    });
   });
 
   it('fails when the download fails instead of reporting success', async () => {
-    mockSpawnSync.mockImplementation((cmd: string) =>
-      cmd === 'curl' ? { status: 22 } : { status: 0 }
+    mockSpawn.mockImplementation((cmd: string) =>
+      childFor(cmd === 'curl' ? { status: 22 } : { status: 0 })
     );
 
     await expect(installStarship('script')).rejects.toThrow('exit code 22');
     // The script must never be executed after a failed download.
-    expect(mockSpawnSync).not.toHaveBeenCalledWith('sh', expect.anything(), expect.anything());
+    expect(mockSpawn).not.toHaveBeenCalledWith('sh', expect.anything(), expect.anything());
   });
 
   it('fails when the downloaded script is empty', async () => {
@@ -153,7 +171,7 @@ describe('installStarship', () => {
   });
 
   it('cleans up the temp dir even when the install fails', async () => {
-    mockSpawnSync.mockReturnValue({ status: 1 });
+    spawnOutcome({ status: 1 });
 
     await expect(installStarship('script')).rejects.toThrow();
     expect(mockRmSync).toHaveBeenCalledWith(expect.any(String), {
@@ -169,24 +187,24 @@ describe('installStarship', () => {
     });
 
     await expect(installStarship('script')).rejects.toThrow('"curl" is not installed');
-    expect(mockSpawnSync).not.toHaveBeenCalled();
+    expect(mockSpawn).not.toHaveBeenCalled();
   });
 
   it('throws the spawned error when the command cannot start', async () => {
     const boom = new Error('spawn ENOENT');
-    mockSpawnSync.mockReturnValue({ error: boom });
+    spawnOutcome({ error: boom });
 
     await expect(installStarship('apt')).rejects.toThrow('spawn ENOENT');
   });
 
   it('throws when the command exits with a non-zero status', async () => {
-    mockSpawnSync.mockReturnValue({ status: 1 });
+    spawnOutcome({ status: 1 });
 
     await expect(installStarship('apt')).rejects.toThrow('exit code 1');
   });
 
   it('throws when the command is killed by a signal', async () => {
-    mockSpawnSync.mockReturnValue({ signal: 'SIGKILL', status: null });
+    spawnOutcome({ signal: 'SIGKILL', status: null });
 
     await expect(installStarship('apt')).rejects.toThrow('killed by signal SIGKILL');
   });
@@ -195,35 +213,35 @@ describe('installStarship', () => {
 describe('installShell', () => {
   it('installs zsh via apt', async () => {
     await installShell('zsh', 'apt');
-    expect(mockSpawnSync).toHaveBeenCalledWith('sudo', ['apt-get', 'install', '-y', 'zsh'], {
+    expect(mockSpawn).toHaveBeenCalledWith('sudo', ['apt-get', 'install', '-y', 'zsh'], {
       stdio: 'inherit',
     });
   });
 
   it('installs fish via brew', async () => {
     await installShell('fish', 'brew');
-    expect(mockSpawnSync).toHaveBeenCalledWith('brew', ['install', 'fish'], {
+    expect(mockSpawn).toHaveBeenCalledWith('brew', ['install', 'fish'], {
       stdio: 'inherit',
     });
   });
 
   it('installs nushell via apt', async () => {
     await installShell('nushell', 'apt');
-    expect(mockSpawnSync).toHaveBeenCalledWith('sudo', ['apt-get', 'install', '-y', 'nushell'], {
+    expect(mockSpawn).toHaveBeenCalledWith('sudo', ['apt-get', 'install', '-y', 'nushell'], {
       stdio: 'inherit',
     });
   });
 
   it('throws a clear error on the script fallback (no package manager)', async () => {
     await expect(installShell('zsh', 'script')).rejects.toThrow('Cannot auto-install zsh');
-    expect(mockSpawnSync).not.toHaveBeenCalled();
+    expect(mockSpawn).not.toHaveBeenCalled();
   });
 
   it('throws when the shell has no package for the package manager', async () => {
     await expect(installShell('powershell', 'apt')).rejects.toThrow(
       'No package for powershell on apt'
     );
-    expect(mockSpawnSync).not.toHaveBeenCalled();
+    expect(mockSpawn).not.toHaveBeenCalled();
   });
 });
 
@@ -287,7 +305,9 @@ describe('installNerdFont', () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'linux' });
     try {
-      mockSpawnSync.mockReturnValueOnce({ status: 0 }).mockReturnValueOnce({ status: 1 });
+      mockSpawn
+        .mockImplementationOnce(() => childFor({ status: 0 }))
+        .mockImplementationOnce(() => childFor({ status: 1 }));
       mockReaddirSync.mockReturnValue([dirent('FiraCodeNerdFont.ttf')]);
 
       await expect(installNerdFont('FiraCode')).resolves.toBeUndefined();
@@ -303,7 +323,7 @@ describe('setDefaultShell', () => {
 
     await setDefaultShell('zsh');
 
-    expect(mockSpawnSync).toHaveBeenCalledWith('chsh', ['-s', '/usr/bin/zsh'], {
+    expect(mockSpawn).toHaveBeenCalledWith('chsh', ['-s', '/usr/bin/zsh'], {
       stdio: 'inherit',
     });
   });
@@ -314,12 +334,12 @@ describe('setDefaultShell', () => {
     });
 
     await expect(setDefaultShell('nushell')).rejects.toThrow('nu not found in PATH');
-    expect(mockSpawnSync).not.toHaveBeenCalled();
+    expect(mockSpawn).not.toHaveBeenCalled();
   });
 
   it('surfaces the /etc/shells hint when chsh fails', async () => {
     mockExecFileSync.mockReturnValue('/opt/homebrew/bin/zsh\n');
-    mockSpawnSync.mockReturnValue({ status: 1 });
+    spawnOutcome({ status: 1 });
 
     await expect(setDefaultShell('zsh')).rejects.toThrow('/etc/shells');
     await expect(setDefaultShell('zsh')).rejects.toThrow('sudo tee -a /etc/shells');

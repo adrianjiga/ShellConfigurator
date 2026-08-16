@@ -1,5 +1,6 @@
-import { execFile, execFileSync, spawnSync } from 'child_process';
+import { execFile, execFileSync, spawn, ChildProcess } from 'child_process';
 import { promisify } from 'util';
+import { suspendUi, resumeUi } from './tty.js';
 
 const execFileP = promisify(execFile);
 
@@ -46,22 +47,69 @@ export function commandPath(cmd: string): string | null {
   }
 }
 
+/** The child currently holding the terminal, so a cancel request can kill it. */
+let activeChild: ChildProcess | null = null;
+
+/** Kills the running command, if any. Used to abort the install phase. */
+export function killActiveCommand(signal: NodeJS.Signals = 'SIGTERM'): void {
+  activeChild?.kill(signal);
+}
+
+export class CommandCancelledError extends Error {
+  constructor(command: string) {
+    super(`Cancelled: ${command}`);
+    this.name = 'CommandCancelledError';
+  }
+}
+
 /**
- * Runs a command with stdio: 'inherit' so sudo password prompts appear in terminal.
- * This blocks the event loop, so Ink cannot repaint until the child exits — the UI
- * is frozen rather than paused, and the child writes to the same TTY Ink draws on.
+ * Runs a command with stdio: 'inherit' so sudo password prompts appear in the
+ * terminal.
+ *
+ * Async rather than spawnSync: a blocking call freezes the whole Ink render loop
+ * and gives no way to cancel. Because the child writes to the same TTY Ink draws
+ * on, the UI is suspended for the child's lifetime so the two cannot interleave.
  */
-export function runCommand(args: string[]): void {
+export function runCommand(args: string[], options: { signal?: AbortSignal } = {}): Promise<void> {
   const [cmd, ...rest] = args;
-  if (!cmd) throw new Error('Empty command');
+  if (!cmd) return Promise.reject(new Error('Empty command'));
 
-  const result = spawnSync(cmd, rest, { stdio: 'inherit' });
+  const printable = args.join(' ');
+  if (options.signal?.aborted) {
+    return Promise.reject(new CommandCancelledError(printable));
+  }
 
-  if (result.error) throw result.error;
-  if (result.signal) {
-    throw new Error(`Command killed by signal ${result.signal}: ${args.join(' ')}`);
-  }
-  if (result.status !== 0) {
-    throw new Error(`Command failed with exit code ${result.status}: ${args.join(' ')}`);
-  }
+  return new Promise<void>((resolve, reject) => {
+    suspendUi();
+    const child = spawn(cmd, rest, { stdio: 'inherit' });
+    activeChild = child;
+
+    let cancelled = false;
+    const onAbort = () => {
+      cancelled = true;
+      child.kill('SIGTERM');
+    };
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+
+    const settle = (fn: () => void) => {
+      options.signal?.removeEventListener('abort', onAbort);
+      if (activeChild === child) activeChild = null;
+      resumeUi();
+      fn();
+    };
+
+    child.on('error', (err) => settle(() => reject(err)));
+
+    child.on('close', (status, signal) => {
+      if (cancelled) {
+        settle(() => reject(new CommandCancelledError(printable)));
+      } else if (signal) {
+        settle(() => reject(new Error(`Command killed by signal ${signal}: ${printable}`)));
+      } else if (status !== 0) {
+        settle(() => reject(new Error(`Command failed with exit code ${status}: ${printable}`)));
+      } else {
+        settle(resolve);
+      }
+    });
+  });
 }

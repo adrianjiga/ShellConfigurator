@@ -60,12 +60,12 @@ export async function installStarship(pm: PackageManager): Promise<void> {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-starship-'));
     const scriptPath = path.join(tmpDir, 'install.sh');
     try {
-      runCommand(['curl', '-fsS', '-o', scriptPath, STARSHIP_INSTALL_URL]);
+      await runCommand(['curl', '-fsS', '-o', scriptPath, STARSHIP_INSTALL_URL]);
       if (!fs.existsSync(scriptPath) || fs.statSync(scriptPath).size === 0) {
         throw new Error(`Downloaded an empty install script from ${STARSHIP_INSTALL_URL}`);
       }
       // Installs to ~/.local/bin, no sudo needed
-      runCommand(['sh', scriptPath, '--yes']);
+      await runCommand(['sh', scriptPath, '--yes']);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -74,7 +74,7 @@ export async function installStarship(pm: PackageManager): Promise<void> {
 
   const cmdArgs = INSTALL_CMDS[pm]('starship');
   if (cmdArgs.length === 0) throw new Error(`No install method for package manager: ${pm}`);
-  runCommand(cmdArgs);
+  await runCommand(cmdArgs);
 }
 
 /**
@@ -109,7 +109,7 @@ export async function installShell(shellId: ShellId, pm: PackageManager): Promis
     );
   }
 
-  runCommand(INSTALL_CMDS[pm](pkg));
+  await runCommand(INSTALL_CMDS[pm](pkg));
 }
 
 export function getNerdFontsDir(): string {
@@ -160,7 +160,7 @@ export async function installNerdFont(fontId: string): Promise<void> {
           `Install it (e.g. ${process.platform === 'darwin' ? 'brew install unzip' : 'sudo apt-get install unzip'}) and try again.`
       );
     }
-    runCommand(['unzip', '-o', '-q', zipPath, '-d', tmpDir]);
+    await runCommand(['unzip', '-o', '-q', zipPath, '-d', tmpDir]);
 
     const fontFiles = collectFontFiles(tmpDir);
     if (fontFiles.length === 0) {
@@ -178,7 +178,7 @@ export async function installNerdFont(fontId: string): Promise<void> {
   // Non-fatal: fc-cache may be absent on minimal systems.
   if (process.platform !== 'darwin') {
     try {
-      runCommand(['fc-cache', '-f']);
+      await runCommand(['fc-cache', '-f']);
     } catch {
       // ignore — cache refresh is best-effort
     }
@@ -208,7 +208,7 @@ export async function setDefaultShell(shellId: ShellId): Promise<void> {
 
   // chsh prompts for current user's password itself — run with stdio: 'inherit'
   try {
-    runCommand(['chsh', '-s', shellPath]);
+    await runCommand(['chsh', '-s', shellPath]);
   } catch (err) {
     // Brew-installed shells usually aren't listed in /etc/shells, so chsh rejects
     // them. Surface an actionable hint instead of the raw chsh error.
