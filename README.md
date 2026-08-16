@@ -13,15 +13,32 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/) 
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 22+
 - A package manager: `pacman`, `apt`, `dnf`, or `brew` (falls back to the official Starship install script)
 
 ## Usage
+
+Run it without installing:
+
+```bash
+npx shell-configurator
+```
+
+Or install it globally:
+
+```bash
+npm install -g shell-configurator
+shell-configurator
+```
+
+### From a clone
 
 ```bash
 npm install
 npm run dev
 ```
+
+The wizard exits non-zero if any install step fails, so it can be used in a script.
 
 ### Wizard steps
 
