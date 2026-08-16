@@ -28,6 +28,10 @@ const {
 vi.mock('child_process', () => ({
   execFileSync: mockExecFileSync,
   spawnSync: mockSpawnSync,
+  // exec.ts promisifies execFile; unused here but must exist on the mock.
+  execFile: Object.assign(vi.fn(), {
+    [Symbol.for('nodejs.util.promisify.custom')]: vi.fn(),
+  }),
 }));
 
 vi.mock('fs', () => ({
@@ -160,7 +164,7 @@ describe('installStarship', () => {
 
   it('throws a clear error when curl is missing for the script path', async () => {
     mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-      if (args[1] === 'command -v curl') throw new Error('command not found');
+      if (args[3] === 'curl') throw new Error('command not found');
       return '';
     });
 
@@ -241,7 +245,7 @@ describe('installNerdFont', () => {
 
   it('throws a clear error when unzip is missing and still cleans up', async () => {
     mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
-      if (args[1] === 'command -v unzip') throw new Error('command not found');
+      if (args[3] === 'unzip') throw new Error('command not found');
       return '';
     });
 

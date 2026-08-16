@@ -50,7 +50,7 @@ function execFileByArg(match: (arg: string) => boolean, stdout = '/usr/bin/cmd')
   mockExecFile.mockImplementation((...args: unknown[]) => {
     const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
     const cmdArgs = args[1] as string[];
-    if (match(cmdArgs[1]!)) {
+    if (match(cmdArgs[3]!)) {
       cb(null, stdout, '');
     } else {
       cb(new Error('not found'), '', '');
@@ -84,7 +84,7 @@ describe('detectPackageManagerAsync', () => {
   });
 
   it('returns pacman when brew is absent and pacman is installed', async () => {
-    execFileByArg((arg) => arg !== 'command -v brew');
+    execFileByArg((arg) => arg !== 'brew');
     expect(await detectPackageManagerAsync()).toBe('pacman');
   });
 
@@ -140,7 +140,7 @@ describe('detectInstalledShellsAsync', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('returns shells whose binaries exist', async () => {
-    execFileByArg((arg) => arg === 'command -v bash' || arg === 'command -v zsh');
+    execFileByArg((arg) => arg === 'bash' || arg === 'zsh');
     const shells = await detectInstalledShellsAsync();
     expect(shells).toContain('bash');
     expect(shells).toContain('zsh');
@@ -156,6 +156,7 @@ describe('detectInstalledShellsAsync', () => {
   it('returns all shells when all binaries exist', async () => {
     execFileSucceeds('/usr/bin/shell');
     const shells = await detectInstalledShellsAsync();
-    expect(shells).toEqual(['bash', 'zsh', 'fish', 'nushell', 'powershell']);
+    // Order follows the SHELLS table, which is the single source of truth.
+    expect(shells).toEqual(['zsh', 'bash', 'fish', 'nushell', 'powershell']);
   });
 });

@@ -1,8 +1,9 @@
-import { execFileSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { ShellId, PackageManager } from '../types.js';
+import { commandExists, commandPath, runCommand } from './exec.js';
+import { getShellBinary } from '../config/shells.js';
 
 // Package names per shell per package manager
 const SHELL_PACKAGES: Record<ShellId, Partial<Record<PackageManager, string>>> = {
@@ -39,33 +40,6 @@ const FONT_DOWNLOAD_TIMEOUT_MS = 60_000;
 /** Nerd Font archives run to tens of MB; anything far past that is not a font archive. */
 const MAX_FONT_ARCHIVE_BYTES = 200 * 1024 * 1024;
 
-// Runs a command with stdio: 'inherit' so sudo password prompts appear in terminal.
-// This blocks the event loop, so Ink cannot repaint until the child exits — the UI
-// is frozen rather than paused, and the child writes to the same TTY Ink draws on.
-function runCommand(args: string[]): void {
-  const [cmd, ...rest] = args;
-  if (!cmd) throw new Error('Empty command');
-
-  const result = spawnSync(cmd, rest, { stdio: 'inherit' });
-
-  if (result.error) throw result.error;
-  if (result.signal) {
-    throw new Error(`Command killed by signal ${result.signal}: ${args.join(' ')}`);
-  }
-  if (result.status !== 0) {
-    throw new Error(`Command failed with exit code ${result.status}: ${args.join(' ')}`);
-  }
-}
-
-function hasBinary(cmd: string): boolean {
-  try {
-    execFileSync('sh', ['-c', `command -v ${cmd}`], { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** Where the official install script puts the binary when run without sudo. */
 export const SCRIPT_INSTALL_BIN_DIR = path.join(os.homedir(), '.local', 'bin');
 
@@ -73,7 +47,7 @@ const STARSHIP_INSTALL_URL = 'https://starship.rs/install.sh';
 
 export async function installStarship(pm: PackageManager): Promise<void> {
   if (pm === 'script') {
-    if (!hasBinary('curl')) {
+    if (!commandExists('curl')) {
       throw new Error(
         'Cannot download Starship: "curl" is not installed. Install curl and try again, ' +
           'or install Starship manually (see https://starship.rs/install).'
@@ -112,7 +86,7 @@ export async function installStarship(pm: PackageManager): Promise<void> {
  * line resolves to `starship: command not found` on every prompt.
  */
 export function getMissingStarshipPathDir(): string | null {
-  if (hasBinary('starship')) return null;
+  if (commandExists('starship')) return null;
   return fs.existsSync(path.join(SCRIPT_INSTALL_BIN_DIR, 'starship'))
     ? SCRIPT_INSTALL_BIN_DIR
     : null;
@@ -180,7 +154,7 @@ export async function installNerdFont(fontId: string): Promise<void> {
 
     // Extract into the temp dir, then copy only font files so non-font
     // payloads (LICENSE.md, readme.md) don't land in the fonts dir.
-    if (!hasBinary('unzip')) {
+    if (!commandExists('unzip')) {
       throw new Error(
         'Cannot extract the font: "unzip" is not installed. ' +
           `Install it (e.g. ${process.platform === 'darwin' ? 'brew install unzip' : 'sudo apt-get install unzip'}) and try again.`
@@ -225,23 +199,10 @@ function collectFontFiles(dir: string): string[] {
 }
 
 export async function setDefaultShell(shellId: ShellId): Promise<void> {
-  const binaries: Record<ShellId, string> = {
-    bash: 'bash',
-    zsh: 'zsh',
-    fish: 'fish',
-    nushell: 'nu',
-    powershell: 'pwsh',
-  };
+  const binary = getShellBinary(shellId);
 
-  const binary = binaries[shellId];
-  let shellPath: string;
-
-  try {
-    shellPath = execFileSync('sh', ['-c', `command -v ${binary}`], {
-      encoding: 'utf8',
-      stdio: 'pipe',
-    }).trim();
-  } catch {
+  const shellPath = commandPath(binary);
+  if (!shellPath) {
     throw new Error(`${binary} not found in PATH`);
   }
 

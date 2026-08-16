@@ -5,6 +5,8 @@ import { ShellId } from '../types.js';
 export interface ShellDef {
   id: ShellId;
   label: string;
+  /** Executable name on PATH — not always the same as the id (nushell → nu). */
+  binary: string;
   rcFile: string | null;
   initLine: string;
   manualNote?: string;
@@ -15,6 +17,7 @@ export interface ShellDef {
 export const SHELLS: ShellDef[] = [
   {
     id: 'zsh',
+    binary: 'zsh',
     label: 'Zsh',
     rcFile: path.join(os.homedir(), '.zshrc'),
     initLine: 'eval "$(starship init zsh)"',
@@ -22,6 +25,7 @@ export const SHELLS: ShellDef[] = [
   },
   {
     id: 'bash',
+    binary: 'bash',
     label: 'Bash',
     rcFile: path.join(os.homedir(), '.bashrc'),
     initLine: 'eval "$(starship init bash)"',
@@ -29,6 +33,7 @@ export const SHELLS: ShellDef[] = [
   },
   {
     id: 'fish',
+    binary: 'fish',
     label: 'Fish',
     rcFile: path.join(os.homedir(), '.config', 'fish', 'config.fish'),
     initLine: 'starship init fish | source',
@@ -36,6 +41,7 @@ export const SHELLS: ShellDef[] = [
   },
   {
     id: 'nushell',
+    binary: 'nu',
     label: 'Nushell',
     rcFile: null,
     initLine: 'starship init nu | save -f ($nu.data-dir | path join "vendor/autoload/starship.nu")',
@@ -43,6 +49,7 @@ export const SHELLS: ShellDef[] = [
   },
   {
     id: 'powershell',
+    binary: 'pwsh',
     label: 'PowerShell',
     rcFile: null,
     initLine: 'Invoke-Expression (&starship init powershell)',
@@ -52,4 +59,9 @@ export const SHELLS: ShellDef[] = [
 
 export function getShell(id: ShellId): ShellDef | undefined {
   return SHELLS.find((s) => s.id === id);
+}
+
+/** Executable name for a shell, e.g. 'nu' for nushell. */
+export function getShellBinary(id: ShellId): string {
+  return SHELLS.find((s) => s.id === id)?.binary ?? id;
 }
