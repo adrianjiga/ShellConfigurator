@@ -1,13 +1,21 @@
 import { tomlBasic } from '../generators/toml.ts';
+import type { PaletteColorName } from './palettes.ts';
 
 /**
- * Style values the generator resolves from the chosen colour scheme and hands to
- * each module's `toml` builder. Kept structural so config does not depend on the
- * generator module.
+ * What the generator hands each module's `settings` builder.
+ *
+ * Modules do not resolve their own colour: the generator emits the `style` key
+ * from the palette entry matching the module id. Only modules that carry their
+ * colour in differently-named keys need `styleFor`.
  */
 export interface ModuleTomlContext {
   hasNerdFont: boolean;
-  style: { dir: string; branch: string; status: string };
+  /**
+   * Builds the style expression for a palette colour — the colour on its own in a
+   * normal prompt, or an `fg:fg bg:<colour>` pair under powerline. Keeping this a
+   * callback means a module never has to know which of the two it is in.
+   */
+  styleFor: (name: PaletteColorName) => string;
 }
 
 export interface ModuleDef {
@@ -20,9 +28,52 @@ export interface ModuleDef {
   // Only modules whose symbol is a genuine Nerd Font glyph branch on hasNerdFont;
   // emoji and plain Unicode render without one, so those symbols are unconditional.
   previewSegment: (hasNerdFont: boolean) => string;
-  // Returns this module's starship.toml block.
-  toml: (ctx: ModuleTomlContext) => string;
+  /**
+   * The module's inner format — what sits inside the coloured segment. A normal
+   * prompt leaves starship's own default format alone, but a powerline prompt has
+   * to wrap the content in separator glyphs, and that needs the content spelled out.
+   */
+  content: string;
+  /** This module's TOML keys other than `style` and `format`. */
+  settings?: (ctx: ModuleTomlContext) => string;
+  /**
+   * Set when the module carries its colour in keys other than `style`
+   * (`style_user`/`style_root`, `[[battery.display]]`), so the generator must not
+   * emit a `style` of its own.
+   */
+  stylesItself?: boolean;
 }
+
+/**
+ * The placeable modules.
+ *
+ * Spelled out rather than inferred from `MODULE_DEFS` because palettes key their
+ * colour table on this union, and inferring it would make the two files reference
+ * each other's types in a cycle. `satisfies Record<ConfigurableModuleId, …>` below
+ * keeps the union and the data exhaustive in both directions, so neither a missing
+ * entry nor a stray one compiles — which is the drift that caused the prompt
+ * character to silently vanish from the preview.
+ */
+export type ConfigurableModuleId =
+  | 'username'
+  | 'hostname'
+  | 'directory'
+  | 'git_branch'
+  | 'git_status'
+  | 'nodejs'
+  | 'python'
+  | 'rust'
+  | 'docker_context'
+  | 'kubernetes'
+  | 'aws'
+  | 'time'
+  | 'battery'
+  | 'cmd_duration'
+  | 'jobs';
+
+/** The prompt character is always appended last and is configured on the Style
+ *  screen, so it is not a placeable module and has no MODULE_DEFS entry. */
+export type ModuleId = ConfigurableModuleId | 'character';
 
 const MODULE_DEFS = {
   username: {
@@ -32,12 +83,13 @@ const MODULE_DEFS = {
     defaultRight: false,
 
     previewSegment: () => 'user',
-    toml: () =>
+    content: '$user',
+    stylesItself: true,
+    settings: ({ styleFor }) =>
       `
-[username]
 show_always = false
-style_user  = "bold yellow"
-style_root  = "bold red"
+style_user  = "${tomlBasic(styleFor('username'))}"
+style_root  = "${tomlBasic(styleFor('err'))}"
 `.trim(),
   },
   hostname: {
@@ -47,12 +99,8 @@ style_root  = "bold red"
     defaultRight: false,
 
     previewSegment: () => 'host',
-    toml: () =>
-      `
-[hostname]
-ssh_only = true
-style    = "bold green"
-`.trim(),
+    content: '$ssh_symbol$hostname',
+    settings: () => `ssh_only = true`,
   },
   directory: {
     label: 'Directory',
@@ -61,10 +109,9 @@ style    = "bold green"
     defaultRight: false,
 
     previewSegment: () => '~/projects/myapp',
-    toml: ({ style }) =>
+    content: '$path$read_only',
+    settings: () =>
       `
-[directory]
-style             = "${tomlBasic(style.dir)}"
 truncation_length = 3
 truncate_to_repo  = true
 `.trim(),
@@ -76,12 +123,8 @@ truncate_to_repo  = true
     defaultRight: false,
 
     previewSegment: (nf) => `${nf ? ' ' : 'on '}main`,
-    toml: ({ hasNerdFont, style }) =>
-      `
-[git_branch]
-symbol = "${hasNerdFont ? ' ' : 'on '}"
-style  = "${tomlBasic(style.branch)}"
-`.trim(),
+    content: '$symbol$branch',
+    settings: ({ hasNerdFont }) => `symbol = "${hasNerdFont ? ' ' : 'on '}"`,
   },
   git_status: {
     label: 'Git Status',
@@ -90,10 +133,9 @@ style  = "${tomlBasic(style.branch)}"
     defaultRight: false,
 
     previewSegment: () => '+1',
-    toml: ({ style }) =>
+    content: '$all_status$ahead_behind',
+    settings: () =>
       `
-[git_status]
-style     = "${tomlBasic(style.status)}"
 ahead     = "⇡\${count}"
 behind    = "⇣\${count}"
 diverged  = "⇕⇡\${ahead_count}⇣\${behind_count}"
@@ -110,11 +152,10 @@ deleted   = "-\${count}"
     defaultRight: false,
 
     previewSegment: (nf) => `${nf ? ' ' : 'node '}v22.0.0`,
-    toml: ({ hasNerdFont }) =>
+    content: '$symbol$version',
+    settings: ({ hasNerdFont }) =>
       `
-[nodejs]
 symbol   = "${hasNerdFont ? ' ' : 'node '}"
-style    = "bold green"
 disabled = false
 `.trim(),
   },
@@ -125,11 +166,10 @@ disabled = false
     defaultRight: false,
 
     previewSegment: (nf) => `${nf ? ' ' : 'py '}3.12.0`,
-    toml: ({ hasNerdFont }) =>
+    content: '$symbol$version',
+    settings: ({ hasNerdFont }) =>
       `
-[python]
 symbol   = "${hasNerdFont ? ' ' : 'py '}"
-style    = "bold yellow"
 disabled = false
 `.trim(),
   },
@@ -140,11 +180,10 @@ disabled = false
     defaultRight: false,
 
     previewSegment: () => '🦀 1.80.0',
-    toml: ({ hasNerdFont }) =>
+    content: '$symbol$version',
+    settings: ({ hasNerdFont }) =>
       `
-[rust]
 symbol   = "${hasNerdFont ? ' ' : 'rs '}"
-style    = "bold red"
 disabled = false
 `.trim(),
   },
@@ -155,11 +194,10 @@ disabled = false
     defaultRight: false,
 
     previewSegment: () => '🐳 default',
-    toml: () =>
+    content: '$symbol$context',
+    settings: () =>
       `
-[docker_context]
 symbol   = "🐳 "
-style    = "bold blue"
 disabled = false
 `.trim(),
   },
@@ -170,11 +208,10 @@ disabled = false
     defaultRight: false,
 
     previewSegment: () => '☸ prod',
-    toml: () =>
+    content: '$symbol$context',
+    settings: () =>
       `
-[kubernetes]
 symbol   = "☸ "
-style    = "bold cyan"
 disabled = false
 `.trim(),
   },
@@ -185,11 +222,10 @@ disabled = false
     defaultRight: false,
 
     previewSegment: () => '☁️ us-east-1',
-    toml: () =>
+    content: '$symbol$profile$region',
+    settings: () =>
       `
-[aws]
 symbol   = "☁️  "
-style    = "bold yellow"
 disabled = false
 `.trim(),
   },
@@ -200,12 +236,11 @@ disabled = false
     defaultRight: false,
 
     previewSegment: () => '12:34',
-    toml: () =>
+    content: '$time',
+    settings: () =>
       `
-[time]
 disabled    = false
 time_format = "%H:%M"
-style       = "bold white"
 `.trim(),
   },
   battery: {
@@ -215,18 +250,19 @@ style       = "bold white"
     defaultRight: false,
 
     previewSegment: () => '🔋 85%',
-    toml: () =>
+    content: '$symbol$percentage',
+    stylesItself: true,
+    settings: ({ styleFor }) =>
       `
-[battery]
 disabled = false
 
 [[battery.display]]
 threshold = 30
-style     = "bold red"
+style     = "${tomlBasic(styleFor('err'))}"
 
 [[battery.display]]
 threshold = 80
-style     = "bold yellow"
+style     = "${tomlBasic(styleFor('battery'))}"
 `.trim(),
   },
   cmd_duration: {
@@ -236,12 +272,8 @@ style     = "bold yellow"
     defaultRight: true,
 
     previewSegment: () => '2s',
-    toml: () =>
-      `
-[cmd_duration]
-min_time = 2000
-style    = "bold yellow"
-`.trim(),
+    content: '$duration',
+    settings: () => `min_time = 2000`,
   },
   jobs: {
     label: 'Background Jobs',
@@ -250,28 +282,16 @@ style    = "bold yellow"
     defaultRight: false,
 
     previewSegment: () => '2',
-    toml: () =>
+    content: '$symbol$number',
+    settings: () =>
       `
-[jobs]
 symbol    = "✦"
-style     = "bold blue"
 threshold = 1
 `.trim(),
   },
-  // `satisfies` (not a type annotation) so the literal keys survive for
-  // ConfigurableModuleId while each callback still gets contextual typing.
-} satisfies Record<string, Omit<ModuleDef, 'id'>>;
-
-/**
- * MODULE_DEFS is the single source of truth: the id union, the module list, and
- * each module's TOML all derive from it, so adding a module is a one-place change
- * and cannot leave the type and the data disagreeing.
- */
-export type ConfigurableModuleId = keyof typeof MODULE_DEFS;
-
-/** The prompt character is always appended last and is configured on the Style
- *  screen, so it is not a placeable module and has no MODULE_DEFS entry. */
-export type ModuleId = ConfigurableModuleId | 'character';
+  // `satisfies` (not a type annotation) so each callback still gets contextual
+  // typing, while the Record makes the table exhaustive over ConfigurableModuleId.
+} satisfies Record<ConfigurableModuleId, Omit<ModuleDef, 'id'>>;
 
 export const MODULES: readonly ModuleDef[] = (
   Object.keys(MODULE_DEFS) as ConfigurableModuleId[]

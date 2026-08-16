@@ -4,13 +4,15 @@ import { generateToml } from '../../generators/starship.ts';
 import { DEFAULT_STATE, WizardState } from '../../types.ts';
 import { MODULES } from '../../config/modules.ts';
 import { PRESETS } from '../../config/presets.ts';
+import { PALETTES } from '../../config/palettes.ts';
 
 const base: WizardState = {
   ...DEFAULT_STATE,
   leftModules: ['directory', 'git_branch'],
   rightModules: ['cmd_duration'],
   hasNerdFont: false,
-  colorScheme: 'default',
+  palette: 'default',
+  powerline: false,
   characterSymbol: 'arrow',
 };
 
@@ -52,19 +54,19 @@ describe('generateToml', () => {
     expect(toml).toContain('symbol = "on "');
   });
 
-  it('applies default color scheme to directory', () => {
-    const toml = generateToml({ ...base, colorScheme: 'default' });
-    expect(toml).toContain('style             = "bold blue"');
+  it('styles modules by palette colour name and emits the palette table', () => {
+    const generated = generateToml({ ...base, palette: 'tokyo-night' });
+    expect(generated).toContain('palette      = "tokyo-night"');
+    expect(generated).toContain('style  = "bold directory"');
+    expect(generated).toContain('[palettes.tokyo-night]');
+    expect(generated).toContain('directory      = "#7aa2f7"');
   });
 
-  it('applies pastel color scheme to directory', () => {
-    const toml = generateToml({ ...base, colorScheme: 'pastel' });
-    expect(toml).toContain('style             = "bold cyan"');
-  });
-
-  it('applies minimal color scheme to directory', () => {
-    const toml = generateToml({ ...base, colorScheme: 'minimal' });
-    expect(toml).toContain('style             = "white"');
+  it('gives each palette its own colours, so no two presets render alike', () => {
+    const tokyo = generateToml({ ...base, palette: 'tokyo-night' });
+    const gruvbox = generateToml({ ...base, palette: 'gruvbox' });
+    expect(tokyo).not.toEqual(gruvbox);
+    expect(gruvbox).toContain('directory      = "#83a598"');
   });
 
   it('uses lambda character symbol', () => {
@@ -73,7 +75,7 @@ describe('generateToml', () => {
       leftModules: ['character'],
       characterSymbol: 'lambda',
     });
-    expect(toml).toContain('[λ](green)');
+    expect(toml).toContain('[λ](bold ok)');
   });
 
   it('uses dollar character symbol', () => {
@@ -82,7 +84,7 @@ describe('generateToml', () => {
       leftModules: ['character'],
       characterSymbol: 'dollar',
     });
-    expect(toml).toContain('[\\$](green)');
+    expect(toml).toContain('[\\$](bold ok)');
   });
 
   it('does not emit duplicate module blocks when a module appears on both sides', () => {
@@ -145,13 +147,12 @@ describe('generateToml', () => {
     }
   });
 
-  it.each(['default', 'pastel', 'minimal'] as const)(
-    'generates parseable TOML for the %s color scheme',
-    (colorScheme) => {
-      const parsed = toml.parse(generateToml({ ...base, colorScheme }));
-      expect(parsed).toBeTruthy();
-    }
-  );
+  it.each(PALETTES.map((p) => p.id))('generates parseable TOML for the %s palette', (palette) => {
+    const parsed = toml.parse(
+      generateToml({ ...base, palette: palette as WizardState['palette'] })
+    );
+    expect(parsed).toBeTruthy();
+  });
 
   it.each(['arrow', 'lambda', 'dollar'] as const)(
     'generates parseable TOML for the %s character symbol',
@@ -212,5 +213,93 @@ describe('modules selected on both sides', () => {
 
     expect(toml).not.toContain('$fill');
     expect(toml).not.toContain('[fill]');
+  });
+});
+
+// The powerline separators the generator emits, spelled as escapes because they
+// live in the Nerd Font private use area and do not survive copy-paste intact.
+const SEPARATOR_RIGHT = '\ue0b0';
+const SEPARATOR_LEFT = '\ue0b2';
+
+describe('powerline segments', () => {
+  const powerlineState: WizardState = {
+    ...base,
+    hasNerdFont: true,
+    powerline: true,
+    leftModules: ['directory', 'git_branch', 'character'],
+    rightModules: ['nodejs', 'cmd_duration'],
+  };
+
+  it('styles segments as a foreground on a coloured background', () => {
+    const generated = generateToml(powerlineState);
+    expect(generated).toContain('style  = "bold fg:fg bg:directory"');
+  });
+
+  it('tints each left separator with the next segment’s colour', () => {
+    const generated = generateToml(powerlineState);
+    expect(generated).toContain(`[${SEPARATOR_RIGHT}](fg:directory bg:git_branch)`);
+  });
+
+  it('leaves the outermost separator without a background', () => {
+    const generated = generateToml(powerlineState);
+    expect(generated).toContain(`[${SEPARATOR_RIGHT}](fg:git_branch)`);
+  });
+
+  it('points right-hand separators back at the previous segment', () => {
+    const generated = generateToml(powerlineState);
+    expect(generated).toContain(`[${SEPARATOR_LEFT}](fg:nodejs)`);
+    expect(generated).toContain(`[${SEPARATOR_LEFT}](fg:cmd_duration bg:nodejs)`);
+  });
+
+  it('collapses an empty module instead of leaving a blank block', () => {
+    const generated = generateToml(powerlineState);
+    const formatLines = generated.split('\n').filter((l) => l.startsWith('format ='));
+    expect(formatLines.length).toBeGreaterThan(0);
+    for (const line of formatLines) {
+      expect(line).toMatch(/= "\(.*\)"$/);
+    }
+  });
+
+  it('never draws the prompt character as a powerline segment', () => {
+    const generated = generateToml(powerlineState);
+    expect(generated).toContain("success_symbol = '[❯](bold ok)'");
+  });
+
+  it('falls back to a plain prompt when there is no Nerd Font for the separators', () => {
+    const generated = generateToml({ ...powerlineState, hasNerdFont: false });
+    expect(generated).not.toContain(SEPARATOR_RIGHT);
+    expect(generated).not.toContain('bg:directory');
+    expect(generated).toContain('style  = "bold directory"');
+  });
+});
+
+describe('presets are visually distinct', () => {
+  // The regression this guards: presets used to differ only in which modules they
+  // enabled, so "Tokyo Night" and "Gruvbox Rainbow" generated byte-identical
+  // colours and the theme names promised something the generator never produced.
+  it('generates a different config for every preset', () => {
+    const generated = new Map<string, string>();
+
+    for (const preset of PRESETS) {
+      const config = generateToml({
+        ...DEFAULT_STATE,
+        hasNerdFont: true,
+        leftModules: preset.leftModules ?? DEFAULT_STATE.leftModules,
+        rightModules: preset.rightModules ?? DEFAULT_STATE.rightModules,
+        palette: preset.palette,
+        powerline: preset.powerline,
+      });
+
+      const clash = [...generated.entries()].find(([, other]) => other === config);
+      expect(clash?.[0], `${preset.id} generates the same config as ${clash?.[0]}`).toBeUndefined();
+      generated.set(preset.id, config);
+    }
+
+    expect(generated.size).toBe(PRESETS.length);
+  });
+
+  it('gives every preset a palette of its own', () => {
+    const palettes = PRESETS.map((p) => p.palette);
+    expect(new Set(palettes).size).toBe(PRESETS.length);
   });
 });

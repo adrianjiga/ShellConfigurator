@@ -1,7 +1,8 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { WizardState, ColorScheme, CharacterSymbol } from '../types.ts';
-import { getModule } from '../config/modules.ts';
+import { WizardState, CharacterSymbol } from '../types.ts';
+import { getModule, type ConfigurableModuleId, type ModuleId } from '../config/modules.ts';
+import { getPalette, inkColor, type PaletteColorName } from '../config/palettes.ts';
 
 const CHAR_SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> = {
   arrow: { success: '❯', error: '❯' },
@@ -9,83 +10,73 @@ const CHAR_SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> 
   dollar: { success: '$', error: '$' },
 };
 
-const SCHEME_COLORS: Record<
-  ColorScheme,
-  { dir: string; branch: string; status: string; char: string }
-> = {
-  default: { dir: 'blue', branch: 'magenta', status: 'red', char: 'green' },
-  pastel: { dir: 'cyan', branch: 'magenta', status: 'yellow', char: 'green' },
-  minimal: { dir: 'white', branch: 'white', status: 'red', char: 'green' },
-};
-
-const MODULE_COLORS: Record<string, string> = {
-  directory: 'blue',
-  git_branch: 'magenta',
-  git_status: 'red',
-  nodejs: 'green',
-  python: 'yellow',
-  rust: 'red',
-  docker_context: 'blue',
-  kubernetes: 'cyan',
-  aws: 'yellow',
-  time: 'white',
-  battery: 'yellow',
-  cmd_duration: 'yellow',
-  username: 'yellow',
-  hostname: 'green',
-  jobs: 'blue',
-};
-
-interface SegmentProps {
-  text: string;
-  color: string;
-  bold?: boolean;
-}
-
-function Segment({ text, color, bold }: SegmentProps) {
-  return (
-    <Text color={color} bold={bold}>
-      {text}{' '}
-    </Text>
-  );
-}
+/** The same separators the generator emits (U+E0B0 / U+E0B2). */
+const SEPARATOR_RIGHT = '\ue0b0';
+const SEPARATOR_LEFT = '\ue0b2';
 
 interface PromptPreviewProps {
   state: WizardState;
 }
 
 export function PromptPreview({ state }: PromptPreviewProps) {
-  const { leftModules, rightModules, hasNerdFont, colorScheme, characterSymbol } = state;
-  const colors = SCHEME_COLORS[colorScheme];
+  const { leftModules, rightModules, hasNerdFont, characterSymbol } = state;
+  const palette = getPalette(state.palette);
+  // Mirrors the generator: separators are Nerd Font glyphs, so without one the
+  // preview must show the plain prompt that will actually be written.
+  const powerline = state.powerline && hasNerdFont;
 
-  function renderModule(id: string) {
-    // The prompt character has no MODULES entry (it is not user-configurable as a
-    // segment), so this must be checked before the lookup below.
-    if (id === 'character') {
-      return (
-        <Segment
-          key="character"
-          text={CHAR_SYMBOLS[characterSymbol].success}
-          color={colors.char}
-          bold
-        />
-      );
-    }
+  const color = (name: PaletteColorName) => inkColor(palette.colors[name]);
 
-    const def = getModule(id);
-    if (!def) return null;
+  const isSegment = (id: ModuleId): id is ConfigurableModuleId => id !== 'character';
 
-    const color =
-      id === 'directory'
-        ? colors.dir
-        : id === 'git_branch'
-          ? colors.branch
-          : id === 'git_status'
-            ? colors.status
-            : (MODULE_COLORS[id] ?? 'white');
-
-    return <Segment key={id} text={def.previewSegment(hasNerdFont)} color={color} />;
+  function renderCharacter() {
+    return (
+      <Text key="character" color={color('ok')} bold>
+        {CHAR_SYMBOLS[characterSymbol].success}{' '}
+      </Text>
+    );
   }
+
+  /**
+   * Renders one side of the prompt. In powerline mode each segment is a coloured
+   * block followed (or preceded) by a separator tinted with its neighbour's
+   * colour, which is the same interlocking the generator writes into the config.
+   */
+  function renderSide(ids: ModuleId[], side: 'left' | 'right') {
+    const segments = ids.filter(isSegment);
+
+    return segments.flatMap((id, i) => {
+      const def = getModule(id);
+      if (!def) return [];
+
+      const text = def.previewSegment(hasNerdFont);
+      if (!powerline) {
+        return [
+          <Text key={id} color={color(def.id)}>
+            {text}{' '}
+          </Text>,
+        ];
+      }
+
+      const neighbour = segments[side === 'left' ? i + 1 : i - 1];
+      const neighbourColor = neighbour ? color(neighbour) : undefined;
+      const block = (
+        <Text key={`${id}-block`} color={color('fg')} backgroundColor={color(def.id)} bold>
+          {' '}
+          {text}{' '}
+        </Text>
+      );
+      const separator = (
+        <Text key={`${id}-sep`} color={color(def.id)} backgroundColor={neighbourColor}>
+          {side === 'left' ? SEPARATOR_RIGHT : SEPARATOR_LEFT}
+        </Text>
+      );
+
+      return side === 'left' ? [block, separator] : [separator, block];
+    });
+  }
+
+  const leftSegmentCount = leftModules.filter(isSegment).length;
 
   return (
     <Box flexDirection="column">
@@ -100,8 +91,11 @@ export function PromptPreview({ state }: PromptPreviewProps) {
 
         {/* Left prompt */}
         <Box flexDirection="row" flexWrap="wrap">
-          {leftModules.map((id) => renderModule(id))}
+          {renderSide(leftModules, 'left')}
         </Box>
+
+        {/* The prompt character sits on its own line, as in the generated config */}
+        <Box flexDirection="row">{leftModules.includes('character') && renderCharacter()}</Box>
 
         {/* Right prompt (dimmed, shown below for simplicity) */}
         {rightModules.length > 0 && (
@@ -109,15 +103,14 @@ export function PromptPreview({ state }: PromptPreviewProps) {
             <Text color="gray" italic>
               right:{' '}
             </Text>
-            {rightModules.map((id) => renderModule(id))}
+            {renderSide(rightModules, 'right')}
           </Box>
         )}
       </Box>
 
       <Box marginTop={1} flexDirection="column">
         <Text color="gray" italic>
-          {leftModules.filter((m) => m !== 'character').length} left segment
-          {leftModules.filter((m) => m !== 'character').length !== 1 ? 's' : ''}
+          {leftSegmentCount} left segment{leftSegmentCount !== 1 ? 's' : ''}
           {rightModules.length > 0 ? `, ${rightModules.length} right` : ''}
         </Text>
       </Box>

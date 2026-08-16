@@ -32,6 +32,9 @@ export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
       preset: preset.id,
       leftModules: preset.leftModules ?? state.leftModules,
       rightModules: preset.rightModules ?? state.rightModules,
+      // Seeds the Style screen's pickers; the user can still change both there.
+      palette: preset.palette,
+      powerline: preset.powerline,
     });
   };
 
