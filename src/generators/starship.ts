@@ -170,8 +170,13 @@ disabled = false
 }
 
 export function generateToml(state: WizardState): string {
-  const leftFormat = buildFormatString(state.leftModules);
-  const rightFormat = buildFormatString(state.rightModules);
+  // A module chosen on both sides would otherwise be emitted twice in the format
+  // string and render twice in the prompt. The left side wins.
+  const leftModules = [...new Set(state.leftModules)];
+  const rightModules = [...new Set(state.rightModules)].filter((id) => !leftModules.includes(id));
+
+  const leftFormat = buildFormatString(leftModules);
+  const rightFormat = buildFormatString(rightModules);
 
   // Use $fill to right-align modules on the same line, then \n$character
   // on a second line. This avoids right_format which shells pin to the
@@ -183,7 +188,7 @@ export function generateToml(state: WizardState): string {
   parts.push('\\n$character');
   const format = parts.filter(Boolean).join('');
 
-  const allModules = [...new Set([...state.leftModules, ...state.rightModules])] as ModuleId[];
+  const allModules = [...leftModules, ...rightModules];
 
   const blocks = allModules.map((id) => moduleBlock(id, state)).join('\n\n');
 

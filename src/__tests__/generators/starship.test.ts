@@ -168,3 +168,49 @@ describe('generateToml', () => {
     expect(parsed['fill']).toEqual({ symbol: ' ' });
   });
 });
+
+describe('modules selected on both sides', () => {
+  it('emits a duplicated module only once in the format string', () => {
+    const toml = generateToml({
+      ...DEFAULT_STATE,
+      leftModules: ['directory', 'character'],
+      rightModules: ['directory'],
+    });
+
+    const formatLine = toml.split('\n').find((l) => l.startsWith('format')) ?? '';
+    expect(formatLine.match(/\$directory/g)).toHaveLength(1);
+  });
+
+  it('emits one config block per module when a module is on both sides', () => {
+    const toml = generateToml({
+      ...DEFAULT_STATE,
+      leftModules: ['git_branch', 'character'],
+      rightModules: ['git_branch'],
+    });
+
+    expect(toml.match(/^\[git_branch\]$/gm)).toHaveLength(1);
+  });
+
+  it('keeps a right-only module on the right', () => {
+    const toml = generateToml({
+      ...DEFAULT_STATE,
+      leftModules: ['directory', 'character'],
+      rightModules: ['cmd_duration'],
+    });
+
+    const formatLine = toml.split('\n').find((l) => l.startsWith('format')) ?? '';
+    expect(formatLine).toContain('$fill');
+    expect(formatLine).toContain('$cmd_duration');
+  });
+
+  it('drops the fill when every right module was already on the left', () => {
+    const toml = generateToml({
+      ...DEFAULT_STATE,
+      leftModules: ['directory', 'character'],
+      rightModules: ['directory'],
+    });
+
+    expect(toml).not.toContain('$fill');
+    expect(toml).not.toContain('[fill]');
+  });
+});

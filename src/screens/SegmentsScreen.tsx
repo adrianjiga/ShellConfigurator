@@ -20,6 +20,9 @@ const CONFIGURABLE = MODULES;
 export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: SegmentsScreenProps) {
   const currentModules = side === 'left' ? state.leftModules : state.rightModules;
 
+  // A module already on the left cannot also go on the right — it would render twice.
+  const takenByLeft = new Set<string>(side === 'right' ? state.leftModules : []);
+
   const [enabled, setEnabled] = useState<Set<ConfigurableModuleId>>(
     () => new Set(currentModules.filter((m) => m !== 'character'))
   );
@@ -67,6 +70,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
 
     if (char === ' ') {
       const id = CONFIGURABLE[cursor]!.id;
+      if (takenByLeft.has(id)) return;
       setEnabled((prev) => {
         const next = new Set(prev);
         if (next.has(id)) next.delete(id);
@@ -99,15 +103,28 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
         <Box flexDirection="column" marginTop={1}>
           {CONFIGURABLE.map((mod, i) => {
             const isActive = i === cursor;
+            const isTaken = takenByLeft.has(mod.id);
             const isChecked = enabled.has(mod.id);
             return (
               <Box key={mod.id} flexDirection="row" gap={1}>
                 <Text color={isActive ? 'cyan' : 'gray'}>{isActive ? '›' : ' '}</Text>
-                <Text color={isChecked ? 'green' : 'gray'}>{isChecked ? '[✓]' : '[ ]'}</Text>
-                <Text color={isActive ? 'white' : 'gray'} bold={isActive}>
+                <Text color={isTaken ? 'gray' : isChecked ? 'green' : 'gray'}>
+                  {isTaken ? '[–]' : isChecked ? '[✓]' : '[ ]'}
+                </Text>
+                <Text
+                  color={isTaken ? 'gray' : isActive ? 'white' : 'gray'}
+                  bold={isActive && !isTaken}
+                  dimColor={isTaken}
+                >
                   {mod.label}
                 </Text>
-                {isActive && (
+                {isTaken && (
+                  <Text color="gray" italic>
+                    {' '}
+                    — already on the left
+                  </Text>
+                )}
+                {isActive && !isTaken && (
                   <Text color="gray" italic>
                     {' '}
                     — {mod.description}
