@@ -144,7 +144,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
           { key: '↑↓', label: 'navigate' },
           { key: 'Space', label: 'toggle' },
           { key: 'Enter/Tab/→', label: side === 'right' ? 'confirm / skip' : 'next' },
-          { key: 'Esc', label: 'back' },
+          { key: 'Esc/←', label: 'back' },
         ]}
       />
     </WizardLayout>

@@ -167,6 +167,9 @@ export async function installNerdFont(fontId: string): Promise<void> {
       throw new Error(`No font files found in ${font.zipName}`);
     }
     for (const file of fontFiles) {
+      // path.basename is load-bearing, not cosmetic: it strips any directory
+      // component from the unverified archive's entries, so a crafted zip cannot
+      // write outside fontsDir. Do not replace it with the relative path.
       fs.copyFileSync(file, path.join(fontsDir, path.basename(file)));
     }
   } finally {
