@@ -1,5 +1,5 @@
 import { WizardState, ColorScheme, CharacterSymbol } from '../types.ts';
-import type { ModuleId } from '../config/modules.ts';
+import { getModule, type ModuleId } from '../config/modules.ts';
 
 const SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> = {
   arrow: { success: '[❯](green)', error: '[❯](red)' },
@@ -23,150 +23,26 @@ function buildFormatString(modules: string[]): string {
 
 function moduleBlock(id: ModuleId, state: WizardState): string {
   const { hasNerdFont, colorScheme } = state;
-  const c = COLOR_STYLES[colorScheme];
 
-  switch (id) {
-    case 'character':
-      return `
+  // The character is not a placeable module, so it has no MODULES entry.
+  if (id === 'character') {
+    return `
 [character]
 success_symbol = '${SYMBOLS[state.characterSymbol].success}'
 error_symbol   = '${SYMBOLS[state.characterSymbol].error}'
 `.trim();
+  }
 
-    case 'directory':
-      return `
-[directory]
-style             = "${c.dir}"
-truncation_length = 3
-truncate_to_repo  = true
-`.trim();
-
-    case 'git_branch':
-      return `
-[git_branch]
-symbol = "${hasNerdFont ? ' ' : 'on '}"
-style  = "${c.branch}"
-`.trim();
-
-    case 'git_status':
-      return `
-[git_status]
-style     = "${c.status}"
-ahead     = "⇡\${count}"
-behind    = "⇣\${count}"
-diverged  = "⇕⇡\${ahead_count}⇣\${behind_count}"
-modified  = "!\${count}"
-staged    = "+\${count}"
-untracked = "?\${count}"
-deleted   = "-\${count}"
-`.trim();
-
-    case 'nodejs':
-      return `
-[nodejs]
-symbol   = "${hasNerdFont ? ' ' : 'node '}"
-style    = "bold green"
-disabled = false
-`.trim();
-
-    case 'python':
-      return `
-[python]
-symbol   = "${hasNerdFont ? ' ' : 'py '}"
-style    = "bold yellow"
-disabled = false
-`.trim();
-
-    case 'rust':
-      return `
-[rust]
-symbol   = "${hasNerdFont ? ' ' : 'rs '}"
-style    = "bold red"
-disabled = false
-`.trim();
-
-    case 'docker_context':
-      return `
-[docker_context]
-symbol   = "🐳 "
-style    = "bold blue"
-disabled = false
-`.trim();
-
-    case 'kubernetes':
-      return `
-[kubernetes]
-symbol   = "☸ "
-style    = "bold cyan"
-disabled = false
-`.trim();
-
-    case 'aws':
-      return `
-[aws]
-symbol   = "☁️  "
-style    = "bold yellow"
-disabled = false
-`.trim();
-
-    case 'time':
-      return `
-[time]
-disabled    = false
-time_format = "%H:%M"
-style       = "bold white"
-`.trim();
-
-    case 'battery':
-      return `
-[battery]
-disabled = false
-
-[[battery.display]]
-threshold = 30
-style     = "bold red"
-
-[[battery.display]]
-threshold = 80
-style     = "bold yellow"
-`.trim();
-
-    case 'cmd_duration':
-      return `
-[cmd_duration]
-min_time = 2000
-style    = "bold yellow"
-`.trim();
-
-    case 'username':
-      return `
-[username]
-show_always = false
-style_user  = "bold yellow"
-style_root  = "bold red"
-`.trim();
-
-    case 'hostname':
-      return `
-[hostname]
-ssh_only = true
-style    = "bold green"
-`.trim();
-
-    case 'jobs':
-      return `
-[jobs]
-symbol    = "✦"
-style     = "bold blue"
-threshold = 1
-`.trim();
-
-    default:
-      return `
+  const def = getModule(id);
+  if (!def) {
+    // Unknown id (malformed state) — emit a harmless enabling stub.
+    return `
 [${id}]
 disabled = false
 `.trim();
   }
+
+  return def.toml({ hasNerdFont, style: COLOR_STYLES[colorScheme] });
 }
 
 export function generateToml(state: WizardState): string {
