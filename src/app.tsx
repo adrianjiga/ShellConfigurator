@@ -22,6 +22,14 @@ export function App() {
     setState((prev) => ({ ...prev, ...update, step: next }));
   }
 
+  function finishInstall(update?: Partial<WizardState>) {
+    // Exit non-zero when anything failed, so the wizard is usable from a script.
+    if (update?.installResults?.some((t) => t.status === 'failed')) {
+      process.exitCode = 1;
+    }
+    advanceTo('done', update);
+  }
+
   function goNext(update?: Partial<WizardState>) {
     setState((prev) => getNextStep(prev, update));
   }
@@ -74,7 +82,7 @@ export function App() {
       return <ShellScreen state={state} onNext={goNext} onUpdate={updateState} onBack={goBack} />;
 
     case 'installing':
-      return <InstallingScreen state={state} onNext={(update) => advanceTo('done', update)} />;
+      return <InstallingScreen state={state} onNext={finishInstall} />;
 
     case 'done':
       return <DoneScreen state={state} />;
