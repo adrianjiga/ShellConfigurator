@@ -27,7 +27,9 @@ export interface ModuleDef {
   description: string;
   defaultLeft: boolean;
   defaultRight: boolean;
-  // Returns a short colored preview string for the prompt preview
+  // Returns a short colored preview string for the prompt preview.
+  // Only modules whose symbol is a genuine Nerd Font glyph branch on hasNerdFont;
+  // emoji and plain Unicode render without one, so those symbols are unconditional.
   previewSegment: (hasNerdFont: boolean) => string;
 }
 
@@ -94,7 +96,7 @@ const MODULE_DEFS: Record<ConfigurableModuleId, Omit<ModuleDef, 'id'>> = {
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? '🦀 ' : 'rs '}1.80.0`,
+    previewSegment: () => '🦀 1.80.0',
   },
   docker_context: {
     label: 'Docker',
@@ -102,7 +104,7 @@ const MODULE_DEFS: Record<ConfigurableModuleId, Omit<ModuleDef, 'id'>> = {
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? '🐳 ' : 'docker:'}default`,
+    previewSegment: () => '🐳 default',
   },
   kubernetes: {
     label: 'Kubernetes',
@@ -110,7 +112,7 @@ const MODULE_DEFS: Record<ConfigurableModuleId, Omit<ModuleDef, 'id'>> = {
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? '☸ ' : 'k8s:'}prod`,
+    previewSegment: () => '☸ prod',
   },
   aws: {
     label: 'AWS',
@@ -118,7 +120,7 @@ const MODULE_DEFS: Record<ConfigurableModuleId, Omit<ModuleDef, 'id'>> = {
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? '☁️ ' : 'aws:'}us-east-1`,
+    previewSegment: () => '☁️ us-east-1',
   },
   time: {
     label: 'Time',
@@ -134,7 +136,7 @@ const MODULE_DEFS: Record<ConfigurableModuleId, Omit<ModuleDef, 'id'>> = {
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? '🔋' : ''}85%`,
+    previewSegment: () => '🔋 85%',
   },
   cmd_duration: {
     label: 'Command Duration',

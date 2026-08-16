@@ -88,7 +88,7 @@ disabled = false
     case 'docker_context':
       return `
 [docker_context]
-symbol   = "${hasNerdFont ? '🐳 ' : 'docker:'}"
+symbol   = "🐳 "
 style    = "bold blue"
 disabled = false
 `.trim();
@@ -96,7 +96,7 @@ disabled = false
     case 'kubernetes':
       return `
 [kubernetes]
-symbol   = "${hasNerdFont ? '☸ ' : 'k8s:'}"
+symbol   = "☸ "
 style    = "bold cyan"
 disabled = false
 `.trim();
@@ -104,7 +104,7 @@ disabled = false
     case 'aws':
       return `
 [aws]
-symbol   = "${hasNerdFont ? '☁️  ' : 'aws:'}"
+symbol   = "☁️  "
 style    = "bold yellow"
 disabled = false
 `.trim();
@@ -156,7 +156,7 @@ style    = "bold green"
     case 'jobs':
       return `
 [jobs]
-symbol    = "${hasNerdFont ? '✦' : '+'}"
+symbol    = "✦"
 style     = "bold blue"
 threshold = 1
 `.trim();
