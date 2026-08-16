@@ -1,20 +1,20 @@
-import {
-  WizardState,
-  InstallTask,
-  FONT_SELECT_SENTINEL,
-  PackageManager,
-  ShellId,
-} from '../types.js';
+import { WizardState, InstallTask, fontIdToInstall, PackageManager, ShellId } from '../types.ts';
 import {
   NERD_FONTS,
   installStarship,
   installShell,
   installNerdFont,
   setDefaultShell,
-} from './installer.js';
-import { generateToml } from '../generators/starship.js';
-import { writeStarshipConfig, applyShellConfig } from '../generators/shellRc.js';
-import { isStarshipInstalledAsync } from './detector.js';
+  getMissingStarshipPathDir,
+} from './installer.ts';
+import { generateToml } from '../generators/starship.ts';
+import {
+  writeStarshipConfig,
+  applyShellConfig,
+  WriteConfigResult,
+  ApplyShellConfigOptions,
+} from '../generators/shellRc.ts';
+import { isStarshipInstalledAsync } from './detector.ts';
 
 export interface InstallTaskDeps {
   isStarshipInstalled: () => Promise<{ installed: boolean; version?: string }>;
@@ -23,8 +23,12 @@ export interface InstallTaskDeps {
   installShell: (shellId: ShellId, pm: PackageManager) => Promise<void>;
   setDefaultShell: (shellId: ShellId) => Promise<void>;
   generateToml: (state: WizardState) => string;
-  writeStarshipConfig: (toml: string) => void;
-  applyShellConfig: (shellId: ShellId) => { applied: boolean; note?: string };
+  writeStarshipConfig: (toml: string) => WriteConfigResult;
+  applyShellConfig: (
+    shellId: ShellId,
+    options?: ApplyShellConfigOptions
+  ) => { applied: boolean; note?: string };
+  getMissingStarshipPathDir: () => string | null;
 }
 
 export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
@@ -36,6 +40,7 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   generateToml,
   writeStarshipConfig,
   applyShellConfig,
+  getMissingStarshipPathDir,
 };
 
 export function buildTaskList(state: WizardState): InstallTask[] {
@@ -46,10 +51,10 @@ export function buildTaskList(state: WizardState): InstallTask[] {
     tasks.push({ id: 'starship', label: 'Starship', status: 'pending' });
   }
 
-  // Nerd Font (skip sentinel value)
-  if (state.nerdFontToInstall && state.nerdFontToInstall !== FONT_SELECT_SENTINEL) {
-    const fontLabel =
-      NERD_FONTS.find((f) => f.id === state.nerdFontToInstall)?.label ?? state.nerdFontToInstall;
+  // Nerd Font (only when a concrete font was chosen)
+  const fontId = fontIdToInstall(state.nerdFontToInstall);
+  if (fontId) {
+    const fontLabel = NERD_FONTS.find((f) => f.id === fontId)?.label ?? fontId;
     tasks.push({ id: 'font', label: `Nerd Font (${fontLabel})`, status: 'pending' });
   }
 
@@ -72,22 +77,49 @@ export function buildTaskList(state: WizardState): InstallTask[] {
   // Config write
   tasks.push({ id: 'config', label: 'Write starship.toml', status: 'pending' });
 
-  // RC files
-  tasks.push({ id: 'rc', label: 'Apply shell configs', status: 'pending' });
+  // RC files — one task per shell so a failure in one does not taint the others
+  for (const shellId of state.selectedShells) {
+    tasks.push({ id: rcTaskId(shellId), label: `Configure ${shellId}`, status: 'pending' });
+  }
 
   return tasks;
+}
+
+/** Task id for the rc-file step of a given shell. */
+export function rcTaskId(shellId: ShellId): string {
+  return `rc_${shellId}`;
+}
+
+/** Raised when the user aborts the install phase. */
+export class InstallCancelledError extends Error {
+  constructor() {
+    super('Install cancelled');
+    this.name = 'InstallCancelledError';
+  }
 }
 
 export async function runInstallTasks(
   state: WizardState,
   deps: InstallTaskDeps,
-  onUpdate: (id: string, patch: Partial<InstallTask>) => void
+  onUpdate: (id: string, patch: Partial<InstallTask>) => void,
+  signal?: AbortSignal
 ): Promise<InstallTask[]> {
   let tasks = buildTaskList(state);
 
   function update(id: string, patch: Partial<InstallTask>) {
     tasks = tasks.map((t) => (t.id === id ? { ...t, ...patch } : t));
     onUpdate(id, patch);
+  }
+
+  const cancelled = () => signal?.aborted === true;
+
+  /** Marks every task that never ran, so the summary never implies they succeeded. */
+  function markRemainingCancelled() {
+    for (const task of tasks) {
+      if (task.status === 'pending' || task.status === 'running') {
+        update(task.id, { status: 'failed', error: 'Cancelled' });
+      }
+    }
   }
 
   // --- Starship (task omitted entirely when skipStarshipInstall) ---
@@ -109,20 +141,34 @@ export async function runInstallTasks(
     }
   }
 
-  // --- Nerd Font (skip sentinel value) ---
-  if (state.nerdFontToInstall && state.nerdFontToInstall !== FONT_SELECT_SENTINEL) {
+  if (cancelled()) {
+    markRemainingCancelled();
+    return tasks;
+  }
+
+  // --- Nerd Font (only when a concrete font was chosen) ---
+  let fontInstallFailed = false;
+  const fontId = fontIdToInstall(state.nerdFontToInstall);
+  if (fontId) {
     update('font', { status: 'running' });
     try {
-      await deps.installNerdFont(state.nerdFontToInstall);
+      await deps.installNerdFont(fontId);
       update('font', { status: 'done' });
     } catch (err) {
+      fontInstallFailed = true;
       update('font', { status: 'failed', error: String(err) });
     }
+  }
+
+  if (cancelled()) {
+    markRemainingCancelled();
+    return tasks;
   }
 
   // --- Missing shells ---
   for (const shellId of state.selectedShells) {
     if (state.installedShells.includes(shellId)) continue;
+    if (cancelled()) break;
     const taskId = `shell_${shellId}`;
     update(taskId, { status: 'running' });
     try {
@@ -131,6 +177,11 @@ export async function runInstallTasks(
     } catch (err) {
       update(taskId, { status: 'failed', error: String(err) });
     }
+  }
+
+  if (cancelled()) {
+    markRemainingCancelled();
+    return tasks;
   }
 
   // --- chsh ---
@@ -144,36 +195,64 @@ export async function runInstallTasks(
     }
   }
 
+  if (cancelled()) {
+    markRemainingCancelled();
+    return tasks;
+  }
+
   // --- Write starship.toml ---
   update('config', { status: 'running' });
   try {
-    const toml = deps.generateToml(state);
-    deps.writeStarshipConfig(toml);
-    update('config', { status: 'done' });
+    // hasNerdFont is set optimistically when the user opts into an install. If that
+    // install failed, generating with it still true would write a config full of
+    // glyphs the terminal cannot render.
+    const configState = fontInstallFailed ? { ...state, hasNerdFont: false } : state;
+    const toml = deps.generateToml(configState);
+    const written = deps.writeStarshipConfig(toml);
+
+    const notes = [
+      written?.backedUpTo ? `previous config saved to ${written.backedUpTo}` : null,
+      fontInstallFailed ? 'written without Nerd Font glyphs — the font install failed' : null,
+    ].filter(Boolean);
+
+    update('config', {
+      status: 'done',
+      note: notes.length > 0 ? notes.join('; ') : undefined,
+    });
   } catch (err) {
     update('config', { status: 'failed', error: String(err) });
   }
 
   // --- Apply shell RC files (skipped until Starship is installed) ---
-  if (state.skipStarshipInstall) {
-    update('rc', {
-      status: 'skipped',
-      label: 'Apply shell configs (skipped — install Starship first)',
-    });
-  } else {
-    update('rc', { status: 'running' });
-    const rcErrors: string[] = [];
-    for (const shellId of state.selectedShells) {
-      try {
-        deps.applyShellConfig(shellId);
-      } catch (err) {
-        rcErrors.push(`${shellId}: ${err instanceof Error ? err.message : err}`);
-      }
+  // Checked once, after the install, so the rc lines can fix up PATH if the
+  // script install put the binary somewhere the shell will not look.
+  const ensurePathDir = state.skipStarshipInstall ? null : deps.getMissingStarshipPathDir();
+
+  for (const shellId of state.selectedShells) {
+    const taskId = rcTaskId(shellId);
+
+    if (state.skipStarshipInstall) {
+      update(taskId, {
+        status: 'skipped',
+        label: `Configure ${shellId} (skipped — install Starship first)`,
+      });
+      continue;
     }
-    if (rcErrors.length > 0) {
-      update('rc', { status: 'failed', error: rcErrors.join('; ') });
-    } else {
-      update('rc', { status: 'done' });
+
+    update(taskId, { status: 'running' });
+    try {
+      const result = deps.applyShellConfig(shellId, { ensurePathDir });
+      if (result.applied) {
+        update(taskId, { status: 'done', note: result.note });
+      } else if (result.note) {
+        // Not an error: the shell was already configured, or it needs manual
+        // setup (nushell, powershell). Either way no rc file was written.
+        update(taskId, { status: 'skipped', note: result.note });
+      } else {
+        update(taskId, { status: 'failed', error: `Unknown shell: ${shellId}` });
+      }
+    } catch (err) {
+      update(taskId, { status: 'failed', error: err instanceof Error ? err.message : String(err) });
     }
   }
 

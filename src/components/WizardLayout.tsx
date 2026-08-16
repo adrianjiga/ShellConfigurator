@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { WizardState, WizardStep, STEP_ORDER } from '../types.js';
-import { PromptPreview } from './PromptPreview.js';
+import { WizardState, WizardStep, STEP_ORDER } from '../types.ts';
+import { PromptPreview } from './PromptPreview.tsx';
 
 const STEP_LABELS: Record<WizardStep, string> = {
   welcome: '1. Welcome',

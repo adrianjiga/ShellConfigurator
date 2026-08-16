@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { WizardState } from '../types.js';
-import { MODULES } from '../config/modules.js';
-import { WizardLayout } from '../components/WizardLayout.js';
-import { NavHints } from '../components/NavHints.js';
+import { WizardState } from '../types.ts';
+import { MODULES, ConfigurableModuleId, ModuleId } from '../config/modules.ts';
+import { WizardLayout } from '../components/WizardLayout.tsx';
+import { NavHints } from '../components/NavHints.tsx';
 
 interface SegmentsScreenProps {
   state: WizardState;
@@ -13,13 +13,17 @@ interface SegmentsScreenProps {
   onBack: () => void;
 }
 
-// 'character' is always added automatically at the end of left prompt
-const CONFIGURABLE = MODULES.filter((m) => m.id !== 'character');
+// 'character' is always added automatically at the end of the left prompt and is
+// not a ConfigurableModuleId, so MODULES already excludes it.
+const CONFIGURABLE = MODULES;
 
 export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: SegmentsScreenProps) {
   const currentModules = side === 'left' ? state.leftModules : state.rightModules;
 
-  const [enabled, setEnabled] = useState<Set<string>>(
+  // A module already on the left cannot also go on the right — it would render twice.
+  const takenByLeft = new Set<string>(side === 'right' ? state.leftModules : []);
+
+  const [enabled, setEnabled] = useState<Set<ConfigurableModuleId>>(
     () => new Set(currentModules.filter((m) => m !== 'character'))
   );
   const [cursor, setCursor] = useState(0);
@@ -37,12 +41,15 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
     } else {
       onUpdate({ rightModules: ordered });
     }
+    // onUpdate is a fresh closure each parent render; including it would loop on
+    // every state push.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, side]);
 
   function saveAndProceed() {
     const ordered = CONFIGURABLE.filter((m) => enabled.has(m.id)).map((m) => m.id);
     if (side === 'left') {
-      onNext({ leftModules: [...new Set([...ordered, 'character'])] });
+      onNext({ leftModules: [...new Set<ModuleId>([...ordered, 'character'])] });
     } else {
       onNext({ rightModules: ordered });
     }
@@ -66,6 +73,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
 
     if (char === ' ') {
       const id = CONFIGURABLE[cursor]!.id;
+      if (takenByLeft.has(id)) return;
       setEnabled((prev) => {
         const next = new Set(prev);
         if (next.has(id)) next.delete(id);
@@ -98,15 +106,28 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
         <Box flexDirection="column" marginTop={1}>
           {CONFIGURABLE.map((mod, i) => {
             const isActive = i === cursor;
+            const isTaken = takenByLeft.has(mod.id);
             const isChecked = enabled.has(mod.id);
             return (
               <Box key={mod.id} flexDirection="row" gap={1}>
                 <Text color={isActive ? 'cyan' : 'gray'}>{isActive ? '›' : ' '}</Text>
-                <Text color={isChecked ? 'green' : 'gray'}>{isChecked ? '[✓]' : '[ ]'}</Text>
-                <Text color={isActive ? 'white' : 'gray'} bold={isActive}>
+                <Text color={isTaken ? 'gray' : isChecked ? 'green' : 'gray'}>
+                  {isTaken ? '[–]' : isChecked ? '[✓]' : '[ ]'}
+                </Text>
+                <Text
+                  color={isTaken ? 'gray' : isActive ? 'white' : 'gray'}
+                  bold={isActive && !isTaken}
+                  dimColor={isTaken}
+                >
                   {mod.label}
                 </Text>
-                {isActive && (
+                {isTaken && (
+                  <Text color="gray" italic>
+                    {' '}
+                    — already on the left
+                  </Text>
+                )}
+                {isActive && !isTaken && (
                   <Text color="gray" italic>
                     {' '}
                     — {mod.description}
@@ -123,7 +144,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
           { key: '↑↓', label: 'navigate' },
           { key: 'Space', label: 'toggle' },
           { key: 'Enter/Tab/→', label: side === 'right' ? 'confirm / skip' : 'next' },
-          { key: 'Esc', label: 'back' },
+          { key: 'Esc/←', label: 'back' },
         ]}
       />
     </WizardLayout>

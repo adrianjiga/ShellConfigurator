@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -8,30 +8,98 @@ vi.mock('fs', () => ({
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
   appendFileSync: vi.fn(),
+  copyFileSync: vi.fn(),
 }));
 
 import * as fs from 'fs';
-import { applyShellConfig, writeStarshipConfig, getConfigPath } from '../../generators/shellRc.js';
+import { applyShellConfig, writeStarshipConfig, getConfigPath } from '../../generators/shellRc.ts';
 
 const expectedConfigPath = path.join(os.homedir(), '.config', 'starship.toml');
 const expectedConfigDir = path.join(os.homedir(), '.config');
 
 describe('getConfigPath', () => {
-  it('returns path to starship.toml inside ~/.config', () => {
+  const savedEnv = { ...process.env };
+  afterEach(() => {
+    process.env = { ...savedEnv };
+  });
+
+  it('defaults to starship.toml inside ~/.config', () => {
+    delete process.env.STARSHIP_CONFIG;
+    delete process.env.XDG_CONFIG_HOME;
+    expect(getConfigPath()).toBe(expectedConfigPath);
+  });
+
+  it('honours XDG_CONFIG_HOME', () => {
+    delete process.env.STARSHIP_CONFIG;
+    process.env.XDG_CONFIG_HOME = '/home/u/.dotfiles/config';
+    expect(getConfigPath()).toBe(path.join('/home/u/.dotfiles/config', 'starship.toml'));
+  });
+
+  it('honours STARSHIP_CONFIG over XDG_CONFIG_HOME', () => {
+    process.env.XDG_CONFIG_HOME = '/home/u/.dotfiles/config';
+    process.env.STARSHIP_CONFIG = '/home/u/custom-starship.toml';
+    expect(getConfigPath()).toBe('/home/u/custom-starship.toml');
+  });
+
+  it('ignores empty environment values', () => {
+    process.env.STARSHIP_CONFIG = '  ';
+    process.env.XDG_CONFIG_HOME = '';
     expect(getConfigPath()).toBe(expectedConfigPath);
   });
 });
 
 describe('writeStarshipConfig', () => {
-  beforeEach(() => vi.clearAllMocks());
+  const savedEnv = { ...process.env };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.STARSHIP_CONFIG;
+    delete process.env.XDG_CONFIG_HOME;
+  });
+  afterEach(() => {
+    process.env = { ...savedEnv };
+  });
 
   it('writes toml content to the config path', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     const toml = '[character]\nsuccess_symbol = "❯"';
 
-    writeStarshipConfig(toml);
+    const result = writeStarshipConfig(toml);
 
     expect(fs.writeFileSync).toHaveBeenCalledWith(expectedConfigPath, toml, 'utf8');
+    expect(result.path).toBe(expectedConfigPath);
+  });
+
+  it('writes to the XDG location when one is configured', () => {
+    process.env.XDG_CONFIG_HOME = '/home/u/.dotfiles/config';
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+
+    const result = writeStarshipConfig('x');
+
+    const expected = path.join('/home/u/.dotfiles/config', 'starship.toml');
+    expect(fs.writeFileSync).toHaveBeenCalledWith(expected, 'x', 'utf8');
+    expect(result.path).toBe(expected);
+  });
+
+  it('backs up an existing config before overwriting it', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+
+    const result = writeStarshipConfig('new content');
+
+    expect(result.backedUpTo).toMatch(/starship\.toml\.bak-/);
+    expect(fs.copyFileSync).toHaveBeenCalledWith(expectedConfigPath, result.backedUpTo);
+    // The backup must be taken before the overwrite, not after.
+    const copyOrder = vi.mocked(fs.copyFileSync).mock.invocationCallOrder[0] ?? 0;
+    const writeOrder = vi.mocked(fs.writeFileSync).mock.invocationCallOrder[0] ?? 0;
+    expect(copyOrder).toBeLessThan(writeOrder);
+  });
+
+  it('does not back up when there is no existing config', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+
+    const result = writeStarshipConfig('');
+
+    expect(fs.copyFileSync).not.toHaveBeenCalled();
+    expect(result.backedUpTo).toBeUndefined();
   });
 
   it('creates config directory when it does not exist', () => {
@@ -157,6 +225,52 @@ describe('applyShellConfig', () => {
     expect(() => applyShellConfig('zsh')).toThrow('Cannot create directory');
     expect(() => applyShellConfig('zsh')).toThrow('EACCES: permission denied');
     expect(fs.appendFileSync).not.toHaveBeenCalled();
+  });
+
+  it('adds a PATH line before the init line when starship is not reachable', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => '');
+
+    const result = applyShellConfig('zsh', { ensurePathDir: '/home/u/.local/bin' });
+
+    const appended = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
+    expect(appended).toContain('export PATH="/home/u/.local/bin:$PATH"');
+    // Order matters: `starship init` cannot resolve before PATH is set.
+    expect(appended.indexOf('export PATH')).toBeLessThan(appended.indexOf('starship init'));
+    expect(result.note).toContain('/home/u/.local/bin');
+  });
+
+  it('uses fish syntax for the PATH line', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => '');
+
+    applyShellConfig('fish', { ensurePathDir: '/home/u/.local/bin' });
+
+    const appended = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
+    expect(appended).toContain('fish_add_path /home/u/.local/bin');
+    expect(appended).not.toContain('export PATH');
+  });
+
+  it('omits the PATH line when starship is already reachable', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => '');
+
+    const result = applyShellConfig('zsh', { ensurePathDir: null });
+
+    const appended = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
+    expect(appended).not.toContain('export PATH');
+    expect(result.note).toBeUndefined();
+  });
+
+  it('does not duplicate a PATH line that is already present', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => 'export PATH="/home/u/.local/bin:$PATH"');
+
+    applyShellConfig('zsh', { ensurePathDir: '/home/u/.local/bin' });
+
+    const appended = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
+    expect(appended).not.toContain('export PATH');
+    expect(appended).toContain('starship init zsh');
   });
 
   it('is idempotent for fish', () => {

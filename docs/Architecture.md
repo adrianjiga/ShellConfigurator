@@ -81,15 +81,15 @@ Both directions use the single `shouldVisitFontSelect(nerdFontToInstall)` predic
 
 ### Conditional Skip: `font_select`
 
-The `font_select` step is only shown when the user chooses "install a font" on FontCheckScreen. This is controlled by a sentinel value:
+The `font_select` step is only shown when the user chooses "install a font" on FontCheckScreen. This is controlled by the `NerdFontChoice` union:
 
 ```
 FontCheckScreen → "No, install one for me"
-  → sets nerdFontToInstall = FONT_SELECT_SENTINEL ('__select__')
+  → sets nerdFontToInstall = { kind: 'select' }
   → shouldVisitFontSelect() returns true, includes font_select
 
 FontCheckScreen → "Yes, I already have one" / "No, use text symbols"
-  → sets nerdFontToInstall = null
+  → sets nerdFontToInstall = { kind: 'none' }
   → shouldVisitFontSelect() returns false, skips font_select, advances to preset
 ```
 
@@ -130,7 +130,7 @@ interface WizardState {
   selectedShells: ShellId[];
   packageManager: PackageManager;
   installedShells: ShellId[];
-  nerdFontToInstall: string | null;
+  nerdFontToInstall: NerdFontChoice;
   setDefaultShell: ShellId | null;
   skipStarshipInstall: boolean; // "Continue without Starship" — skip install + RC steps
   installResults: InstallTask[]; // Final task statuses from InstallingScreen

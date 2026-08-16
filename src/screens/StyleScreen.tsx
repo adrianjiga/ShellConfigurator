@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { WizardState, CharacterSymbol, ColorScheme } from '../types.js';
-import { WizardLayout } from '../components/WizardLayout.js';
-import { NavHints } from '../components/NavHints.js';
+import { WizardState, CharacterSymbol, ColorScheme } from '../types.ts';
+import { WizardLayout } from '../components/WizardLayout.tsx';
+import { NavHints } from '../components/NavHints.tsx';
 
 interface StyleScreenProps {
   state: WizardState;
@@ -51,6 +51,9 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
       characterSymbol: CHAR_OPTIONS[charIdx]!.value,
       colorScheme: COLOR_OPTIONS[colorIdx]!.value,
     });
+    // onUpdate is a fresh closure each parent render; including it would loop on
+    // every state push.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [charIdx, colorIdx]);
 
   useInput((_, key) => {

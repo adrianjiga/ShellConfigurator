@@ -1,13 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { buildTaskList } from '../../services/installTasks.js';
-import { DEFAULT_STATE, FONT_SELECT_SENTINEL } from '../../types.js';
+import { buildTaskList } from '../../services/installTasks.ts';
+import { DEFAULT_STATE, NO_NERD_FONT } from '../../types.ts';
 
 describe('buildTaskList', () => {
-  it('includes starship, config, and rc tasks by default', () => {
+  it('includes starship and config tasks by default', () => {
     const tasks = buildTaskList(DEFAULT_STATE);
     expect(tasks.map((t) => t.id)).toContain('starship');
     expect(tasks.map((t) => t.id)).toContain('config');
-    expect(tasks.map((t) => t.id)).toContain('rc');
+  });
+
+  it('emits one rc task per selected shell', () => {
+    const tasks = buildTaskList({ ...DEFAULT_STATE, selectedShells: ['zsh', 'fish'] });
+    expect(tasks.map((t) => t.id)).toContain('rc_zsh');
+    expect(tasks.map((t) => t.id)).toContain('rc_fish');
+    expect(tasks.map((t) => t.id)).not.toContain('rc');
   });
 
   it('omits the starship task when skipStarshipInstall is set', () => {
@@ -16,24 +22,30 @@ describe('buildTaskList', () => {
   });
 
   it('omits the font task when nerdFontToInstall is null', () => {
-    const tasks = buildTaskList({ ...DEFAULT_STATE, nerdFontToInstall: null });
+    const tasks = buildTaskList({ ...DEFAULT_STATE, nerdFontToInstall: NO_NERD_FONT });
     expect(tasks.map((t) => t.id)).not.toContain('font');
   });
 
   it('omits the font task for the font_select sentinel value', () => {
-    const tasks = buildTaskList({ ...DEFAULT_STATE, nerdFontToInstall: FONT_SELECT_SENTINEL });
+    const tasks = buildTaskList({ ...DEFAULT_STATE, nerdFontToInstall: NO_NERD_FONT });
     expect(tasks.map((t) => t.id)).not.toContain('font');
   });
 
   it('adds a font task with the font label for a concrete font id', () => {
-    const tasks = buildTaskList({ ...DEFAULT_STATE, nerdFontToInstall: 'JetBrainsMono' });
+    const tasks = buildTaskList({
+      ...DEFAULT_STATE,
+      nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' },
+    });
     const font = tasks.find((t) => t.id === 'font');
     expect(font?.label).toBe('Nerd Font (JetBrains Mono)');
     expect(font?.status).toBe('pending');
   });
 
   it('falls back to the raw id when the font is unknown', () => {
-    const tasks = buildTaskList({ ...DEFAULT_STATE, nerdFontToInstall: 'SomeFont' });
+    const tasks = buildTaskList({
+      ...DEFAULT_STATE,
+      nerdFontToInstall: { kind: 'install' as const, id: 'SomeFont' },
+    });
     expect(tasks.find((t) => t.id === 'font')?.label).toBe('Nerd Font (SomeFont)');
   });
 
@@ -73,11 +85,11 @@ describe('buildTaskList', () => {
       ...DEFAULT_STATE,
       selectedShells: ['zsh', 'bash'],
       installedShells: ['zsh'],
-      nerdFontToInstall: 'FiraCode',
+      nerdFontToInstall: { kind: 'install' as const, id: 'FiraCode' },
       setDefaultShell: 'zsh',
     });
     const ids = tasks.map((t) => t.id);
-    expect(ids).toEqual(['starship', 'font', 'shell_bash', 'chsh', 'config', 'rc']);
+    expect(ids).toEqual(['starship', 'font', 'shell_bash', 'chsh', 'config', 'rc_zsh', 'rc_bash']);
     expect(tasks.every((t) => t.status === 'pending')).toBe(true);
   });
 });

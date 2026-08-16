@@ -1,11 +1,11 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import React, { act } from 'react';
 import { render, cleanup } from 'ink-testing-library';
-import { ShellScreen } from '../../screens/ShellScreen.js';
-import { DEFAULT_STATE } from '../../types.js';
-import { detectInstalledShellsAsync } from '../../services/detector.js';
+import { ShellScreen } from '../../screens/ShellScreen.tsx';
+import { DEFAULT_STATE } from '../../types.ts';
+import { detectInstalledShellsAsync } from '../../services/detector.ts';
 
-vi.mock('../../services/detector.js', () => ({
+vi.mock('../../services/detector.ts', () => ({
   detectInstalledShellsAsync: vi.fn(),
 }));
 
@@ -136,5 +136,34 @@ describe('ShellScreen', () => {
     instance.stdin.write('\u001B');
     await flush();
     expect(onBack).toHaveBeenCalled();
+  });
+});
+
+describe('selection order', () => {
+  const DOWN = '\u001B[B';
+  const UP = '\u001B[A';
+
+  it('returns selected shells in SHELLS order, not click order', async () => {
+    const { instance, onNext } = setup();
+    await flush();
+
+    // Select fish (index 2) first, then zsh (index 0) — reverse of the table order.
+    instance.stdin.write(DOWN);
+    await flush();
+    instance.stdin.write(DOWN);
+    await flush();
+    instance.stdin.write(' ');
+    await flush();
+    instance.stdin.write(UP);
+    await flush();
+    instance.stdin.write(UP);
+    await flush();
+    instance.stdin.write(' ');
+    await flush();
+    instance.stdin.write('\r');
+    await flush();
+
+    const selected = onNext.mock.calls[0]?.[0]?.selectedShells;
+    expect(selected).toEqual(['zsh', 'fish']);
   });
 });

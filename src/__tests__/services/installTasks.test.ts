@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { runInstallTasks, InstallTaskDeps } from '../../services/installTasks.js';
-import { DEFAULT_STATE, FONT_SELECT_SENTINEL, WizardState, InstallTask } from '../../types.js';
+import { runInstallTasks, InstallTaskDeps } from '../../services/installTasks.ts';
+import { DEFAULT_STATE, NO_NERD_FONT, WizardState, InstallTask } from '../../types.ts';
 
 function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
   return {
@@ -10,8 +10,9 @@ function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
     installShell: vi.fn().mockResolvedValue(undefined),
     setDefaultShell: vi.fn().mockResolvedValue(undefined),
     generateToml: vi.fn(() => 'format = "$character"'),
-    writeStarshipConfig: vi.fn(),
+    writeStarshipConfig: vi.fn(() => ({ path: '/home/u/.config/starship.toml' })),
     applyShellConfig: vi.fn(() => ({ applied: true })),
+    getMissingStarshipPathDir: vi.fn(() => null),
     ...overrides,
   };
 }
@@ -54,12 +55,12 @@ describe('runInstallTasks', () => {
   it('installs a concrete nerd font but ignores the sentinel', async () => {
     const deps = fakeDeps();
     const withFont = await runInstallTasks(
-      state({ nerdFontToInstall: 'JetBrainsMono' }),
+      state({ nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' } }),
       deps,
       vi.fn()
     );
     const withSentinel = await runInstallTasks(
-      state({ nerdFontToInstall: FONT_SELECT_SENTINEL }),
+      state({ nerdFontToInstall: NO_NERD_FONT }),
       deps,
       vi.fn()
     );
@@ -128,7 +129,50 @@ describe('runInstallTasks', () => {
     expect(results.find((t) => t.id === 'config')?.status).toBe('done');
   });
 
-  it('applies rc configs to every selected shell and names per-shell errors', async () => {
+  it('reports the backup path when an existing config was replaced', async () => {
+    const deps = fakeDeps({
+      writeStarshipConfig: vi.fn(() => ({
+        path: '/home/u/.config/starship.toml',
+        backedUpTo: '/home/u/.config/starship.toml.bak-2026',
+      })),
+    });
+    const results = await runInstallTasks(state(), deps, vi.fn());
+
+    expect(results.find((t) => t.id === 'config')?.note).toContain('starship.toml.bak-2026');
+  });
+
+  it('regenerates the config without nerd font glyphs when the font install fails', async () => {
+    const deps = fakeDeps({
+      installNerdFont: vi.fn().mockRejectedValue(new Error('no network')),
+    });
+    const results = await runInstallTasks(
+      state({
+        nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' },
+        hasNerdFont: true,
+      }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.generateToml).toHaveBeenCalledWith(expect.objectContaining({ hasNerdFont: false }));
+    expect(results.find((t) => t.id === 'config')?.note).toContain('without Nerd Font glyphs');
+  });
+
+  it('keeps nerd font glyphs when the font install succeeds', async () => {
+    const deps = fakeDeps();
+    await runInstallTasks(
+      state({
+        nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' },
+        hasNerdFont: true,
+      }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.generateToml).toHaveBeenCalledWith(expect.objectContaining({ hasNerdFont: true }));
+  });
+
+  it('isolates rc failures to the shell that failed', async () => {
     const deps = fakeDeps({
       applyShellConfig: vi.fn().mockImplementation((shellId: string) => {
         if (shellId === 'fish') throw new Error('mkdir failed');
@@ -141,11 +185,63 @@ describe('runInstallTasks', () => {
       vi.fn()
     );
 
-    expect(deps.applyShellConfig).toHaveBeenCalledWith('bash');
-    expect(deps.applyShellConfig).toHaveBeenCalledWith('fish');
-    const rc = results.find((t) => t.id === 'rc');
-    expect(rc?.status).toBe('failed');
-    expect(rc?.error).toContain('fish');
+    expect(deps.applyShellConfig).toHaveBeenCalledWith('bash', expect.anything());
+    expect(deps.applyShellConfig).toHaveBeenCalledWith('fish', expect.anything());
+    expect(results.find((t) => t.id === 'rc_bash')?.status).toBe('done');
+    const fish = results.find((t) => t.id === 'rc_fish');
+    expect(fish?.status).toBe('failed');
+    expect(fish?.error).toContain('mkdir failed');
+  });
+
+  it('passes the missing PATH directory through to the rc step', async () => {
+    const deps = fakeDeps({
+      getMissingStarshipPathDir: vi.fn(() => '/home/u/.local/bin'),
+    });
+    await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    expect(deps.applyShellConfig).toHaveBeenCalledWith('zsh', {
+      ensurePathDir: '/home/u/.local/bin',
+    });
+  });
+
+  it('does not probe for a PATH fix when starship was skipped', async () => {
+    const deps = fakeDeps({ getMissingStarshipPathDir: vi.fn(() => '/home/u/.local/bin') });
+    await runInstallTasks(
+      state({ skipStarshipInstall: true, selectedShells: ['zsh'] }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.getMissingStarshipPathDir).not.toHaveBeenCalled();
+  });
+
+  it('records a shell that needs manual setup as skipped and keeps its note', async () => {
+    const deps = fakeDeps({
+      applyShellConfig: vi.fn(() => ({ applied: false, note: 'Run the above command once.' })),
+    });
+    const results = await runInstallTasks(state({ selectedShells: ['nushell'] }), deps, vi.fn());
+
+    const rc = results.find((t) => t.id === 'rc_nushell');
+    expect(rc?.status).toBe('skipped');
+    expect(rc?.note).toBe('Run the above command once.');
+  });
+
+  it('records an already-configured shell as skipped rather than freshly applied', async () => {
+    const deps = fakeDeps({
+      applyShellConfig: vi.fn(() => ({ applied: false, note: 'already configured' })),
+    });
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    const rc = results.find((t) => t.id === 'rc_zsh');
+    expect(rc?.status).toBe('skipped');
+    expect(rc?.note).toBe('already configured');
+  });
+
+  it('fails the rc task for an unknown shell', async () => {
+    const deps = fakeDeps({ applyShellConfig: vi.fn(() => ({ applied: false })) });
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    expect(results.find((t) => t.id === 'rc_zsh')?.status).toBe('failed');
   });
 
   it('skips rc configs when skipStarshipInstall is set', async () => {
@@ -157,19 +253,61 @@ describe('runInstallTasks', () => {
     );
 
     expect(deps.applyShellConfig).not.toHaveBeenCalled();
-    const rc = results.find((t) => t.id === 'rc');
+    const rc = results.find((t) => t.id === 'rc_bash');
     expect(rc?.status).toBe('skipped');
     expect(rc?.label).toContain('install Starship first');
+  });
+
+  it('stops the chain and marks unrun tasks as cancelled when aborted', async () => {
+    const controller = new AbortController();
+    const deps = fakeDeps({
+      installStarship: vi.fn(async () => {
+        controller.abort();
+      }),
+    });
+
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh'], installedShells: [] }),
+      deps,
+      vi.fn(),
+      controller.signal
+    );
+
+    // Nothing after the abort point may run.
+    expect(deps.installShell).not.toHaveBeenCalled();
+    expect(deps.writeStarshipConfig).not.toHaveBeenCalled();
+    expect(deps.applyShellConfig).not.toHaveBeenCalled();
+
+    // And no unrun task may be left looking successful.
+    expect(results.find((t) => t.id === 'config')?.status).toBe('failed');
+    expect(results.find((t) => t.id === 'config')?.error).toBe('Cancelled');
+    expect(results.find((t) => t.id === 'rc_zsh')?.status).toBe('failed');
+    expect(results.every((t) => t.status !== 'pending')).toBe(true);
+  });
+
+  it('runs to completion when the signal never aborts', async () => {
+    const controller = new AbortController();
+    const deps = fakeDeps();
+
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh'], installedShells: ['zsh'] }),
+      deps,
+      vi.fn(),
+      controller.signal
+    );
+
+    expect(deps.writeStarshipConfig).toHaveBeenCalled();
+    expect(results.find((t) => t.id === 'rc_zsh')?.status).toBe('done');
   });
 
   it('reports every task transition through onUpdate', async () => {
     const deps = fakeDeps();
     const onUpdate = vi.fn();
-    await runInstallTasks(state(), deps, onUpdate);
+    await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, onUpdate);
 
     expect(onUpdate).toHaveBeenCalledWith('starship', { status: 'running' });
     expect(onUpdate).toHaveBeenCalledWith('starship', { status: 'done' });
     expect(onUpdate).toHaveBeenCalledWith('config', { status: 'done' });
-    expect(onUpdate).toHaveBeenCalledWith('rc', { status: 'done' });
+    expect(onUpdate).toHaveBeenCalledWith('rc_zsh', { status: 'done' });
   });
 });

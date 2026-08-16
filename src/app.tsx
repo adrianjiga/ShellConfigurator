@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { WizardState, WizardStep, DEFAULT_STATE } from './types.js';
-import { getNextStep, getPrevStep } from './stepMachine.js';
-import { WelcomeScreen } from './screens/WelcomeScreen.js';
-import { FontCheckScreen } from './screens/FontCheckScreen.js';
-import { FontSelectScreen } from './screens/FontSelectScreen.js';
-import { PresetScreen } from './screens/PresetScreen.js';
-import { SegmentsScreen } from './screens/SegmentsScreen.js';
-import { StyleScreen } from './screens/StyleScreen.js';
-import { ShellScreen } from './screens/ShellScreen.js';
-import { InstallingScreen } from './screens/InstallingScreen.js';
-import { DoneScreen } from './screens/DoneScreen.js';
+import { WizardState, WizardStep, DEFAULT_STATE } from './types.ts';
+import { getNextStep, getPrevStep } from './stepMachine.ts';
+import { WelcomeScreen } from './screens/WelcomeScreen.tsx';
+import { FontCheckScreen } from './screens/FontCheckScreen.tsx';
+import { FontSelectScreen } from './screens/FontSelectScreen.tsx';
+import { PresetScreen } from './screens/PresetScreen.tsx';
+import { SegmentsScreen } from './screens/SegmentsScreen.tsx';
+import { StyleScreen } from './screens/StyleScreen.tsx';
+import { ShellScreen } from './screens/ShellScreen.tsx';
+import { InstallingScreen } from './screens/InstallingScreen.tsx';
+import { DoneScreen } from './screens/DoneScreen.tsx';
 
 export function App() {
   const [state, setState] = useState<WizardState>(DEFAULT_STATE);
@@ -20,6 +20,14 @@ export function App() {
 
   function advanceTo(next: WizardStep, update?: Partial<WizardState>) {
     setState((prev) => ({ ...prev, ...update, step: next }));
+  }
+
+  function finishInstall(update?: Partial<WizardState>) {
+    // Exit non-zero when anything failed, so the wizard is usable from a script.
+    if (update?.installResults?.some((t) => t.status === 'failed')) {
+      process.exitCode = 1;
+    }
+    advanceTo('done', update);
   }
 
   function goNext(update?: Partial<WizardState>) {
@@ -74,7 +82,7 @@ export function App() {
       return <ShellScreen state={state} onNext={goNext} onUpdate={updateState} onBack={goBack} />;
 
     case 'installing':
-      return <InstallingScreen state={state} onNext={(update) => advanceTo('done', update)} />;
+      return <InstallingScreen state={state} onNext={finishInstall} />;
 
     case 'done':
       return <DoneScreen state={state} />;

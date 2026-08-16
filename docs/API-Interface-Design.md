@@ -43,7 +43,7 @@ interface WizardState {
   selectedShells: ShellId[]; // Shells to configure
   packageManager: PackageManager; // Detected package manager
   installedShells: ShellId[]; // Shells already on system
-  nerdFontToInstall: string | null; // Font ID, sentinel, or null
+  nerdFontToInstall: NerdFontChoice; // {kind:'none'|'select'|'install',id}
   setDefaultShell: ShellId | null; // Shell to set via chsh
   skipStarshipInstall: boolean; // "Continue without Starship" — skips install + RC steps
   installResults: InstallTask[]; // Final task statuses from InstallingScreen
