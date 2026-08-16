@@ -6,12 +6,26 @@ export type ColorScheme = 'default' | 'pastel' | 'minimal';
 export type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'script';
 export type InstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
-/** Sentinel value for nerdFontToInstall — means "route to font selection screen" */
-export const FONT_SELECT_SENTINEL = '__select__' as const;
+/**
+ * What the user decided about a Nerd Font. A discriminated union rather than a
+ * nullable string with a sentinel, so "no font step", "route to the picker", and
+ * "install this id" cannot be confused and no consumer needs to know a magic value.
+ */
+export type NerdFontChoice =
+  | { kind: 'none' }
+  | { kind: 'select' }
+  | { kind: 'install'; id: string };
+
+export const NO_NERD_FONT: NerdFontChoice = { kind: 'none' };
 
 /** Whether the wizard should show the font selection step for this choice */
-export function shouldVisitFontSelect(nerdFontToInstall: string | null): boolean {
-  return nerdFontToInstall !== null;
+export function shouldVisitFontSelect(choice: NerdFontChoice): boolean {
+  return choice.kind !== 'none';
+}
+
+/** The font id to install, or null when nothing should be installed. */
+export function fontIdToInstall(choice: NerdFontChoice): string | null {
+  return choice.kind === 'install' ? choice.id : null;
 }
 
 export interface InstallTask {
@@ -60,7 +74,7 @@ export interface WizardState {
   selectedShells: ShellId[];
   packageManager: PackageManager;
   installedShells: ShellId[];
-  nerdFontToInstall: string | null;
+  nerdFontToInstall: NerdFontChoice;
   setDefaultShell: ShellId | null;
   skipStarshipInstall: boolean;
   installResults: InstallTask[];
@@ -78,7 +92,7 @@ export const DEFAULT_STATE: WizardState = {
   selectedShells: [],
   packageManager: 'script',
   installedShells: [],
-  nerdFontToInstall: null,
+  nerdFontToInstall: NO_NERD_FONT,
   setDefaultShell: null,
   skipStarshipInstall: false,
   installResults: [],

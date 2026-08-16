@@ -1,10 +1,4 @@
-import {
-  WizardState,
-  InstallTask,
-  FONT_SELECT_SENTINEL,
-  PackageManager,
-  ShellId,
-} from '../types.ts';
+import { WizardState, InstallTask, fontIdToInstall, PackageManager, ShellId } from '../types.ts';
 import {
   NERD_FONTS,
   installStarship,
@@ -57,10 +51,10 @@ export function buildTaskList(state: WizardState): InstallTask[] {
     tasks.push({ id: 'starship', label: 'Starship', status: 'pending' });
   }
 
-  // Nerd Font (skip sentinel value)
-  if (state.nerdFontToInstall && state.nerdFontToInstall !== FONT_SELECT_SENTINEL) {
-    const fontLabel =
-      NERD_FONTS.find((f) => f.id === state.nerdFontToInstall)?.label ?? state.nerdFontToInstall;
+  // Nerd Font (only when a concrete font was chosen)
+  const fontId = fontIdToInstall(state.nerdFontToInstall);
+  if (fontId) {
+    const fontLabel = NERD_FONTS.find((f) => f.id === fontId)?.label ?? fontId;
     tasks.push({ id: 'font', label: `Nerd Font (${fontLabel})`, status: 'pending' });
   }
 
@@ -152,12 +146,13 @@ export async function runInstallTasks(
     return tasks;
   }
 
-  // --- Nerd Font (skip sentinel value) ---
+  // --- Nerd Font (only when a concrete font was chosen) ---
   let fontInstallFailed = false;
-  if (state.nerdFontToInstall && state.nerdFontToInstall !== FONT_SELECT_SENTINEL) {
+  const fontId = fontIdToInstall(state.nerdFontToInstall);
+  if (fontId) {
     update('font', { status: 'running' });
     try {
-      await deps.installNerdFont(state.nerdFontToInstall);
+      await deps.installNerdFont(fontId);
       update('font', { status: 'done' });
     } catch (err) {
       fontInstallFailed = true;

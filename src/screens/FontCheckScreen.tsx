@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import { WizardState, FONT_SELECT_SENTINEL } from '../types.ts';
+import { WizardState, NO_NERD_FONT } from '../types.ts';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { NavHints } from '../components/NavHints.tsx';
 
@@ -34,14 +34,14 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
   function handleSelect(item: { value: string }) {
     switch (item.value) {
       case 'have':
-        onNext({ hasNerdFont: true, nerdFontToInstall: null });
+        onNext({ hasNerdFont: true, nerdFontToInstall: NO_NERD_FONT });
         break;
       case 'install':
         // app.tsx will route to font_select step
-        onNext({ hasNerdFont: true, nerdFontToInstall: FONT_SELECT_SENTINEL });
+        onNext({ hasNerdFont: true, nerdFontToInstall: { kind: 'select' } });
         break;
       case 'none':
-        onNext({ hasNerdFont: false, nerdFontToInstall: null });
+        onNext({ hasNerdFont: false, nerdFontToInstall: NO_NERD_FONT });
         break;
     }
   }

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runInstallTasks, InstallTaskDeps } from '../../services/installTasks.ts';
-import { DEFAULT_STATE, FONT_SELECT_SENTINEL, WizardState, InstallTask } from '../../types.ts';
+import { DEFAULT_STATE, NO_NERD_FONT, WizardState, InstallTask } from '../../types.ts';
 
 function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
   return {
@@ -55,12 +55,12 @@ describe('runInstallTasks', () => {
   it('installs a concrete nerd font but ignores the sentinel', async () => {
     const deps = fakeDeps();
     const withFont = await runInstallTasks(
-      state({ nerdFontToInstall: 'JetBrainsMono' }),
+      state({ nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' } }),
       deps,
       vi.fn()
     );
     const withSentinel = await runInstallTasks(
-      state({ nerdFontToInstall: FONT_SELECT_SENTINEL }),
+      state({ nerdFontToInstall: NO_NERD_FONT }),
       deps,
       vi.fn()
     );
@@ -146,7 +146,10 @@ describe('runInstallTasks', () => {
       installNerdFont: vi.fn().mockRejectedValue(new Error('no network')),
     });
     const results = await runInstallTasks(
-      state({ nerdFontToInstall: 'JetBrainsMono', hasNerdFont: true }),
+      state({
+        nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' },
+        hasNerdFont: true,
+      }),
       deps,
       vi.fn()
     );
@@ -158,7 +161,10 @@ describe('runInstallTasks', () => {
   it('keeps nerd font glyphs when the font install succeeds', async () => {
     const deps = fakeDeps();
     await runInstallTasks(
-      state({ nerdFontToInstall: 'JetBrainsMono', hasNerdFont: true }),
+      state({
+        nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' },
+        hasNerdFont: true,
+      }),
       deps,
       vi.fn()
     );

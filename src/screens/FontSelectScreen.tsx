@@ -35,7 +35,7 @@ export function FontSelectScreen({ state, onNext, onBack }: FontSelectScreenProp
           <SelectInput
             items={items}
             onSelect={(item) =>
-              onNext({ nerdFontToInstall: item.value as string, hasNerdFont: true })
+              onNext({ nerdFontToInstall: { kind: 'install', id: item.value }, hasNerdFont: true })
             }
           />
         </Box>

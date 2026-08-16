@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
-import { WizardState, InstallStatus, FONT_SELECT_SENTINEL } from '../types.ts';
+import { WizardState, InstallStatus, fontIdToInstall } from '../types.ts';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { getConfigPath } from '../generators/shellRc.ts';
 import { getShell } from '../config/shells.ts';
@@ -46,10 +46,8 @@ function StatusMark({ status }: { status: ReportedStatus }) {
 
 export function DoneScreen({ state }: DoneScreenProps) {
   const { exit } = useApp();
-  const fontInstalled = state.nerdFontToInstall && state.nerdFontToInstall !== FONT_SELECT_SENTINEL;
-  const fontLabel = fontInstalled
-    ? (NERD_FONTS.find((f) => f.id === state.nerdFontToInstall)?.label ?? state.nerdFontToInstall)
-    : null;
+  const fontId = fontIdToInstall(state.nerdFontToInstall);
+  const fontLabel = fontId ? (NERD_FONTS.find((f) => f.id === fontId)?.label ?? fontId) : null;
 
   const failures = state.installResults.filter((t) => t.status === 'failed');
   const hasFailures = failures.length > 0;
@@ -109,7 +107,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
             )}
           </Box>
 
-          {fontInstalled && (
+          {fontId && (
             <Box flexDirection="column">
               <Box flexDirection="row" gap={1}>
                 <StatusMark status={fontStatus} />
@@ -208,7 +206,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
               the wizard to configure your shells.
             </Text>
           )}
-          {fontInstalled && fontStatus === 'done' && (
+          {fontId && fontStatus === 'done' && (
             <Text color="yellow">
               Remember to set <Text color="cyan">{fontLabel} Nerd Font</Text> in your terminal
               emulator settings.
