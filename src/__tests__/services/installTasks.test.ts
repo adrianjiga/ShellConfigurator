@@ -128,7 +128,7 @@ describe('runInstallTasks', () => {
     expect(results.find((t) => t.id === 'config')?.status).toBe('done');
   });
 
-  it('applies rc configs to every selected shell and names per-shell errors', async () => {
+  it('isolates rc failures to the shell that failed', async () => {
     const deps = fakeDeps({
       applyShellConfig: vi.fn().mockImplementation((shellId: string) => {
         if (shellId === 'fish') throw new Error('mkdir failed');
@@ -143,9 +143,39 @@ describe('runInstallTasks', () => {
 
     expect(deps.applyShellConfig).toHaveBeenCalledWith('bash');
     expect(deps.applyShellConfig).toHaveBeenCalledWith('fish');
-    const rc = results.find((t) => t.id === 'rc');
-    expect(rc?.status).toBe('failed');
-    expect(rc?.error).toContain('fish');
+    expect(results.find((t) => t.id === 'rc_bash')?.status).toBe('done');
+    const fish = results.find((t) => t.id === 'rc_fish');
+    expect(fish?.status).toBe('failed');
+    expect(fish?.error).toContain('mkdir failed');
+  });
+
+  it('records a shell that needs manual setup as skipped and keeps its note', async () => {
+    const deps = fakeDeps({
+      applyShellConfig: vi.fn(() => ({ applied: false, note: 'Run the above command once.' })),
+    });
+    const results = await runInstallTasks(state({ selectedShells: ['nushell'] }), deps, vi.fn());
+
+    const rc = results.find((t) => t.id === 'rc_nushell');
+    expect(rc?.status).toBe('skipped');
+    expect(rc?.note).toBe('Run the above command once.');
+  });
+
+  it('records an already-configured shell as skipped rather than freshly applied', async () => {
+    const deps = fakeDeps({
+      applyShellConfig: vi.fn(() => ({ applied: false, note: 'already configured' })),
+    });
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    const rc = results.find((t) => t.id === 'rc_zsh');
+    expect(rc?.status).toBe('skipped');
+    expect(rc?.note).toBe('already configured');
+  });
+
+  it('fails the rc task for an unknown shell', async () => {
+    const deps = fakeDeps({ applyShellConfig: vi.fn(() => ({ applied: false })) });
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    expect(results.find((t) => t.id === 'rc_zsh')?.status).toBe('failed');
   });
 
   it('skips rc configs when skipStarshipInstall is set', async () => {
@@ -157,7 +187,7 @@ describe('runInstallTasks', () => {
     );
 
     expect(deps.applyShellConfig).not.toHaveBeenCalled();
-    const rc = results.find((t) => t.id === 'rc');
+    const rc = results.find((t) => t.id === 'rc_bash');
     expect(rc?.status).toBe('skipped');
     expect(rc?.label).toContain('install Starship first');
   });
@@ -165,11 +195,11 @@ describe('runInstallTasks', () => {
   it('reports every task transition through onUpdate', async () => {
     const deps = fakeDeps();
     const onUpdate = vi.fn();
-    await runInstallTasks(state(), deps, onUpdate);
+    await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, onUpdate);
 
     expect(onUpdate).toHaveBeenCalledWith('starship', { status: 'running' });
     expect(onUpdate).toHaveBeenCalledWith('starship', { status: 'done' });
     expect(onUpdate).toHaveBeenCalledWith('config', { status: 'done' });
-    expect(onUpdate).toHaveBeenCalledWith('rc', { status: 'done' });
+    expect(onUpdate).toHaveBeenCalledWith('rc_zsh', { status: 'done' });
   });
 });

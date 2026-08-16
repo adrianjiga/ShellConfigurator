@@ -3,11 +3,17 @@ import { buildTaskList } from '../../services/installTasks.js';
 import { DEFAULT_STATE, FONT_SELECT_SENTINEL } from '../../types.js';
 
 describe('buildTaskList', () => {
-  it('includes starship, config, and rc tasks by default', () => {
+  it('includes starship and config tasks by default', () => {
     const tasks = buildTaskList(DEFAULT_STATE);
     expect(tasks.map((t) => t.id)).toContain('starship');
     expect(tasks.map((t) => t.id)).toContain('config');
-    expect(tasks.map((t) => t.id)).toContain('rc');
+  });
+
+  it('emits one rc task per selected shell', () => {
+    const tasks = buildTaskList({ ...DEFAULT_STATE, selectedShells: ['zsh', 'fish'] });
+    expect(tasks.map((t) => t.id)).toContain('rc_zsh');
+    expect(tasks.map((t) => t.id)).toContain('rc_fish');
+    expect(tasks.map((t) => t.id)).not.toContain('rc');
   });
 
   it('omits the starship task when skipStarshipInstall is set', () => {
@@ -77,7 +83,15 @@ describe('buildTaskList', () => {
       setDefaultShell: 'zsh',
     });
     const ids = tasks.map((t) => t.id);
-    expect(ids).toEqual(['starship', 'font', 'shell_bash', 'chsh', 'config', 'rc']);
+    expect(ids).toEqual([
+      'starship',
+      'font',
+      'shell_bash',
+      'chsh',
+      'config',
+      'rc_zsh',
+      'rc_bash',
+    ]);
     expect(tasks.every((t) => t.status === 'pending')).toBe(true);
   });
 });

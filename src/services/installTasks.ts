@@ -72,10 +72,17 @@ export function buildTaskList(state: WizardState): InstallTask[] {
   // Config write
   tasks.push({ id: 'config', label: 'Write starship.toml', status: 'pending' });
 
-  // RC files
-  tasks.push({ id: 'rc', label: 'Apply shell configs', status: 'pending' });
+  // RC files — one task per shell so a failure in one does not taint the others
+  for (const shellId of state.selectedShells) {
+    tasks.push({ id: rcTaskId(shellId), label: `Configure ${shellId}`, status: 'pending' });
+  }
 
   return tasks;
+}
+
+/** Task id for the rc-file step of a given shell. */
+export function rcTaskId(shellId: ShellId): string {
+  return `rc_${shellId}`;
 }
 
 export async function runInstallTasks(
@@ -155,25 +162,31 @@ export async function runInstallTasks(
   }
 
   // --- Apply shell RC files (skipped until Starship is installed) ---
-  if (state.skipStarshipInstall) {
-    update('rc', {
-      status: 'skipped',
-      label: 'Apply shell configs (skipped — install Starship first)',
-    });
-  } else {
-    update('rc', { status: 'running' });
-    const rcErrors: string[] = [];
-    for (const shellId of state.selectedShells) {
-      try {
-        deps.applyShellConfig(shellId);
-      } catch (err) {
-        rcErrors.push(`${shellId}: ${err instanceof Error ? err.message : err}`);
-      }
+  for (const shellId of state.selectedShells) {
+    const taskId = rcTaskId(shellId);
+
+    if (state.skipStarshipInstall) {
+      update(taskId, {
+        status: 'skipped',
+        label: `Configure ${shellId} (skipped — install Starship first)`,
+      });
+      continue;
     }
-    if (rcErrors.length > 0) {
-      update('rc', { status: 'failed', error: rcErrors.join('; ') });
-    } else {
-      update('rc', { status: 'done' });
+
+    update(taskId, { status: 'running' });
+    try {
+      const result = deps.applyShellConfig(shellId);
+      if (result.applied) {
+        update(taskId, { status: 'done' });
+      } else if (result.note) {
+        // Not an error: the shell was already configured, or it needs manual
+        // setup (nushell, powershell). Either way no rc file was written.
+        update(taskId, { status: 'skipped', note: result.note });
+      } else {
+        update(taskId, { status: 'failed', error: `Unknown shell: ${shellId}` });
+      }
+    } catch (err) {
+      update(taskId, { status: 'failed', error: err instanceof Error ? err.message : String(err) });
     }
   }
 

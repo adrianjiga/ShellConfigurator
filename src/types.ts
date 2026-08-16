@@ -17,6 +17,8 @@ export interface InstallTask {
   label: string;
   status: InstallStatus;
   error?: string;
+  /** Non-error detail about the outcome (e.g. "already configured", manual steps) */
+  note?: string;
 }
 
 export type WizardStep =

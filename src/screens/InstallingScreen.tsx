@@ -86,6 +86,13 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
                   </Text>
                 </Box>
               )}
+              {task.note && !task.error && (
+                <Box marginLeft={4}>
+                  <Text color="gray" italic>
+                    {task.note}
+                  </Text>
+                </Box>
+              )}
             </Box>
           ))}
         </Box>
