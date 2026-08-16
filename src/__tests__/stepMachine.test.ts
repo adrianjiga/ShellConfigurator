@@ -71,3 +71,15 @@ describe('getPrevStep', () => {
     expect(prev.step).toBe('fontcheck');
   });
 });
+
+describe('terminal steps', () => {
+  it('does not walk back from done into installing', () => {
+    const state = { ...DEFAULT_STATE, step: 'done' as const };
+    expect(getPrevStep(state).step).toBe('done');
+  });
+
+  it('does not walk back out of installing', () => {
+    const state = { ...DEFAULT_STATE, step: 'installing' as const };
+    expect(getPrevStep(state).step).toBe('installing');
+  });
+});

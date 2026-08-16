@@ -1,4 +1,7 @@
-import { WizardState, STEP_ORDER, shouldVisitFontSelect } from './types.ts';
+import { WizardState, WizardStep, STEP_ORDER, shouldVisitFontSelect } from './types.ts';
+
+/** Steps that perform or report irreversible work — never re-enterable via back. */
+const TERMINAL_STEPS: WizardStep[] = ['installing', 'done'];
 
 /**
  * Returns the state advanced to the next step, honoring the conditional
@@ -27,6 +30,10 @@ export function getNextStep(state: WizardState, update?: Partial<WizardState>): 
  * skip. If there is no previous step, the state is returned unchanged.
  */
 export function getPrevStep(state: WizardState): WizardState {
+  // Once installing has begun there is no going back: re-entering it would re-run
+  // every install, including chsh and the config overwrite.
+  if (TERMINAL_STEPS.includes(state.step)) return state;
+
   const currentIndex = STEP_ORDER.indexOf(state.step);
   let prevIndex = currentIndex - 1;
 
