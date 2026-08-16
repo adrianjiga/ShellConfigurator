@@ -51,6 +51,9 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
       characterSymbol: CHAR_OPTIONS[charIdx]!.value,
       colorScheme: COLOR_OPTIONS[colorIdx]!.value,
     });
+    // onUpdate is a fresh closure each parent render; including it would loop on
+    // every state push.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [charIdx, colorIdx]);
 
   useInput((_, key) => {

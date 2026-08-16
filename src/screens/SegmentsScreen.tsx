@@ -41,6 +41,9 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
     } else {
       onUpdate({ rightModules: ordered });
     }
+    // onUpdate is a fresh closure each parent render; including it would loop on
+    // every state push.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, side]);
 
   function saveAndProceed() {

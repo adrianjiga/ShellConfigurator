@@ -40,6 +40,9 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
     return () => {
       cancelled = true;
     };
+    // Shell detection runs once on mount; onUpdate is a fresh closure each render
+    // and would re-trigger it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useInput((char, key) => {

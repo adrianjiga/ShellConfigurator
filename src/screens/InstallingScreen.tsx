@@ -71,6 +71,9 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
     return () => {
       unmounted = true;
     };
+    // Runs once on mount: re-running would restart every install. The `ran` ref
+    // guards double-invocation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Only listen while this screen owns the terminal: during an interactive child
