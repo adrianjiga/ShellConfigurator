@@ -57,6 +57,48 @@ export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigRes
   return { path: configPath, backedUpTo };
 }
 
+const BLOCK_MARKER = '# Added by ShellConfigurator';
+
+/**
+ * Removes every "Added by ShellConfigurator" block whose body contains any of
+ * the given needles. A block runs from its banner line through the following
+ * non-blank lines. Wizard runs can leave stale blocks behind (e.g. an `unset
+ * STARSHIP_CONFIG` guard surviving after a later run configured the shell), so
+ * each function must drop the other's markers before deciding what to write —
+ * otherwise re-running the wizard can never repair a polluted rc file.
+ */
+function removeShellConfiguratorBlocks(content: string, needles: string[]): string {
+  const lines = content.split('\n');
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim() === BLOCK_MARKER) {
+      const block = [line];
+      let j = i + 1;
+      while (j < lines.length && lines[j].trim() !== '') {
+        block.push(lines[j]);
+        j++;
+      }
+      if (needles.some((n) => block.includes(n))) {
+        // Drop the stale block (and the blank line that follows it).
+        i = j;
+        if (i < lines.length && lines[i].trim() === '') i++;
+        continue;
+      }
+      // Keep the block, ensuring a single blank line separates it from whatever
+      // came before.
+      if (out.length > 0 && out[out.length - 1].trim() !== '') out.push('');
+      out.push(...block);
+      i = j;
+    } else {
+      out.push(line);
+      i++;
+    }
+  }
+  return out.join('\n');
+}
+
 export interface ApplyShellConfigOptions {
   /** Directory to prepend to PATH ahead of the init line, when starship is not reachable. */
   ensurePathDir?: string | null;
@@ -106,6 +148,13 @@ export function applyShellConfig(
 
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
 
+  // A later run may have reset this shell to the shared config; drop that stale
+  // guard so the per-shell wiring below is actually what takes effect.
+  const cleaned = removeShellConfiguratorBlocks(existing, [starshipUnsetLine(shellId)!]);
+  // Persist any removal first — a stale block dropped here must not survive
+  // even when we also append below.
+  if (cleaned !== existing) fs.writeFileSync(rcPath, cleaned, 'utf8');
+
   // The PATH and STARSHIP_CONFIG lines must come before the init line, or
   // `starship init` cannot resolve either the binary or its config.
   const pathDir = options.ensurePathDir;
@@ -113,17 +162,16 @@ export function applyShellConfig(
   const configLine = starshipConfigLine(shellId);
 
   // Idempotent: skip if already configured (check for the full block we'd add).
-  const blockMarker = `# Added by ShellConfigurator`;
-  if (existing.includes(configLine ?? shell.initLine)) {
+  if (cleaned.includes(configLine ?? shell.initLine)) {
     return { applied: false, note: 'already configured' };
   }
 
   const lines = [
-    ...(pathLine && !existing.includes(pathLine) ? [pathLine] : []),
-    ...(configLine && !existing.includes(configLine) ? [configLine] : []),
-    ...(!existing.includes(shell.initLine) ? [shell.initLine] : []),
+    ...(pathLine && !cleaned.includes(pathLine) ? [pathLine] : []),
+    ...(configLine && !cleaned.includes(configLine) ? [configLine] : []),
+    ...(!cleaned.includes(shell.initLine) ? [shell.initLine] : []),
   ];
-  const addition = `\n${blockMarker}\n${lines.join('\n')}\n`;
+  const addition = `\n${BLOCK_MARKER}\n${lines.join('\n')}\n`;
   fs.appendFileSync(rcPath, addition, 'utf8');
 
   return {
@@ -172,12 +220,19 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
   }
 
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
+  // Drop any per-shell wiring a previous run added, so the unset guard below is
+  // the only ShellConfigurator line this shell still executes.
+  const cleaned = removeShellConfiguratorBlocks(existing, [
+    starshipConfigLine(shellId)!,
+    shell.initLine,
+  ]);
+  if (cleaned !== existing) fs.writeFileSync(rcPath, cleaned, 'utf8');
   const unsetLine = starshipUnsetLine(shellId)!;
 
-  if (existing.includes(unsetLine)) {
+  if (cleaned.includes(unsetLine)) {
     return { applied: false, note: 'already configured' };
   }
 
-  fs.appendFileSync(rcPath, `\n# Added by ShellConfigurator\n${unsetLine}\n`, 'utf8');
+  fs.appendFileSync(rcPath, `\n${BLOCK_MARKER}\n${unsetLine}\n`, 'utf8');
   return { applied: true };
 }

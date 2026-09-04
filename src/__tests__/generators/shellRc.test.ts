@@ -331,6 +331,60 @@ describe('applyShellConfig', () => {
     expect(result.note).toBe('already configured');
     expect(fs.appendFileSync).not.toHaveBeenCalled();
   });
+
+  it('removes a stale unset guard so the per-shell config takes effect', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    const fishConfig = path.join(os.homedir(), '.config', 'starship', 'fish.toml');
+    // A later wizard run reset fish to the shared config, leaving a stale guard
+    // that stomps on the per-shell wiring added earlier.
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () =>
+        `\n# Added by ShellConfigurator\nset -gx STARSHIP_CONFIG ${fishConfig}\nstarship init fish | source\n\n# Added by ShellConfigurator\nset -e STARSHIP_CONFIG\n`
+    );
+
+    const result = applyShellConfig('fish');
+
+    expect(result.applied).toBe(false);
+    expect(result.note).toBe('already configured');
+    expect(fs.appendFileSync).not.toHaveBeenCalled();
+    const written = vi.mocked(fs.writeFileSync).mock.calls[0]?.[1] as string;
+    expect(written).toContain(`set -gx STARSHIP_CONFIG ${fishConfig}`);
+    expect(written).toContain('starship init fish | source');
+    expect(written).not.toContain('set -e STARSHIP_CONFIG');
+  });
+
+  it('repairs a shell whose rc only has the stale unset guard', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () => '# Existing user content\n\n# Added by ShellConfigurator\nunset STARSHIP_CONFIG\n'
+    );
+
+    const result = applyShellConfig('bash');
+
+    expect(result.applied).toBe(true);
+    const written = vi.mocked(fs.writeFileSync).mock.calls[0]?.[1] as string;
+    expect(written).toBe('# Existing user content\n');
+    const appended = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
+    expect(appended).toContain('export STARSHIP_CONFIG');
+    expect(appended).toContain('starship init bash');
+  });
+
+  it('drops only the stale unset block when both generations of config coexist', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () =>
+        `\n# Added by ShellConfigurator\neval "$(starship init zsh)"\n\n# Added by ShellConfigurator\nexport STARSHIP_CONFIG="${expectedConfigPath}"\n\n# Added by ShellConfigurator\nunset STARSHIP_CONFIG\n`
+    );
+
+    const result = applyShellConfig('zsh');
+
+    expect(result.applied).toBe(false);
+    expect(fs.appendFileSync).not.toHaveBeenCalled();
+    const written = vi.mocked(fs.writeFileSync).mock.calls[0]?.[1] as string;
+    expect(written).toContain('eval "$(starship init zsh)"');
+    expect(written).toContain(`export STARSHIP_CONFIG="${expectedConfigPath}"`);
+    expect(written).not.toContain('unset STARSHIP_CONFIG');
+  });
 });
 
 describe('resetSharedShellConfig', () => {
@@ -373,6 +427,41 @@ describe('resetSharedShellConfig', () => {
     expect(result.applied).toBe(false);
     expect(result.note).toBe('already configured');
     expect(fs.appendFileSync).not.toHaveBeenCalled();
+  });
+
+  it('removes a stale per-shell block before adding the unset guard', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () =>
+        `# Existing content\n# Added by ShellConfigurator\nexport STARSHIP_CONFIG="${expectedConfigPath}"\neval "$(starship init zsh)"\n`
+    );
+
+    const result = resetSharedShellConfig('zsh');
+
+    expect(result.applied).toBe(true);
+    const written = vi.mocked(fs.writeFileSync).mock.calls[0]?.[1] as string;
+    expect(written).toBe('# Existing content');
+    const appended = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
+    expect(appended).toContain('unset STARSHIP_CONFIG');
+  });
+
+  it('keeps the unset guard and drops a stale per-shell block (idempotent)', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    const fishConfig = path.join(os.homedir(), '.config', 'starship', 'fish.toml');
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () =>
+        `\n# Added by ShellConfigurator\nset -gx STARSHIP_CONFIG ${fishConfig}\nstarship init fish | source\n\n# Added by ShellConfigurator\nset -e STARSHIP_CONFIG\n`
+    );
+
+    const result = resetSharedShellConfig('fish');
+
+    expect(result.applied).toBe(false);
+    expect(result.note).toBe('already configured');
+    expect(fs.appendFileSync).not.toHaveBeenCalled();
+    const written = vi.mocked(fs.writeFileSync).mock.calls[0]?.[1] as string;
+    expect(written).not.toContain('set -gx STARSHIP_CONFIG');
+    expect(written).not.toContain('starship init fish | source');
+    expect(written).toContain('set -e STARSHIP_CONFIG');
   });
 
   it('returns a manual note for shells without an rc file', () => {
