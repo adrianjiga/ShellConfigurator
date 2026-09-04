@@ -109,6 +109,20 @@ function starshipConfigLine(shellId: ShellId): string | null {
   return `export STARSHIP_CONFIG="${configPath}"`;
 }
 
+/** Creates the rc file's parent directory (important for fish) when missing. */
+function ensureRcDir(rcPath: string): void {
+  const rcDir = path.dirname(rcPath);
+  if (fs.existsSync(rcDir)) return;
+  try {
+    fs.mkdirSync(rcDir, { recursive: true });
+  } catch (err) {
+    throw new Error(
+      `Cannot create directory ${rcDir}: ${err instanceof Error ? err.message : err}`,
+      { cause: err }
+    );
+  }
+}
+
 export function applyShellConfig(
   shellId: ShellId,
   options: ApplyShellConfigOptions = {}
@@ -122,19 +136,7 @@ export function applyShellConfig(
   }
 
   const rcPath = shell.rcFile;
-
-  // Ensure parent directory exists (important for fish)
-  const rcDir = path.dirname(rcPath);
-  if (!fs.existsSync(rcDir)) {
-    try {
-      fs.mkdirSync(rcDir, { recursive: true });
-    } catch (err) {
-      throw new Error(
-        `Cannot create directory ${rcDir}: ${err instanceof Error ? err.message : err}`,
-        { cause: err }
-      );
-    }
-  }
+  ensureRcDir(rcPath);
 
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
 
@@ -188,17 +190,7 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
   if (!shell.rcFile) return { applied: false, note: shell.manualNote };
 
   const rcPath = shell.rcFile;
-  const rcDir = path.dirname(rcPath);
-  if (!fs.existsSync(rcDir)) {
-    try {
-      fs.mkdirSync(rcDir, { recursive: true });
-    } catch (err) {
-      throw new Error(
-        `Cannot create directory ${rcDir}: ${err instanceof Error ? err.message : err}`,
-        { cause: err }
-      );
-    }
-  }
+  ensureRcDir(rcPath);
 
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
   // Drop any per-shell wiring an earlier "configure" run may have added.
