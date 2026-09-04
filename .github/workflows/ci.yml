@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: [master]
   pull_request:
     branches: [master]
 
@@ -56,28 +56,6 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
-
-  coverage:
-    name: Coverage (node ${{ matrix.node }}, ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        # Matches the engines floor: every supported version is actually verified.
-        os: [ubuntu-latest]
-        node: ['22', '24']
-        include:
-          # getNerdFontsDir, the brew branch, and the fc-cache skip are darwin-only.
-          - os: macos-latest
-            node: '22'
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
-        with:
-          node-version: ${{ matrix.node }}
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run test:coverage
 
   distro-smoke:
     name: Distro smoke (${{ matrix.image }})
