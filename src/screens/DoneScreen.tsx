@@ -185,14 +185,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
                     <Text color="cyan">{shell.initLine}</Text>
                   </Box>
                 )}
-                {rcStatus === 'done' && rcNote && (
-                  <Box marginLeft={3}>
-                    <Text color="gray" italic>
-                      {rcNote}
-                    </Text>
-                  </Box>
-                )}
-                {rcStatus === 'skipped' && !shell?.rcFile && rcNote && (
+                {(rcStatus === 'done' || (rcStatus === 'skipped' && !shell?.rcFile)) && rcNote && (
                   <Box marginLeft={3}>
                     <Text color="gray" italic>
                       {rcNote}
