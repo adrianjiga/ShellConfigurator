@@ -131,6 +131,13 @@ export async function runInstallTasks(
     }
   }
 
+  /** Bails at a phase boundary when the user aborts, marking unrun tasks failed. */
+  function bailIfCancelled(): boolean {
+    if (!cancelled()) return false;
+    markRemainingCancelled();
+    return true;
+  }
+
   // --- Starship (task omitted entirely when skipStarshipInstall) ---
   if (!state.skipStarshipInstall) {
     update('starship', { status: 'running' });
@@ -150,10 +157,7 @@ export async function runInstallTasks(
     }
   }
 
-  if (cancelled()) {
-    markRemainingCancelled();
-    return tasks;
-  }
+  if (bailIfCancelled()) return tasks;
 
   // --- Nerd Font (only when a concrete font was chosen) ---
   let fontInstallFailed = false;
@@ -168,10 +172,7 @@ export async function runInstallTasks(
     }
   }
 
-  if (cancelled()) {
-    markRemainingCancelled();
-    return tasks;
-  }
+  if (bailIfCancelled()) return tasks;
 
   // --- Missing shells ---
   for (const shellId of state.selectedShells) {
@@ -187,10 +188,7 @@ export async function runInstallTasks(
     }
   }
 
-  if (cancelled()) {
-    markRemainingCancelled();
-    return tasks;
-  }
+  if (bailIfCancelled()) return tasks;
 
   // --- chsh ---
   if (state.setDefaultShell) {
@@ -203,10 +201,7 @@ export async function runInstallTasks(
     }
   }
 
-  if (cancelled()) {
-    markRemainingCancelled();
-    return tasks;
-  }
+  if (bailIfCancelled()) return tasks;
 
   // --- Write per-shell starship configs ---
   // Each selected shell gets its own file; the shared starship.toml is never touched.
