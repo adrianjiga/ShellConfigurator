@@ -56,6 +56,10 @@ describe('DoneScreen over real install results', () => {
     expect(frame).toContain('starship init nu');
     // It must create the autoload directory first, or save -f fails on a fresh install.
     expect(frame).toContain('mkdir ($nu.data-dir');
+    // ...and pin STARSHIP_CONFIG to the per-shell config, or nu falls back to
+    // the shared ~/.config/starship.toml (no rc file to export it).
+    expect(frame).toContain('starship-config.nu');
+    expect(frame).toContain('path join starship nushell.toml');
   });
 
   it('reports an already-configured shell as skipped rather than freshly applied', async () => {

@@ -200,15 +200,21 @@ interface ShellDef {
 
 ### Shell Init Lines
 
-| Shell      | RC File                      | Init Line                                       |
-| ---------- | ---------------------------- | ----------------------------------------------- |
-| zsh        | `~/.zshrc`                   | `eval "$(starship init zsh)"`                   |
-| bash       | `~/.bashrc`                  | `eval "$(starship init bash)"`                  |
-| fish       | `~/.config/fish/config.fish` | `starship init fish \| source`                  |
-| nushell    | `null` (manual)              | `mkdir ($nu.data-dir ...); starship init nu \| save -f ...` |
-| powershell | `null` (manual)              | `Invoke-Expression (&starship init powershell)` |
+| Shell      | RC File                      | Init Line                                                                                           |
+| ---------- | ---------------------------- | --------------------------------------------------------------------------------------------------- |
+| zsh        | `~/.zshrc`                   | `eval "$(starship init zsh)"`                                                                       |
+| bash       | `~/.bashrc`                  | `eval "$(starship init bash)"`                                                                      |
+| fish       | `~/.config/fish/config.fish` | `starship init fish \| source`                                                                      |
+| nushell    | `null` (manual)              | `mkdir ...; $"export-env { $env.STARSHIP_CONFIG = ... }" \| save ...; starship init nu \| save ...` |
+| powershell | `null` (manual)              | `Invoke-Expression (&starship init powershell)`                                                     |
 
 Shells with `rcFile: null` are not auto-configured. Instead, `manualNote` is displayed on DoneScreen.
+
+For nushell the manual command writes two files into `$nu.data-dir/vendor/autoload`:
+an `export-env` block (`starship-config.nu`) that pins `$env.STARSHIP_CONFIG` to the
+shell's per-shell `starship/nushell.toml`, and the `starship init` output
+(`starship.nu`). Nushell auto-sources every file in that directory at startup, so
+the prompt keeps using the per-shell config with no rc file involved.
 
 ### Lookup
 
