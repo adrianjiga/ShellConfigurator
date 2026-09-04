@@ -104,10 +104,8 @@ await check('applyShellConfig writes banner + init line and is idempotent', () =
   assert.equal(second.note, 'already configured');
 });
 
-// --- Nushell manual setup pins STARSHIP_CONFIG to the per-shell config ---
-// The container has no `nu` binary, so this verifies the command the wizard
-// shows is shaped correctly and that its runtime path expression resolves to
-// exactly the file writeShellConfig() produces for nushell.
+// --- Nushell manual command must pin STARSHIP_CONFIG to its per-shell config ---
+// No `nu` binary in the container, so verify the command shape and path resolution.
 
 await check('nushell manual command resolves to its own per-shell config', () => {
   const nu = getShell('nushell');
@@ -116,16 +114,12 @@ await check('nushell manual command resolves to its own per-shell config', () =>
   const manual = applyShellConfig('nushell');
   assert.equal(manual.applied, false, 'nushell must not be auto-configured');
   assert.ok(manual.note, 'nushell manualNote missing');
-  // The autoload env pin the command writes must sort before starship.nu so
-  // STARSHIP_CONFIG is set before the prompt hooks run.
+  // The env pin must sort before starship.nu so it is set before the prompt hooks run.
   assert.ok(nu.initLine.includes('starship-config.nu'), 'command missing autoload env pin');
   assert.ok(nu.initLine.includes('STARSHIP_CONFIG'), 'command missing STARSHIP_CONFIG');
   assert.ok(nu.initLine.includes('starship init nu'), 'command missing starship init');
 
-  // What nu evaluates at runtime: default-config-dir is the shell's own config
-  // dir (~/.config/nushell or $XDG_CONFIG_HOME/nushell); `path dirname` takes
-  // its parent, then the expression joins starship + nushell.toml. That must be
-  // the same path the wizard writes its per-shell config to.
+  // `path dirname` on default-config-dir + join must equal what writeShellConfig writes.
   const configHome =
     process.env.XDG_CONFIG_HOME?.trim() || nodePath.join(process.env.HOME, '.config');
   assert.equal(
@@ -134,10 +128,9 @@ await check('nushell manual command resolves to its own per-shell config', () =>
   );
 });
 
-// --- Per-shell wiring and the shared-config guard stay mutually exclusive ---
-// A shell switched between "configured" and "reset" across wizard runs must not
-// end up with both blocks in its rc file — the stale one stomps on the other at
-// startup. This exercises the exact repair reported from the field.
+// --- Per-shell and shared-config blocks must stay mutually exclusive across runs ---
+// A shell switched between "configured" and "reset" must not end up with both
+// blocks — the stale one would stomp on the other at startup.
 
 await check('resetSharedShellConfig replaces a per-shell block with the unset guard', () => {
   const rcPath = nodePath.join(process.env.HOME, '.bashrc');

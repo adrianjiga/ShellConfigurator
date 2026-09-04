@@ -28,11 +28,8 @@ export function subscribeToUiSuspension(listener: SuspendListener): () => void {
 }
 
 /**
- * Toggles the terminal's raw mode. Ink leaves the terminal in raw mode for the
- * whole process; if a child inherited that it could not read a password or
- * confirmations correctly (echo is off, input isn't line-buffered). Before
- * handing the TTY to a child the terminal must be returned to canonical mode,
- * and re-armed afterwards so Ink can resume drawing.
+ * Returns the TTY to canonical mode while a child owns it (raw mode would break
+ * password/confirmation input), and re-arms it afterwards for Ink.
  */
 function setRawModeStandard(enabled: boolean): void {
   try {

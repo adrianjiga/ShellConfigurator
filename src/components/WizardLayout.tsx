@@ -22,8 +22,7 @@ interface WizardLayoutProps {
   hidePreview?: boolean;
 }
 
-// Below this many columns the side-by-side layout squeezes the prompt preview so
-// hard that the segments wrap into an unreadable block, so it is dropped instead.
+// Below this width the preview wraps into an unreadable block, so it is dropped.
 const PREVIEW_MIN_COLUMNS = 100;
 
 export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps) {

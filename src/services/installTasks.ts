@@ -30,7 +30,7 @@ export interface InstallTaskDeps {
     options?: ApplyShellConfigOptions
   ) => { applied: boolean; note?: string };
   resetSharedShellConfig: (shellId: ShellId) => { applied: boolean; note?: string };
-  /** Shells on this machine that run Starship and could inherit a leaked config. */
+  /** Shells that run Starship and could inherit a leaked STARSHIP_CONFIG. */
   getShellsUsingStarship: () => Promise<ShellId[]>;
   getMissingStarshipPathDir: () => string | null;
 }
@@ -207,8 +207,7 @@ export async function runInstallTasks(
   }
 
   // --- Write per-shell starship configs ---
-  // Each selected shell gets its own config file so the shared ~/.config/starship.toml
-  // (which other shells may already use) is never touched.
+  // Each selected shell gets its own file; the shared starship.toml is never touched.
   update('config', { status: 'running' });
   try {
     if (state.selectedShells.length === 0) {
@@ -272,11 +271,8 @@ export async function runInstallTasks(
   }
 
   // --- Reset leaked STARSHIP_CONFIG for shells not given their own config ---
-  // A configured shell exports STARSHIP_CONFIG pointing at its per-shell toml, which
-  // is inherited by any shell launched from it (e.g. `bash` typed from a configured
-  // zsh). Other Starship shells on the machine must clear the variable at startup so
-  // they fall back to the shared config instead of showing a parent shell's prompt.
-  // Skipped when Starship was not installed/configured at all.
+  // Their rc must clear the variable at startup or they'd show a parent shell's
+  // prompt. Skipped when Starship was never installed/configured.
   if (!state.skipStarshipInstall) {
     try {
       const starshipShells = await deps.getShellsUsingStarship();

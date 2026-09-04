@@ -12,11 +12,8 @@ export interface WriteConfigResult {
 }
 
 /**
- * Directory that holds per-shell Starship configs, mirroring Starship's own base
- * directory resolution: $XDG_CONFIG_HOME, else ~/.config. Each selected shell gets
- * its own file inside the `starship/` subdirectory, so the shared
- * ~/.config/starship.toml that other shells (e.g. one bootstrapped globally) may
- * already use is never overwritten. Resolved per call so the env is read live.
+ * Base directory for per-shell Starship configs: $XDG_CONFIG_HOME, else
+ * ~/.config. Resolved per call so the env is read live.
  */
 function getConfigBaseDir(): string {
   const xdg = process.env.XDG_CONFIG_HOME?.trim();
@@ -24,18 +21,16 @@ function getConfigBaseDir(): string {
 }
 
 /**
- * Path to a single shell's own Starship config, e.g. ~/.config/starship/zsh.toml.
- * A shell's rc file points at this via STARSHIP_CONFIG before initializing
- * Starship, isolating its prompt from every other shell.
+ * Path to one shell's own config, e.g. ~/.config/starship/zsh.toml, which the
+ * shell's rc file points at via STARSHIP_CONFIG.
  */
 export function getShellConfigPath(shellId: ShellId): string {
   return path.join(getConfigBaseDir(), 'starship', `${shellId}.toml`);
 }
 
 /**
- * Writes one shell's Starship config to its own per-shell file. Never touches the
- * shared ~/.config/starship.toml. Backs up any existing per-shell config first,
- * since overwriting is the one irreversible step in the wizard.
+ * Writes one shell's config, backing up any existing file first (overwriting is
+ * the one irreversible step). Never touches the shared starship.toml.
  */
 export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigResult {
   const configPath = getShellConfigPath(shellId);
@@ -60,12 +55,8 @@ export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigRes
 const BLOCK_MARKER = '# Added by ShellConfigurator';
 
 /**
- * Removes every "Added by ShellConfigurator" block whose body contains any of
- * the given needles. A block runs from its banner line through the following
- * non-blank lines. Wizard runs can leave stale blocks behind (e.g. an `unset
- * STARSHIP_CONFIG` guard surviving after a later run configured the shell), so
- * each function must drop the other's markers before deciding what to write —
- * otherwise re-running the wizard can never repair a polluted rc file.
+ * Drops every "Added by ShellConfigurator" block containing any needle, so a
+ * re-run can repair an rc polluted by the opposite block from an earlier run.
  */
 function removeShellConfiguratorBlocks(content: string, needles: string[]): string {
   const lines = content.split('\n');
@@ -105,9 +96,8 @@ export interface ApplyShellConfigOptions {
 }
 
 /**
- * The STARSHIP_CONFIG export for a shell, in that shell's own syntax, pointing at
- * the shell's per-shell config so it never inherits the shared starship.toml.
- * Returns null for shells without a script rc file (nushell, powershell).
+ * STARSHIP_CONFIG export for a shell, in that shell's own syntax. Null for
+ * shells without a script rc file (nushell, powershell).
  */
 function starshipConfigLine(shellId: ShellId): string | null {
   const shell = getShell(shellId);
@@ -148,11 +138,9 @@ export function applyShellConfig(
 
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
 
-  // A later run may have reset this shell to the shared config; drop that stale
-  // guard so the per-shell wiring below is actually what takes effect.
+  // Drop a stale unset guard a later "reset" run may have left.
   const cleaned = removeShellConfiguratorBlocks(existing, [starshipUnsetLine(shellId)!]);
-  // Persist any removal first — a stale block dropped here must not survive
-  // even when we also append below.
+  // Persist removals before appending below.
   if (cleaned !== existing) fs.writeFileSync(rcPath, cleaned, 'utf8');
 
   // The PATH and STARSHIP_CONFIG lines must come before the init line, or
@@ -181,11 +169,8 @@ export function applyShellConfig(
 }
 
 /**
- * The STARSHIP_CONFIG unset for a shell that should use the shared config, in that
- * shell's own syntax. Exporting STARSHIP_CONFIG in one shell's rc leaks into every
- * shell launched from it (e.g. `bash` typed from a configured zsh), so shells not
- * given their own config must clear the variable at startup to fall back to the
- * shared ~/.config/starship.toml. Returns null for shells without a script rc file.
+ * STARSHIP_CONFIG unset for a shell that should use the shared config: clears a
+ * leaked export from a configured parent shell. Null for shells without an rc file.
  */
 function starshipUnsetLine(shellId: ShellId): string | null {
   const shell = getShell(shellId);
@@ -194,12 +179,8 @@ function starshipUnsetLine(shellId: ShellId): string | null {
 }
 
 /**
- * Makes a shell that Starship runs in but that the wizard is NOT giving its own
- * per-shell config return to the shared config, so it never inherits a leaked
- * STARSHIP_CONFIG from a configured parent shell. Idempotent — the unset line is
- * added only if not already present. Leaves the shell's prompt appearance
- * untouched (it still uses the shared starship.toml). Returns {applied:false} for
- * shells with no rc file (nushell, powershell).
+ * Points a Starship-running shell that wasn't given its own config back at the
+ * shared config, so it never inherits a leaked STARSHIP_CONFIG. Idempotent.
  */
 export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; note?: string } {
   const shell = getShell(shellId);
@@ -220,8 +201,7 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
   }
 
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
-  // Drop any per-shell wiring a previous run added, so the unset guard below is
-  // the only ShellConfigurator line this shell still executes.
+  // Drop any per-shell wiring an earlier "configure" run may have added.
   const cleaned = removeShellConfiguratorBlocks(existing, [
     starshipConfigLine(shellId)!,
     shell.initLine,

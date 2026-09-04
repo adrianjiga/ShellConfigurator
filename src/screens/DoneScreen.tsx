@@ -179,9 +179,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
                     </Text>
                   </Box>
                 )}
-                {/* Shells with no rc file (nushell, powershell) need the init line
-                    run by hand — show the command FIRST, then the manual note, so
-                    "the above command" really is the line directly above it. */}
+                {/* Manual-only shells (nushell, powershell) show the init command above its note. */}
                 {rcStatus === 'skipped' && !shell?.rcFile && shell?.initLine && (
                   <Box marginLeft={3}>
                     <Text color="cyan">{shell.initLine}</Text>
