@@ -237,15 +237,26 @@ Takes full wizard state, returns a complete `starship.toml` file as a string.
 ### shellRc.ts
 
 ```typescript
-function getConfigPath(): string;
-// Returns ~/.config/starship.toml
+function getShellConfigPath(shellId: ShellId): string;
+// Returns ~/.config/starship/<shell>.toml (honours $XDG_CONFIG_HOME)
 
-function writeStarshipConfig(toml: string): void;
-// Writes TOML string to config path, creating ~/.config/ if needed
+function writeShellConfig(toml: string, shellId: ShellId): { path: string; backedUpTo?: string };
+// Writes the TOML to the per-shell config path, backing up any existing
+// file first. Never touches the shared ~/.config/starship.toml.
 
-function applyShellConfig(shellId: ShellId): { applied: boolean; note?: string };
-// Appends init line to RC file. Returns { applied: false, note } if
-// shell is manual-only or already configured.
+function applyShellConfig(
+  shellId: ShellId,
+  opts?: { ensurePathDir?: string | null }
+): { applied: boolean; note?: string };
+// Appends the STARSHIP_CONFIG pin + init line to the shell's rc file.
+// Returns { applied: false, note } for manual-only shells or when already
+// configured. Drops stale unset-guard blocks from earlier runs first, so
+// a re-run can repair a polluted rc file.
+
+function resetSharedShellConfig(shellId: ShellId): { applied: boolean; note?: string };
+// Removes any per-shell wiring and appends an unset guard so the shell
+// falls back to the shared ~/.config/starship.toml instead of inheriting
+// a leaked STARSHIP_CONFIG. The mirror image of applyShellConfig.
 ```
 
 ---
@@ -305,8 +316,15 @@ interface InstallTaskDeps {
   installShell: (shellId: ShellId, pm: PackageManager) => Promise<void>;
   setDefaultShell: (shellId: ShellId) => Promise<void>;
   generateToml: (state: WizardState) => string;
-  writeStarshipConfig: (toml: string) => void;
-  applyShellConfig: (shellId: ShellId) => { applied: boolean; note?: string };
+  writeShellConfig: (toml: string, shellId: ShellId) => WriteConfigResult;
+  applyShellConfig: (
+    shellId: ShellId,
+    opts?: { ensurePathDir?: string | null }
+  ) => {
+    applied: boolean;
+    note?: string;
+  };
+  resetSharedShellConfig: (shellId: ShellId) => { applied: boolean; note?: string };
 }
 
 const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps;

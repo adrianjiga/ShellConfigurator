@@ -62,8 +62,9 @@ The wizard exits non-zero if any install step fails, so it can be used in a scri
 - **Starship** — via your package manager, or `curl` if none is detected
 - **Nerd Font** — downloaded from the official nerd-fonts GitHub release, installed to `~/Library/Fonts/` (macOS) or `~/.local/share/fonts/` (Linux)
 - **Shells** — installed via your package manager if not already present
-- **`~/.config/starship.toml`** — generated from your wizard choices
-- **Shell RC files** — `starship init` line appended idempotently to each selected shell's config
+- **Per-shell Starship configs** — `~/.config/starship/<shell>.toml` for every selected shell, so each shell keeps its own prompt; the shared `~/.config/starship.toml` is never overwritten
+- **Shell RC files** — each selected shell gets a `STARSHIP_CONFIG` export pointing at its own config plus the `starship init` line (appended idempotently); shells left unselected get an `unset` guard so a configured parent's prompt doesn't leak in
+- **Nushell** — `nu` has no rc file, so its setup command pins `STARSHIP_CONFIG` at startup via a `vendor/autoload` `export-env` file instead
 
 ## Supported Nerd Fonts
 
