@@ -2,13 +2,15 @@
   "name": "shell-configurator",
   "version": "1.0.0",
   "description": "Interactive terminal wizard for configuring Starship prompt",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "shell-configurator": "./dist/index.js"
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=22"
