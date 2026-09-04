@@ -100,7 +100,12 @@ export function runCommand(args: string[], options: { signal?: AbortSignal } = {
 
     child.on('error', (err) => settle(() => reject(err)));
 
-    child.on('close', (status, signal) => {
+    // 'exit' (not 'close'): a spawned child that backgrounds a grandchild inheriting
+    // a shared terminal fd (e.g. a pacman post-transaction hook detaching a watcher)
+    // will keep its stdio open, so 'close' never fires even though the child ended —
+    // the promise would never settle and the UI would stay suspended forever. 'exit'
+    // fires as soon as the process itself ends, which is the state we wait on here.
+    child.on('exit', (status, signal) => {
       if (cancelled) {
         settle(() => reject(new CommandCancelledError(printable)));
       } else if (signal) {

@@ -68,8 +68,9 @@ function childFor(outcome: SpawnOutcome) {
   const child = new EventEmitter() as EventEmitter & { kill: ReturnType<typeof vi.fn> };
   child.kill = vi.fn();
   setImmediate(() => {
+    // runCommand settles on 'exit' (not 'close' — see exec.ts), so the mock must emit it.
     if (outcome.error) child.emit('error', outcome.error);
-    else child.emit('close', outcome.status ?? 0, outcome.signal ?? null);
+    else child.emit('exit', outcome.status ?? 0, outcome.signal ?? null);
   });
   return child;
 }
