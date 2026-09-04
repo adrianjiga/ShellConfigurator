@@ -158,8 +158,8 @@ App (owns state)
 | ---------------------- | ------------------------------------------------------------------------- |
 | WelcomeScreen          | `starshipInstalled`, `packageManager`, `skipStarshipInstall`              |
 | FontCheckScreen        | `hasNerdFont`, `nerdFontToInstall`                                        |
-| FontSelectScreen       | `nerdFontToInstall`                                                       |
-| PresetScreen           | `preset`, `leftModules`, `rightModules`                                   |
+| FontSelectScreen       | `nerdFontToInstall`, `hasNerdFont`                                        |
+| PresetScreen           | `preset`, `leftModules`, `rightModules`, `palette`, `powerline`           |
 | SegmentsScreen (left)  | `leftModules` (live via `onUpdate`)                                       |
 | SegmentsScreen (right) | `rightModules` (live via `onUpdate`)                                      |
 | StyleScreen            | `characterSymbol`, `palette`, `powerline`                                 |
@@ -173,7 +173,7 @@ Some screens push state changes in real time (without advancing) so `PromptPrevi
 
 - **SegmentsScreen**: `useEffect` calls `onUpdate({ leftModules: [...] })` on every toggle
 - **ShellScreen**: pushes `installedShells` after async detection completes
-- **PresetScreen**: updates modules on highlight (before user confirms)
+- **PresetScreen**: only the highlighted preset's _description_ updates live (`onHighlight`); modules, palette, and powerline are committed on Enter, so the preview does not swap while scrolling presets
 
 ---
 
@@ -183,14 +183,24 @@ Module definitions live in `src/config/modules.ts`. Each module has:
 
 ```typescript
 interface ModuleDef {
-  id: string;
+  id: ConfigurableModuleId;
   label: string;
   description: string;
   defaultLeft: boolean;
   defaultRight: boolean;
   previewSegment: (hasNerdFont: boolean) => string;
+  content: string; // Inner format — what a powerline prompt wraps in separator glyphs
+  settings?: (ctx: ModuleTomlContext) => string; // TOML keys beyond style/format
+  stylesItself?: boolean; // Carries its colour in its own keys (username → style_user, battery → [[battery.display]])
 }
 ```
+
+The generator emits the `[section]`, the palette `style`, and the powerline
+`format` for every module itself; each module's `settings` supplies only the keys
+it needs (`symbol`, `disabled`, thresholds...), so powerline is a one-place change
+rather than a per-module one. Palettes key their colour table on
+`ConfigurableModuleId`, so adding a module is a compile error until every palette
+picks it a colour.
 
 The `character` module is special — it is never shown as a toggle in SegmentsScreen. Instead, it is always appended to the end of `leftModules` automatically.
 
