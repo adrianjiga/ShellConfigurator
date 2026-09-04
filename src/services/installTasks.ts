@@ -49,7 +49,10 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   getMissingStarshipPathDir,
 };
 
-export function buildTaskList(state: WizardState): InstallTask[] {
+export function buildTaskList(
+  state: WizardState,
+  fontId: string | null = fontIdToInstall(state.nerdFontToInstall)
+): InstallTask[] {
   const tasks: InstallTask[] = [];
 
   // Starship (skipped when the user chose "Continue without Starship")
@@ -58,7 +61,6 @@ export function buildTaskList(state: WizardState): InstallTask[] {
   }
 
   // Nerd Font (only when a concrete font was chosen)
-  const fontId = fontIdToInstall(state.nerdFontToInstall);
   if (fontId) {
     const fontLabel = NERD_FONTS.find((f) => f.id === fontId)?.label ?? fontId;
     tasks.push({ id: 'font', label: `Nerd Font (${fontLabel})`, status: 'pending' });
@@ -81,7 +83,7 @@ export function buildTaskList(state: WizardState): InstallTask[] {
   }
 
   // Config write
-  tasks.push({ id: 'config', label: 'Write starship.toml', status: 'pending' });
+  tasks.push({ id: 'config', label: 'Write config files', status: 'pending' });
 
   // RC files — one task per shell so a failure in one does not taint the others
   for (const shellId of state.selectedShells) {
@@ -110,7 +112,8 @@ export async function runInstallTasks(
   onUpdate: (id: string, patch: Partial<InstallTask>) => void,
   signal?: AbortSignal
 ): Promise<InstallTask[]> {
-  let tasks = buildTaskList(state);
+  const fontId = fontIdToInstall(state.nerdFontToInstall);
+  let tasks = buildTaskList(state, fontId);
 
   function update(id: string, patch: Partial<InstallTask>) {
     tasks = tasks.map((t) => (t.id === id ? { ...t, ...patch } : t));
@@ -154,7 +157,6 @@ export async function runInstallTasks(
 
   // --- Nerd Font (only when a concrete font was chosen) ---
   let fontInstallFailed = false;
-  const fontId = fontIdToInstall(state.nerdFontToInstall);
   if (fontId) {
     update('font', { status: 'running' });
     try {
