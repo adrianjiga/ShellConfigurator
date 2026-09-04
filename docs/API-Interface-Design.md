@@ -60,22 +60,41 @@ interface InstallTask {
   label: string; // Display label
   status: InstallStatus; // Current status
   error?: string; // Error message if failed
+  note?: string;   // Non-error outcome detail (e.g. "already configured", manual steps)
 }
 ```
+
+### Nerd Font Choice
+
+What the user decided about a Nerd Font. A discriminated union rather than a
+nullable string with a sentinel, so "no font step", "route to the picker", and
+"install this id" cannot be confused and no consumer needs to know a magic value.
+
+```typescript
+type NerdFontChoice =
+  | { kind: 'none' }
+  | { kind: 'select' }
+  | { kind: 'install'; id: string };
+
+const NO_NERD_FONT: NerdFontChoice; // { kind: 'none' }
+
+function shouldVisitFontSelect(choice: NerdFontChoice): boolean;
+// True unless the choice is { kind: 'none' } (user declined a font).
+
+function fontIdToInstall(choice: NerdFontChoice): string | null;
+// The font id to install, or null when nothing should be installed.
+```
+
+`shouldVisitFontSelect` is the single predicate used by the step machine in both
+directions to decide whether to show `font_select`; `fontIdToInstall` is how
+task-building resolves the concrete font to install.
 
 ### Constants
 
 ```typescript
-const FONT_SELECT_SENTINEL = '__select__' as const;
-
-function shouldVisitFontSelect(nerdFontToInstall: string | null): boolean;
-// Returns true unless nerdFontToInstall is null (user declined a font)
-
 const STEP_ORDER: WizardStep[];
 // welcome → fontcheck → font_select → preset → segments_left → segments_right → style → shells → installing → done
 ```
-
-Sentinel value stored in `nerdFontToInstall` to signal that the user chose to install a font but hasn't picked which one yet. `shouldVisitFontSelect` is the single predicate used by the step machine in both directions to decide whether to show `font_select`.
 
 ### Step Machine
 
@@ -127,14 +146,29 @@ type ModuleId =
 
 ```typescript
 interface ModuleDef {
-  id: string;
+  id: ConfigurableModuleId;
   label: string; // Display name in UI
   description: string; // Shown when module is focused
   defaultLeft: boolean; // Included in left prompt by default
   defaultRight: boolean; // Included in right prompt by default
   previewSegment: (hasNerdFont: boolean) => string; // Text for PromptPreview
+  content: string; // Inner format, e.g. '$symbol$version' — what powerline wraps in separators
+  settings?: (ctx: ModuleTomlContext) => string; // TOML keys other than style/format
+  stylesItself?: boolean; // Module carries its colour in keys other than `style`
 }
 ```
+
+`Id` is typed as `ConfigurableModuleId` (the 15 placeable modules); `character`
+is not placeable and so has no entry — it gets special placement on its own line
+and is configured on the Style screen instead.
+
+`ModuleTomlContext` hands each `settings` builder `{ hasNerdFont, styleFor }`
+where `styleFor(name)` builds the style expression for a palette colour — the
+colour on its own in a normal prompt, or an `fg:fg bg:<colour>` pair under
+powerline. Only modules that carry their colour in differently-named keys
+(`username`/`hostname` → `style_user`/`style_root`, `battery` →
+`[[battery.display]]`) need `styleFor`; the generator emits the plain `style` key
+for everyone else.
 
 ### Lookup
 
@@ -142,7 +176,7 @@ interface ModuleDef {
 function getModule(id: string): ModuleDef | undefined;
 ```
 
-The `MODULES` array is the single registry. All module-aware code reads from it.
+The `MODULES` array is the single registry. All module-aware code reads from it, and `MODULE_DEFS` is checked with `satisfies Record<ConfigurableModuleId, …>` so a missing entry or a stray one is a compile error.
 
 ### Example Entry
 
@@ -154,6 +188,9 @@ The `MODULES` array is the single registry. All module-aware code reads from it.
   defaultLeft: true,
   defaultRight: false,
   previewSegment: (nf) => `${nf ? ' ' : 'on '}main`,
+  content: '$symbol$branch',
+  settings: ({ hasNerdFont }) =>
+    `symbol = "${hasNerdFont ? ' ' : 'on '}"`,
 }
 ```
 
@@ -171,14 +208,16 @@ interface PresetDef {
   label: string; // Display name
   description: string; // Shown below preset list
   requiresNerdFont: boolean; // Hidden if user has no Nerd Font
-  leftModules?: string[]; // Overrides default left modules
-  rightModules?: string[]; // Overrides default right modules
+  leftModules?: ModuleId[]; // Overrides default left modules
+  rightModules?: ModuleId[]; // Overrides default right modules
+  palette: PaletteId; // Colour theme this preset starts from
+  powerline: boolean; // Whether segments render as interlocking coloured blocks
 }
 ```
 
 12 presets defined. Presets with `requiresNerdFont: true` are filtered out in PresetScreen when `state.hasNerdFont` is `false`.
 
-When a preset is selected, its `leftModules` and `rightModules` replace the current state (with `character` always appended to leftModules by SegmentsScreen).
+When a preset is selected, its `leftModules` and `rightModules` replace the current state (with `character` always appended to leftModules by SegmentsScreen), and its `palette` and `powerline` seed the Style screen's pickers — the user can still change both there. Every preset names a different palette, so no two presets generate the same colours.
 
 ---
 
@@ -192,9 +231,11 @@ When a preset is selected, its `leftModules` and `rightModules` replace the curr
 interface ShellDef {
   id: ShellId;
   label: string;
+  binary: string; // Executable on PATH — not always the id (nushell → 'nu')
   rcFile: string | null; // Absolute path, or null for manual-only shells
   initLine: string; // Starship init command for this shell
   manualNote?: string; // Instructions shown on DoneScreen
+  pathLine?: (dir: string) => string; // PATH addition in this shell's syntax, used when starship needs one
 }
 ```
 
@@ -265,20 +306,18 @@ function resetSharedShellConfig(shellId: ShellId): { applied: boolean; note?: st
 
 ### detector.ts
 
+All detection is async — there are no sync counterparts, because every function
+runs while the Ink render loop is live and must not block it.
+
 ```typescript
-function detectPackageManager(): PackageManager;
+function detectPackageManagerAsync(): Promise<PackageManager>;
 // Returns detected package manager or 'script' fallback
 
-function isStarshipInstalled(): { installed: boolean; version?: string };
-// Checks starship --version
-
-function detectInstalledShells(): ShellId[];
-// Returns array of shells found in PATH
-
-// Async versions (non-blocking for Ink render loop)
-function detectPackageManagerAsync(): Promise<PackageManager>;
 function isStarshipInstalledAsync(): Promise<{ installed: boolean; version?: string }>;
+// Checks `starship --version`
+
 function detectInstalledShellsAsync(): Promise<ShellId[]>;
+// Returns shells found on PATH, one binary check per SHELLS entry
 ```
 
 ### installer.ts
@@ -299,9 +338,19 @@ function setDefaultShell(shellId: ShellId): Promise<void>;
 
 function getNerdFontsDir(): string;
 // Platform fonts directory: ~/Library/Fonts on darwin, ~/.local/share/fonts elsewhere
+
+function getMissingStarshipPathDir(): string | null;
+// The directory (~/.local/bin) that must be on PATH when the install script put
+// the binary there and the shell can't reach it, or null when starship is already
+// reachable.
 ```
 
-All installer functions use `spawnSync` with `stdio: 'inherit'` — they block execution and pass terminal I/O through for sudo prompts.
+All install commands go through `runCommand` in `src/services/exec.ts`: an async
+`spawn` with `stdio: 'inherit'` (so sudo prompts pass through), tty suspension
+via `src/services/tty.ts` for the child's lifetime, an optional `AbortSignal` to
+cancel in flight, and rejection on spawn error, signal kill, or non-zero exit.
+The Ink render loop is never blocked — commands run through `runInstallTasks`,
+not `spawnSync`.
 
 ### installTasks.ts
 
@@ -325,6 +374,9 @@ interface InstallTaskDeps {
     note?: string;
   };
   resetSharedShellConfig: (shellId: ShellId) => { applied: boolean; note?: string };
+  getShellsUsingStarship: () => Promise<ShellId[]>;
+  // Shells that run Starship and could inherit a leaked STARSHIP_CONFIG.
+  getMissingStarshipPathDir: () => string | null;
 }
 
 const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps;
@@ -333,10 +385,13 @@ const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps;
 function runInstallTasks(
   state: WizardState,
   deps: InstallTaskDeps,
-  onUpdate: (id: string, patch: Partial<InstallTask>) => void
+  onUpdate: (id: string, patch: Partial<InstallTask>) => void,
+  signal?: AbortSignal
 ): Promise<InstallTask[]>;
 // Executes every task sequentially, reporting status changes via onUpdate and
-// returning the final task list. Per-task failures don't halt the pipeline.
+// returning the final task list. Per-task failures don't halt the pipeline. An
+// optional AbortSignal halts the chain at phase boundaries and marks every task
+// that never ran as failed — never silently done.
 ```
 
 ---
@@ -345,8 +400,10 @@ function runInstallTasks(
 
 ### Adding a Module
 
-1. **`src/types.ts`** — no change needed (modules use string IDs)
-2. **`src/config/modules.ts`** — add to `ModuleId` type and `MODULES` array:
+1. **`src/config/modules.ts`** — add the id to `ConfigurableModuleId` and an
+   entry to `MODULE_DEFS`. Every module needs `label`, `description`,
+   `defaultLeft`/`defaultRight`, `previewSegment`, and `content` (the format the
+   powerline generator wraps in separators); most also provide `settings`:
    ```typescript
    {
      id: 'lua',
@@ -355,25 +412,23 @@ function runInstallTasks(
      defaultLeft: false,
      defaultRight: false,
      previewSegment: (nf) => `${nf ? '🌙 ' : 'lua '}5.4.0`,
+     content: '$symbol$version',
+     settings: ({ hasNerdFont }) =>
+       `symbol   = "${hasNerdFont ? '🌙 ' : 'lua '}"
+        disabled = false`.trim(),
    }
    ```
-3. **`src/generators/starship.ts`** — add case to `moduleBlock()`:
-   ```typescript
-   case 'lua':
-     return `
-   [lua]
-   symbol   = "${hasNerdFont ? '🌙 ' : 'lua '}"
-   style    = "bold blue"
-   disabled = false
-   `.trim();
-   ```
-4. **`src/components/PromptPreview.tsx`** — (optional) add entry to `MODULE_COLORS` for preview coloring
-
-Modules without a case in `moduleBlock()` fall through to the default block: `[id]\ndisabled = false`.
+2. **`src/config/palettes.ts`** — add a colour. `PaletteColorName` is keyed on
+   `ConfigurableModuleId`, so every palette is a compile error until it picks a
+   colour for the new module — this is deliberate. No other step: the generator
+   emits the `[section]`, `style`, and powerline `format` keys itself.
+3. **`src/components/PromptPreview.tsx`** — nothing to do. The preview reads
+   `previewSegment()` from the same definition.
 
 ### Adding a Preset
 
-**`src/config/presets.ts`** — add entry to `PRESETS` array:
+**`src/config/presets.ts`** — add entry to `PRESETS` array with a `palette` and
+`powerline` setting (name a distinct palette so the preset renders differently):
 
 ```typescript
 {
@@ -383,6 +438,8 @@ Modules without a case in `moduleBlock()` fall through to the default block: `[i
   requiresNerdFont: false,
   leftModules: ['directory', 'git_branch', 'character'],
   rightModules: [],
+  palette: 'mono',
+  powerline: false,
 }
 ```
 
@@ -391,9 +448,14 @@ No other files need changes. PresetScreen reads from the `PRESETS` array directl
 ### Adding a Shell
 
 1. **`src/types.ts`** — add to `ShellId` union
-2. **`src/config/shells.ts`** — add to `SHELLS` array with `rcFile`, `initLine`, and optional `manualNote`
-3. **`src/services/installer.ts`** — add package name mappings to `SHELL_PACKAGES` and binary name to `setDefaultShell()`
-4. **`src/services/detector.ts`** — add binary check to `detectInstalledShells()`
+2. **`src/config/shells.ts`** — add to `SHELLS` array with `binary`, `rcFile`,
+   `initLine`, and optional `manualNote`/`pathLine`. Shells without a script rc
+   file (nushell, powershell) use `rcFile: null` and get a manual `initLine` shown
+   on DoneScreen
+3. **`src/services/installer.ts`** — add package name mappings to
+   `SHELL_PACKAGES` (per package manager) for auto-install support
+4. **`src/services/detector.ts`** — no change needed: `detectInstalledShellsAsync`
+   iterates `SHELLS` and checks each `binary`
 
 ### Adding a Palette
 

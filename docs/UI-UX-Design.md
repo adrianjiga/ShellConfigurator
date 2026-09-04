@@ -43,7 +43,7 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 
 **Flow**:
 
-- On mount, runs async detection: package manager, Starship version, installed shells
+- On mount, runs async detection: package manager and Starship status (installed shells are detected later, on the Shell Select step)
 - Displays results as they complete
 - If Starship is installed: Enter to continue
 - If not: SelectInput with "Install automatically" / "I'll install manually"
@@ -90,7 +90,7 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 
 **Layout**: Filtered list of presets. Presets requiring Nerd Fonts are hidden if the user selected "no Nerd Font". Each preset shows a description below the list when highlighted.
 
-**Preview**: Updates live on highlight — modules change in the preview pane as the user scrolls through presets.
+**Preview**: The highlighted preset's description updates live below the list; the preview pane itself swaps only once a preset is confirmed with Enter (modules, palette, and powerline are committed together then).
 
 **Keys**: `↑↓` navigate, `Enter` select, `Esc` back
 
@@ -122,20 +122,31 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 
 **Purpose**: Choose character symbol and color scheme.
 
-**Layout**: Two side-by-side sections with focus indicator:
+**Layout**: Three sections stacked vertically — character, palette, and segment style (plain / powerline) — each with its own focus indicator:
 
 ```
-  Prompt character          Color scheme
-  › Arrow    ❯              › Default
-    Lambda   λ                Pastel
-    Dollar   $                Minimal
+  Style options
+
+  Prompt character
+  › Arrow    ❯
+    Lambda   λ
+    Dollar   $
+
+  Colour palette
+  › Default
+    Pastel
+    ...
+
+  Segment style
+  › Plain
+    Powerline   — separators between segments
 ```
 
-`Tab` switches focus between sections. The focused section shows items in bold.
+`Tab` cycles focus between sections. The focused section shows items in bold and reacts to arrows.
 
 **Preview**: Updates live as selections change.
 
-**Keys**: `↑↓` navigate within section, `Tab` switch section, `Enter` confirm, `Esc` back
+**Keys**: `↑↓` navigate within focused section, `Tab` switch section, `Enter` confirm, `Esc` back
 
 ---
 
@@ -185,7 +196,7 @@ Error details appear indented below failed tasks in red italic.
 
 If the user chose "Continue without Starship", the Starship task is omitted entirely and "Apply shell configs" is skipped with an "install Starship first" note — no init lines are written without Starship present.
 
-**No user input** — fully automated. Auto-advances to Done after 1200ms.
+**Input**: Minimal. `c` cancels the run — the task chain aborts at the next phase boundary, the command in flight is killed, and tasks that never ran are marked failed ("cancelled"), never done. Otherwise auto-advances to Done after a 1200ms pause.
 
 ---
 
@@ -245,7 +256,7 @@ Colors come from two sources:
 
 ### Update Behavior
 
-The preview re-renders on every state change. Screens that push live updates via `onUpdate` (SegmentsScreen, PresetScreen) cause immediate visual feedback as the user toggles modules or highlights presets.
+The preview re-renders on every state change. Screens that push live updates via `onUpdate` (SegmentsScreen as modules toggle, ShellScreen when detection lands) cause immediate visual feedback; the other screens change the prompt only when the user confirms a choice and the step advances.
 
 ---
 
