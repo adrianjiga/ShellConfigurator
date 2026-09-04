@@ -44,7 +44,12 @@ import { App } from '../app.tsx';
 const ENTER = '\r';
 const SPACE = ' ';
 
-afterEach(cleanup);
+const INITIAL_EXIT_CODE = process.exitCode;
+
+afterEach(() => {
+  cleanup();
+  process.exitCode = INITIAL_EXIT_CODE;
+});
 beforeEach(() => vi.clearAllMocks());
 
 async function flush() {
@@ -52,9 +57,13 @@ async function flush() {
 }
 
 /** Walks the wizard to the end and returns the TOML that was written. */
-async function runWizard(keys: string[]): Promise<string> {
+async function runWizard(
+  keys: string[],
+  instanceOut?: { instance: ReturnType<typeof render> }
+): Promise<string> {
   const instance = render(<App />);
   await flush();
+  if (instanceOut) instanceOut.instance = instance;
 
   for (const key of keys) {
     instance.stdin.write(key);
@@ -68,6 +77,16 @@ async function runWizard(keys: string[]): Promise<string> {
 
   expect(mockWriteConfig).toHaveBeenCalled();
   return mockWriteConfig.mock.calls[0]![0];
+}
+
+/** The InstallingScreen advances to Done ~1.2s after the chain ends; wait for it. */
+async function waitForDone(instance: { lastFrame: () => string | undefined }): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < 5000) {
+    await new Promise((r) => setTimeout(r, 25));
+    if (instance.lastFrame()?.includes('Done')) return;
+  }
+  throw new Error('never reached the done screen');
 }
 
 describe('full wizard walkthrough', () => {
@@ -131,5 +150,24 @@ describe('full wizard walkthrough', () => {
     const formatLine = toml.split('\n').find((l) => l.startsWith('format')) ?? '';
     const directoryRefs = formatLine.match(/\$directory/g) ?? [];
     expect(directoryRefs.length).toBeLessThanOrEqual(1);
+  });
+
+  it('keeps a clean exit code when every step succeeded', async () => {
+    const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
+    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER], out);
+    await waitForDone(out.instance);
+
+    expect(process.exitCode ?? 0).toBe(0);
+  });
+
+  it('exits non-zero when an install step fails', async () => {
+    // { applied: false } with no note makes the rc step fail ("Unknown shell"),
+    // which must surface as a non-zero exit so scripts can detect the failure.
+    mockApplyShellConfig.mockReturnValueOnce({ applied: false });
+    const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
+    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER], out);
+    await waitForDone(out.instance);
+
+    expect(process.exitCode).toBe(1);
   });
 });
