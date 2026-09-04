@@ -205,7 +205,7 @@ interface ShellDef {
 | zsh        | `~/.zshrc`                   | `eval "$(starship init zsh)"`                   |
 | bash       | `~/.bashrc`                  | `eval "$(starship init bash)"`                  |
 | fish       | `~/.config/fish/config.fish` | `starship init fish \| source`                  |
-| nushell    | `null` (manual)              | `starship init nu \| save -f ...`               |
+| nushell    | `null` (manual)              | `mkdir ($nu.data-dir ...); starship init nu \| save -f ...` |
 | powershell | `null` (manual)              | `Invoke-Expression (&starship init powershell)` |
 
 Shells with `rcFile: null` are not auto-configured. Instead, `manualNote` is displayed on DoneScreen.

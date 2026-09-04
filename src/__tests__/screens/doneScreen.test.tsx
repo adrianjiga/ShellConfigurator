@@ -54,6 +54,8 @@ describe('DoneScreen over real install results', () => {
     expect(frame).toContain('Run the above command once in Nushell');
     // The command the user has to run must be on screen, not just described.
     expect(frame).toContain('starship init nu');
+    // It must create the autoload directory first, or save -f fails on a fresh install.
+    expect(frame).toContain('mkdir ($nu.data-dir');
   });
 
   it('reports an already-configured shell as skipped rather than freshly applied', async () => {
