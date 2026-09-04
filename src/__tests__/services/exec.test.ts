@@ -143,6 +143,47 @@ describe('runCommand', () => {
     expect(isUiSuspended()).toBe(false);
   });
 
+  it('takes the terminal out of raw mode while the child runs and re-arms it after', async () => {
+    const setRawMode = vi.fn();
+    const realStdin = process.stdin;
+    Object.defineProperty(process, 'stdin', {
+      configurable: true,
+      value: { isTTY: true, setRawMode },
+    });
+
+    try {
+      let modeWhileRunning: boolean | undefined;
+      mockSpawn.mockImplementation(() => {
+        modeWhileRunning = setRawMode.mock.calls.at(-1)?.[0];
+        return childFor({ status: 0 });
+      });
+
+      await runCommand(['sudo', 'true']);
+
+      expect(modeWhileRunning).toBe(false);
+      expect(setRawMode.mock.calls.at(-1)?.[0]).toBe(true);
+    } finally {
+      Object.defineProperty(process, 'stdin', { configurable: true, value: realStdin });
+    }
+  });
+
+  it('re-arms raw mode even when the child fails', async () => {
+    const setRawMode = vi.fn();
+    const realStdin = process.stdin;
+    Object.defineProperty(process, 'stdin', {
+      configurable: true,
+      value: { isTTY: true, setRawMode },
+    });
+
+    try {
+      spawnOutcome({ status: 1 });
+      await expect(runCommand(['sudo', 'false'])).rejects.toThrow();
+      expect(setRawMode.mock.calls.at(-1)?.[0]).toBe(true);
+    } finally {
+      Object.defineProperty(process, 'stdin', { configurable: true, value: realStdin });
+    }
+  });
+
   it('rejects immediately when the signal is already aborted', async () => {
     const controller = new AbortController();
     controller.abort();
