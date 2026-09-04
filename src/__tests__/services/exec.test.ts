@@ -216,6 +216,29 @@ describe('runCommand', () => {
     await expect(promise).rejects.toThrow('killed by signal SIGTERM');
   });
 
+  it('does not clear another command when a superseded child exits late', async () => {
+    // runCommand holds the active child while it runs. A second command started
+    // first overwrites it; when that superseding child settles, the first one's
+    // late exit must not clear the now-empty active-child slot again — the guard
+    // `activeChild === child` covers that, but the null case never runs unless a
+    // child settles after a successor already did.
+    const childA = new EventEmitter() as EventEmitter & { kill: ReturnType<typeof vi.fn> };
+    childA.kill = vi.fn();
+    mockSpawn
+      .mockImplementationOnce(() => childA)
+      .mockImplementationOnce(() => childFor({ status: 0 }));
+
+    const a = runCommand(['sleep', '100']);
+    const b = runCommand(['true']);
+
+    await b;
+    // Sure-fire ordering: B has already settled before A emits its exit.
+    setImmediate(() => childA.emit('exit', 0, null));
+
+    await a;
+    expect(isUiSuspended()).toBe(false);
+  });
+
   it('settles and resumes the UI when the child exits but its stdio is left open', async () => {
     // A child that backgrounds a grandchild inheriting the shared tty (e.g. a pacman
     // post-transaction hook) keeps its stdio open, so 'close' never fires. runCommand
