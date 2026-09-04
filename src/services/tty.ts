@@ -59,8 +59,9 @@ export function resumeUi(): void {
   }
 }
 
-/** Test helper: drops all listeners and clears the suspension depth. */
+/** Test-only: drops listeners and clears the depth so tests cannot leak state. */
 export function resetUiSuspension(): void {
+  if (process.env.VITEST !== 'true') return;
   listeners.clear();
   depth = 0;
 }
