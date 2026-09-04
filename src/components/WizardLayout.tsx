@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useStdout } from 'ink';
 import { WizardState, WizardStep, STEP_ORDER } from '../types.ts';
 import { PromptPreview } from './PromptPreview.tsx';
 
@@ -22,8 +22,15 @@ interface WizardLayoutProps {
   hidePreview?: boolean;
 }
 
+// Below this many columns the side-by-side layout squeezes the prompt preview so
+// hard that the segments wrap into an unreadable block, so it is dropped instead.
+const PREVIEW_MIN_COLUMNS = 100;
+
 export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps) {
+  const { stdout } = useStdout();
   const currentIndex = Math.max(0, STEP_ORDER.indexOf(state.step));
+  const showPreview =
+    !hidePreview && (stdout?.columns ?? PREVIEW_MIN_COLUMNS) >= PREVIEW_MIN_COLUMNS;
 
   return (
     <Box flexDirection="column" padding={1}>
@@ -55,10 +62,17 @@ export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps
         {/* Left: wizard content */}
         <Box flexDirection="column" flexGrow={1} minWidth={40}>
           {children}
+          {!hidePreview && !showPreview && (
+            <Box marginTop={1}>
+              <Text color="gray" italic>
+                Preview hidden — widen the terminal to see it live.
+              </Text>
+            </Box>
+          )}
         </Box>
 
-        {/* Right: live preview (hidden on welcome/done) */}
-        {!hidePreview && (
+        {/* Right: live preview (hidden on narrow terminals and on welcome/done) */}
+        {showPreview && (
           <Box flexDirection="column" minWidth={36}>
             <PromptPreview state={state} />
           </Box>
