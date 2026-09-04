@@ -173,7 +173,7 @@ Some screens push state changes in real time (without advancing) so `PromptPrevi
 
 - **SegmentsScreen**: `useEffect` calls `onUpdate({ leftModules: [...] })` on every toggle
 - **ShellScreen**: pushes `installedShells` after async detection completes
-- **PresetScreen**: only the highlighted preset's *description* updates live (`onHighlight`); modules, palette, and powerline are committed on Enter, so the preview does not swap while scrolling presets
+- **PresetScreen**: only the highlighted preset's _description_ updates live (`onHighlight`); modules, palette, and powerline are committed on Enter, so the preview does not swap while scrolling presets
 
 ---
 

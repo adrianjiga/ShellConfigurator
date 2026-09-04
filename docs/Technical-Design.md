@@ -194,7 +194,7 @@ wizard is re-run.
 | Config      | Always                                  | Write per-shell configs (`~/.config/starship/<shell>.toml`) |
 | RC files    | Not `skipStarshipInstall`               | One task per shell: init line + `STARSHIP_CONFIG` pin       |
 
-The Config task writes *per-shell* configs, one per selected shell; the shared
+The Config task writes _per-shell_ configs, one per selected shell; the shared
 `~/.config/starship.toml` is never touched. The RC step is one task per shell so
 a failure in one does not taint the others, and it is followed by a final
 best-effort pass that writes an `unset STARSHIP_CONFIG` guard into any

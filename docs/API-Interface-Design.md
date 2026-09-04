@@ -60,7 +60,7 @@ interface InstallTask {
   label: string; // Display label
   status: InstallStatus; // Current status
   error?: string; // Error message if failed
-  note?: string;   // Non-error outcome detail (e.g. "already configured", manual steps)
+  note?: string; // Non-error outcome detail (e.g. "already configured", manual steps)
 }
 ```
 
@@ -71,10 +71,7 @@ nullable string with a sentinel, so "no font step", "route to the picker", and
 "install this id" cannot be confused and no consumer needs to know a magic value.
 
 ```typescript
-type NerdFontChoice =
-  | { kind: 'none' }
-  | { kind: 'select' }
-  | { kind: 'install'; id: string };
+type NerdFontChoice = { kind: 'none' } | { kind: 'select' } | { kind: 'install'; id: string };
 
 const NO_NERD_FONT: NerdFontChoice; // { kind: 'none' }
 
