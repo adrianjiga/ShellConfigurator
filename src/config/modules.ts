@@ -261,7 +261,7 @@ threshold = 30
 style     = "${tomlBasic(styleFor('err'))}"
 
 [[battery.display]]
-threshold = 80
+threshold = 100
 style     = "${tomlBasic(styleFor('battery'))}"
 `.trim(),
   },
@@ -273,7 +273,7 @@ style     = "${tomlBasic(styleFor('battery'))}"
 
     previewSegment: () => '2s',
     content: '$duration',
-    settings: () => `min_time = 2000`,
+    settings: () => `min_time = 0`,
   },
   jobs: {
     label: 'Background Jobs',
