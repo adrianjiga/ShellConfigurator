@@ -9,12 +9,13 @@ import {
 } from './installer.ts';
 import { generateToml } from '../generators/starship.ts';
 import {
-  writeStarshipConfig,
+  writeShellConfig,
   applyShellConfig,
+  resetSharedShellConfig,
   WriteConfigResult,
   ApplyShellConfigOptions,
 } from '../generators/shellRc.ts';
-import { isStarshipInstalledAsync } from './detector.ts';
+import { isStarshipInstalledAsync, detectInstalledShellsAsync } from './detector.ts';
 
 export interface InstallTaskDeps {
   isStarshipInstalled: () => Promise<{ installed: boolean; version?: string }>;
@@ -23,11 +24,14 @@ export interface InstallTaskDeps {
   installShell: (shellId: ShellId, pm: PackageManager) => Promise<void>;
   setDefaultShell: (shellId: ShellId) => Promise<void>;
   generateToml: (state: WizardState) => string;
-  writeStarshipConfig: (toml: string) => WriteConfigResult;
+  writeShellConfig: (toml: string, shellId: ShellId) => WriteConfigResult;
   applyShellConfig: (
     shellId: ShellId,
     options?: ApplyShellConfigOptions
   ) => { applied: boolean; note?: string };
+  resetSharedShellConfig: (shellId: ShellId) => { applied: boolean; note?: string };
+  /** Shells on this machine that run Starship and could inherit a leaked config. */
+  getShellsUsingStarship: () => Promise<ShellId[]>;
   getMissingStarshipPathDir: () => string | null;
 }
 
@@ -38,8 +42,10 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   installShell,
   setDefaultShell,
   generateToml,
-  writeStarshipConfig,
+  writeShellConfig,
   applyShellConfig,
+  resetSharedShellConfig,
+  getShellsUsingStarship: detectInstalledShellsAsync,
   getMissingStarshipPathDir,
 };
 
@@ -200,20 +206,29 @@ export async function runInstallTasks(
     return tasks;
   }
 
-  // --- Write starship.toml ---
+  // --- Write per-shell starship configs ---
+  // Each selected shell gets its own config file so the shared ~/.config/starship.toml
+  // (which other shells may already use) is never touched.
   update('config', { status: 'running' });
   try {
+    if (state.selectedShells.length === 0) {
+      throw new Error('No shells selected — nothing to configure');
+    }
+
     // hasNerdFont is set optimistically when the user opts into an install. If that
     // install failed, generating with it still true would write a config full of
     // glyphs the terminal cannot render.
     const configState = fontInstallFailed ? { ...state, hasNerdFont: false } : state;
     const toml = deps.generateToml(configState);
-    const written = deps.writeStarshipConfig(toml);
 
-    const notes = [
-      written?.backedUpTo ? `previous config saved to ${written.backedUpTo}` : null,
-      fontInstallFailed ? 'written without Nerd Font glyphs — the font install failed' : null,
-    ].filter(Boolean);
+    const notes: string[] = [];
+    for (const shellId of state.selectedShells) {
+      const written = deps.writeShellConfig(toml, shellId);
+      if (written?.backedUpTo) {
+        notes.push(`${shellId}: previous config saved to ${written.backedUpTo}`);
+      }
+    }
+    if (fontInstallFailed) notes.push('written without Nerd Font glyphs — the font install failed');
 
     update('config', {
       status: 'done',
@@ -253,6 +268,25 @@ export async function runInstallTasks(
       }
     } catch (err) {
       update(taskId, { status: 'failed', error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  // --- Reset leaked STARSHIP_CONFIG for shells not given their own config ---
+  // A configured shell exports STARSHIP_CONFIG pointing at its per-shell toml, which
+  // is inherited by any shell launched from it (e.g. `bash` typed from a configured
+  // zsh). Other Starship shells on the machine must clear the variable at startup so
+  // they fall back to the shared config instead of showing a parent shell's prompt.
+  // Skipped when Starship was not installed/configured at all.
+  if (!state.skipStarshipInstall) {
+    try {
+      const starshipShells = await deps.getShellsUsingStarship();
+      for (const shellId of starshipShells) {
+        if (state.selectedShells.includes(shellId)) continue;
+        if (cancelled()) break;
+        deps.resetSharedShellConfig(shellId);
+      }
+    } catch {
+      // Detection is best-effort; a failure must not fail the whole run.
     }
   }
 

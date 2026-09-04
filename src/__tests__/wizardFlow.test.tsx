@@ -14,15 +14,19 @@ vi.mock('../services/detector.ts', () => ({
   detectInstalledShellsAsync: vi.fn().mockResolvedValue(['zsh', 'bash', 'fish']),
 }));
 
-const { mockWriteConfig, mockApplyShellConfig } = vi.hoisted(() => ({
-  mockWriteConfig: vi.fn((_toml: string) => ({ path: '/tmp/starship.toml' })),
+const { mockWriteConfig, mockApplyShellConfig, mockResetSharedConfig } = vi.hoisted(() => ({
+  mockWriteConfig: vi.fn((_toml: string, _shellId: string) => ({
+    path: '/tmp/starship.toml',
+  })),
   mockApplyShellConfig: vi.fn(() => ({ applied: true })),
+  mockResetSharedConfig: vi.fn(() => ({ applied: false })),
 }));
 
 vi.mock('../generators/shellRc.ts', () => ({
-  writeStarshipConfig: mockWriteConfig,
+  writeShellConfig: mockWriteConfig,
   applyShellConfig: mockApplyShellConfig,
-  getConfigPath: () => '/tmp/starship.toml',
+  resetSharedShellConfig: mockResetSharedConfig,
+  getShellConfigPath: () => '/tmp/starship.toml',
 }));
 
 vi.mock('../services/installer.ts', () => ({
