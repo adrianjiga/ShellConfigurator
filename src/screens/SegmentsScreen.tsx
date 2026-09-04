@@ -109,29 +109,32 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
             const isTaken = takenByLeft.has(mod.id);
             const isChecked = enabled.has(mod.id);
             return (
-              <Box key={mod.id} flexDirection="row" gap={1}>
-                <Text color={isActive ? 'cyan' : 'gray'}>{isActive ? '›' : ' '}</Text>
-                <Text color={isTaken ? 'gray' : isChecked ? 'green' : 'gray'}>
-                  {isTaken ? '[–]' : isChecked ? '[✓]' : '[ ]'}
-                </Text>
-                <Text
-                  color={isTaken ? 'gray' : isActive ? 'white' : 'gray'}
-                  bold={isActive && !isTaken}
-                  dimColor={isTaken}
-                >
-                  {mod.label}
-                </Text>
-                {isTaken && (
-                  <Text color="gray" italic>
-                    {' '}
-                    — already on the left
+              <Box key={mod.id} flexDirection="column">
+                <Box flexDirection="row" gap={1}>
+                  <Text color={isActive ? 'cyan' : 'gray'}>{isActive ? '›' : ' '}</Text>
+                  <Text color={isTaken ? 'gray' : isChecked ? 'green' : 'gray'}>
+                    {isTaken ? '[–]' : isChecked ? '[✓]' : '[ ]'}
                   </Text>
-                )}
+                  <Text
+                    color={isTaken ? 'gray' : isActive ? 'white' : 'gray'}
+                    bold={isActive && !isTaken}
+                    dimColor={isTaken}
+                  >
+                    {mod.label}
+                  </Text>
+                  {isTaken && (
+                    <Text color="gray" italic>
+                      {' '}
+                      — already on the left
+                    </Text>
+                  )}
+                </Box>
                 {isActive && !isTaken && (
-                  <Text color="gray" italic>
-                    {' '}
-                    — {mod.description}
-                  </Text>
+                  <Box paddingLeft={6}>
+                    <Text color="gray" italic>
+                      {mod.description}
+                    </Text>
+                  </Box>
                 )}
               </Box>
             );

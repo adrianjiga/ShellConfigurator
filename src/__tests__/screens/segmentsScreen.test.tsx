@@ -35,6 +35,21 @@ describe('SegmentsScreen', () => {
     expect(instance.lastFrame()).not.toContain('Prompt character');
   });
 
+  it('renders the active description on its own indented line, not inline', async () => {
+    const { instance } = setup();
+    await flush();
+    // Cursor starts at index 0 = username.
+    const lines = (instance.lastFrame() ?? '').split('\n');
+    const toggleLine = lines.find((l) => l.includes('Username'));
+    const descriptionLine = lines.find((l) => l.includes('Current user (shown when SSH or root)'));
+    expect(toggleLine).toBeTruthy();
+    expect(descriptionLine).toBeTruthy();
+    // The description starts in the same column as the label, aligned under it.
+    expect(descriptionLine!.indexOf('Current user')).toBe(toggleLine!.indexOf('Username'));
+    // And it sits on its own line, never on the toggle/label line.
+    expect(descriptionLine).not.toContain('[✓]');
+  });
+
   it('does not call onUpdate on initial mount', async () => {
     const { onUpdate } = setup();
     await flush();
