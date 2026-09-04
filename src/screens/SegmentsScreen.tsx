@@ -17,6 +17,10 @@ interface SegmentsScreenProps {
 // not a ConfigurableModuleId, so MODULES already excludes it.
 const CONFIGURABLE = MODULES;
 
+function orderedModules(enabled: Set<ConfigurableModuleId>): ModuleId[] {
+  return CONFIGURABLE.filter((m) => enabled.has(m.id)).map((m) => m.id);
+}
+
 export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: SegmentsScreenProps) {
   const currentModules = side === 'left' ? state.leftModules : state.rightModules;
 
@@ -35,11 +39,12 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
       isInitialMount.current = false;
       return;
     }
-    const ordered = CONFIGURABLE.filter((m) => enabled.has(m.id)).map((m) => m.id);
+    const ordered = orderedModules(enabled);
+    const modules: ModuleId[] = side === 'left' ? [...ordered, 'character'] : ordered;
     if (side === 'left') {
-      onUpdate({ leftModules: [...ordered, 'character'] });
+      onUpdate({ leftModules: modules });
     } else {
-      onUpdate({ rightModules: ordered });
+      onUpdate({ rightModules: modules });
     }
     // onUpdate is a fresh closure each parent render; including it would loop on
     // every state push.
@@ -47,11 +52,12 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
   }, [enabled, side]);
 
   function saveAndProceed() {
-    const ordered = CONFIGURABLE.filter((m) => enabled.has(m.id)).map((m) => m.id);
+    const ordered = orderedModules(enabled);
+    const modules: ModuleId[] = side === 'left' ? [...ordered, 'character'] : ordered;
     if (side === 'left') {
-      onNext({ leftModules: [...new Set<ModuleId>([...ordered, 'character'])] });
+      onNext({ leftModules: modules });
     } else {
-      onNext({ rightModules: ordered });
+      onNext({ rightModules: modules });
     }
   }
 
@@ -109,29 +115,32 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
             const isTaken = takenByLeft.has(mod.id);
             const isChecked = enabled.has(mod.id);
             return (
-              <Box key={mod.id} flexDirection="row" gap={1}>
-                <Text color={isActive ? 'cyan' : 'gray'}>{isActive ? '›' : ' '}</Text>
-                <Text color={isTaken ? 'gray' : isChecked ? 'green' : 'gray'}>
-                  {isTaken ? '[–]' : isChecked ? '[✓]' : '[ ]'}
-                </Text>
-                <Text
-                  color={isTaken ? 'gray' : isActive ? 'white' : 'gray'}
-                  bold={isActive && !isTaken}
-                  dimColor={isTaken}
-                >
-                  {mod.label}
-                </Text>
-                {isTaken && (
-                  <Text color="gray" italic>
-                    {' '}
-                    — already on the left
+              <Box key={mod.id} flexDirection="column">
+                <Box flexDirection="row" gap={1}>
+                  <Text color={isActive ? 'cyan' : 'gray'}>{isActive ? '›' : ' '}</Text>
+                  <Text color={isTaken ? 'gray' : isChecked ? 'green' : 'gray'}>
+                    {isTaken ? '[–]' : isChecked ? '[✓]' : '[ ]'}
                   </Text>
-                )}
+                  <Text
+                    color={isTaken ? 'gray' : isActive ? 'white' : 'gray'}
+                    bold={isActive && !isTaken}
+                    dimColor={isTaken}
+                  >
+                    {mod.label}
+                  </Text>
+                  {isTaken && (
+                    <Text color="gray" italic>
+                      {' '}
+                      — already on the left
+                    </Text>
+                  )}
+                </Box>
                 {isActive && !isTaken && (
-                  <Text color="gray" italic>
-                    {' '}
-                    — {mod.description}
-                  </Text>
+                  <Box paddingLeft={6}>
+                    <Text color="gray" italic>
+                      {mod.description}
+                    </Text>
+                  </Box>
                 )}
               </Box>
             );

@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import { WizardState, InstallStatus, fontIdToInstall } from '../types.ts';
 import { WizardLayout } from '../components/WizardLayout.tsx';
-import { getConfigPath } from '../generators/shellRc.ts';
+import { getShellConfigPath } from '../generators/shellRc.ts';
 import { getShell } from '../config/shells.ts';
 import { rcTaskId } from '../services/installTasks.ts';
 import { NERD_FONTS } from '../services/installer.ts';
@@ -88,9 +88,17 @@ export function DoneScreen({ state }: DoneScreenProps) {
           <Box flexDirection="column">
             <Box flexDirection="row" gap={1}>
               <StatusMark status={configStatus} />
-              <Text>{configStatus === 'done' ? 'Config written to' : 'Config not written to'}</Text>
-              <Text color="cyan">{getConfigPath()}</Text>
+              <Text>
+                {configStatus === 'done' ? 'Per-shell config written' : 'Config not written'}
+              </Text>
             </Box>
+            {configStatus === 'done' &&
+              state.selectedShells.map((shellId) => (
+                <Box key={shellId} marginLeft={3} flexDirection="row" gap={1}>
+                  <Text color="cyan">{getShellConfigPath(shellId)}</Text>
+                  <Text color="gray">(for {shellId})</Text>
+                </Box>
+              ))}
             {configStatus === 'failed' && (
               <Box marginLeft={3}>
                 <Text color="red" italic>
@@ -149,7 +157,9 @@ export function DoneScreen({ state }: DoneScreenProps) {
                     {rcStatus === 'done'
                       ? `init line added to ${shell?.rcFile}`
                       : rcStatus === 'skipped'
-                        ? (rcNote ?? 'skipped')
+                        ? shell?.rcFile
+                          ? (rcNote ?? 'skipped')
+                          : 'set up manually'
                         : rcStatus === 'failed'
                           ? 'not configured'
                           : 'status unknown'}
@@ -169,17 +179,17 @@ export function DoneScreen({ state }: DoneScreenProps) {
                     </Text>
                   </Box>
                 )}
-                {rcStatus === 'done' && rcNote && (
+                {/* Manual-only shells (nushell, powershell) show the init command above its note. */}
+                {rcStatus === 'skipped' && !shell?.rcFile && shell?.initLine && (
+                  <Box marginLeft={3}>
+                    <Text color="cyan">{shell.initLine}</Text>
+                  </Box>
+                )}
+                {(rcStatus === 'done' || (rcStatus === 'skipped' && !shell?.rcFile)) && rcNote && (
                   <Box marginLeft={3}>
                     <Text color="gray" italic>
                       {rcNote}
                     </Text>
-                  </Box>
-                )}
-                {/* Shells with no rc file (nushell, powershell) need the init line run by hand */}
-                {rcStatus === 'skipped' && !shell?.rcFile && shell?.initLine && (
-                  <Box marginLeft={3}>
-                    <Text color="cyan">{shell.initLine}</Text>
                   </Box>
                 )}
               </Box>

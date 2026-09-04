@@ -33,11 +33,12 @@ interface SpawnOutcome {
 
 function childFor(outcome: SpawnOutcome) {
   const child = new EventEmitter() as EventEmitter & { kill: ReturnType<typeof vi.fn> };
-  child.kill = vi.fn(() => child.emit('close', null, 'SIGTERM'));
+  // runCommand settles on 'exit' (not 'close' — see exec.ts), so the mock must emit it.
+  child.kill = vi.fn(() => child.emit('exit', null, 'SIGTERM'));
   if (!outcome.hang) {
     setImmediate(() => {
       if (outcome.error) child.emit('error', outcome.error);
-      else child.emit('close', outcome.status ?? 0, outcome.signal ?? null);
+      else child.emit('exit', outcome.status ?? 0, outcome.signal ?? null);
     });
   }
   return child;
@@ -142,6 +143,47 @@ describe('runCommand', () => {
     expect(isUiSuspended()).toBe(false);
   });
 
+  it('takes the terminal out of raw mode while the child runs and re-arms it after', async () => {
+    const setRawMode = vi.fn();
+    const realStdin = process.stdin;
+    Object.defineProperty(process, 'stdin', {
+      configurable: true,
+      value: { isTTY: true, setRawMode },
+    });
+
+    try {
+      let modeWhileRunning: boolean | undefined;
+      mockSpawn.mockImplementation(() => {
+        modeWhileRunning = setRawMode.mock.calls.at(-1)?.[0];
+        return childFor({ status: 0 });
+      });
+
+      await runCommand(['sudo', 'true']);
+
+      expect(modeWhileRunning).toBe(false);
+      expect(setRawMode.mock.calls.at(-1)?.[0]).toBe(true);
+    } finally {
+      Object.defineProperty(process, 'stdin', { configurable: true, value: realStdin });
+    }
+  });
+
+  it('re-arms raw mode even when the child fails', async () => {
+    const setRawMode = vi.fn();
+    const realStdin = process.stdin;
+    Object.defineProperty(process, 'stdin', {
+      configurable: true,
+      value: { isTTY: true, setRawMode },
+    });
+
+    try {
+      spawnOutcome({ status: 1 });
+      await expect(runCommand(['sudo', 'false'])).rejects.toThrow();
+      expect(setRawMode.mock.calls.at(-1)?.[0]).toBe(true);
+    } finally {
+      Object.defineProperty(process, 'stdin', { configurable: true, value: realStdin });
+    }
+  });
+
   it('rejects immediately when the signal is already aborted', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -172,5 +214,44 @@ describe('runCommand', () => {
     killActiveCommand();
 
     await expect(promise).rejects.toThrow('killed by signal SIGTERM');
+  });
+
+  it('does not clear another command when a superseded child exits late', async () => {
+    // runCommand holds the active child while it runs. A second command started
+    // first overwrites it; when that superseding child settles, the first one's
+    // late exit must not clear the now-empty active-child slot again — the guard
+    // `activeChild === child` covers that, but the null case never runs unless a
+    // child settles after a successor already did.
+    const childA = new EventEmitter() as EventEmitter & { kill: ReturnType<typeof vi.fn> };
+    childA.kill = vi.fn();
+    mockSpawn
+      .mockImplementationOnce(() => childA)
+      .mockImplementationOnce(() => childFor({ status: 0 }));
+
+    const a = runCommand(['sleep', '100']);
+    const b = runCommand(['true']);
+
+    await b;
+    // Sure-fire ordering: B has already settled before A emits its exit.
+    setImmediate(() => childA.emit('exit', 0, null));
+
+    await a;
+    expect(isUiSuspended()).toBe(false);
+  });
+
+  it('settles and resumes the UI when the child exits but its stdio is left open', async () => {
+    // A child that backgrounds a grandchild inheriting the shared tty (e.g. a pacman
+    // post-transaction hook) keeps its stdio open, so 'close' never fires. runCommand
+    // must settle on 'exit' so the promise resolves and the UI resumes regardless.
+    const child = new EventEmitter() as EventEmitter & { kill: ReturnType<typeof vi.fn> };
+    child.kill = vi.fn();
+    mockSpawn.mockImplementation(() => {
+      // Emit exit (process ended) but never emit close (stdio still open).
+      setImmediate(() => child.emit('exit', 0, null));
+      return child;
+    });
+
+    await expect(runCommand(['sudo', 'pacman', '-S', 'zsh'])).resolves.toBeUndefined();
+    expect(isUiSuspended()).toBe(false);
   });
 });

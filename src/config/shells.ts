@@ -44,7 +44,7 @@ export const SHELLS: ShellDef[] = [
     binary: 'nu',
     label: 'Nushell',
     rcFile: null,
-    initLine: 'starship init nu | save -f ($nu.data-dir | path join "vendor/autoload/starship.nu")',
+    initLine: `mkdir ($nu.data-dir | path join "vendor/autoload"); $"export-env { $env.STARSHIP_CONFIG = '($nu.default-config-dir | path dirname | path join starship nushell.toml)' }" | save -f ($nu.data-dir | path join "vendor/autoload/starship-config.nu"); starship init nu | save -f ($nu.data-dir | path join "vendor/autoload/starship.nu")`,
     manualNote: 'Run the above command once in Nushell to set up Starship.',
   },
   {

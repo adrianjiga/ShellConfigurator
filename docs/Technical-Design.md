@@ -129,37 +129,46 @@ style  = "bold purple"
 
 **File**: `src/generators/shellRc.ts`
 
-### Config File Writing
+### Per-Shell Config Writing
 
-`writeStarshipConfig(toml)` writes the generated TOML to `~/.config/starship.toml`:
+`writeShellConfig(toml, shellId)` writes the generated TOML to `~/.config/starship/<shell>.toml`
+(`$XDG_CONFIG_HOME` honoured when set):
 
-1. Ensures `~/.config/` exists via `mkdirSync({ recursive: true })`
-2. Overwrites the file with `writeFileSync()`
+1. Ensures the per-shell config directory exists
+2. Backs up any existing per-shell config to `<shell>.toml.bak-<timestamp>` — overwriting is the one irreversible step in the wizard
+3. Writes the new file
+
+The shared `~/.config/starship.toml` is never touched, so a shell bootstrapped globally (or another tool) keeps working.
 
 ### Shell Init Line Injection
 
-`applyShellConfig(shellId)` appends the Starship init command to the shell's RC file:
+`applyShellConfig(shellId)` appends the Starship init line to the shell's RC file together with a
+`STARSHIP_CONFIG` export that points at that shell's per-shell config, so each shell renders its own prompt:
 
 ```
-~/.zshrc         → eval "$(starship init zsh)"
-~/.bashrc        → eval "$(starship init bash)"
-~/.config/fish/config.fish → starship init fish | source
+# Added by ShellConfigurator
+export STARSHIP_CONFIG="/home/u/.config/starship/zsh.toml"
+eval "$(starship init zsh)"
 ```
+
+Fish uses `set -gx STARSHIP_CONFIG ...`; nushell and PowerShell have `rcFile: null` and return their
+manual note instead.
 
 **Pipeline**:
 
 1. Look up shell definition via `getShell(id)`
 2. If `rcFile` is `null` (nushell, powershell): return manual instructions
 3. Create parent directory if missing (important for Fish: `~/.config/fish/`)
-4. Read existing file content
-5. **Idempotency check**: if the init line is already present, skip
-6. Append with a comment header:
-   ```
-   # Added by ShellConfigurator
-   eval "$(starship init zsh)"
-   ```
+4. Read existing content, then **drop any stale block of the opposite kind** — e.g. an `unset STARSHIP_CONFIG` guard left over from an earlier run where the shell wasn't selected — so a re-run can repair a polluted rc file
+5. **Idempotency check**: if the config line is already present, skip
+6. Append the new block
 
-The idempotency check uses a simple `string.includes()` — it only matches the exact init line, so a commented-out line (`# eval "$(starship init bash)"`) does not prevent re-addition.
+`resetSharedShellConfig(shellId)` is the mirror image: it removes any per-shell
+block and appends `unset STARSHIP_CONFIG` (fish: `set -e STARSHIP_CONFIG`). Shells that still run
+starship but weren't given their own config use it to fall back to the shared file instead of
+inheriting a `STARSHIP_CONFIG` leaked from a configured parent shell. Both functions remove the
+other's old blocks, so "per-shell" and "shared" stay mutually exclusive no matter how many times the
+wizard is re-run.
 
 ---
 
@@ -318,7 +327,7 @@ WelcomeScreen and ShellScreen use the async versions. InstallingScreen runs its 
 
 ### Cross-Distro Smoke Testing
 
-The `.github/workflows/ci.yml` `distro-smoke` job runs the non-destructive parts — `detectPackageManager`, `detectInstalledShells`, `isStarshipInstalled`, `generateToml` (parsed as TOML for every preset), and `applyShellConfig` idempotency against a scratch `HOME` — inside Ubuntu, Debian, Fedora, and Arch containers (`scripts/docker-smoke.mjs`). This exercises the detection chain against real `/etc/os-release` and package-manager layouts without a VM matrix. It caught the `which`-absence issue on Fedora that led to the `command -v` change above.
+The `.github/workflows/ci.yml` `distro-smoke` job runs the non-destructive parts — `detectPackageManager`, `detectInstalledShells`, `isStarshipInstalled`, `generateToml` (parsed as TOML for every preset), `applyShellConfig` idempotency, the nushell manual command resolving to its per-shell config, and `applyShellConfig`/`resetSharedShellConfig` staying mutually exclusive across re-runs (stale unset guards dropped, polluted rc files repaired) — all against a scratch `HOME` inside Ubuntu, Debian, Fedora, and Arch containers (`scripts/docker-smoke.mjs`). This exercises the detection chain against real `/etc/os-release` and package-manager layouts without a VM matrix. It caught the `which`-absence issue on Fedora that led to the `command -v` change above. Containers that ship an old Node get a pinned Node 22 tarball from `scripts/ci/distro-setup.sh` first, so every container runs the same engine floor.
 
 ---
 

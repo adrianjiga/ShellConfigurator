@@ -100,7 +100,9 @@ export function runCommand(args: string[], options: { signal?: AbortSignal } = {
 
     child.on('error', (err) => settle(() => reject(err)));
 
-    child.on('close', (status, signal) => {
+    // 'exit' not 'close': a child that backgrounds a grandchild keeps its stdio
+    // open, so 'close' never fires even though the process has ended.
+    child.on('exit', (status, signal) => {
       if (cancelled) {
         settle(() => reject(new CommandCancelledError(printable)));
       } else if (signal) {

@@ -16,8 +16,10 @@ function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
     installShell: vi.fn().mockResolvedValue(undefined),
     setDefaultShell: vi.fn().mockResolvedValue(undefined),
     generateToml: vi.fn(() => 'format = "$character"'),
-    writeStarshipConfig: vi.fn(() => ({ path: '/home/u/.config/starship.toml' })),
+    writeShellConfig: vi.fn(() => ({ path: '/home/u/.config/starship/zsh.toml' })),
     applyShellConfig: vi.fn(() => ({ applied: true })),
+    resetSharedShellConfig: vi.fn(() => ({ applied: false })),
+    getShellsUsingStarship: vi.fn().mockResolvedValue([]),
     getMissingStarshipPathDir: vi.fn(() => null),
     ...overrides,
   };
@@ -52,6 +54,12 @@ describe('DoneScreen over real install results', () => {
     expect(frame).toContain('Run the above command once in Nushell');
     // The command the user has to run must be on screen, not just described.
     expect(frame).toContain('starship init nu');
+    // It must create the autoload directory first, or save -f fails on a fresh install.
+    expect(frame).toContain('mkdir ($nu.data-dir');
+    // ...and pin STARSHIP_CONFIG to the per-shell config, or nu falls back to
+    // the shared ~/.config/starship.toml (no rc file to export it).
+    expect(frame).toContain('starship-config.nu');
+    expect(frame).toContain('path join starship nushell.toml');
   });
 
   it('reports an already-configured shell as skipped rather than freshly applied', async () => {
@@ -100,14 +108,14 @@ describe('DoneScreen over real install results', () => {
     const frame = await runAndRender(
       { selectedShells: ['zsh'], installedShells: ['zsh'] },
       fakeDeps({
-        writeStarshipConfig: vi.fn(() => {
+        writeShellConfig: vi.fn(() => {
           throw new Error('permission denied');
         }),
       })
     );
 
     expect(frame).toContain('Finished with errors');
-    expect(frame).toContain('Config not written to');
+    expect(frame).toContain('Config not written');
     expect(frame).toContain('permission denied');
   });
 

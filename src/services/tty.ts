@@ -27,20 +27,41 @@ export function subscribeToUiSuspension(listener: SuspendListener): () => void {
   };
 }
 
+/**
+ * Returns the TTY to canonical mode while a child owns it (raw mode would break
+ * password/confirmation input), and re-arms it afterwards for Ink.
+ */
+function setRawModeStandard(enabled: boolean): void {
+  try {
+    if (process.stdin.isTTY && process.stdin.setRawMode) {
+      process.stdin.setRawMode(enabled);
+    }
+  } catch {
+    // Not a TTY (pipelines, tests) or already in the requested mode — nothing to do.
+  }
+}
+
 /** Hands the terminal to a child process. Nestable; resume the same number of times. */
 export function suspendUi(): void {
   depth += 1;
-  if (depth === 1) notify();
+  if (depth === 1) {
+    setRawModeStandard(false);
+    notify();
+  }
 }
 
 export function resumeUi(): void {
   if (depth === 0) return;
   depth -= 1;
-  if (depth === 0) notify();
+  if (depth === 0) {
+    setRawModeStandard(true);
+    notify();
+  }
 }
 
-/** Test helper: drops all listeners and clears the suspension depth. */
+/** Test-only: drops listeners and clears the depth so tests cannot leak state. */
 export function resetUiSuspension(): void {
+  if (process.env.VITEST !== 'true') return;
   listeners.clear();
   depth = 0;
 }

@@ -8,7 +8,7 @@ Interactive Ink (React) TUI that walks users through configuring Starship. Node 
 - `npm test` / `npm test -- --run <file>` — vitest, tests in `src/__tests__/` mirroring `src/`. Single test: `npx vitest run src/__tests__/generators/starship.test.ts`. `npm run test:coverage` adds the v8 report (thresholds in `vitest.config.ts`).
 - `npm run lint` (eslint, `no-explicit-any` is an error), `npm run format:check` / `npm run format` (prettier).
 - `npm run build` — `tsc`, emits `dist/`. `npm run typecheck` (`tsconfig.test.json`) type-checks **including** `src/__tests__`, which the build config excludes; run it before pushing.
-- CI (`.github/workflows/ci.yml`) runs lint, format:check, typecheck, build, coverage (node 22 + 24 on ubuntu, plus a macOS runner), and a `distro-smoke` Docker matrix as separate jobs — nothing runs the wizard itself. GitHub Actions are pinned to commit SHAs with `# vX.Y.Z` comments so Dependabot can update them.
+- CI splits into `.github/workflows/ci.yml` (lint, format:check, typecheck, build, and the `distro-smoke` Docker matrix) and `.github/workflows/tests.yml` (the v8 coverage gate on node 22 + 24 ubuntu plus a macOS runner). Both trigger on push to master and PRs to master — nothing runs the wizard itself. GitHub Actions are pinned to commit SHAs with `# vX.Y.Z` comments so Dependabot can update them.
 - `.npmrc` sets `legacy-peer-deps=true` — required for Ink's peer deps; don't remove. `prepare` runs `npm run build` on every install.
 
 ## Architecture
@@ -27,6 +27,7 @@ Interactive Ink (React) TUI that walks users through configuring Starship. Node 
 - ESM: relative imports name the real source file (e.g. `from './types.ts'`, `from './App.tsx'`). `rewriteRelativeImportExtensions` rewrites them to `.js` on emit, so `dist/` stays valid for Node's ESM resolver. Never write `.js` in source.
 - Package manager detection order matters and is asserted in tests: brew → pacman → os-release distro id → apt-get/dnf binary → `script`.
 - Binary checks live in `services/exec.ts` and use `sh -c 'command -v "$1"' sh <cmd>`, never `which` — `which` is absent on minimal/Fedora/Alpine images, and passing the name as `$1` keeps it out of the script text. The CI `distro-smoke` job guards it.
+- The `distro-smoke` containers run `scripts/ci/distro-setup.sh` first, which upgrades to a pinned Node 22 tarball when the distro ships an older node (debian/ubuntu ship 18) so the run uses the same engine floor as everywhere else. Don't remove or inline it.
 - All install commands go through `runCommand` in `services/exec.ts`: async `spawn`, never `spawnSync`, and it suspends the Ink UI (`services/tty.ts`) for the child's lifetime so sudo prompts are not painted over.
 - `detector.test.ts` shows the required mocking pattern: `vi.hoisted` mocks plus a `Symbol.for('nodejs.util.promisify.custom')` stub so promisified `execFile` resolves correctly. Follow it when adding detection tests.
-- `shellRc.ts` `applyShellConfig` is idempotent (skips if the init line is already present) — keep that behavior.
+- `shellRc.ts` `applyShellConfig`/`resetSharedShellConfig` are idempotent **and mutually exclusive**: each removes the other's stale `Added by ShellConfigurator` blocks before writing, so a re-run can repair an rc file polluted by earlier runs that switched that shell between configured and unconfigured. Keep that behavior.

@@ -10,8 +10,10 @@ function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
     installShell: vi.fn().mockResolvedValue(undefined),
     setDefaultShell: vi.fn().mockResolvedValue(undefined),
     generateToml: vi.fn(() => 'format = "$character"'),
-    writeStarshipConfig: vi.fn(() => ({ path: '/home/u/.config/starship.toml' })),
+    writeShellConfig: vi.fn(() => ({ path: '/home/u/.config/starship/zsh.toml' })),
     applyShellConfig: vi.fn(() => ({ applied: true })),
+    resetSharedShellConfig: vi.fn(() => ({ applied: false })),
+    getShellsUsingStarship: vi.fn().mockResolvedValue([]),
     getMissingStarshipPathDir: vi.fn(() => null),
     ...overrides,
   };
@@ -120,25 +122,30 @@ describe('runInstallTasks', () => {
     expect(results.find((t) => t.id === 'chsh')?.status).toBe('done');
   });
 
-  it('writes the generated toml', async () => {
+  it('writes a per-shell toml for each selected shell', async () => {
     const deps = fakeDeps();
-    const results = await runInstallTasks(state(), deps, vi.fn());
+    const results = await runInstallTasks(
+      state({ selectedShells: ['bash', 'zsh'] }),
+      deps,
+      vi.fn()
+    );
 
     expect(deps.generateToml).toHaveBeenCalledWith(expect.objectContaining({ step: 'welcome' }));
-    expect(deps.writeStarshipConfig).toHaveBeenCalledWith('format = "$character"');
+    expect(deps.writeShellConfig).toHaveBeenCalledWith('format = "$character"', 'bash');
+    expect(deps.writeShellConfig).toHaveBeenCalledWith('format = "$character"', 'zsh');
     expect(results.find((t) => t.id === 'config')?.status).toBe('done');
   });
 
-  it('reports the backup path when an existing config was replaced', async () => {
+  it('reports the backup path when an existing per-shell config was replaced', async () => {
     const deps = fakeDeps({
-      writeStarshipConfig: vi.fn(() => ({
-        path: '/home/u/.config/starship.toml',
-        backedUpTo: '/home/u/.config/starship.toml.bak-2026',
+      writeShellConfig: vi.fn(() => ({
+        path: '/home/u/.config/starship/zsh.toml',
+        backedUpTo: '/home/u/.config/starship/zsh.toml.bak-2026',
       })),
     });
-    const results = await runInstallTasks(state(), deps, vi.fn());
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
 
-    expect(results.find((t) => t.id === 'config')?.note).toContain('starship.toml.bak-2026');
+    expect(results.find((t) => t.id === 'config')?.note).toContain('zsh.toml.bak-2026');
   });
 
   it('regenerates the config without nerd font glyphs when the font install fails', async () => {
@@ -147,6 +154,7 @@ describe('runInstallTasks', () => {
     });
     const results = await runInstallTasks(
       state({
+        selectedShells: ['zsh'],
         nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' },
         hasNerdFont: true,
       }),
@@ -162,6 +170,7 @@ describe('runInstallTasks', () => {
     const deps = fakeDeps();
     await runInstallTasks(
       state({
+        selectedShells: ['zsh'],
         nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' },
         hasNerdFont: true,
       }),
@@ -275,7 +284,7 @@ describe('runInstallTasks', () => {
 
     // Nothing after the abort point may run.
     expect(deps.installShell).not.toHaveBeenCalled();
-    expect(deps.writeStarshipConfig).not.toHaveBeenCalled();
+    expect(deps.writeShellConfig).not.toHaveBeenCalled();
     expect(deps.applyShellConfig).not.toHaveBeenCalled();
 
     // And no unrun task may be left looking successful.
@@ -296,7 +305,7 @@ describe('runInstallTasks', () => {
       controller.signal
     );
 
-    expect(deps.writeStarshipConfig).toHaveBeenCalled();
+    expect(deps.writeShellConfig).toHaveBeenCalled();
     expect(results.find((t) => t.id === 'rc_zsh')?.status).toBe('done');
   });
 
@@ -309,5 +318,35 @@ describe('runInstallTasks', () => {
     expect(onUpdate).toHaveBeenCalledWith('starship', { status: 'done' });
     expect(onUpdate).toHaveBeenCalledWith('config', { status: 'done' });
     expect(onUpdate).toHaveBeenCalledWith('rc_zsh', { status: 'done' });
+  });
+
+  it('resets STARSHIP_CONFIG on starship shells not given their own config', async () => {
+    const deps = fakeDeps({
+      getShellsUsingStarship: vi.fn().mockResolvedValue(['bash', 'fish', 'zsh']),
+    });
+    await runInstallTasks(
+      state({ selectedShells: ['zsh'], installedShells: ['zsh'] }),
+      deps,
+      vi.fn()
+    );
+
+    // bash and fish are not getting their own config, so they must be reset so they
+    // never inherit zsh's exported STARSHIP_CONFIG. zsh is selected, so it is skipped.
+    expect(deps.resetSharedShellConfig).toHaveBeenCalledWith('bash');
+    expect(deps.resetSharedShellConfig).toHaveBeenCalledWith('fish');
+    expect(deps.resetSharedShellConfig).not.toHaveBeenCalledWith('zsh');
+  });
+
+  it('does not reset shells when starship install is skipped', async () => {
+    const deps = fakeDeps({
+      getShellsUsingStarship: vi.fn().mockResolvedValue(['bash', 'zsh']),
+    });
+    await runInstallTasks(
+      state({ skipStarshipInstall: true, selectedShells: ['zsh'], installedShells: ['zsh'] }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.resetSharedShellConfig).not.toHaveBeenCalled();
   });
 });

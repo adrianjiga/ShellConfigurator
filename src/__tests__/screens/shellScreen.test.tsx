@@ -127,6 +127,26 @@ describe('ShellScreen', () => {
     expect(instance.lastFrame()).toContain('› [✓] Bash');
   });
 
+  it('warns about manual shells without implying a command is already shown', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh', 'nushell']);
+    const { instance } = setup();
+    await flush();
+    await flush();
+
+    // nushell is index 3: zsh, bash, fish, nushell.
+    instance.stdin.write('\u001B[B');
+    await flush();
+    instance.stdin.write('\u001B[B');
+    await flush();
+    instance.stdin.write('\u001B[B');
+    await flush();
+
+    expect(instance.lastFrame()).toContain('Manual setup required');
+    // "Run the above command" only makes sense on the summary screen, where the
+    // command is actually shown above the note — never here, before installation.
+    expect(instance.lastFrame()).not.toContain('Run the above command');
+  });
+
   it('calls onBack on Escape', async () => {
     vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh']);
     const { instance, onBack } = setup();
