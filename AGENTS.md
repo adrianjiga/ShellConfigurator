@@ -24,6 +24,9 @@ Interactive Ink (React) TUI that walks users through configuring Starship. Node 
 
 ## Conventions
 
+- Always use conventional commit messages (e.g. `feat:`, `fix:`, `ci:`, `docs:`, `chore:`).
+- Never commit or push directly to `master`/`main` — every change goes through a feature branch and a PR.
+- Every PR description has these sections: **Summary**, **Why**, **What Changed**.
 - ESM: relative imports name the real source file (e.g. `from './types.ts'`, `from './App.tsx'`). `rewriteRelativeImportExtensions` rewrites them to `.js` on emit, so `dist/` stays valid for Node's ESM resolver. Never write `.js` in source.
 - Package manager detection order matters and is asserted in tests: brew → pacman → os-release distro id → apt-get/dnf binary → `script`.
 - Binary checks live in `services/exec.ts` and use `sh -c 'command -v "$1"' sh <cmd>`, never `which` — `which` is absent on minimal/Fedora/Alpine images, and passing the name as `$1` keeps it out of the script text. The CI `distro-smoke` job guards it.
