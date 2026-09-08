@@ -33,6 +33,15 @@ npm install -g shell-configurator
 shell-configurator
 ```
 
+### Via curl (requires Node.js 22+)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/adrianjiga/ShellConfigurator/master/scripts/install.sh | sh
+```
+
+This downloads the latest release to a per-user directory and symlinks the
+binary into `~/.local/bin` — no root required. Safe to re-run for updates.
+
 ### From a clone
 
 ```bash
@@ -41,6 +50,9 @@ npm run dev
 ```
 
 The wizard exits non-zero if any install step fails, so it can be used in a script.
+
+All releases, including changelogs and install tarballs, are published on
+[GitHub Releases](https://github.com/adrianjiga/ShellConfigurator/releases).
 
 ### Wizard steps
 
