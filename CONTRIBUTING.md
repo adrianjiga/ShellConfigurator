@@ -23,16 +23,16 @@ The project is pure ESM. Relative imports name the real source file
 
 ## Useful commands
 
-| Command                  | What it does                                          |
-| ------------------------ | ----------------------------------------------------- |
-| `npm test`               | Run unit tests (vitest)                               |
-| `npm run test:coverage`  | Tests + v8 coverage report (CI enforces thresholds)   |
-| `npm run lint`           | ESLint (`no-explicit-any` is an error)                |
-| `npm run format:check`   | Prettier check                                        |
-| `npm run format`         | Prettier write                                        |
-| `npm run typecheck`      | Full type-check including tests                       |
-| `npm run build`          | Emit `dist/` with `tsc`                               |
-| `npm run dev`            | Run the wizard via tsx — **read the warning below**   |
+| Command                 | What it does                                        |
+| ----------------------- | --------------------------------------------------- |
+| `npm test`              | Run unit tests (vitest)                             |
+| `npm run test:coverage` | Tests + v8 coverage report (CI enforces thresholds) |
+| `npm run lint`          | ESLint (`no-explicit-any` is an error)              |
+| `npm run format:check`  | Prettier check                                      |
+| `npm run format`        | Prettier write                                      |
+| `npm run typecheck`     | Full type-check including tests                     |
+| `npm run build`         | Emit `dist/` with `tsc`                             |
+| `npm run dev`           | Run the wizard via tsx — **read the warning below** |
 
 ### Never run `npm run dev` to "test" changes
 
@@ -91,7 +91,7 @@ Nothing is ever committed or pushed directly to `master` — it is protected.
 
 - ESLint and Prettier are enforced; `no-explicit-any` fails the build.
 - No emojis in code, docs, or commit messages unless there is a concrete reason.
-- Comments explain *why*, not *what*; avoid restating the code.
+- Comments explain _why_, not _what_; avoid restating the code.
 
 ## Releasing
 
