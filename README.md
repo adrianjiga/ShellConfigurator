@@ -1,5 +1,10 @@
 # ShellConfigurator
 
+[![CI](https://github.com/adrianjiga/ShellConfigurator/actions/workflows/ci.yml/badge.svg)](https://github.com/adrianjiga/ShellConfigurator/actions/workflows/ci.yml)
+[![Tests](https://github.com/adrianjiga/ShellConfigurator/actions/workflows/tests.yml/badge.svg)](https://github.com/adrianjiga/ShellConfigurator/actions/workflows/tests.yml)
+[![npm](https://img.shields.io/npm/v/shell-configurator)](https://www.npmjs.com/package/shell-configurator)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 An interactive terminal wizard for configuring [Starship](https://starship.rs/) — a cross-shell prompt. Inspired by `p10k configure`, it walks you through every choice and applies everything automatically.
 
 ## Features

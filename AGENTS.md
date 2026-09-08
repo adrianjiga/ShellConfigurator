@@ -11,6 +11,12 @@ Interactive Ink (React) TUI that walks users through configuring Starship. Node 
 - CI splits into `.github/workflows/ci.yml` (lint, format:check, typecheck, build, and the `distro-smoke` Docker matrix) and `.github/workflows/tests.yml` (the v8 coverage gate on node 22 + 24 ubuntu plus a macOS runner). Both trigger on push to master and PRs to master — nothing runs the wizard itself. GitHub Actions are pinned to commit SHAs with `# vX.Y.Z` comments so Dependabot can update them.
 - `.npmrc` sets `legacy-peer-deps=true` — required for Ink's peer deps; don't remove. `prepare` runs `npm run build` on every install.
 
+## Repository rules and releases
+
+- `master` is protected by the GitHub ruleset "master protection" (configured on GitHub, not in the repo): PRs only, no force-push/deletion on branches (tags are unaffected), 0-approval solo merge, and 13 required status checks — Lint, Format, Typecheck, Build, the 4 distro-smoke jobs, the 3 Coverage jobs, and the 2 CodeQL Analyze checks — with branches tested against latest master (`strict`).
+- Releasing: bump `package.json` + lockfile, push a `v*` tag → `release.yml` stages to npm via OIDC and creates the GitHub release with the `npm pack` tarball; then approve the staged package with 2FA (`npm stage approve` / npmjs Staged Packages tab).
+- The curl installer (`scripts/install.sh`) consumes the GitHub-release tarball, which must stay self-contained: `bundledDependencies` (fflate, ink, ink-select-input, react) keep `node_modules` inside the packed tarball. Verify with `npm pack --pack-destination <dir>` and running `dist/index.js` from the extracted tar — a bare `dist/` tarball crashes with `ERR_MODULE_NOT_FOUND`.
+
 ## Architecture
 
 - `src/index.tsx` renders `<App/>` (Ink). `src/app.tsx` owns all `WizardState` and the linear step flow (`STEP_ORDER` in `src/types.ts`): welcome → fontcheck → font_select → preset → segments_left → segments_right → style → shells → installing → done. Step navigation is the pure `getNextStep`/`getPrevStep` pair in `src/stepMachine.ts`, wrapped by `goNext`/`goBack` in `app.tsx`.

@@ -95,5 +95,8 @@ Nothing is ever committed or pushed directly to `master` — it is protected.
 
 ## Releasing
 
-See [`docs/Releasing.md`](docs/Releasing.md) for the full release pipeline
-(tagged releases, OIDC-staged npm publishing, GitHub Release tarballs).
+Releases are triggered by pushing a `v*` tag, which runs `release.yml`: the
+workflow builds, stages the package to npm via OIDC, and attaches the `npm
+pack` tarball to a GitHub release. The staged package is then approved manually
+with 2FA (`npm stage approve` or the npmjs Staged Packages tab). Releases are
+maintainers-only and not part of the normal contribution flow.
