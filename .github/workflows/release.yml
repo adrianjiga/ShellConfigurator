@@ -20,8 +20,10 @@ jobs:
           node-version: '22'
           cache: 'npm'
       # Provenance via OIDC trusted publishing needs npm >= 11.5.1. Node 22
-      # ships an older npm, so upgrade the CLI here rather than at publish time.
-      - run: npm install -g npm@latest
+      # ships an older npm, so upgrade the CLI here rather than at publish
+      # time. Pin to the 11.x line: npm 12 flips install scripts off by
+      # default, which would break esbuild's platform-binary postinstall.
+      - run: npm install -g npm@11
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
