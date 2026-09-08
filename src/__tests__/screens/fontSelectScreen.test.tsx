@@ -3,6 +3,7 @@ import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FontSelectScreen } from '../../screens/FontSelectScreen.tsx';
 import { DEFAULT_STATE } from '../../types.ts';
+import { pressEsc } from '../helpers/ink.ts';
 
 vi.mock('../../services/installer.ts', () => ({
   NERD_FONTS: [
@@ -57,8 +58,7 @@ describe('FontSelectScreen', () => {
     const { instance, onBack } = setup();
     await flush();
 
-    instance.stdin.write('\u001B');
-    await flush();
+    await pressEsc(instance.stdin);
 
     expect(onBack).toHaveBeenCalled();
   });

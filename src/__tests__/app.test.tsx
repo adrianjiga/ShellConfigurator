@@ -2,6 +2,8 @@ import { cleanup, render } from 'ink-testing-library';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { pressEsc } from './helpers/ink.ts';
+
 // Detection is the only thing WelcomeScreen and ShellScreen do on mount; stub it so
 // the wizard is driven purely by keystrokes.
 vi.mock('../services/detector.ts', () => ({
@@ -15,7 +17,6 @@ vi.mock('../services/detector.ts', () => ({
 import { App } from '../app.tsx';
 
 const ENTER = '\r';
-const ESC = '';
 const DOWN = '[B';
 
 afterEach(cleanup);
@@ -63,7 +64,7 @@ describe('App wizard routing', () => {
     await press(instance, ENTER);
     expect(instance.lastFrame()).toContain('Nerd Font check');
 
-    await press(instance, ESC);
+    await pressEsc(instance.stdin);
     expect(instance.lastFrame()).toContain('Welcome to ShellConfigurator');
   });
 

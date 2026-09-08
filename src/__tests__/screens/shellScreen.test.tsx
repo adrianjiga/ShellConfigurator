@@ -5,6 +5,8 @@ import { ShellScreen } from '../../screens/ShellScreen.tsx';
 import { detectInstalledShellsAsync } from '../../services/detector.ts';
 import { DEFAULT_STATE } from '../../types.ts';
 
+import { pressEsc } from '../helpers/ink.ts';
+
 vi.mock('../../services/detector.ts', () => ({
   detectInstalledShellsAsync: vi.fn(),
 }));
@@ -153,8 +155,7 @@ describe('ShellScreen', () => {
     await flush();
     await flush();
 
-    instance.stdin.write('\u001B');
-    await flush();
+    await pressEsc(instance.stdin);
     expect(onBack).toHaveBeenCalled();
   });
 });
