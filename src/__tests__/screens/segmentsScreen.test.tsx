@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SegmentsScreen } from '../../screens/SegmentsScreen.tsx';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
+import { pressEsc } from '../helpers/ink.ts';
+
 afterEach(cleanup);
 
 function setup(overrides: Partial<WizardState> = {}) {
@@ -107,8 +109,7 @@ describe('SegmentsScreen', () => {
   it('calls onBack on Escape', async () => {
     const { instance, onBack } = setup();
     await flush();
-    instance.stdin.write('\u001B');
-    await flush();
+    await pressEsc(instance.stdin);
     expect(onBack).toHaveBeenCalled();
   });
 });

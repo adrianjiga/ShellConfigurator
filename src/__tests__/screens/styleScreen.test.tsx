@@ -5,6 +5,8 @@ import { PALETTES } from '../../config/palettes.ts';
 import { StyleScreen } from '../../screens/StyleScreen.tsx';
 import { DEFAULT_STATE } from '../../types.ts';
 
+import { pressEsc } from '../helpers/ink.ts';
+
 afterEach(cleanup);
 
 function setup(overrides = {}) {
@@ -123,8 +125,7 @@ describe('StyleScreen', () => {
   it('calls onBack on Escape', async () => {
     const { instance, onBack } = setup();
     await flush();
-    instance.stdin.write('\u001B');
-    await flush();
+    await pressEsc(instance.stdin);
     expect(onBack).toHaveBeenCalled();
   });
 });
