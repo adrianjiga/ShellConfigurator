@@ -1,0 +1,82 @@
+name: Bug report
+description: Something in ShellConfigurator is broken or behaves unexpectedly
+title: '[Bug]: '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Before you start, please run
+        `npx shell-configurator --version` so we know exactly which version you had.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What did you expect, and what actually happened?
+      placeholder: The starship.toml came out with the wrong color palette...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact steps that trigger the problem. Include the choices you made in the wizard.
+      placeholder: |
+        1. Run `npx shell-configurator`
+        2. Select the Tokyo Night preset
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ShellConfigurator version
+      description: Output of `npx shell-configurator --version`
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: e.g. Ubuntu 24.04, macOS 15, Arch Linux
+    validations:
+      required: true
+  - type: dropdown
+    id: package-manager
+    attributes:
+      label: Package manager
+      description: The package manager detected by the wizard
+      options:
+        - apt
+        - dnf
+        - pacman
+        - brew
+        - fallback script
+        - Not sure / not detected
+  - type: dropdown
+    id: shell
+    attributes:
+      label: Target shell
+      description: Which shell(s) you were configuring
+      multiple: true
+      options:
+        - zsh
+        - bash
+        - fish
+        - nushell
+        - PowerShell
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Paste the wizard output around the failure (no screenshots, copy-paste text).
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I ran the wizard in a scratch machine or container (not one I care about) to reproduce this
+          required: false
+        - label: This is not a duplicate of an existing issue
+          required: false

@@ -120,3 +120,10 @@ npm run lint      # ESLint
 npm run format:check   # Prettier check
 npm run format    # Prettier write
 ```
+
+## Contributing
+
+Bugs and feature requests go on the [Issues
+tab](https://github.com/adrianjiga/ShellConfigurator/issues). For development
+setup, conventions, and how to get changes merged, see
+[CONTRIBUTING.md](CONTRIBUTING.md).
