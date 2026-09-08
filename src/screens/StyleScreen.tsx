@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { WizardState, CharacterSymbol } from '../types.ts';
-import { PALETTES, inkColor, type PaletteColorName } from '../config/palettes.ts';
-import { WizardLayout } from '../components/WizardLayout.tsx';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
+import { WizardLayout } from '../components/WizardLayout.tsx';
+import { inkColor, PALETTES, type PaletteColorName } from '../config/palettes.ts';
+import type { CharacterSymbol, WizardState } from '../types.ts';
 
 interface StyleScreenProps {
   state: WizardState;
@@ -66,7 +66,7 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
     onUpdate(selection());
     // onUpdate is a fresh closure each parent render; including it would loop on
     // every state push. `selection` closes over the same three indices.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above - every state push. `selection` closes over the same three indices
   }, [charIdx, colorIdx, powerlineIdx]);
 
   useInput((_, key) => {

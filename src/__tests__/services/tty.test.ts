@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   isUiSuspended,
-  subscribeToUiSuspension,
   resetUiSuspension,
-  suspendUi,
   resumeUi,
+  subscribeToUiSuspension,
+  suspendUi,
 } from '../../services/tty.ts';
 
 beforeEach(() => resetUiSuspension());

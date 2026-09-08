@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockExecFile, mockReadFile } = vi.hoisted(() => {
   const mockExecFile = vi.fn();
@@ -27,9 +27,9 @@ vi.mock('fs', () => ({
 }));
 
 import {
+  detectInstalledShellsAsync,
   detectPackageManagerAsync,
   isStarshipInstalledAsync,
-  detectInstalledShellsAsync,
 } from '../../services/detector.ts';
 
 function execFileSucceeds(stdout = '') {

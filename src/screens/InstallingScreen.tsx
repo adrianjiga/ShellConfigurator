@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { WizardState, InstallTask, InstallStatus } from '../types.ts';
+import React, { useEffect, useRef, useState } from 'react';
 import { WizardLayout } from '../components/WizardLayout.tsx';
+import { killActiveCommand } from '../services/exec.ts';
 import {
   buildTaskList,
-  runInstallTasks,
   DEFAULT_INSTALL_TASK_DEPS,
+  runInstallTasks,
 } from '../services/installTasks.ts';
 import { isUiSuspended, subscribeToUiSuspension } from '../services/tty.ts';
-import { killActiveCommand } from '../services/exec.ts';
+import type { InstallStatus, InstallTask, WizardState } from '../types.ts';
 
 interface InstallingScreenProps {
   state: WizardState;
@@ -73,7 +73,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
     };
     // Runs once on mount: re-running would restart every install. The `ran` ref
     // guards double-invocation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above - guards double-invocation
   }, []);
 
   // Only listen while this screen owns the terminal: during an interactive child

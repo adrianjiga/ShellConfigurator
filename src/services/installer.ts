@@ -1,10 +1,10 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { ShellId, PackageManager } from '../types.ts';
 import { unzipSync } from 'fflate';
-import { commandExists, commandPath, runCommand } from './exec.ts';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { getShellBinary } from '../config/shells.ts';
+import type { PackageManager, ShellId } from '../types.ts';
+import { commandExists, commandPath, runCommand } from './exec.ts';
 
 // Package names per shell per package manager
 const SHELL_PACKAGES: Record<ShellId, Partial<Record<PackageManager, string>>> = {

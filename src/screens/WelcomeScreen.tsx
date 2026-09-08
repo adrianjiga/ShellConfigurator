@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import { WizardState, PackageManager } from '../types.ts';
-import { detectPackageManagerAsync, isStarshipInstalledAsync } from '../services/detector.ts';
-import { WizardLayout } from '../components/WizardLayout.tsx';
+import React, { useEffect, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
+import { WizardLayout } from '../components/WizardLayout.tsx';
+import { detectPackageManagerAsync, isStarshipInstalledAsync } from '../services/detector.ts';
+import type { PackageManager, WizardState } from '../types.ts';
 
 interface WelcomeScreenProps {
   state: WizardState;

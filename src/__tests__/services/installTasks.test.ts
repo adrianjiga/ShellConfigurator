@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
-import { runInstallTasks, InstallTaskDeps } from '../../services/installTasks.ts';
-import { DEFAULT_STATE, NO_NERD_FONT, WizardState, InstallTask } from '../../types.ts';
+import { describe, expect, it, vi } from 'vitest';
+import { type InstallTaskDeps, runInstallTasks } from '../../services/installTasks.ts';
+import { DEFAULT_STATE, type InstallTask, NO_NERD_FONT, type WizardState } from '../../types.ts';
 
 function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
   return {

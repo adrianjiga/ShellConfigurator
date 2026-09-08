@@ -1,10 +1,10 @@
-import { describe, it, expect } from 'vitest';
 import * as toml from '@iarna/toml';
-import { generateToml } from '../../generators/starship.ts';
-import { DEFAULT_STATE, WizardState } from '../../types.ts';
+import { describe, expect, it } from 'vitest';
 import { MODULES } from '../../config/modules.ts';
-import { PRESETS } from '../../config/presets.ts';
 import { PALETTES } from '../../config/palettes.ts';
+import { PRESETS } from '../../config/presets.ts';
+import { generateToml } from '../../generators/starship.ts';
+import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
 const base: WizardState = {
   ...DEFAULT_STATE,

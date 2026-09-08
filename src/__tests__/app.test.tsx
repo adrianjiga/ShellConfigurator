@@ -1,6 +1,6 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { cleanup, render } from 'ink-testing-library';
 import React, { act } from 'react';
-import { render, cleanup } from 'ink-testing-library';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Detection is the only thing WelcomeScreen and ShellScreen do on mount; stub it so
 // the wizard is driven purely by keystrokes.

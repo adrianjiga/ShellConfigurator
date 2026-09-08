@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { getNextStep, getPrevStep } from '../stepMachine.ts';
 import { DEFAULT_STATE, NO_NERD_FONT } from '../types.ts';
 

@@ -1,10 +1,10 @@
-import React from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import { WizardState } from '../types.ts';
-import { NERD_FONTS, getNerdFontsDir } from '../services/installer.ts';
-import { WizardLayout } from '../components/WizardLayout.tsx';
+import React from 'react';
 import { NavHints } from '../components/NavHints.tsx';
+import { WizardLayout } from '../components/WizardLayout.tsx';
+import { getNerdFontsDir, NERD_FONTS } from '../services/installer.ts';
+import type { WizardState } from '../types.ts';
 
 interface FontSelectScreenProps {
   state: WizardState;

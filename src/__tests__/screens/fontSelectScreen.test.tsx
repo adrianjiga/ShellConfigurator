@@ -1,6 +1,6 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { cleanup, render } from 'ink-testing-library';
 import React, { act } from 'react';
-import { render, cleanup } from 'ink-testing-library';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FontSelectScreen } from '../../screens/FontSelectScreen.tsx';
 import { DEFAULT_STATE } from '../../types.ts';
 

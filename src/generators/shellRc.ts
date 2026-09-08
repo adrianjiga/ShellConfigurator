@@ -1,8 +1,8 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
-import { ShellId } from '../types.ts';
+import * as path from 'path';
 import { getShell } from '../config/shells.ts';
+import type { ShellId } from '../types.ts';
 
 export interface WriteConfigResult {
   /** Where the config was actually written. */

@@ -1,21 +1,27 @@
-import { WizardState, InstallTask, fontIdToInstall, PackageManager, ShellId } from '../types.ts';
 import {
-  NERD_FONTS,
-  installStarship,
-  installShell,
-  installNerdFont,
-  setDefaultShell,
-  getMissingStarshipPathDir,
-} from './installer.ts';
-import { generateToml } from '../generators/starship.ts';
-import {
-  writeShellConfig,
+  type ApplyShellConfigOptions,
   applyShellConfig,
   resetSharedShellConfig,
-  WriteConfigResult,
-  ApplyShellConfigOptions,
+  type WriteConfigResult,
+  writeShellConfig,
 } from '../generators/shellRc.ts';
-import { isStarshipInstalledAsync, detectInstalledShellsAsync } from './detector.ts';
+import { generateToml } from '../generators/starship.ts';
+import {
+  fontIdToInstall,
+  type InstallTask,
+  type PackageManager,
+  type ShellId,
+  type WizardState,
+} from '../types.ts';
+import { detectInstalledShellsAsync, isStarshipInstalledAsync } from './detector.ts';
+import {
+  getMissingStarshipPathDir,
+  installNerdFont,
+  installShell,
+  installStarship,
+  NERD_FONTS,
+  setDefaultShell,
+} from './installer.ts';
 
 export interface InstallTaskDeps {
   isStarshipInstalled: () => Promise<{ installed: boolean; version?: string }>;

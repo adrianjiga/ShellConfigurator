@@ -1,6 +1,6 @@
-import React from 'react';
 import { Box, Text, useStdout } from 'ink';
-import { WizardState, WizardStep, STEP_ORDER } from '../types.ts';
+import type React from 'react';
+import { STEP_ORDER, type WizardState, type WizardStep } from '../types.ts';
 import { PromptPreview } from './PromptPreview.tsx';
 
 const STEP_LABELS: Record<WizardStep, string> = {

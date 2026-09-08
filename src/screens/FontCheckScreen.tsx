@@ -1,9 +1,9 @@
-import React from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import { WizardState, NO_NERD_FONT } from '../types.ts';
-import { WizardLayout } from '../components/WizardLayout.tsx';
+import React from 'react';
 import { NavHints } from '../components/NavHints.tsx';
+import { WizardLayout } from '../components/WizardLayout.tsx';
+import { NO_NERD_FONT, type WizardState } from '../types.ts';
 
 interface FontCheckScreenProps {
   state: WizardState;

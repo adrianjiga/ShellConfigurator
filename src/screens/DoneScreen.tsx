@@ -1,11 +1,11 @@
-import React from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
-import { WizardState, InstallStatus, fontIdToInstall } from '../types.ts';
+import React from 'react';
 import { WizardLayout } from '../components/WizardLayout.tsx';
-import { getShellConfigPath } from '../generators/shellRc.ts';
 import { getShell } from '../config/shells.ts';
-import { rcTaskId } from '../services/installTasks.ts';
+import { getShellConfigPath } from '../generators/shellRc.ts';
 import { NERD_FONTS } from '../services/installer.ts';
+import { rcTaskId } from '../services/installTasks.ts';
+import { fontIdToInstall, type InstallStatus, type WizardState } from '../types.ts';
 
 interface DoneScreenProps {
   state: WizardState;

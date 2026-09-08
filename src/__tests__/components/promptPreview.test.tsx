@@ -1,8 +1,8 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { cleanup, render } from 'ink-testing-library';
 import React from 'react';
-import { render, cleanup } from 'ink-testing-library';
+import { afterEach, describe, expect, it } from 'vitest';
 import { PromptPreview } from '../../components/PromptPreview.tsx';
-import { DEFAULT_STATE, WizardState } from '../../types.ts';
+import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
 afterEach(cleanup);
 

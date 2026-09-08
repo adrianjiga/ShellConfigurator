@@ -1,5 +1,5 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockExecFileSync, mockSpawn } = vi.hoisted(() => ({
   mockExecFileSync: vi.fn(),
@@ -15,11 +15,11 @@ vi.mock('child_process', () => ({
 }));
 
 import {
+  CommandCancelledError,
   commandExists,
   commandPath,
-  runCommand,
   killActiveCommand,
-  CommandCancelledError,
+  runCommand,
 } from '../../services/exec.ts';
 import { isUiSuspended, resetUiSuspension } from '../../services/tty.ts';
 

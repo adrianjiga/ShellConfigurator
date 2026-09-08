@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { WizardState } from '../types.ts';
-import { MODULES, ConfigurableModuleId, ModuleId } from '../config/modules.ts';
-import { WizardLayout } from '../components/WizardLayout.tsx';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
+import { WizardLayout } from '../components/WizardLayout.tsx';
+import { type ConfigurableModuleId, MODULES, type ModuleId } from '../config/modules.ts';
+import type { WizardState } from '../types.ts';
 
 interface SegmentsScreenProps {
   state: WizardState;
@@ -48,7 +48,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
     }
     // onUpdate is a fresh closure each parent render; including it would loop on
     // every state push.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above - every state push
   }, [enabled, side]);
 
   function saveAndProceed() {

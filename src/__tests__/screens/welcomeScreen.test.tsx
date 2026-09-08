@@ -1,9 +1,9 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { cleanup, render } from 'ink-testing-library';
 import React, { act } from 'react';
-import { render, cleanup } from 'ink-testing-library';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WelcomeScreen } from '../../screens/WelcomeScreen.tsx';
-import { DEFAULT_STATE } from '../../types.ts';
 import { detectPackageManagerAsync, isStarshipInstalledAsync } from '../../services/detector.ts';
+import { DEFAULT_STATE } from '../../types.ts';
 
 vi.mock('../../services/detector.ts', () => ({
   detectPackageManagerAsync: vi.fn(),

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
 import { parse } from '@iarna/toml';
+import { describe, expect, it } from 'vitest';
 import { tomlBasic, tomlLiteral } from '../../generators/toml.ts';
 
 describe('tomlBasic', () => {

@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { WizardState, WizardStep, DEFAULT_STATE } from './types.ts';
-import { getNextStep, getPrevStep } from './stepMachine.ts';
-import { WelcomeScreen } from './screens/WelcomeScreen.tsx';
+import { DoneScreen } from './screens/DoneScreen.tsx';
 import { FontCheckScreen } from './screens/FontCheckScreen.tsx';
 import { FontSelectScreen } from './screens/FontSelectScreen.tsx';
+import { InstallingScreen } from './screens/InstallingScreen.tsx';
 import { PresetScreen } from './screens/PresetScreen.tsx';
 import { SegmentsScreen } from './screens/SegmentsScreen.tsx';
-import { StyleScreen } from './screens/StyleScreen.tsx';
 import { ShellScreen } from './screens/ShellScreen.tsx';
-import { InstallingScreen } from './screens/InstallingScreen.tsx';
-import { DoneScreen } from './screens/DoneScreen.tsx';
+import { StyleScreen } from './screens/StyleScreen.tsx';
+import { WelcomeScreen } from './screens/WelcomeScreen.tsx';
+import { getNextStep, getPrevStep } from './stepMachine.ts';
+import { DEFAULT_STATE, type WizardState, type WizardStep } from './types.ts';
 
 export function App() {
   const [state, setState] = useState<WizardState>(DEFAULT_STATE);
