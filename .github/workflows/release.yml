@@ -30,9 +30,11 @@ jobs:
       - run: npm test
       - run: npm run build
       # npm pack names the tarball shell-configurator-<version>.tgz; the curl
-      # installer looks up the same asset in the GitHub release body.
+      # installer looks up the same asset in the GitHub release body. --silent
+      # keeps the prepare script's lifecycle output off stdout so the captured
+      # value is the tarball filename and nothing else.
       - name: Package release tarball
-        run: pack_output=$(npm pack); echo "artifact=${pack_output}" >> "$GITHUB_ENV"
+        run: echo "artifact=$(npm pack --silent)" >> "$GITHUB_ENV"
       # OIDC trusted publishing: npm negotiates a short-lived token from the
       # ACTIONS_ID_TOKEN_REQUEST_URL. No NODE_AUTH_TOKEN is set so npm CLI does
       # not skip the OIDC exchange, and the --provenance flag attaches Sigstore
