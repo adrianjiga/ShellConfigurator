@@ -38,6 +38,14 @@ npm install -g shell-configurator
 shell-configurator
 ```
 
+### Command line options
+
+```text
+shell-configurator              start the wizard
+shell-configurator --help       show usage and exit
+shell-configurator --version    print the version and exit
+```
+
 ### Via curl (requires Node.js 22+)
 
 ```bash
