@@ -1,6 +1,6 @@
 {
   "name": "shell-configurator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Interactive terminal wizard for configuring Starship prompt",
   "license": "MIT",
   "type": "module",
