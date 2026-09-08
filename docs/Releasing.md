@@ -25,26 +25,29 @@ therefore done manually with a classic token.
      - Repository: `ShellConfigurator`
      - Workflow filename: `release.yml`
      - Environment: _(leave blank)_
+     - Allowed actions: `npm stage publish` is always enabled; direct
+       `npm publish` is **not** required (this package uses staged publishing)
    - **Or from the CLI** (requires a Granular Access Token with package write
      access):
 
      ```bash
      npm trust github shell-configurator \
        --repo adrianjiga/ShellConfigurator \
-       --file .github/workflows/release.yml --allow-publish -y
+       --file .github/workflows/release.yml --allow-stage-publish -y
      ```
 
 3. **(Optional) Lock out classic tokens**
 
    On npmjs.com, the package _Settings → Publishing access_ page can be set to
    "Require two-factor authentication and disallow tokens". With a trusted
-   publisher configured, npm still accepts OIDC publishes even when classic
-   tokens are disabled.
+   publisher configured, npm still accepts OIDC stage publishes even when
+   classic tokens are disabled.
 
 Once the trusted publisher is configured, no `NPM_TOKEN` secret is needed in
 the repository. The `id-token: write` permission in `release.yml` lets GitHub
-mint a short-lived OIDC token per run, and `npm publish --provenance` attaches
-Sigstore attestations linking the build back to this repository.
+mint a short-lived OIDC token per run, and the approval step on npmjs.com
+attaches Sigstore provenance attestations linking the build back to this
+repository.
 
 ## Cutting a release
 
@@ -63,11 +66,23 @@ Sigstore attestations linking the build back to this repository.
 2. Pushing a tag matching `v*` triggers `.github/workflows/release.yml`, which:
    - runs lint, typecheck, and the test suite
    - builds `dist/` and packs the npm tarball
-   - publishes to npm with provenance via OIDC
+   - **stages** the new version on npm via OIDC (not yet public)
    - creates a GitHub Release with automatic release notes and the tarball
      attached (this is what the curl installer downloads)
 
-3. Verify the release:
+3. **Approve the staged package** with 2FA, either on npmjs.com (_Staged
+   Packages_ tab → _Approve_) or from the CLI:
+
+   ```bash
+   npm stage list                 # find the stage id for shell-configurator
+   npm stage approve <stage-id>   # prompts for your OTP
+   ```
+
+   `npm stage publish` defers the 2FA proof-of-presence to this step and is
+   run unattended by CI; the trusted publisher config forbids direct
+   `npm publish`, so nothing goes live without this manual approval.
+
+4. Verify the release:
    - `npm view shell-configurator` shows the new version
    - the package page on npmjs.com shows the provenance/Sigstore badge
    - the GitHub Releases page has a release for the tag with the `.tgz` asset
