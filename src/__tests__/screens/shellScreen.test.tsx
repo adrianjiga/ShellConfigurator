@@ -1,9 +1,9 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import React, { act } from 'react';
-import { render, cleanup } from 'ink-testing-library';
+import { cleanup, render } from 'ink-testing-library';
+import { act } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ShellScreen } from '../../screens/ShellScreen.tsx';
-import { DEFAULT_STATE } from '../../types.ts';
 import { detectInstalledShellsAsync } from '../../services/detector.ts';
+import { DEFAULT_STATE } from '../../types.ts';
 
 vi.mock('../../services/detector.ts', () => ({
   detectInstalledShellsAsync: vi.fn(),

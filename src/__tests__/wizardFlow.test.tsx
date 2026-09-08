@@ -1,7 +1,7 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import React, { act } from 'react';
-import { render, cleanup } from 'ink-testing-library';
 import { parse } from '@iarna/toml';
+import { cleanup, render } from 'ink-testing-library';
+import { act } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Only the side-effecting edges are stubbed. generateToml, the step machine, the
 // screens, and runInstallTasks all run for real, so this exercises the whole

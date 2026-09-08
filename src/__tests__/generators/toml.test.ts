@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
 import { parse } from '@iarna/toml';
+import { describe, expect, it } from 'vitest';
 import { tomlBasic, tomlLiteral } from '../../generators/toml.ts';
 
 describe('tomlBasic', () => {
@@ -24,7 +24,9 @@ describe('tomlBasic', () => {
 
   it('preserves starship variable syntax verbatim', () => {
     // git_status templates rely on ${count} reaching the config unmangled.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: starship pass-through.
     const out = `ahead = "${tomlBasic('⇡${count}')}"`;
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: starship pass-through.
     expect(parse(out)).toEqual({ ahead: '⇡${count}' });
   });
 });

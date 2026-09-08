@@ -1,7 +1,7 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as path from 'path';
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
+import * as path from 'node:path';
 import { zipSync } from 'fflate';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockSpawn,
@@ -48,13 +48,13 @@ vi.mock('fs', () => ({
 }));
 
 import {
-  installStarship,
-  installShell,
-  installNerdFont,
-  setDefaultShell,
-  getNerdFontsDir,
   getMissingStarshipPathDir,
+  getNerdFontsDir,
+  installNerdFont,
+  installShell,
+  installStarship,
   SCRIPT_INSTALL_BIN_DIR,
+  setDefaultShell,
 } from '../../services/installer.ts';
 
 interface SpawnOutcome {

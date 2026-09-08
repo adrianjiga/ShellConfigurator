@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
-import React from 'react';
 import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';

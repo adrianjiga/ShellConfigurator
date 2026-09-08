@@ -1,4 +1,4 @@
-import { WizardState, WizardStep, STEP_ORDER, shouldVisitFontSelect } from './types.ts';
+import { STEP_ORDER, shouldVisitFontSelect, type WizardState, type WizardStep } from './types.ts';
 
 /** Steps that perform or report irreversible work — never re-enterable via back. */
 const TERMINAL_STEPS: WizardStep[] = ['installing', 'done'];

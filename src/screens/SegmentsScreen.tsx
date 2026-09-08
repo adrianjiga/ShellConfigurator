@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { WizardState } from '../types.ts';
-import { MODULES, ConfigurableModuleId, ModuleId } from '../config/modules.ts';
-import { WizardLayout } from '../components/WizardLayout.tsx';
+import { useEffect, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
+import { WizardLayout } from '../components/WizardLayout.tsx';
+import { type ConfigurableModuleId, MODULES, type ModuleId } from '../config/modules.ts';
+import type { WizardState } from '../types.ts';
 
 interface SegmentsScreenProps {
   state: WizardState;
@@ -34,6 +34,8 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
   const isInitialMount = useRef(true);
 
   // Push live updates to parent state so preview stays in sync (skip initial mount)
+  // onUpdate is a fresh closure each parent render; including it would loop on every state push.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: onUpdate loops on every state push.
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
@@ -46,9 +48,6 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
     } else {
       onUpdate({ rightModules: modules });
     }
-    // onUpdate is a fresh closure each parent render; including it would loop on
-    // every state push.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, side]);
 
   function saveAndProceed() {

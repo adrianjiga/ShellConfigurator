@@ -1,6 +1,6 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as os from 'os';
-import * as path from 'path';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(),
@@ -11,12 +11,12 @@ vi.mock('fs', () => ({
   copyFileSync: vi.fn(),
 }));
 
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import {
   applyShellConfig,
+  getShellConfigPath,
   resetSharedShellConfig,
   writeShellConfig,
-  getShellConfigPath,
 } from '../../generators/shellRc.ts';
 
 const expectedConfigPath = path.join(os.homedir(), '.config', 'starship', 'zsh.toml');

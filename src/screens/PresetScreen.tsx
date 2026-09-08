@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import { WizardState } from '../types.ts';
-import { PRESETS } from '../config/presets.ts';
-import { WizardLayout } from '../components/WizardLayout.tsx';
+import { useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
+import { WizardLayout } from '../components/WizardLayout.tsx';
+import { PRESETS } from '../config/presets.ts';
+import type { WizardState } from '../types.ts';
 
 interface PresetScreenProps {
   state: WizardState;

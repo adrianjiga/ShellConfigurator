@@ -1,7 +1,7 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import React from 'react';
-import { render, cleanup } from 'ink-testing-library';
 import { Text } from 'ink';
+import { cleanup, render } from 'ink-testing-library';
+import type React from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ErrorBoundary } from '../../components/ErrorBoundary.tsx';
 
 afterEach(cleanup);

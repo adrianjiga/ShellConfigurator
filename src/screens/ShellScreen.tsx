@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { WizardState, ShellId } from '../types.ts';
+import { useEffect, useRef, useState } from 'react';
+import { NavHints } from '../components/NavHints.tsx';
+import { WizardLayout } from '../components/WizardLayout.tsx';
 import { SHELLS } from '../config/shells.ts';
 import { detectInstalledShellsAsync } from '../services/detector.ts';
-import { WizardLayout } from '../components/WizardLayout.tsx';
-import { NavHints } from '../components/NavHints.tsx';
+import type { ShellId, WizardState } from '../types.ts';
 
 interface ShellScreenProps {
   state: WizardState;
@@ -26,6 +26,9 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
 
+  // Shell detection runs once on mount; onUpdate is a fresh closure each render
+  // and would re-trigger it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: onUpdate is a fresh closure each render.
   useEffect(() => {
     let cancelled = false;
 
@@ -40,9 +43,6 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
     return () => {
       cancelled = true;
     };
-    // Shell detection runs once on mount; onUpdate is a fresh closure each render
-    // and would re-trigger it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useInput((char, key) => {

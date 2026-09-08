@@ -129,9 +129,9 @@ npm start         # Run compiled output
 npx tsc --noEmit  # Type-check without building
 npm test          # Run unit tests (vitest)
 npm run test:coverage  # Unit tests + coverage report (v8)
-npm run lint      # ESLint
-npm run format:check   # Prettier check
-npm run format    # Prettier write
+npm run lint      # Biome (lint)
+npm run format:check   # Biome format check
+npm run format    # Biome format write
 ```
 
 ## Contributing

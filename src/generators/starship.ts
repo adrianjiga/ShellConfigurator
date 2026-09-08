@@ -1,6 +1,6 @@
-import { WizardState, CharacterSymbol } from '../types.ts';
-import { getModule, type ConfigurableModuleId, type ModuleId } from '../config/modules.ts';
+import { type ConfigurableModuleId, getModule, type ModuleId } from '../config/modules.ts';
 import { getPalette, type PaletteColorName } from '../config/palettes.ts';
+import type { CharacterSymbol, WizardState } from '../types.ts';
 import { tomlBasic, tomlLiteral } from './toml.ts';
 
 const SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> = {
