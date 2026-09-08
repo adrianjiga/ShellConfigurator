@@ -31,17 +31,22 @@ jobs:
       # in GITHUB_ENV.
       - name: Package release tarball
         run: echo "artifact=$(npm pack --silent --ignore-scripts)" >> "$GITHUB_ENV"
-      # Stage defers 2FA to a later npm stage approve; no NODE_AUTH_TOKEN so
-      # npm uses the OIDC exchange.
+      # Smoke-boots the packed tarball: guards against a release that extracts
+      # but cannot launch (e.g. missing bundled dependencies).
+      - name: Verify tarball boots
+        run: |
+          tmp=$(mktemp -d)
+          tar -xzf "${{ env.artifact }}" -C "$tmp"
+          node "$tmp/package/dist/index.js" --version
+          rm -rf "$tmp"
+      # OIDC trusted publishing: npm negotiates a short-lived token from the
+      # ACTIONS_ID_TOKEN_REQUEST_URL. No NODE_AUTH_TOKEN is set so the exchange
+      # is used. Stage defers 2FA to a later maintainer approval.
       - name: Stage on npm (OIDC)
         shell: bash
         run: |
           set -o pipefail
-          npm stage publish --provenance --access public --ignore-scripts --loglevel verbose 2>&1 | tee /tmp/publish.log
-      - if: failure()
-        id: publish-diag
-        name: Dump npm diagnostics
-        run: grep -iE "oidc|exchange|ENEEDAUTH|trusted|401|403|approve|stage" /tmp/publish.log || true
+          npm stage publish --provenance --access public --ignore-scripts
       - name: Create GitHub release
         uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:

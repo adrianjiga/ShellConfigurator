@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      production-dependencies:
+        dependency-type: production
+      development-dependencies:
+        dependency-type: development
+    ignore:
+      # Ink and react are pinned as a pair with ink-select-input peer deps;
+      # bump them together deliberately, not via individual dependabot PRs.
+      - dependency-name: 'ink'
+      - dependency-name: 'react'
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

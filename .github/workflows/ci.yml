@@ -57,6 +57,15 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  # Aggregates the lint/format/typecheck/build jobs into one required check so
+  # the master ruleset stays stable when a step is added or renamed.
+  quality-gate:
+    name: Quality gate
+    runs-on: ubuntu-latest
+    needs: [lint, format, typecheck, build]
+    steps:
+      - run: echo "All quality checks passed."
+
   distro-smoke:
     name: Distro smoke (${{ matrix.image }})
     runs-on: ubuntu-latest
