@@ -6,7 +6,7 @@ Interactive Ink (React) TUI that walks users through configuring Starship. Node 
 
 - `npm run dev` — run the wizard via tsx (interactive TUI). **Dangerous**: it runs real system installs (`sudo apt/dnf/pacman`, `chsh`) and writes `~/.config/starship.toml`, Nerd Fonts, and shell RC files (`~/.zshrc`, `~/.bashrc`, `~/.config/fish/config.fish`). Never run it to "test" a change on a machine you don't want modified; verify logic via unit tests instead.
 - `npm test` / `npm test -- --run <file>` — vitest, tests in `src/__tests__/` mirroring `src/`. Single test: `npx vitest run src/__tests__/generators/starship.test.ts`. `npm run test:coverage` adds the v8 report (thresholds in `vitest.config.ts`).
-- `npm run lint` (eslint, `no-explicit-any` is an error), `npm run format:check` / `npm run format` (prettier).
+- `npm run lint` (biome, `no-explicit-any` is an error), `npm run format:check` / `npm run format` (biome). Biome config lives in `biome.json`; the linter sidesteps the `typescript` compiler, so TS 7 updates don't break it.
 - `npm run build` — `tsc`, emits `dist/`. `npm run typecheck` (`tsconfig.test.json`) type-checks **including** `src/__tests__`, which the build config excludes; run it before pushing.
 - CI splits into `.github/workflows/ci.yml` (lint, format:check, typecheck, build, and the `distro-smoke` Docker matrix) and `.github/workflows/tests.yml` (the v8 coverage gate on node 22 + 24 ubuntu plus a macOS runner). Both trigger on push to master and PRs to master — nothing runs the wizard itself. GitHub Actions are pinned to commit SHAs with `# vX.Y.Z` comments so Dependabot can update them.
 - `.npmrc` sets `legacy-peer-deps=true` — required for Ink's peer deps; don't remove. `prepare` runs `npm run build` on every install.
