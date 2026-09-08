@@ -43,9 +43,13 @@ jobs:
       # not skip the OIDC exchange, and the --provenance flag attaches Sigstore
       # attestations linking this build back to the source.
       - name: Publish to npm (OIDC)
-        run: npm publish --provenance --access public --ignore-scripts --loglevel verbose 2>&1 | tee /tmp/publish.log
-      - name: Dump OIDC exchange diagnostics
-        if: always()
+        shell: bash
+        run: |
+          set -o pipefail
+          npm publish --provenance --access public --ignore-scripts --loglevel verbose 2>&1 | tee /tmp/publish.log
+      - if: failure()
+        id: publish-diag
+        name: Dump OIDC exchange diagnostics
         run: grep -iE "oidc|exchange|ENEEDAUTH|trusted|401|403" /tmp/publish.log || true
       - name: Create GitHub release
         uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
