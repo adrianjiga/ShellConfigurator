@@ -19,38 +19,29 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      # Provenance via OIDC trusted publishing needs npm >= 11.5.1. Node 22
-      # ships an older npm, so upgrade the CLI here rather than at publish
-      # time. Pin to the 11.x line: npm 12 flips install scripts off by
-      # default, which would break esbuild's platform-binary postinstall.
+      # npm 12 disables install scripts (breaks esbuild postinstall); Node 22
+      # ships an older npm, so upgrade here.
       - run: npm install -g npm@11
       - run: npm ci
-      # prepublishOnly + prepare also run as npm lifecycle hooks on `npm pack`
-      # and `npm publish`; --ignore-scripts below keeps the checks to this one
-      # explicit run instead of re-running them three times per release.
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      # npm pack names the tarball shell-configurator-<version>.tgz; the curl
-      # installer looks up the same asset in the GitHub release body. --silent
-      # keeps the prepare script's lifecycle output off stdout so the captured
-      # value is the tarball filename and nothing else.
+      # --silent keeps prepare output off stdout so only the tarball name lands
+      # in GITHUB_ENV.
       - name: Package release tarball
         run: echo "artifact=$(npm pack --silent --ignore-scripts)" >> "$GITHUB_ENV"
-      # OIDC trusted publishing: npm negotiates a short-lived token from the
-      # ACTIONS_ID_TOKEN_REQUEST_URL. No NODE_AUTH_TOKEN is set so npm CLI does
-      # not skip the OIDC exchange, and the --provenance flag attaches Sigstore
-      # attestations linking this build back to the source.
-      - name: Publish to npm (OIDC)
+      # Stage defers 2FA to a later npm stage approve; no NODE_AUTH_TOKEN so
+      # npm uses the OIDC exchange.
+      - name: Stage on npm (OIDC)
         shell: bash
         run: |
           set -o pipefail
-          npm publish --provenance --access public --ignore-scripts --loglevel verbose 2>&1 | tee /tmp/publish.log
+          npm stage publish --provenance --access public --ignore-scripts --loglevel verbose 2>&1 | tee /tmp/publish.log
       - if: failure()
         id: publish-diag
-        name: Dump OIDC exchange diagnostics
-        run: grep -iE "oidc|exchange|ENEEDAUTH|trusted|401|403" /tmp/publish.log || true
+        name: Dump npm diagnostics
+        run: grep -iE "oidc|exchange|ENEEDAUTH|trusted|401|403|approve|stage" /tmp/publish.log || true
       - name: Create GitHub release
         uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
