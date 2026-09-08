@@ -19,13 +19,12 @@ therefore done manually with a classic token.
 
    The `release.yml` workflow publishes with OIDC, so npm must accept
    publishes from it. Either:
-
-   - **On npmjs.com:** open the package → *Settings → Publishing access →
-     Add trusted publisher*, and enter:
+   - **On npmjs.com:** open the package → _Settings → Publishing access →
+     Add trusted publisher_, and enter:
      - GitHub user: `adrianjiga`
      - Repository: `ShellConfigurator`
      - Workflow filename: `release.yml`
-     - Environment: *(leave blank)*
+     - Environment: _(leave blank)_
    - **Or from the CLI** (requires a Granular Access Token with package write
      access):
 
@@ -37,7 +36,7 @@ therefore done manually with a classic token.
 
 3. **(Optional) Lock out classic tokens**
 
-   On npmjs.com, the package *Settings → Publishing access* page can be set to
+   On npmjs.com, the package _Settings → Publishing access_ page can be set to
    "Require two-factor authentication and disallow tokens". With a trusted
    publisher configured, npm still accepts OIDC publishes even when classic
    tokens are disabled.
