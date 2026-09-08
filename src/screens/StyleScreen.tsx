@@ -58,15 +58,15 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
   });
 
   // Push live updates to parent state so preview stays in sync (skip initial mount)
+  // onUpdate is a fresh closure each render; including it would loop on every state
+  // push. `selection` closes over the same three index values.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: onUpdate is a fresh closure each render.
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
       return;
     }
     onUpdate(selection());
-    // onUpdate is a fresh closure each parent render; including it would loop on
-    // every state push. `selection` closes over the same three indices.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above - every state push. `selection` closes over the same three indices
   }, [charIdx, colorIdx, powerlineIdx]);
 
   useInput((_, key) => {

@@ -1,5 +1,5 @@
-import { type ChildProcess, execFile, execFileSync, spawn } from 'child_process';
-import { promisify } from 'util';
+import { type ChildProcess, execFile, execFileSync, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import { resumeUi, suspendUi } from './tty.ts';
 
 const execFileP = promisify(execFile);

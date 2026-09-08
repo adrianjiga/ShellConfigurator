@@ -42,6 +42,9 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   // nothing, so Ink's next frame cannot paint over its password prompt.
   useEffect(() => subscribeToUiSuspension(setUiSuspended), []);
 
+  // Runs once on mount: re-running would restart every install. The `ran` ref
+  // guards double-invocation.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mounts once; ran ref guards double-invocation.
   useEffect(() => {
     if (ran.current) return;
     ran.current = true;
@@ -71,9 +74,6 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
     return () => {
       unmounted = true;
     };
-    // Runs once on mount: re-running would restart every install. The `ran` ref
-    // guards double-invocation.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above - guards double-invocation
   }, []);
 
   // Only listen while this screen owns the terminal: during an interactive child

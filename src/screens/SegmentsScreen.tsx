@@ -34,6 +34,8 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
   const isInitialMount = useRef(true);
 
   // Push live updates to parent state so preview stays in sync (skip initial mount)
+  // onUpdate is a fresh closure each parent render; including it would loop on every state push.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: onUpdate loops on every state push.
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
@@ -46,9 +48,6 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
     } else {
       onUpdate({ rightModules: modules });
     }
-    // onUpdate is a fresh closure each parent render; including it would loop on
-    // every state push.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above - every state push
   }, [enabled, side]);
 
   function saveAndProceed() {

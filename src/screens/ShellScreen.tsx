@@ -26,6 +26,9 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
 
+  // Shell detection runs once on mount; onUpdate is a fresh closure each render
+  // and would re-trigger it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: onUpdate is a fresh closure each render.
   useEffect(() => {
     let cancelled = false;
 
@@ -40,9 +43,6 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
     return () => {
       cancelled = true;
     };
-    // Shell detection runs once on mount; onUpdate is a fresh closure each render
-    // and would re-trigger it.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above - and would re-trigger it
   }, []);
 
   useInput((char, key) => {

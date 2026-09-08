@@ -164,9 +164,9 @@ describe('generateToml', () => {
 
   it('parsed TOML keeps the fill block and format intact', () => {
     const parsed = toml.parse(generateToml(base)) as Record<string, unknown>;
-    expect(parsed['format']).toContain('$fill');
-    expect(parsed['add_newline']).toBe(true);
-    expect(parsed['fill']).toEqual({ symbol: ' ' });
+    expect(parsed.format).toContain('$fill');
+    expect(parsed.add_newline).toBe(true);
+    expect(parsed.fill).toEqual({ symbol: ' ' });
   });
 });
 
