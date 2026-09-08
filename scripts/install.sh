@@ -75,6 +75,14 @@ rm -rf "$tmp_dir"
 chmod +x "$data_dir/dist/index.js"
 ln -sf "$data_dir/dist/index.js" "$bin_dir/shell-configurator"
 
+# Boot the freshly installed binary so a broken release never "installs" silently.
+if "$bin_dir/shell-configurator" --version >/dev/null 2>&1; then
+  echo "Verified the install by launching \`shell-configurator --version\`."
+else
+  echo "The installed binary failed to start. See '$data_dir' for details." >&2
+  exit 1
+fi
+
 cat <<EOF
 
 Installed $(basename "$asset_url" .tgz) to $data_dir.

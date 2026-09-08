@@ -1,8 +1,13 @@
 #!/usr/bin/env node
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
+
+const VERSION = JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+).version as string;
 
 /**
  * Ink puts the terminal in raw mode and hides the cursor; if the process dies
@@ -27,8 +32,21 @@ function reportFatal(prefix: string, err: unknown): void {
   process.exitCode = 1;
 }
 
+function handleCliArgs(): boolean {
+  const args = process.argv.slice(2);
+  if (args.some((arg) => arg === '--version' || arg === '-v')) {
+    process.stdout.write(`${VERSION}\n`);
+    return true;
+  }
+  return false;
+}
+
 process.on('uncaughtException', (err) => reportFatal('ShellConfigurator crashed', err));
 process.on('unhandledRejection', (err) => reportFatal('ShellConfigurator crashed', err));
+
+if (handleCliArgs()) {
+  process.exit(0);
+}
 
 const app = render(
   <ErrorBoundary onError={(err) => reportFatal('ShellConfigurator hit a render error', err)}>
