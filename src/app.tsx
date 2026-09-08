@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { DoneScreen } from './screens/DoneScreen.tsx';
 import { FontCheckScreen } from './screens/FontCheckScreen.tsx';
 import { FontSelectScreen } from './screens/FontSelectScreen.tsx';

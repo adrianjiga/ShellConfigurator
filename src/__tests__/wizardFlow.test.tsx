@@ -1,6 +1,6 @@
 import { parse } from '@iarna/toml';
 import { cleanup, render } from 'ink-testing-library';
-import React, { act } from 'react';
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Only the side-effecting edges are stubbed. generateToml, the step machine, the

@@ -1,5 +1,4 @@
 import { cleanup, render } from 'ink-testing-library';
-import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyShellConfig } from '../../generators/shellRc.ts';
 import { DoneScreen } from '../../screens/DoneScreen.tsx';

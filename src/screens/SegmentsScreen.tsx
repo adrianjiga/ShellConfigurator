@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from 'ink';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { type ConfigurableModuleId, MODULES, type ModuleId } from '../config/modules.ts';

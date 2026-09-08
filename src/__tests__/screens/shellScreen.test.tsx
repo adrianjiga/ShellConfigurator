@@ -1,5 +1,5 @@
 import { cleanup, render } from 'ink-testing-library';
-import React, { act } from 'react';
+import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ShellScreen } from '../../screens/ShellScreen.tsx';
 import { detectInstalledShellsAsync } from '../../services/detector.ts';

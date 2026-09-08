@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { detectPackageManagerAsync, isStarshipInstalledAsync } from '../services/detector.ts';

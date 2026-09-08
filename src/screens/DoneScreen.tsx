@@ -1,5 +1,4 @@
 import { Box, Text, useApp, useInput } from 'ink';
-import React from 'react';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { getShell } from '../config/shells.ts';
 import { getShellConfigPath } from '../generators/shellRc.ts';

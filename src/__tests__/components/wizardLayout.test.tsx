@@ -1,6 +1,5 @@
 import { EventEmitter } from 'node:events';
 import { render, Text } from 'ink';
-import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WizardLayout } from '../../components/WizardLayout.tsx';
 import { DEFAULT_STATE } from '../../types.ts';

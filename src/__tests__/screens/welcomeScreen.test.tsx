@@ -1,5 +1,5 @@
 import { cleanup, render } from 'ink-testing-library';
-import React, { act } from 'react';
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WelcomeScreen } from '../../screens/WelcomeScreen.tsx';
 import { detectPackageManagerAsync, isStarshipInstalledAsync } from '../../services/detector.ts';

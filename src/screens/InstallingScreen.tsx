@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from 'ink';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { killActiveCommand } from '../services/exec.ts';
 import {

@@ -1,6 +1,5 @@
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import React from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { NO_NERD_FONT, type WizardState } from '../types.ts';

@@ -1,5 +1,5 @@
 import { cleanup, render } from 'ink-testing-library';
-import React, { act } from 'react';
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Detection is the only thing WelcomeScreen and ShellScreen do on mount; stub it so
