@@ -13,7 +13,7 @@ Interactive Ink (React) TUI that walks users through configuring Starship. Node 
 
 ## Repository rules and releases
 
-- `master` is protected by the GitHub ruleset "master protection" (configured on GitHub, not in the repo): PRs only, no force-push/deletion on branches (tags are unaffected), 0-approval solo merge, and 13 required status checks — Lint, Format, Typecheck, Build, the 4 distro-smoke jobs, the 3 Coverage jobs, and the 2 CodeQL Analyze checks — with branches tested against latest master (`strict`).
+- `master` is protected by the GitHub ruleset "master protection" (configured on GitHub, not in the repo): PRs only, no force-push/deletion on the branch (tags are unaffected), 0-approval solo merge, and 6 required status checks — Quality gate (lint + format + typecheck + build via `ci.yml`), Coverage gate (node 22/24 Ubuntu + macOS via `tests.yml`), and the 4 distro-smoke jobs — with branches tested against latest master (`strict`). CodeQL still scans via a `code_quality` rule (errors only) rather than a required check, because CodeQL contexts don't run on Dependabot PRs.
 - Releasing: bump `package.json` + lockfile, push a `v*` tag → `release.yml` stages to npm via OIDC and creates the GitHub release with the `npm pack` tarball; then approve the staged package with 2FA (`npm stage approve` / npmjs Staged Packages tab).
 - The curl installer (`scripts/install.sh`) consumes the GitHub-release tarball, which must stay self-contained: `bundledDependencies` (fflate, ink, ink-select-input, react) keep `node_modules` inside the packed tarball. Verify with `npm pack --pack-destination <dir>` and running `dist/index.js` from the extracted tar — a bare `dist/` tarball crashes with `ERR_MODULE_NOT_FOUND`.
 

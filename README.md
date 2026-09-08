@@ -126,7 +126,7 @@ src/
 npm run dev       # Run with tsx (no build step)
 npm run build     # Compile to dist/
 npm start         # Run compiled output
-npx tsc --noEmit  # Type-check without building
+npm run typecheck   # Type-check including tests
 npm test          # Run unit tests (vitest)
 npm run test:coverage  # Unit tests + coverage report (v8)
 npm run lint      # Biome (lint)
