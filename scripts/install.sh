@@ -69,7 +69,7 @@ tar -xzf "$tmp_dir/package.tgz" -C "$tmp_dir"
 
 # Clear any previous install so a stale extract never shadows a new one.
 rm -rf "${data_dir:?}"/*
-cp -f "$tmp_dir/package/"* "$data_dir/"
+cp -rf "$tmp_dir/package/." "$data_dir/"
 rm -rf "$tmp_dir"
 
 chmod +x "$data_dir/dist/index.js"
