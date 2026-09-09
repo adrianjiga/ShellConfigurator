@@ -137,6 +137,13 @@ describe('installStarship', () => {
     });
   });
 
+  it('installs via apk', async () => {
+    await installStarship('apk');
+    expect(mockSpawn).toHaveBeenCalledWith('sudo', ['apk', 'add', '--no-cache', 'starship'], {
+      stdio: 'inherit',
+    });
+  });
+
   it('downloads the install script to a file and runs it separately', async () => {
     await installStarship('script');
 
@@ -226,6 +233,13 @@ describe('installShell', () => {
   it('installs nushell via apt', async () => {
     await installShell('nushell', 'apt');
     expect(mockSpawn).toHaveBeenCalledWith('sudo', ['apt-get', 'install', '-y', 'nushell'], {
+      stdio: 'inherit',
+    });
+  });
+
+  it('installs zsh via apk', async () => {
+    await installShell('zsh', 'apk');
+    expect(mockSpawn).toHaveBeenCalledWith('sudo', ['apk', 'add', '--no-cache', 'zsh'], {
       stdio: 'inherit',
     });
   });

@@ -15,6 +15,10 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The release notes script walks git log back to the previous v* tag,
+          # which needs full history rather than the shallow default.
+          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
@@ -47,8 +51,11 @@ jobs:
         run: |
           set -o pipefail
           npm stage publish --provenance --access public --ignore-scripts
+      - name: Build release notes from conventional commits
+        shell: bash
+        run: scripts/release-notes.sh > "$RUNNER_TEMP/release-notes.md"
       - name: Create GitHub release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: ${{ env.artifact }}
-          generate_release_notes: true
+          body_path: ${{ runner.temp }}/release-notes.md

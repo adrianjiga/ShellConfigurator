@@ -9,7 +9,7 @@
 ```typescript
 type ShellId = 'zsh' | 'bash' | 'fish' | 'nushell' | 'powershell';
 type CharacterSymbol = 'arrow' | 'lambda' | 'dollar';
-type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'script';
+type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'apk' | 'script';
 type InstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
 type WizardStep =
@@ -21,6 +21,7 @@ type WizardStep =
   | 'segments_right'
   | 'style'
   | 'shells'
+  | 'review'
   | 'installing'
   | 'done';
 ```
@@ -90,7 +91,7 @@ task-building resolves the concrete font to install.
 
 ```typescript
 const STEP_ORDER: WizardStep[];
-// welcome → fontcheck → font_select → preset → segments_left → segments_right → style → shells → installing → done
+// welcome → fontcheck → font_select → preset → segments_left → segments_right → style → shells → review → installing → done
 ```
 
 ### Step Machine

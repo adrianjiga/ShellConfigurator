@@ -1,6 +1,5 @@
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyShellConfig } from '../../generators/shellRc.ts';
 import { DoneScreen } from '../../screens/DoneScreen.tsx';
 import { type InstallTaskDeps, runInstallTasks } from '../../services/installTasks.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
@@ -16,6 +15,7 @@ function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
     setDefaultShell: vi.fn().mockResolvedValue(undefined),
     generateToml: vi.fn(() => 'format = "$character"'),
     writeShellConfig: vi.fn(() => ({ path: '/home/u/.config/starship/zsh.toml' })),
+    backupSharedConfig: vi.fn(() => null),
     applyShellConfig: vi.fn(() => ({ applied: true })),
     resetSharedShellConfig: vi.fn(() => ({ applied: false })),
     getShellsUsingStarship: vi.fn().mockResolvedValue([]),
@@ -44,7 +44,12 @@ describe('DoneScreen over real install results', () => {
     // nushell has no rc file, so applyShellConfig returns applied:false + a note.
     const frame = await runAndRender(
       { selectedShells: ['nushell'], installedShells: ['nushell'] },
-      fakeDeps({ applyShellConfig })
+      fakeDeps({
+        applyShellConfig: vi.fn(() => ({
+          applied: false,
+          note: 'Run the above command once in Nushell to set up Starship.',
+        })),
+      })
     );
     const row = rowFor(frame, 'Nushell');
 
@@ -59,6 +64,21 @@ describe('DoneScreen over real install results', () => {
     // the shared ~/.config/starship.toml (no rc file to export it).
     expect(frame).toContain('starship-config.nu');
     expect(frame).toContain('path join starship nushell.toml');
+  });
+
+  it('shows a manual-setup shell as already configured when its init was applied', async () => {
+    const frame = await runAndRender(
+      { selectedShells: ['powershell'], installedShells: ['powershell'] },
+      fakeDeps({
+        applyShellConfig: vi.fn(() => ({ applied: false, note: 'already configured' })),
+      })
+    );
+    const row = rowFor(frame, 'PowerShell');
+
+    expect(row).toContain('already configured');
+    expect(row).not.toContain('set up manually');
+    // The init command is not offered again — the setup already happened.
+    expect(frame).not.toContain('Invoke-Expression (&starship init powershell)');
   });
 
   it('reports an already-configured shell as skipped rather than freshly applied', async () => {

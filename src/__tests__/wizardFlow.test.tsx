@@ -12,6 +12,7 @@ vi.mock('../services/detector.ts', () => ({
     .fn()
     .mockResolvedValue({ installed: true, version: 'starship 1.20' }),
   detectInstalledShellsAsync: vi.fn().mockResolvedValue(['zsh', 'bash', 'fish']),
+  detectCurrentShellAsync: vi.fn().mockResolvedValue(null),
 }));
 
 const { mockWriteConfig, mockApplyShellConfig, mockResetSharedConfig } = vi.hoisted(() => ({
@@ -26,6 +27,7 @@ vi.mock('../generators/shellRc.ts', () => ({
   writeShellConfig: mockWriteConfig,
   applyShellConfig: mockApplyShellConfig,
   resetSharedShellConfig: mockResetSharedConfig,
+  backupSharedConfig: vi.fn(() => null),
   getShellConfigPath: () => '/tmp/starship.toml',
 }));
 
@@ -99,6 +101,7 @@ describe('full wizard walkthrough', () => {
       ENTER, // accept right segments -> style
       ENTER, // accept style -> shells
       SPACE, // select zsh
+      ENTER, // -> review
       ENTER, // -> installing
     ]);
 
@@ -121,6 +124,7 @@ describe('full wizard walkthrough', () => {
       DOWN, // style: character focus starts on arrow; move down to lambda
       ENTER, // style: confirm -> shells (Tab switches section, it does not confirm)
       SPACE, // select zsh
+      ENTER, // -> review
       ENTER, // -> installing
     ]);
 
@@ -129,7 +133,7 @@ describe('full wizard walkthrough', () => {
   });
 
   it('applies the rc config for the selected shell', async () => {
-    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER]);
+    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER]);
 
     expect(mockApplyShellConfig).toHaveBeenCalledWith('zsh', expect.anything());
   });
@@ -144,6 +148,7 @@ describe('full wizard walkthrough', () => {
       ENTER, // -> style
       ENTER, // -> shells
       SPACE, // select zsh
+      ENTER, // -> review
       ENTER, // -> installing
     ]);
 
@@ -152,9 +157,29 @@ describe('full wizard walkthrough', () => {
     expect(directoryRefs.length).toBeLessThanOrEqual(1);
   });
 
+  it('pauses at a review step showing the config before installing', async () => {
+    const instance = render(<App />);
+    await flush();
+
+    for (const key of [ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER]) {
+      instance.stdin.write(key);
+      await flush();
+    }
+
+    const frame = instance.lastFrame();
+    expect(frame).toContain('Review your configuration');
+    // The rc snippet and the generated TOML are shown for the chosen shell.
+    expect(frame).toContain('STARSHIP_CONFIG="/tmp/starship.toml"');
+    expect(frame).toContain('eval "$(starship init zsh)"');
+    expect(frame).toContain('$directory$git_branch$git_status');
+    // Reviewing must not have written anything yet.
+    expect(mockWriteConfig).not.toHaveBeenCalled();
+    expect(mockApplyShellConfig).not.toHaveBeenCalled();
+  });
+
   it('keeps a clean exit code when every step succeeded', async () => {
     const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
-    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER], out);
+    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER], out);
     await waitForDone(out.instance);
 
     expect(process.exitCode ?? 0).toBe(0);
@@ -165,9 +190,59 @@ describe('full wizard walkthrough', () => {
     // which must surface as a non-zero exit so scripts can detect the failure.
     mockApplyShellConfig.mockReturnValueOnce({ applied: false });
     const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
-    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER], out);
+    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER], out);
     await waitForDone(out.instance);
 
     expect(process.exitCode).toBe(1);
+  });
+});
+
+describe('dry-run wizard walkthrough', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockWriteConfig.mockClear();
+  });
+
+  async function runDryWizard(): Promise<ReturnType<typeof render>> {
+    const instance = render(<App dryRun />);
+    await flush();
+
+    // Walk straight to the shells step and pick zsh; installing must be skipped.
+    instance.stdin.write(ENTER); // welcome
+    await flush();
+    instance.stdin.write(ENTER); // fontcheck
+    await flush();
+    instance.stdin.write(ENTER); // preset
+    await flush();
+    instance.stdin.write(ENTER); // segments_left
+    await flush();
+    instance.stdin.write(ENTER); // segments_right
+    await flush();
+    instance.stdin.write(ENTER); // style
+    await flush();
+    instance.stdin.write(SPACE); // select zsh
+    await flush();
+    instance.stdin.write(ENTER); // -> review
+    await flush();
+    instance.stdin.write(ENTER); // -> done (skips installing)
+    await flush();
+
+    return instance;
+  }
+
+  it('skips the install step and lands on the dry-run summary', async () => {
+    const instance = await runDryWizard();
+
+    const frame = instance.lastFrame();
+    expect(frame).toContain('Dry run');
+    expect(frame).toContain('Tasks that would run');
+    expect(frame).toContain('Generated config');
+  });
+
+  it('never writes any config or rc files in dry-run mode', async () => {
+    await runDryWizard();
+
+    expect(mockWriteConfig).not.toHaveBeenCalled();
+    expect(mockApplyShellConfig).not.toHaveBeenCalled();
   });
 });

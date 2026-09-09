@@ -21,6 +21,7 @@ const PM_LABELS: Record<PackageManager, string> = {
   apt: 'apt (Debian/Ubuntu)',
   dnf: 'dnf (Fedora)',
   brew: 'Homebrew (macOS)',
+  apk: 'apk (Alpine)',
   script: 'install script (no package manager detected)',
 };
 

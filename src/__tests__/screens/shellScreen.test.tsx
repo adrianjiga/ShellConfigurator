@@ -1,13 +1,14 @@
 import { cleanup, render } from 'ink-testing-library';
 import { act } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShellScreen } from '../../screens/ShellScreen.tsx';
-import { detectInstalledShellsAsync } from '../../services/detector.ts';
-import { DEFAULT_STATE } from '../../types.ts';
+import { detectCurrentShellAsync, detectInstalledShellsAsync } from '../../services/detector.ts';
+import { DEFAULT_STATE, type ShellId } from '../../types.ts';
 
 import { pressEsc } from '../helpers/ink.ts';
 
 vi.mock('../../services/detector.ts', () => ({
+  detectCurrentShellAsync: vi.fn(),
   detectInstalledShellsAsync: vi.fn(),
 }));
 
@@ -149,6 +150,36 @@ describe('ShellScreen', () => {
     expect(instance.lastFrame()).not.toContain('Run the above command');
   });
 
+  it('pre-selects the detected current shell', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh', 'bash']);
+    vi.mocked(detectCurrentShellAsync).mockResolvedValue('bash');
+    const { instance } = setup();
+    await flush();
+    await flush();
+    await flush();
+
+    expect(instance.lastFrame()).toContain('[✓] Bash');
+  });
+
+  it('does not clobber an existing selection with detection', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh', 'bash']);
+    vi.mocked(detectCurrentShellAsync).mockResolvedValue('bash');
+    const state = { ...DEFAULT_STATE, selectedShells: ['zsh'] as ShellId[], installedShells: [] };
+    const onNext = vi.fn();
+    const onUpdate = vi.fn();
+    const onBack = vi.fn();
+    const instance = render(
+      <ShellScreen state={state} onNext={onNext} onUpdate={onUpdate} onBack={onBack} />
+    );
+    await flush();
+    await flush();
+    await flush();
+
+    expect(instance.lastFrame()).toContain('[✓] Zsh');
+    expect(instance.lastFrame()).not.toContain('[✓] Bash');
+    expect(instance.lastFrame()).toContain('[ ] Bash');
+  });
+
   it('calls onBack on Escape', async () => {
     vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh']);
     const { instance, onBack } = setup();
@@ -163,6 +194,12 @@ describe('ShellScreen', () => {
 describe('selection order', () => {
   const DOWN = '\u001B[B';
   const UP = '\u001B[A';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(detectCurrentShellAsync).mockResolvedValue(null);
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh', 'bash', 'fish']);
+  });
 
   it('returns selected shells in SHELLS order, not click order', async () => {
     const { instance, onNext } = setup();

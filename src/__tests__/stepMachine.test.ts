@@ -47,6 +47,31 @@ describe('getNextStep', () => {
     const state = stateWith('done', { nerdFontToInstall: NO_NERD_FONT });
     expect(getNextStep(state)).toBe(state);
   });
+
+  it('routes shells to the review step in dry-run mode', () => {
+    const next = getNextStep(stateWith('shells', { dryRun: true, selectedShells: ['zsh'] }));
+    expect(next.step).toBe('review');
+  });
+
+  it('routes shells to the review step in normal mode', () => {
+    const next = getNextStep(stateWith('shells', { dryRun: false, selectedShells: ['zsh'] }));
+    expect(next.step).toBe('review');
+  });
+
+  it('enters installing from review in normal mode', () => {
+    const next = getNextStep(stateWith('review', { dryRun: false, selectedShells: ['zsh'] }));
+    expect(next.step).toBe('installing');
+  });
+
+  it('skips installing from review in dry-run mode', () => {
+    const next = getNextStep(stateWith('review', { dryRun: true, selectedShells: ['zsh'] }));
+    expect(next.step).toBe('done');
+  });
+
+  it('can still not advance when a dry-run skip lands beyond the last step', () => {
+    const state = stateWith('done', { dryRun: true });
+    expect(getNextStep(state)).toBe(state);
+  });
 });
 
 describe('getPrevStep', () => {
@@ -75,6 +100,11 @@ describe('getPrevStep', () => {
   it('moves from font_select back to fontcheck', () => {
     const prev = getPrevStep(stateWith('font_select', { nerdFontToInstall: NO_NERD_FONT }));
     expect(prev.step).toBe('fontcheck');
+  });
+
+  it('moves from review back to shells', () => {
+    const prev = getPrevStep(stateWith('review', { selectedShells: ['zsh'] }));
+    expect(prev.step).toBe('shells');
   });
 });
 

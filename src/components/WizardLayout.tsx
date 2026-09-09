@@ -12,8 +12,9 @@ const STEP_LABELS: Record<WizardStep, string> = {
   segments_right: '6. Right',
   style: '7. Style',
   shells: '8. Shell',
-  installing: '9. Installing',
-  done: '10. Done',
+  review: '9. Review',
+  installing: '10. Installing',
+  done: '11. Done',
 };
 
 interface WizardLayoutProps {

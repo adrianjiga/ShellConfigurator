@@ -33,14 +33,17 @@ export async function detectPackageManagerAsync(): Promise<PackageManager> {
     if (['ubuntu', 'debian', 'linuxmint', 'pop', 'elementary'].includes(id)) return 'apt';
     if (['fedora', 'rhel', 'centos', 'rocky', 'alma'].includes(id)) return 'dnf';
     if (['arch', 'manjaro', 'endeavouros', 'cachyos', 'garuda'].includes(id)) return 'pacman';
+    if (['alpine'].includes(id)) return 'apk';
   }
 
-  const [hasApt, hasDnf] = await Promise.all([
+  const [hasApt, hasDnf, hasApk] = await Promise.all([
     commandExistsAsync('apt-get'),
     commandExistsAsync('dnf'),
+    commandExistsAsync('apk'),
   ]);
   if (hasApt) return 'apt';
   if (hasDnf) return 'dnf';
+  if (hasApk) return 'apk';
 
   return 'script';
 }
@@ -61,4 +64,27 @@ export async function detectInstalledShellsAsync(): Promise<ShellId[]> {
     SHELLS.map(async ({ id, binary }) => ({ id, exists: await commandExistsAsync(binary) }))
   );
   return results.filter(({ exists }) => exists).map(({ id }) => id);
+}
+
+/**
+ * Best-effort detection of the shell the wizard is running in, so it can be
+ * pre-selected. Reads $SHELL first, falling back to the process command name.
+ * Returns null when it can't be mapped to a known shell.
+ */
+export async function detectCurrentShellAsync(): Promise<ShellId | null> {
+  const envPath = process.env.SHELL?.trim();
+  if (envPath) {
+    const name = envPath.split('/').pop() ?? '';
+    const match = SHELLS.find((s) => s.binary === name || s.id === name);
+    if (match) return match.id;
+  }
+  try {
+    const comm = (await runCapture('ps', ['-p', `${process.pid}`, '-o', 'comm='])).trim();
+    const name = comm.split('/').pop() ?? '';
+    const match = SHELLS.find((s) => s.binary === name || s.id === name);
+    if (match) return match.id;
+  } catch {
+    // Fall through to null.
+  }
+  return null;
 }

@@ -173,7 +173,40 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 
 ---
 
-### 9. Installing
+### 9. Review
+
+**Purpose**: Confirmation gate between shell selection and the install — nothing has
+been written yet, so this is the last chance to change things (Esc) before the
+irreversible install/config-write phase.
+
+**Layout**: Install plan from `buildTaskList` plus, per selected shell, the config
+file path, the rc lines that will be appended (`STARSHIP_CONFIG` export + init line,
+or the manual setup command for nushell/PowerShell), and the generated TOML:
+
+```
+  Review your configuration
+
+  This run will
+    • Install zsh
+    • Write config files
+    • Configure zsh
+
+  Configuration to write
+    ~/.config/starship/zsh.toml (Zsh)
+      export STARSHIP_CONFIG="~/.config/starship/zsh.toml"
+      eval "$(starship init zsh)"
+      format = "$directory$character"
+      ...
+```
+
+In `--dry-run` mode the same screen appears but states that nothing will be applied;
+`installing` is still skipped afterwards.
+
+**Keys**: `Enter`/`Space` confirm, `Esc` back
+
+---
+
+### 10. Installing
 
 **Purpose**: Execute all installation tasks and show progress.
 

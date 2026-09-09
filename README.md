@@ -41,9 +41,11 @@ shell-configurator
 ### Command line options
 
 ```text
-shell-configurator              start the wizard
-shell-configurator --help       show usage and exit
-shell-configurator --version    print the version and exit
+shell-configurator                start the wizard
+shell-configurator --help         show usage and exit
+shell-configurator --version      print the version and exit
+shell-configurator --dry-run      preview the config without installing (also -d, --no-install)
+shell-configurator --restore      restore the shared and per-shell configs from their newest backup
 ```
 
 ### Via curl (requires Node.js 22+)
@@ -79,6 +81,7 @@ All releases, including changelogs and install tarballs, are published on
 | Right segments | Choose modules for the right side                               |
 | Style          | Color scheme and character symbol                               |
 | Shell select   | Pick which shells to configure (shows install status per shell) |
+| Review         | Preview the generated per-shell config and the install plan     |
 | Installing     | Runs all installs and writes config                             |
 | Done           | Summary of everything that was applied                          |
 
@@ -133,6 +136,12 @@ npm run lint      # Biome (lint)
 npm run format:check   # Biome format check
 npm run format    # Biome format write
 ```
+
+## Troubleshooting
+
+See [docs/troubleshooting.md](docs/troubleshooting.md) for common issues and
+fixes (font not rendering, `chsh` failures, missing PATH entries, prompt
+leaks, and more).
 
 ## Contributing
 
