@@ -122,6 +122,108 @@ describe('StyleScreen', () => {
     });
   });
 
+  it('wraps focus back to the character section on a third Tab', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+
+    instance.stdin.write('\t'); // char → palette
+    await flush();
+    instance.stdin.write('\t'); // palette → powerline
+    await flush();
+    instance.stdin.write('\t'); // powerline → char
+    await flush();
+    instance.stdin.write('\u001B[B'); // arrow → lambda
+    await flush();
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      characterSymbol: 'lambda',
+      palette: 'default',
+      powerline: false,
+    });
+  });
+
+  it('clamps the character selection at both ends', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+
+    instance.stdin.write('\u001B[A'); // arrow is already first; stays there
+    await flush();
+    expect(onUpdate).not.toHaveBeenCalled();
+
+    for (let i = 0; i < 3; i++) {
+      instance.stdin.write('\u001B[B');
+      await flush();
+    }
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'dollar',
+      palette: 'default',
+      powerline: false,
+    });
+
+    instance.stdin.write('\u001B[B'); // dollar is already last; stays there
+    await flush();
+    expect(onUpdate).toHaveBeenCalledTimes(2); // arrow → lambda → dollar only
+  });
+
+  it('clamps the palette selection at the top and bottom', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+
+    instance.stdin.write('\t'); // → palette
+    await flush();
+
+    instance.stdin.write('\u001B[A'); // default is already first; stays there
+    await flush();
+    expect(onUpdate).not.toHaveBeenCalled();
+
+    for (let i = 0; i < PALETTES.length; i++) {
+      instance.stdin.write('\u001B[B');
+      await flush();
+    }
+    const last = PALETTES[PALETTES.length - 1]!;
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: last.id,
+      powerline: false,
+    });
+
+    instance.stdin.write('\u001B[B'); // last palette; stays there
+    await flush();
+    expect(onUpdate).toHaveBeenCalledTimes(PALETTES.length - 1); // one call per move
+  });
+
+  it('clamps the segment style at the top and can toggle it either way', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+
+    instance.stdin.write('\t'); // → palette
+    await flush();
+    instance.stdin.write('\t'); // → powerline
+    await flush();
+
+    instance.stdin.write('\u001B[A'); // plain is already first; stays there
+    await flush();
+    expect(onUpdate).not.toHaveBeenCalled();
+
+    instance.stdin.write('\u001B[B'); // plain → powerline
+    await flush();
+    instance.stdin.write('\u001B[B'); // powerline is last; stays there
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: true,
+    });
+
+    instance.stdin.write('\u001B[A'); // powerline → plain
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+    });
+  });
+
   it('calls onBack on Escape', async () => {
     const { instance, onBack } = setup();
     await flush();
