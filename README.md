@@ -80,6 +80,7 @@ All releases, including changelogs and install tarballs, are published on
 | Right segments | Choose modules for the right side                               |
 | Style          | Color scheme and character symbol                               |
 | Shell select   | Pick which shells to configure (shows install status per shell) |
+| Review         | Preview the generated per-shell config and the install plan     |
 | Installing     | Runs all installs and writes config                             |
 | Done           | Summary of everything that was applied                          |
 

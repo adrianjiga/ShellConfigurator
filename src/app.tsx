@@ -4,6 +4,7 @@ import { FontCheckScreen } from './screens/FontCheckScreen.tsx';
 import { FontSelectScreen } from './screens/FontSelectScreen.tsx';
 import { InstallingScreen } from './screens/InstallingScreen.tsx';
 import { PresetScreen } from './screens/PresetScreen.tsx';
+import { ReviewScreen } from './screens/ReviewScreen.tsx';
 import { SegmentsScreen } from './screens/SegmentsScreen.tsx';
 import { ShellScreen } from './screens/ShellScreen.tsx';
 import { StyleScreen } from './screens/StyleScreen.tsx';
@@ -80,6 +81,9 @@ export function App({ dryRun = false }: { dryRun?: boolean }) {
 
     case 'shells':
       return <ShellScreen state={state} onNext={goNext} onUpdate={updateState} onBack={goBack} />;
+
+    case 'review':
+      return <ReviewScreen state={state} onNext={goNext} onBack={goBack} />;
 
     case 'installing':
       return <InstallingScreen state={state} onNext={finishInstall} />;

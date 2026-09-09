@@ -41,6 +41,10 @@ The app starts in `src/index.tsx`, which renders the root `App` component using 
         │   └── WizardLayout
         │       └── PromptPreview
         │
+        ├── ReviewScreen          (src/screens/ReviewScreen.tsx)
+        │   └── WizardLayout
+        │       └── PromptPreview
+        │
         ├── InstallingScreen      (src/screens/InstallingScreen.tsx)
         │   └── WizardLayout      (hidePreview)
         │
@@ -63,7 +67,7 @@ The app starts in `src/index.tsx`, which renders the root `App` component using 
 The wizard is a linear state machine defined by the `STEP_ORDER` array in `src/types.ts`:
 
 ```
-welcome → fontcheck → font_select → preset → segments_left → segments_right → style → shells → installing → done
+welcome → fontcheck → font_select → preset → segments_left → segments_right → style → shells → review → installing → done
 ```
 
 The navigation logic itself lives in `src/stepMachine.ts` as two pure functions, so the core flow is unit-testable without rendering the TUI:
@@ -230,6 +234,7 @@ src/
 │   ├── SegmentsScreen.tsx     Module toggle list (used for left & right)
 │   ├── StyleScreen.tsx        Character + color scheme picker
 │   ├── ShellScreen.tsx        Shell toggle list
+│   ├── ReviewScreen.tsx       Pre-install confirmation (plan + TOML + rc lines)
 │   ├── InstallingScreen.tsx   Renders install progress (runs installTasks service)
 │   └── DoneScreen.tsx         Summary and exit
 ├── generators/

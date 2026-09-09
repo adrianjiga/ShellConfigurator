@@ -46,6 +46,7 @@ export type WizardStep =
   | 'segments_right'
   | 'style'
   | 'shells'
+  | 'review'
   | 'installing'
   | 'done';
 
@@ -58,6 +59,7 @@ export const STEP_ORDER: WizardStep[] = [
   'segments_right',
   'style',
   'shells',
+  'review',
   'installing',
   'done',
 ];
