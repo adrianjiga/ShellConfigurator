@@ -1,6 +1,7 @@
 import {
   type ApplyShellConfigOptions,
   applyShellConfig,
+  backupSharedConfig,
   resetSharedShellConfig,
   type WriteConfigResult,
   writeShellConfig,
@@ -31,6 +32,8 @@ export interface InstallTaskDeps {
   setDefaultShell: (shellId: ShellId) => Promise<void>;
   generateToml: (state: WizardState) => string;
   writeShellConfig: (toml: string, shellId: ShellId) => WriteConfigResult;
+  /** Snapshots the shared starship.toml before per-shell configs shadow it. Null when none exists. */
+  backupSharedConfig: () => string | null;
   applyShellConfig: (
     shellId: ShellId,
     options?: ApplyShellConfigOptions
@@ -49,6 +52,7 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   setDefaultShell,
   generateToml,
   writeShellConfig,
+  backupSharedConfig,
   applyShellConfig,
   resetSharedShellConfig,
   getShellsUsingStarship: detectInstalledShellsAsync,
@@ -224,6 +228,17 @@ export async function runInstallTasks(
     const toml = deps.generateToml(configState);
 
     const notes: string[] = [];
+
+    // Snapshot the shared starship.toml before per-shell configs shadow it, so a
+    // re-run can restore the pre-wizard prompt. Best-effort: a backup failure
+    // must not stop the config write.
+    try {
+      const sharedBackup = deps.backupSharedConfig();
+      if (sharedBackup) notes.push(`shared config saved to ${sharedBackup}`);
+    } catch {
+      // Non-fatal — the install still proceeds with whatever protection exists.
+    }
+
     for (const shellId of state.selectedShells) {
       const written = deps.writeShellConfig(toml, shellId);
       if (written?.backedUpTo) {

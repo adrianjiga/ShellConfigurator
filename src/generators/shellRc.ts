@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { getShell } from '../config/shells.ts';
+import { getShell, type ShellDef } from '../config/shells.ts';
 import type { ShellId } from '../types.ts';
 
 export interface WriteConfigResult {
@@ -26,6 +26,113 @@ function getConfigBaseDir(): string {
  */
 export function getShellConfigPath(shellId: ShellId): string {
   return path.join(getConfigBaseDir(), 'starship', `${shellId}.toml`);
+}
+
+/**
+ * The shared config the wizard never writes but shadows with per-shell configs:
+ * ~/.config/starship.toml. Copied aside before an install so it can be restored
+ * (see backupSharedConfig / restoreConfigBackups).
+ */
+export function getSharedConfigPath(): string {
+  return path.join(getConfigBaseDir(), 'starship.toml');
+}
+
+function stamp(): string {
+  return new Date().toISOString().replace(/[:.]/g, '-');
+}
+
+/**
+ * Snapshots the shared starship.toml before per-shell configs shadow it. Returns
+ * the backup path, or null when there is no shared config to protect. Best-effort:
+ * a copy failure returns null rather than throwing, so a backup problem can never
+ * block the install.
+ */
+export function backupSharedConfig(): string | null {
+  const shared = getSharedConfigPath();
+  if (!fs.existsSync(shared)) return null;
+  const backup = `${shared}.bak-${stamp()}`;
+  try {
+    fs.copyFileSync(shared, backup);
+  } catch {
+    return null;
+  }
+  return backup;
+}
+
+export interface RestoredConfig {
+  /** 'shared' for starship.toml, otherwise the shell id. */
+  what: 'shared' | ShellId;
+  restoredTo: string;
+  restoredFrom: string;
+}
+
+/** Newest *.bak-* entry for `prefix` inside `dir`, by ISO-stamped file name. */
+function newestBackup(dir: string, prefix: string): string | null {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return null;
+  }
+  const candidates = entries.filter((e) => e.startsWith(`${prefix}.bak-`)).sort();
+  const newest = candidates[candidates.length - 1];
+  return newest ? path.join(dir, newest) : null;
+}
+
+function restoreOne(what: 'shared' | ShellId, target: string, backup: string): RestoredConfig {
+  fs.copyFileSync(backup, target);
+  return { what, restoredTo: target, restoredFrom: backup };
+}
+
+/**
+ * Copies the newest .bak-* snapshot back over the live config for the shared
+ * config and every per-shell config that has one. Backups are kept, not deleted.
+ * Returns every restored config; an empty array means nothing to restore.
+ */
+export function restoreConfigBackups(): RestoredConfig[] {
+  const base = getConfigBaseDir();
+  const restored: RestoredConfig[] = [];
+
+  const newestShared = newestBackup(base, 'starship.toml');
+  if (newestShared) restored.push(restoreOne('shared', getSharedConfigPath(), newestShared));
+
+  const shellsDir = path.join(base, 'starship');
+  if (fs.existsSync(shellsDir)) {
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(shellsDir);
+    } catch {
+      entries = [];
+    }
+    const shells = new Set(
+      entries.map((e) => /^(.+)\.toml\.bak-.*$/.exec(e)?.[1]).filter((s): s is string => Boolean(s))
+    );
+    for (const shellId of shells) {
+      if (!getShell(shellId as ShellId)) continue;
+      const backup = newestBackup(shellsDir, `${shellId}.toml`);
+      if (!backup) continue;
+      restored.push(restoreOne(shellId as ShellId, getShellConfigPath(shellId as ShellId), backup));
+    }
+  }
+
+  return restored;
+}
+
+/**
+ * True when a manual-setup shell's init command has already been applied:
+ * nushell's autoload file exists (written by the documented one-liner), or
+ * powershell's $PROFILE contains the init line.
+ */
+function manualSetupApplied(shell: ShellDef): boolean {
+  if (!shell.initPath || !fs.existsSync(shell.initPath)) return false;
+  if (shell.id === 'powershell') {
+    try {
+      return fs.readFileSync(shell.initPath, 'utf8').includes(shell.initLine);
+    } catch {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -130,8 +237,13 @@ export function applyShellConfig(
   const shell = getShell(shellId);
   if (!shell) return { applied: false };
 
-  // Shells with no automatic rc file (nushell, powershell) need manual setup
+  // Shells with no automatic rc file (nushell, powershell) need manual setup.
+  // If the init command has already been applied, a re-run should say so rather
+  // than always reporting "set up manually".
   if (!shell.rcFile) {
+    if (manualSetupApplied(shell)) {
+      return { applied: false, note: 'already configured' };
+    }
     return { applied: false, note: shell.manualNote };
   }
 

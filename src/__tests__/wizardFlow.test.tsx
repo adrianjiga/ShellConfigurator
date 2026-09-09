@@ -27,6 +27,7 @@ vi.mock('../generators/shellRc.ts', () => ({
   writeShellConfig: mockWriteConfig,
   applyShellConfig: mockApplyShellConfig,
   resetSharedShellConfig: mockResetSharedConfig,
+  backupSharedConfig: vi.fn(() => null),
   getShellConfigPath: () => '/tmp/starship.toml',
 }));
 

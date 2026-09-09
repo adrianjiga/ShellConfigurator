@@ -10,6 +10,12 @@ export interface ShellDef {
   rcFile: string | null;
   initLine: string;
   manualNote?: string;
+  /**
+   * For shells without an rc file: the file their manual init command writes
+   * into (nushell autoload) or reads from (powershell $PROFILE). Lets the wizard
+   * detect that the manual setup has already been applied.
+   */
+  initPath?: string;
   /** Renders a PATH addition in this shell's own syntax, when one is needed. */
   pathLine?: (dir: string) => string;
 }
@@ -46,6 +52,7 @@ export const SHELLS: ShellDef[] = [
     rcFile: null,
     initLine: `mkdir ($nu.data-dir | path join "vendor/autoload"); $"export-env { $env.STARSHIP_CONFIG = '($nu.default-config-dir | path dirname | path join starship nushell.toml)' }" | save -f ($nu.data-dir | path join "vendor/autoload/starship-config.nu"); starship init nu | save -f ($nu.data-dir | path join "vendor/autoload/starship.nu")`,
     manualNote: 'Run the above command once in Nushell to set up Starship.',
+    initPath: path.join(os.homedir(), '.local', 'share', 'nu', 'vendor', 'autoload', 'starship.nu'),
   },
   {
     id: 'powershell',
@@ -54,6 +61,7 @@ export const SHELLS: ShellDef[] = [
     rcFile: null,
     initLine: 'Invoke-Expression (&starship init powershell)',
     manualNote: 'Add the above line to your $PROFILE file in PowerShell.',
+    initPath: path.join(os.homedir(), '.config', 'powershell', 'Microsoft.PowerShell_profile.ps1'),
   },
 ];
 

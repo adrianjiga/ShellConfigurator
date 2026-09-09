@@ -1,11 +1,12 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(),
   mkdirSync: vi.fn(),
   readFileSync: vi.fn(),
+  readdirSync: vi.fn(),
   writeFileSync: vi.fn(),
   appendFileSync: vi.fn(),
   copyFileSync: vi.fn(),
@@ -14,8 +15,11 @@ vi.mock('fs', () => ({
 import * as fs from 'node:fs';
 import {
   applyShellConfig,
+  backupSharedConfig,
+  getSharedConfigPath,
   getShellConfigPath,
   resetSharedShellConfig,
+  restoreConfigBackups,
   writeShellConfig,
 } from '../../generators/shellRc.ts';
 
@@ -226,6 +230,53 @@ describe('applyShellConfig', () => {
     expect(result.applied).toBe(false);
     expect(result.note).toBeTruthy();
     expect(fs.appendFileSync).not.toHaveBeenCalled();
+  });
+
+  it('reports nushell as already configured when its autoload file exists', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+
+    const result = applyShellConfig('nushell');
+
+    expect(result.applied).toBe(false);
+    expect(result.note).toBe('already configured');
+    expect(fs.appendFileSync).not.toHaveBeenCalled();
+  });
+
+  it('reports powershell as already configured when $PROFILE contains the init line', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () => 'Invoke-Expression (&starship init powershell)\n'
+    );
+
+    const result = applyShellConfig('powershell');
+
+    expect(result.applied).toBe(false);
+    expect(result.note).toBe('already configured');
+    expect(fs.appendFileSync).not.toHaveBeenCalled();
+  });
+
+  it('keeps the manual note when powershell $PROFILE exists but lacks the init line', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => '# my profile\n');
+
+    const result = applyShellConfig('powershell');
+
+    expect(result.applied).toBe(false);
+    expect(result.note).not.toBe('already configured');
+    expect(result.note).toContain('$PROFILE');
+  });
+
+  it('keeps the manual note when the powershell profile cannot be read', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => {
+      throw new Error('EACCES');
+    });
+
+    const result = applyShellConfig('powershell');
+
+    expect(result.applied).toBe(false);
+    expect(result.note).not.toBe('already configured');
+    expect(result.note).toContain('$PROFILE');
   });
 
   it('creates rc parent directory if it does not exist', () => {
@@ -479,5 +530,127 @@ describe('resetSharedShellConfig', () => {
     resetSharedShellConfig('fish');
 
     expect(fs.mkdirSync).toHaveBeenCalled();
+  });
+});
+
+describe('backupSharedConfig', () => {
+  const savedEnv = { ...process.env };
+  afterEach(() => {
+    process.env = { ...savedEnv };
+    vi.resetAllMocks();
+  });
+
+  it('returns null when there is no shared config to protect', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+
+    expect(backupSharedConfig()).toBeNull();
+    expect(fs.copyFileSync).not.toHaveBeenCalled();
+  });
+
+  it('snapshots the shared config to a stamped backup path', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+
+    const backup = backupSharedConfig();
+
+    expect(backup).toMatch(/starship\.toml\.bak-/);
+    expect(fs.copyFileSync).toHaveBeenCalledWith(getSharedConfigPath(), backup);
+  });
+
+  it('honours XDG_CONFIG_HOME for the shared config', () => {
+    process.env.XDG_CONFIG_HOME = '/home/u/.dotfiles/config';
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+
+    const backup = backupSharedConfig();
+
+    expect(backup).toMatch(
+      new RegExp(`^${path.join('/home/u/.dotfiles/config', 'starship.toml.bak-')}`)
+    );
+  });
+
+  it('is best-effort — returns null when the copy fails', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.copyFileSync).mockImplementation(() => {
+      throw new Error('EACCES');
+    });
+
+    expect(backupSharedConfig()).toBeNull();
+  });
+});
+
+describe('restoreConfigBackups', () => {
+  const base = path.join(os.homedir(), '.config');
+  const shellsDir = path.join(base, 'starship');
+  const savedEnv = { ...process.env };
+  // readdirSync has buffer/Dirent overloads; the module only reads string
+  // paths, so pin the mock to the simple signature.
+  const readdirSyncMock = fs.readdirSync as unknown as Mock<(dir: string) => string[]>;
+
+  afterEach(() => {
+    process.env = { ...savedEnv };
+    vi.resetAllMocks();
+  });
+
+  it('returns nothing when no backups exist', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    readdirSyncMock.mockReturnValue([]);
+
+    expect(restoreConfigBackups()).toEqual([]);
+    expect(fs.copyFileSync).not.toHaveBeenCalled();
+  });
+
+  it('restores the newest shared backup over the live config', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    readdirSyncMock.mockImplementation((dir) => {
+      if (dir === base) {
+        return [
+          'starship.toml.bak-2026-09-08T10-00-00-000Z',
+          'starship.toml.bak-2026-09-09T09-30-00-000Z',
+        ];
+      }
+      return [];
+    });
+
+    const restored = restoreConfigBackups();
+
+    expect(restored).toHaveLength(1);
+    expect(restored[0]?.what).toBe('shared');
+    expect(restored[0]?.restoredTo).toBe(getSharedConfigPath());
+    expect(restored[0]?.restoredFrom).toContain('2026-09-09T09-30-00-000Z');
+    expect(fs.copyFileSync).toHaveBeenCalledWith(restored[0]?.restoredFrom, getSharedConfigPath());
+  });
+
+  it('restores the newest backup for every per-shell config that has one', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    readdirSyncMock.mockImplementation((dir) => {
+      if (dir === shellsDir) {
+        return [
+          'zsh.toml.bak-2026-09-08T10-00-00-000Z',
+          'zsh.toml.bak-2026-09-09T09-30-00-000Z',
+          'bash.toml.bak-2026-09-09T09-31-00-000Z',
+        ];
+      }
+      return [];
+    });
+
+    const restored = restoreConfigBackups();
+
+    expect(restored.map((r) => r.what).sort()).toEqual(['bash', 'zsh']);
+    const zsh = restored.find((r) => r.what === 'zsh');
+    expect(zsh?.restoredFrom).toContain('2026-09-09T09-30-00-000Z');
+    expect(zsh?.restoredTo).toBe(getShellConfigPath('zsh'));
+    expect(fs.copyFileSync).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores files that are not config backups and unknown shell ids', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    readdirSyncMock.mockImplementation((dir) => {
+      if (dir === shellsDir) {
+        return ['notes.toml.bak-1', 'notashell.toml.bak-2026-09-09T00-00-00-000Z', 'README.md'];
+      }
+      return [];
+    });
+
+    expect(restoreConfigBackups()).toEqual([]);
+    expect(fs.copyFileSync).not.toHaveBeenCalled();
   });
 });

@@ -11,6 +11,7 @@ function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
     setDefaultShell: vi.fn().mockResolvedValue(undefined),
     generateToml: vi.fn(() => 'format = "$character"'),
     writeShellConfig: vi.fn(() => ({ path: '/home/u/.config/starship/zsh.toml' })),
+    backupSharedConfig: vi.fn(() => null),
     applyShellConfig: vi.fn(() => ({ applied: true })),
     resetSharedShellConfig: vi.fn(() => ({ applied: false })),
     getShellsUsingStarship: vi.fn().mockResolvedValue([]),
@@ -146,6 +147,31 @@ describe('runInstallTasks', () => {
     const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
 
     expect(results.find((t) => t.id === 'config')?.note).toContain('zsh.toml.bak-2026');
+  });
+
+  it('backs up the shared config and reports it in the config note', async () => {
+    const deps = fakeDeps({
+      backupSharedConfig: vi.fn(() => '/home/u/.config/starship.toml.bak-2026'),
+    });
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    expect(deps.backupSharedConfig).toHaveBeenCalled();
+    expect(results.find((t) => t.id === 'config')?.note).toContain('shared config saved to');
+    expect(results.find((t) => t.id === 'config')?.note).toContain('starship.toml.bak-2026');
+  });
+
+  it('keeps the config write going when the shared backup fails', async () => {
+    const deps = fakeDeps({
+      backupSharedConfig: vi.fn(() => {
+        throw new Error('EACCES');
+      }),
+    });
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    const config = results.find((t) => t.id === 'config');
+    expect(config?.status).toBe('done');
+    expect(config?.note ?? '').not.toContain('shared config saved to');
+    expect(deps.writeShellConfig).toHaveBeenCalled();
   });
 
   it('regenerates the config without nerd font glyphs when the font install fails', async () => {

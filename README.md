@@ -45,6 +45,7 @@ shell-configurator                start the wizard
 shell-configurator --help         show usage and exit
 shell-configurator --version      print the version and exit
 shell-configurator --dry-run      preview the config without installing (also -d, --no-install)
+shell-configurator --restore      restore the shared and per-shell configs from their newest backup
 ```
 
 ### Via curl (requires Node.js 22+)

@@ -197,7 +197,9 @@ export function DoneScreen({ state }: DoneScreenProps) {
                       : rcStatus === 'skipped'
                         ? shell?.rcFile
                           ? (rcNote ?? 'skipped')
-                          : 'set up manually'
+                          : rcNote === 'already configured'
+                            ? 'already configured'
+                            : 'set up manually'
                         : rcStatus === 'failed'
                           ? 'not configured'
                           : 'status unknown'}
@@ -217,12 +219,15 @@ export function DoneScreen({ state }: DoneScreenProps) {
                     </Text>
                   </Box>
                 )}
-                {/* Manual-only shells (nushell, powershell) show the init command above its note. */}
-                {rcStatus === 'skipped' && !shell?.rcFile && shell?.initLine && (
-                  <Box marginLeft={3}>
-                    <Text color="cyan">{shell.initLine}</Text>
-                  </Box>
-                )}
+                {/* Manual-only shells (nushell, powershell) show the init command, unless it was already applied. */}
+                {rcStatus === 'skipped' &&
+                  !shell?.rcFile &&
+                  shell?.initLine &&
+                  rcNote !== 'already configured' && (
+                    <Box marginLeft={3}>
+                      <Text color="cyan">{shell.initLine}</Text>
+                    </Box>
+                  )}
                 {(rcStatus === 'done' || (rcStatus === 'skipped' && !shell?.rcFile)) && rcNote && (
                   <Box marginLeft={3}>
                     <Text color="gray" italic>

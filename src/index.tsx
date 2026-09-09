@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
+import { restoreConfigBackups } from './generators/shellRc.ts';
 
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   .version as string;
@@ -39,12 +40,28 @@ Usage:
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
+  shell-configurator --restore    restore configs from their newest backup
 
 Options:
   -h, --help       Show this help and exit
   -v, --version    Print the version and exit
   -d, --dry-run    Generate config in-memory and show a summary; installs nothing
+  --restore        Copy the newest .bak-* snapshot back over the shared and
+                   per-shell configs created by earlier wizard runs
 `);
+}
+
+/** Restore the shared and per-shell configs from their newest backups. */
+export function runRestore(): void {
+  const restored = restoreConfigBackups();
+  if (restored.length === 0) {
+    process.stdout.write('Nothing to restore — no ShellConfigurator backups found.\n');
+    return;
+  }
+  process.stdout.write('Restored configs from their newest backups:\n');
+  for (const r of restored) {
+    process.stdout.write(`  ${r.what}: ${r.restoredTo} (from ${r.restoredFrom})\n`);
+  }
 }
 
 export function handleCliArgs(): boolean {
@@ -56,6 +73,10 @@ export function handleCliArgs(): boolean {
     }
     if (arg === '--help' || arg === '-h') {
       printHelp();
+      return true;
+    }
+    if (arg === '--restore' || arg === '--undo') {
+      runRestore();
       return true;
     }
   }

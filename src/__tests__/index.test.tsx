@@ -14,6 +14,14 @@ vi.mock('../app.tsx', () => ({
   App: () => null,
 }));
 
+const { mockRestoreConfigBackups } = vi.hoisted(() => ({
+  mockRestoreConfigBackups: vi.fn(),
+}));
+
+vi.mock('../generators/shellRc.ts', () => ({
+  restoreConfigBackups: mockRestoreConfigBackups,
+}));
+
 import { render } from 'ink';
 import { handleCliArgs, hasDryRunFlag, reportFatal, restoreTerminal } from '../index.tsx';
 
@@ -62,6 +70,61 @@ describe('index CLI handling', () => {
     process.argv = ['node', 'index.tsx', 'somefile'];
     const result = handleCliArgs();
     expect(result).toBe(false);
+  });
+});
+
+describe('index restore flag', () => {
+  const originalArgv = process.argv.slice();
+  const originalExitCode = process.exitCode;
+
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+    mockRestoreConfigBackups.mockReset();
+  });
+
+  afterEach(() => {
+    process.argv = originalArgv;
+    process.exitCode = originalExitCode;
+    stdoutWrite.mockRestore();
+  });
+
+  it('prints the restored configs for --restore', () => {
+    const backup = '/home/u/.config/starship.toml.bak-2026-09-09T09-30-00-000Z';
+    const backup2 = '/home/u/.config/starship/zsh.toml.bak-2026-09-08T10-00-00-000Z';
+    mockRestoreConfigBackups.mockReturnValue([
+      { what: 'shared', restoredTo: '/home/u/.config/starship.toml', restoredFrom: backup },
+      { what: 'zsh', restoredTo: '/home/u/.config/starship/zsh.toml', restoredFrom: backup2 },
+    ]);
+    process.argv = ['node', 'index.tsx', '--restore'];
+
+    const result = handleCliArgs();
+
+    expect(result).toBe(true);
+    expect(stdoutWrite).toHaveBeenCalledWith(
+      expect.stringContaining('shared: /home/u/.config/starship.toml')
+    );
+    expect(stdoutWrite).toHaveBeenCalledWith(
+      expect.stringContaining('zsh: /home/u/.config/starship/zsh.toml')
+    );
+  });
+
+  it('accepts --undo as an alias for --restore', () => {
+    mockRestoreConfigBackups.mockReturnValue([]);
+    process.argv = ['node', 'index.tsx', '--undo'];
+
+    expect(handleCliArgs()).toBe(true);
+    expect(mockRestoreConfigBackups).toHaveBeenCalled();
+  });
+
+  it('reports when there is nothing to restore', () => {
+    mockRestoreConfigBackups.mockReturnValue([]);
+    process.argv = ['node', 'index.tsx', '--restore'];
+
+    handleCliArgs();
+
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Nothing to restore'));
   });
 });
 
