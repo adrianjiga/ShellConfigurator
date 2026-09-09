@@ -134,6 +134,12 @@ npm run format:check   # Biome format check
 npm run format    # Biome format write
 ```
 
+## Troubleshooting
+
+See [docs/troubleshooting.md](docs/troubleshooting.md) for common issues and
+fixes (font not rendering, `chsh` failures, missing PATH entries, prompt
+leaks, and more).
+
 ## Contributing
 
 Bugs and feature requests go on the [Issues
