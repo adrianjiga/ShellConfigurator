@@ -13,7 +13,7 @@ Interactive Ink (React) TUI that walks users through configuring Starship. Node 
 
 ## Repository rules and releases
 
-- `master` is protected by the GitHub ruleset "master protection" (configured on GitHub, not in the repo): PRs only, no force-push/deletion on the branch (tags are unaffected), 0-approval solo merge, and 6 required status checks — Quality gate (lint + format + typecheck + build via `ci.yml`), Coverage gate (node 22/24 Ubuntu + macOS via `tests.yml`), and the 4 distro-smoke jobs — with branches tested against latest master (`strict`). CodeQL still scans via a `code_quality` rule (errors only) rather than a required check, because CodeQL contexts don't run on Dependabot PRs.
+- `master` is protected by the GitHub ruleset "master protection" (configured on GitHub, not in the repo): PRs only, no force-push/deletion on the branch (tags are unaffected), 0-approval solo merge, and 7 required status checks — Quality gate (lint + format + typecheck + build via `ci.yml`), Coverage gate (node 22/24 Ubuntu + macOS via `tests.yml`), and the 5 distro-smoke jobs — with branches tested against latest master (`strict`). CodeQL still scans via a `code_quality` rule (errors only) rather than a required check, because CodeQL contexts don't run on Dependabot PRs.
 - Releasing: bump `package.json` + lockfile, push a `v*` tag → `release.yml` stages to npm via OIDC and creates the GitHub release with the `npm pack` tarball; then approve the staged package with 2FA (`npm stage approve` / npmjs Staged Packages tab).
 - The curl installer (`scripts/install.sh`) consumes the GitHub-release tarball, which must stay self-contained: `bundledDependencies` (fflate, ink, ink-select-input, react) keep `node_modules` inside the packed tarball. Verify with `npm pack --pack-destination <dir>` and running `dist/index.js` from the extracted tar — a bare `dist/` tarball crashes with `ERR_MODULE_NOT_FOUND`.
 
@@ -34,7 +34,7 @@ Interactive Ink (React) TUI that walks users through configuring Starship. Node 
 - Never commit or push directly to `master`/`main` — every change goes through a feature branch and a PR.
 - Every PR description has these sections: **Summary**, **Why**, **What Changed**.
 - ESM: relative imports name the real source file (e.g. `from './types.ts'`, `from './App.tsx'`). `rewriteRelativeImportExtensions` rewrites them to `.js` on emit, so `dist/` stays valid for Node's ESM resolver. Never write `.js` in source.
-- Package manager detection order matters and is asserted in tests: brew → pacman → os-release distro id → apt-get/dnf binary → `script`.
+- Package manager detection order matters and is asserted in tests: brew → pacman → os-release distro id → apt-get/dnf/apk binary → `script`. The `distro-smoke` matrix (with Alpine) guards it.
 - Binary checks live in `services/exec.ts` and use `sh -c 'command -v "$1"' sh <cmd>`, never `which` — `which` is absent on minimal/Fedora/Alpine images, and passing the name as `$1` keeps it out of the script text. The CI `distro-smoke` job guards it.
 - The `distro-smoke` containers run `scripts/ci/distro-setup.sh` first, which upgrades to a pinned Node 22 tarball when the distro ships an older node (debian/ubuntu ship 18) so the run uses the same engine floor as everywhere else. Don't remove or inline it.
 - All install commands go through `runCommand` in `services/exec.ts`: async `spawn`, never `spawnSync`, and it suspends the Ink UI (`services/tty.ts`) for the child's lifetime so sudo prompts are not painted over.

@@ -10,6 +10,10 @@ elif command -v pacman >/dev/null 2>&1; then
   # --disable-sandbox keeps pacman working under qemu emulation (local dev
   # on arm64); harmless on native runners.
   pacman -Syu --noconfirm --disable-sandbox nodejs npm curl tar
+elif command -v apk >/dev/null 2>&1; then
+  # bash is not preinstalled on Alpine but the smoke harness drives the
+  # container with bash -euxo pipefail, so install it alongside the toolchain.
+  apk add --no-cache nodejs npm curl tar bash
 else
   echo "No supported package manager found" >&2
   exit 1

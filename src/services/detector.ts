@@ -33,14 +33,17 @@ export async function detectPackageManagerAsync(): Promise<PackageManager> {
     if (['ubuntu', 'debian', 'linuxmint', 'pop', 'elementary'].includes(id)) return 'apt';
     if (['fedora', 'rhel', 'centos', 'rocky', 'alma'].includes(id)) return 'dnf';
     if (['arch', 'manjaro', 'endeavouros', 'cachyos', 'garuda'].includes(id)) return 'pacman';
+    if (['alpine'].includes(id)) return 'apk';
   }
 
-  const [hasApt, hasDnf] = await Promise.all([
+  const [hasApt, hasDnf, hasApk] = await Promise.all([
     commandExistsAsync('apt-get'),
     commandExistsAsync('dnf'),
+    commandExistsAsync('apk'),
   ]);
   if (hasApt) return 'apt';
   if (hasDnf) return 'dnf';
+  if (hasApk) return 'apk';
 
   return 'script';
 }

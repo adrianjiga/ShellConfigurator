@@ -8,10 +8,10 @@ import { commandExists, commandPath, runCommand } from './exec.ts';
 
 // Package names per shell per package manager
 const SHELL_PACKAGES: Record<ShellId, Partial<Record<PackageManager, string>>> = {
-  bash: { pacman: 'bash', apt: 'bash', dnf: 'bash', brew: 'bash' },
-  zsh: { pacman: 'zsh', apt: 'zsh', dnf: 'zsh', brew: 'zsh' },
-  fish: { pacman: 'fish', apt: 'fish', dnf: 'fish', brew: 'fish' },
-  nushell: { pacman: 'nushell', apt: 'nushell', dnf: 'nushell', brew: 'nushell' },
+  bash: { pacman: 'bash', apt: 'bash', dnf: 'bash', brew: 'bash', apk: 'bash' },
+  zsh: { pacman: 'zsh', apt: 'zsh', dnf: 'zsh', brew: 'zsh', apk: 'zsh' },
+  fish: { pacman: 'fish', apt: 'fish', dnf: 'fish', brew: 'fish', apk: 'fish' },
+  nushell: { pacman: 'nushell', apt: 'nushell', dnf: 'nushell', brew: 'nushell', apk: 'nushell' },
   powershell: { pacman: 'powershell', brew: 'powershell' },
 };
 
@@ -20,6 +20,7 @@ const INSTALL_CMDS: Record<PackageManager, (pkg: string) => string[]> = {
   apt: (pkg) => ['sudo', 'apt-get', 'install', '-y', pkg],
   dnf: (pkg) => ['sudo', 'dnf', 'install', '-y', pkg],
   brew: (pkg) => ['brew', 'install', pkg],
+  apk: (pkg) => ['sudo', 'apk', 'add', '--no-cache', pkg],
   script: (_) => [],
 };
 

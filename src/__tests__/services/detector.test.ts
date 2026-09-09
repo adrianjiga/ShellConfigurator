@@ -113,6 +113,17 @@ describe('detectPackageManagerAsync', () => {
     expect(await detectPackageManagerAsync()).toBe('apt');
   });
 
+  it('returns apk for alpine via os-release', async () => {
+    execFileFails();
+    readFileAsyncReturns('ID=alpine\nNAME="Alpine Linux"');
+    expect(await detectPackageManagerAsync()).toBe('apk');
+  });
+
+  it('returns apk when only the apk binary is present', async () => {
+    execFileByArg((arg) => arg === 'apk');
+    expect(await detectPackageManagerAsync()).toBe('apk');
+  });
+
   it('returns script as fallback when nothing is detected', async () => {
     execFileFails();
     expect(await detectPackageManagerAsync()).toBe('script');

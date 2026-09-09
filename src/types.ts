@@ -3,7 +3,7 @@ import type { PaletteId } from './config/palettes.ts';
 
 export type ShellId = 'zsh' | 'bash' | 'fish' | 'nushell' | 'powershell';
 export type CharacterSymbol = 'arrow' | 'lambda' | 'dollar';
-export type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'script';
+export type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'apk' | 'script';
 export type InstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
 /**
