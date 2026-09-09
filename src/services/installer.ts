@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { unzipSync } from 'fflate';
 import { getShellBinary } from '../config/shells.ts';
 import type { PackageManager, ShellId } from '../types.ts';
 import { commandExists, commandPath, runCommand } from './exec.ts';
+import { type ExtractedFontFile, extractFontFiles } from './fontExtractor.ts';
 
 // Package names per shell per package manager
 const SHELL_PACKAGES: Record<ShellId, Partial<Record<PackageManager, string>>> = {
@@ -45,8 +45,6 @@ const FONT_DOWNLOAD_TIMEOUT_MS = 60_000;
 
 /** Same idea for the checksum lookup: a stuck metadata fetch must not wedge the install. */
 const FONT_CHECKSUM_TIMEOUT_MS = 30_000;
-
-const FONT_FILE_RE = /\.(ttf|otf|woff2?)$/i;
 
 /** Nerd Font archives run to tens of MB; anything far past that is not a font archive. */
 const MAX_FONT_ARCHIVE_BYTES = 200 * 1024 * 1024;
@@ -203,31 +201,27 @@ export async function installNerdFont(fontId: string): Promise<void> {
     );
   }
 
-  // Extracted in-process rather than by shelling out to `unzip`, which is absent
-  // on minimal systems and needed its own detection and platform-specific error.
-  // Only font files are taken, so non-font payloads (LICENSE.md, readme.md) stay out.
-  let entries: Record<string, Uint8Array>;
+  // Extracted by a sandboxed worker rather than shelling out to `unzip`, which
+  // is absent on minimal systems and needed its own detection and
+  // platform-specific error. Only font files survive the worker's filter, so
+  // non-font payloads (LICENSE.md, readme.md) stay out.
+  let fontFiles: ExtractedFontFile[];
   try {
-    entries = unzipSync(new Uint8Array(buffer), {
-      filter: (file) => FONT_FILE_RE.test(file.name),
-    });
+    fontFiles = await extractFontFiles(buffer);
   } catch (err) {
     throw new Error(
       `Could not extract ${font.zipName}: ${err instanceof Error ? err.message : err}`,
       { cause: err }
     );
   }
-
-  const names = Object.keys(entries);
-  if (names.length === 0) {
+  if (fontFiles.length === 0) {
     throw new Error(`No font files found in ${font.zipName}`);
   }
 
-  for (const name of names) {
-    // path.basename is load-bearing, not cosmetic: it strips any directory
-    // component from the unverified archive's entries, so a crafted zip cannot
-    // write outside fontsDir. Do not replace it with the entry path.
-    fs.writeFileSync(path.join(fontsDir, path.basename(name)), entries[name]!);
+  for (const file of fontFiles) {
+    // The worker already flattens entry paths to basenames, so a crafted zip
+    // cannot write outside fontsDir. Do not join onto the raw entry path.
+    fs.writeFileSync(path.join(fontsDir, file.name), file.bytes);
   }
 
   // Refresh font cache (Linux only — macOS picks up ~/Library/Fonts automatically).
