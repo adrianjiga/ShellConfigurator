@@ -11,3 +11,6 @@ change can weigh the original trade-off before unpicking it.
   inside the packed tarball.
 - [0004-discriminated-unions](0004-discriminated-unions.md) — model optional
   choices as discriminated unions, never sentinel strings.
+- [0005-verify-and-sandbox-fonts](0005-verify-and-sandbox-fonts.md) — check the
+  SHA-256 of font downloads against the release metadata and decompress in an
+  isolated worker.

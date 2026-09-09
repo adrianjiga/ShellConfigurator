@@ -11,7 +11,7 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/) 
 
 - **Live preview** — see your prompt update in real time as you make choices
 - **Cross-shell** — configure zsh, bash, fish, nushell, and PowerShell in one run
-- **Automated installation** — installs Starship, Nerd Fonts, and any missing shells for you
+- **Automated installation** — installs Starship, Nerd Fonts (downloads verified against their published SHA-256 digest, extraction sandboxed in a worker), and any missing shells for you
 - **12 presets** — from minimal plain-text to Tokyo Night, Gruvbox Rainbow, and Catppuccin
 - **12 colour palettes** — one behind every preset, and any of them usable with any preset
 - **Powerline prompts** — interlocking coloured blocks with Nerd Font separators
@@ -88,7 +88,7 @@ All releases, including changelogs and install tarballs, are published on
 ## What gets installed / configured
 
 - **Starship** — via your package manager, or `curl` if none is detected
-- **Nerd Font** — downloaded from the official nerd-fonts GitHub release, installed to `~/Library/Fonts/` (macOS) or `~/.local/share/fonts/` (Linux)
+- **Nerd Font** — downloaded from the official nerd-fonts GitHub release, its SHA-256 checked against the digest published for that release, and extracted in an isolated worker before being installed to `~/Library/Fonts/` (macOS) or `~/.local/share/fonts/` (Linux)
 - **Shells** — installed via your package manager if not already present
 - **Per-shell Starship configs** — `~/.config/starship/<shell>.toml` for every selected shell, so each shell keeps its own prompt; the shared `~/.config/starship.toml` is never overwritten
 - **Shell RC files** — each selected shell gets a `STARSHIP_CONFIG` export pointing at its own config plus the `starship init` line (appended idempotently); shells left unselected get an `unset` guard so a configured parent's prompt doesn't leak in
@@ -115,7 +115,7 @@ src/
   config/        # Module, preset, and shell definitions
   generators/    # TOML config builder and shell RC updater
   screens/       # One file per wizard step
-  services/      # Detection (detector.ts), installation (installer.ts), task orchestration (installTasks.ts)
+  services/      # Detection (detector.ts), installation (installer.ts, fontExtractor.ts), task orchestration (installTasks.ts)
   components/    # WizardLayout, PromptPreview, NavHints
   stepMachine.ts # Pure step navigation (getNextStep / getPrevStep)
   types.ts       # Shared types, STEP_ORDER, default state

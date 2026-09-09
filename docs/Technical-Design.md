@@ -263,7 +263,15 @@ All install commands go through `runCommand` in `src/services/exec.ts` — an as
 - **cancellation**: the optional `AbortSignal` kills the child with `SIGTERM`, and `killActiveCommand` does the same from the Install screen
 - **failure modes**: `runCommand` checks three in order — the spawn `'error'` event, an `'exit'` with a signal, then a non-zero exit status. It settles on `'exit'`, not `'close'`: a child that backgrounds a grandchild keeps its stdio open, so `'close'` never fires even though the process has ended. Each failure path produces a distinct, actionable error message.
 
-`installer.ts` (Starship/shell installs, `chsh`) composes commands and delegates to `runCommand`; the font loader uses `fetch` with its own timeout instead.
+`installer.ts` (Starship/shell installs, `chsh`) composes commands and delegates to `runCommand`; fonts never go through the shell — `installNerdFont` downloads with `fetch` and hands the archive to a worker (below).
+
+### Verified Font Downloads & Sandboxed Extraction
+
+`installNerdFont` treats a downloaded archive as hostile input until proven otherwise:
+
+1. **Download guards**: the request carries an `AbortSignal.timeout` (`FONT_DOWNLOAD_TIMEOUT_MS`), so a hung connection can't wedge the install chain, and the archive is refused when the declared `content-length` or the received buffer exceeds `MAX_FONT_ARCHIVE_BYTES`.
+2. **Checksum verification**: before extraction the buffer's SHA-256 is computed (`node:crypto`) and compared with the `sha256:` digest GitHub publishes in the release asset metadata (`GET /repos/ryanoasis/nerd-fonts/releases/latest`, matched by `zipName`). The lookup also has its own `AbortSignal.timeout`. The check fails closed: a mismatched archive, a release without a digest for the asset, or a failed lookup all refuse to install with distinct errors.
+3. **Worker-isolated extraction** (`src/services/fontExtractor.ts`): `extractFontFiles()` decompresses in an `eval`-script `Worker` (CommonJS `require` of the resolved fflate path, archive and path passed through `workerData`), so malformed input can only crash the throwaway worker, never the wizard. The worker filters entries to font files and flattens them to basenames — deliberately structured-cloned back as `{ name, bytes }` while the *writes* stay on the main thread, keeping path handling and `fs.writeFileSync` in one auditable place. A ~60s timeout terminates a stuck worker.
 
 ### Platform-Aware Font Installation
 
@@ -271,6 +279,8 @@ All install commands go through `runCommand` in `src/services/exec.ts` — an as
 
 - **macOS** (`process.platform === 'darwin'`): `~/Library/Fonts` — macOS auto-detects fonts here, so `fc-cache` is skipped
 - **Linux**: `~/.local/share/fonts` — requires `fc-cache -fv` after extraction
+
+If extraction succeeds but yields no font files, the install fails loudly ("No font files found") rather than silently writing nothing.
 
 ---
 
