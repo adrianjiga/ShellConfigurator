@@ -5,13 +5,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Only the side-effecting edges are stubbed. generateToml, the step machine, the
 // screens, and runInstallTasks all run for real, so this exercises the whole
-// keypress -> state -> generated config path.
+// keypress -> state -> generated config path. The installers are hoisted so tests
+// can script them (failure, missing shells, font install).
+const { mockDetectInstalledShells, mockInstallShell, mockInstallNerdFont } = vi.hoisted(() => ({
+  mockDetectInstalledShells: vi.fn().mockResolvedValue(['zsh', 'bash', 'fish']),
+  mockInstallShell: vi.fn().mockResolvedValue(undefined),
+  mockInstallNerdFont: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../services/detector.ts', () => ({
   detectPackageManagerAsync: vi.fn().mockResolvedValue('apt'),
   isStarshipInstalledAsync: vi
     .fn()
     .mockResolvedValue({ installed: true, version: 'starship 1.20' }),
-  detectInstalledShellsAsync: vi.fn().mockResolvedValue(['zsh', 'bash', 'fish']),
+  detectInstalledShellsAsync: mockDetectInstalledShells,
   detectCurrentShellAsync: vi.fn().mockResolvedValue(null),
 }));
 
@@ -34,8 +41,8 @@ vi.mock('../generators/shellRc.ts', () => ({
 vi.mock('../services/installer.ts', () => ({
   NERD_FONTS: [{ id: 'JetBrainsMono', label: 'JetBrains Mono', zipName: 'JetBrainsMono.zip' }],
   installStarship: vi.fn().mockResolvedValue(undefined),
-  installShell: vi.fn().mockResolvedValue(undefined),
-  installNerdFont: vi.fn().mockResolvedValue(undefined),
+  installShell: mockInstallShell,
+  installNerdFont: mockInstallNerdFont,
   setDefaultShell: vi.fn().mockResolvedValue(undefined),
   getMissingStarshipPathDir: vi.fn(() => null),
   getNerdFontsDir: () => '/tmp/fonts',
@@ -45,12 +52,18 @@ import { App } from '../app.tsx';
 
 const ENTER = '\r';
 const SPACE = ' ';
+const DOWN = '\u001B[B';
 
 const INITIAL_EXIT_CODE = process.exitCode;
 
 afterEach(() => {
   cleanup();
   process.exitCode = INITIAL_EXIT_CODE;
+  // clearAllMocks wipes calls but not implementations; restore the hoisted
+  // defaults so a test's scripting does not leak into the next one.
+  mockDetectInstalledShells.mockReset().mockResolvedValue(['zsh', 'bash', 'fish']);
+  mockInstallShell.mockReset().mockResolvedValue(undefined);
+  mockInstallNerdFont.mockReset().mockResolvedValue(undefined);
 });
 beforeEach(() => vi.clearAllMocks());
 
@@ -113,8 +126,6 @@ describe('full wizard walkthrough', () => {
   });
 
   it('carries the prompt character choice all the way into the config', async () => {
-    const DOWN = '\u001B[B';
-
     const toml = await runWizard([
       ENTER, // welcome
       ENTER, // fontcheck
@@ -194,6 +205,88 @@ describe('full wizard walkthrough', () => {
     await waitForDone(out.instance);
 
     expect(process.exitCode).toBe(1);
+  });
+
+  it('installs a chosen Nerd Font through the font_select flow', async () => {
+    const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
+    const toml = await runWizard(
+      [
+        ENTER, // welcome -> fontcheck
+        DOWN, // fontcheck: "No, install one for me"
+        ENTER, // fontcheck -> choose a font
+        ENTER, // font_select: JetBrains Mono -> preset
+        ENTER, // preset -> segments_left
+        ENTER, // accept left segments -> segments_right
+        ENTER, // accept right segments -> style
+        ENTER, // accept style -> shells
+        SPACE, // select zsh
+        ENTER, // -> review
+        ENTER, // -> installing
+      ],
+      out
+    );
+    await waitForDone(out.instance);
+
+    expect(toml).toContain('$character');
+    expect(mockInstallNerdFont).toHaveBeenCalledTimes(1);
+    expect(mockInstallNerdFont).toHaveBeenCalledWith('JetBrainsMono');
+    expect(process.exitCode ?? 0).toBe(0);
+  });
+
+  it('writes a glyph-free config when the font install fails', async () => {
+    // installNerdFont failing must not poison the generated config: hasNerdFont
+    // is forced off so the result avoids glyphs the user's terminal can't render.
+    mockInstallNerdFont.mockRejectedValue(new Error('Checksum mismatch'));
+    const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
+    const toml = await runWizard(
+      [
+        ENTER, // welcome
+        DOWN, // fontcheck: "No, install one for me"
+        ENTER, // fontcheck -> choose a font
+        ENTER, // font_select: JetBrains Mono -> preset
+        ENTER, // preset
+        ENTER, // segments_left
+        ENTER, // segments_right
+        ENTER, // style
+        SPACE, // select zsh
+        ENTER, // -> review
+        ENTER, // -> installing
+      ],
+      out
+    );
+    await waitForDone(out.instance);
+
+    // git_branch under hasNerdFont:false uses the plain-text "on " fallback.
+    expect(toml).toContain('symbol = "on "');
+    expect(toml).not.toContain('symbol = " "');
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('installs a shell the machine does not have', async () => {
+    // zsh is absent from this machine: detection reports only bash+fish, yet the
+    // shell step must still offer zsh and the install chain must install it.
+    mockDetectInstalledShells.mockResolvedValue(['bash', 'fish']);
+    const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
+    const toml = await runWizard(
+      [
+        ENTER, // welcome
+        ENTER, // fontcheck: already have one
+        ENTER, // preset
+        ENTER, // segments_left
+        ENTER, // segments_right
+        ENTER, // style
+        SPACE, // select zsh (missing -> "will install")
+        ENTER, // -> review
+        ENTER, // -> installing
+      ],
+      out
+    );
+    await waitForDone(out.instance);
+
+    expect(toml).toContain('$character');
+    expect(mockInstallShell).toHaveBeenCalledTimes(1);
+    expect(mockInstallShell).toHaveBeenCalledWith('zsh', 'apt');
+    expect(process.exitCode ?? 0).toBe(0);
   });
 });
 

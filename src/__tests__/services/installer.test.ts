@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import * as path from 'node:path';
 import { zipSync } from 'fflate';
@@ -87,6 +88,57 @@ function okResponse(overrides: Partial<Response> = {}): Response {
     arrayBuffer: async () => new ArrayBuffer(0),
     ...overrides,
   } as unknown as Response;
+}
+
+/** sha256 hex of a byte array, matching the digest GitHub publishes for an asset. */
+function hexDigest(bytes: ArrayBuffer): string {
+  return createHash('sha256').update(Buffer.from(bytes)).digest('hex');
+}
+
+/** Builds a real zip so the extraction path is exercised, not mocked. */
+function zipWith(files: Record<string, string>): ArrayBuffer {
+  const entries: Record<string, Uint8Array> = {};
+  for (const [name, content] of Object.entries(files)) {
+    entries[name] = new TextEncoder().encode(content);
+  }
+  const zipped = zipSync(entries);
+  return zipped.buffer.slice(
+    zipped.byteOffset,
+    zipped.byteOffset + zipped.byteLength
+  ) as ArrayBuffer;
+}
+
+/** A GitHub /releases/latest body, optionally carrying a digest for FiraCode.zip. */
+function releaseResponse(digestHex?: string): Response {
+  const assets = digestHex ? [{ name: 'FiraCode.zip', digest: `sha256:${digestHex}` }] : [];
+  return okResponse({ json: async () => ({ assets }) }) as Response;
+}
+
+/**
+ * Routes fetch by URL so installNerdFont sees the checksum API first and the
+ * download second. The API host is the discriminator: the download base URL
+ * (github.com/.../releases/latest/download) contains the same /releases/latest
+ * path, so matching the path alone would misroute the archive.
+ */
+function stubFontFetch(
+  download: () => Response,
+  digestHex = 'a'.repeat(64)
+): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes('api.github.com/repos/ryanoasis/nerd-fonts/releases/latest')) {
+      return releaseResponse(digestHex);
+    }
+    return download();
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
+/** Routes fetch so the download is a real zip whose digest matches its bytes. */
+function respondWithZip(files: Record<string, string>): ReturnType<typeof vi.fn> {
+  const zip = zipWith(files);
+  return stubFontFetch(() => okResponse({ arrayBuffer: async () => zip }), hexDigest(zip));
 }
 
 beforeEach(() => {
@@ -258,30 +310,13 @@ describe('installShell', () => {
 });
 
 describe('installNerdFont', () => {
-  /** Builds a real zip so the extraction path is exercised, not mocked. */
-  function zipWith(files: Record<string, string>): ArrayBuffer {
-    const entries: Record<string, Uint8Array> = {};
-    for (const [name, content] of Object.entries(files)) {
-      entries[name] = new TextEncoder().encode(content);
-    }
-    const zipped = zipSync(entries);
-    return zipped.buffer.slice(
-      zipped.byteOffset,
-      zipped.byteOffset + zipped.byteLength
-    ) as ArrayBuffer;
-  }
-
-  function respondWithZip(files: Record<string, string>) {
-    vi.mocked(fetch).mockResolvedValue(okResponse({ arrayBuffer: async () => zipWith(files) }));
-  }
-
   it('throws for an unknown font id', async () => {
     await expect(installNerdFont('NotAFont')).rejects.toThrow('Unknown font: NotAFont');
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
 
   it('throws when the download fails', async () => {
-    vi.mocked(fetch).mockResolvedValue(okResponse({ ok: false, status: 404 }));
+    stubFontFetch(() => okResponse({ ok: false, status: 404 }));
 
     await expect(installNerdFont('FiraCode')).rejects.toThrow('Failed to download font: HTTP 404');
     expect(mockWriteFileSync).not.toHaveBeenCalled();
@@ -295,9 +330,8 @@ describe('installNerdFont', () => {
   });
 
   it('throws a clear error when the archive is not a valid zip', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      okResponse({ arrayBuffer: async () => new TextEncoder().encode('not a zip').buffer })
-    );
+    const bytes = new TextEncoder().encode('not a zip').buffer;
+    stubFontFetch(() => okResponse({ arrayBuffer: async () => bytes }), hexDigest(bytes));
 
     await expect(installNerdFont('FiraCode')).rejects.toThrow('Could not extract');
   });
@@ -353,24 +387,78 @@ describe('installNerdFont', () => {
 });
 
 describe('installNerdFont download guards', () => {
-  it('aborts the download if it hangs', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      okResponse({ arrayBuffer: async () => zipSync({ 'a.ttf': new Uint8Array([1]) }).buffer })
-    );
+  it('gives every fetch an abort signal so a hang cannot wedge the install', async () => {
+    const fetchMock = respondWithZip({ 'a.ttf': 'font' });
 
     await installNerdFont('FiraCode').catch(() => {});
-    const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit | undefined;
-    expect(init?.signal).toBeInstanceOf(AbortSignal);
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(0);
+    for (const call of fetchMock.mock.calls) {
+      const init = call[1] as RequestInit | undefined;
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+    }
   });
 
   it('refuses an archive whose declared size is implausible', async () => {
-    vi.mocked(fetch).mockResolvedValue(
+    stubFontFetch(() =>
       okResponse({
         headers: { get: () => String(500 * 1024 * 1024) },
       } as unknown as Partial<Response>)
     );
 
     await expect(installNerdFont('FiraCode')).rejects.toThrow('exceeds the');
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+  });
+});
+
+describe('installNerdFont checksum verification', () => {
+  it('accepts an archive whose sha256 matches the published digest', async () => {
+    const fetchMock = respondWithZip({ 'FiraCodeNerdFont-Regular.ttf': 'font' });
+
+    await expect(installNerdFont('FiraCode')).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it('refuses an archive whose checksum does not match the publication', async () => {
+    stubFontFetch(() =>
+      okResponse({ arrayBuffer: async () => zipWith({ 'FiraCodeNerdFont-Regular.ttf': 'font' }) })
+    );
+
+    await expect(installNerdFont('FiraCode')).rejects.toThrow('Checksum mismatch');
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+  });
+
+  it('refuses an archive when the release publishes no digest for it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('api.github.com/repos/ryanoasis/nerd-fonts/releases/latest')) {
+          return releaseResponse(undefined); // no digest
+        }
+        return okResponse({ arrayBuffer: async () => zipWith({ 'a.ttf': 'font' }) });
+      })
+    );
+
+    await expect(installNerdFont('FiraCode')).rejects.toThrow('No sha256 digest');
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+  });
+
+  it('fails when the checksum lookup itself cannot be fetched', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('api.github.com/repos/ryanoasis/nerd-fonts/releases/latest')) {
+          return okResponse({ ok: false, status: 403 });
+        }
+        return okResponse({ arrayBuffer: async () => zipWith({ 'a.ttf': 'font' }) });
+      })
+    );
+
+    await expect(installNerdFont('FiraCode')).rejects.toThrow(
+      'Failed to look up font checksum: HTTP 403'
+    );
     expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 });
