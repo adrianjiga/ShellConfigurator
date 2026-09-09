@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockExecFile, mockReadFile } = vi.hoisted(() => {
   const mockExecFile = vi.fn();
@@ -27,6 +27,7 @@ vi.mock('fs', () => ({
 }));
 
 import {
+  detectCurrentShellAsync,
   detectInstalledShellsAsync,
   detectPackageManagerAsync,
   isStarshipInstalledAsync,
@@ -158,5 +159,48 @@ describe('detectInstalledShellsAsync', () => {
     const shells = await detectInstalledShellsAsync();
     // Order follows the SHELLS table, which is the single source of truth.
     expect(shells).toEqual(['zsh', 'bash', 'fish', 'nushell', 'powershell']);
+  });
+});
+
+describe('detectCurrentShellAsync', () => {
+  const originalShell = process.env.SHELL;
+
+  afterEach(() => {
+    if (originalShell === undefined) delete process.env.SHELL;
+    else process.env.SHELL = originalShell;
+    vi.clearAllMocks();
+  });
+
+  it('detects a shell from $SHELL path', async () => {
+    process.env.SHELL = '/usr/bin/zsh';
+    expect(await detectCurrentShellAsync()).toBe('zsh');
+  });
+
+  it('detects bash from a bare $SHELL name', async () => {
+    process.env.SHELL = 'bash';
+    expect(await detectCurrentShellAsync()).toBe('bash');
+  });
+
+  it('falls back to ps comm when $SHELL is unknown', async () => {
+    process.env.SHELL = '/usr/bin/weird-shell';
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
+      const cmd = args[0] as string;
+      if (cmd === 'ps') cb(null, 'fish', '');
+      else cb(new Error('not found'), '', '');
+    });
+    expect(await detectCurrentShellAsync()).toBe('fish');
+  });
+
+  it('returns null when neither $SHELL nor ps identifies a shell', async () => {
+    process.env.SHELL = '/usr/bin/weird-shell';
+    execFileFails();
+    expect(await detectCurrentShellAsync()).toBeNull();
+  });
+
+  it('returns null when $SHELL is not set', async () => {
+    delete process.env.SHELL;
+    execFileFails();
+    expect(await detectCurrentShellAsync()).toBeNull();
   });
 });

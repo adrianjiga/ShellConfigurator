@@ -12,6 +12,7 @@ vi.mock('../services/detector.ts', () => ({
     .fn()
     .mockResolvedValue({ installed: true, version: 'starship 1.20' }),
   detectInstalledShellsAsync: vi.fn().mockResolvedValue(['zsh', 'bash', 'fish']),
+  detectCurrentShellAsync: vi.fn().mockResolvedValue(null),
 }));
 
 const { mockWriteConfig, mockApplyShellConfig, mockResetSharedConfig } = vi.hoisted(() => ({

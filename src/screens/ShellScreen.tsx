@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { SHELLS } from '../config/shells.ts';
-import { detectInstalledShellsAsync } from '../services/detector.ts';
+import { detectCurrentShellAsync, detectInstalledShellsAsync } from '../services/detector.ts';
 import type { ShellId, WizardState } from '../types.ts';
 
 interface ShellScreenProps {
@@ -39,6 +39,22 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
         onUpdate({ installedShells: detected });
       }
     })();
+
+    // Pre-select the shell the wizard is running in, but only when the user
+    // hasn't already made a choice (won't clobber a back-navigation selection).
+    if (selectedRef.current.size === 0) {
+      (async () => {
+        const current = await detectCurrentShellAsync();
+        if (!cancelled && current) {
+          setSelected((prev) => {
+            if (prev.has(current)) return prev;
+            const next = new Set(prev);
+            next.add(current);
+            return next;
+          });
+        }
+      })();
+    }
 
     return () => {
       cancelled = true;
