@@ -328,7 +328,11 @@ function installShell(shellId: ShellId, pm: PackageManager): Promise<void>;
 // Installs a shell via package manager. Throws if pm is 'script'.
 
 function installNerdFont(fontId: string): Promise<void>;
-// Downloads font zip from GitHub, extracts to platform-appropriate fonts directory
+// Downloads the font zip from GitHub, verifies the archive's SHA-256 against the
+// digest published in the release asset metadata (fails closed on mismatch,
+// missing digest, or lookup failure), then extracts it to the platform-specific
+// fonts directory. Extraction happens in a sandboxed worker (fontExtractor.ts)
+// so malformed archives cannot crash the wizard.
 // macOS: ~/Library/Fonts (fc-cache skipped), Linux: ~/.local/share/fonts (runs fc-cache)
 
 function setDefaultShell(shellId: ShellId): Promise<void>;
@@ -341,6 +345,21 @@ function getMissingStarshipPathDir(): string | null;
 // The directory (~/.local/bin) that must be on PATH when the install script put
 // the binary there and the shell can't reach it, or null when starship is already
 // reachable.
+```
+
+### fontExtractor.ts
+
+```typescript
+function extractFontFiles(zipBytes: Uint8Array): Promise<ExtractedFontFile[]>;
+// Decompresses the archive in an isolated `eval` Worker and returns only the
+// font-file entries, flattened to basenames: { name, bytes }. Never touches the
+// filesystem — the caller (installNerdFont) does the writes. Rejects on invalid
+// archives, worker crashes, or a ~60s timeout.
+
+interface ExtractedFontFile {
+  name: string; // basename only; any directory component from the unverified archive is stripped
+  bytes: Uint8Array;
+}
 ```
 
 All install commands go through `runCommand` in `src/services/exec.ts`: an async
