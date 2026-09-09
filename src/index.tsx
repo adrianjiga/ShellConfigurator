@@ -11,7 +11,7 @@ const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.u
  * Ink puts the terminal in raw mode and hides the cursor; if the process dies
  * without unwinding that, the user's shell is left unusable.
  */
-function restoreTerminal(): void {
+export function restoreTerminal(): void {
   try {
     if (process.stdin.isTTY && process.stdin.setRawMode) {
       process.stdin.setRawMode(false);
@@ -23,7 +23,7 @@ function restoreTerminal(): void {
   }
 }
 
-function reportFatal(prefix: string, err: unknown): void {
+export function reportFatal(prefix: string, err: unknown): void {
   restoreTerminal();
   const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
   process.stderr.write(`\n${prefix}: ${message}\n`);
@@ -45,7 +45,7 @@ Options:
 `);
 }
 
-function handleCliArgs(): boolean {
+export function handleCliArgs(): boolean {
   const args = process.argv.slice(2);
   for (const arg of args) {
     if (arg === '--version' || arg === '-v') {
