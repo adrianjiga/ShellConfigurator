@@ -83,6 +83,8 @@ export interface WizardState {
   nerdFontToInstall: NerdFontChoice;
   setDefaultShell: ShellId | null;
   skipStarshipInstall: boolean;
+  /** When true no install or config-write happens — the wizard only previews. */
+  dryRun: boolean;
   installResults: InstallTask[];
 }
 
@@ -102,5 +104,6 @@ export const DEFAULT_STATE: WizardState = {
   nerdFontToInstall: NO_NERD_FONT,
   setDefaultShell: null,
   skipStarshipInstall: false,
+  dryRun: false,
   installResults: [],
 };

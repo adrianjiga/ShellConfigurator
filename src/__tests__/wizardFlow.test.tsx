@@ -172,3 +172,51 @@ describe('full wizard walkthrough', () => {
     expect(process.exitCode).toBe(1);
   });
 });
+
+describe('dry-run wizard walkthrough', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockWriteConfig.mockClear();
+  });
+
+  async function runDryWizard(): Promise<ReturnType<typeof render>> {
+    const instance = render(<App dryRun />);
+    await flush();
+
+    // Walk straight to the shells step and pick zsh; installing must be skipped.
+    instance.stdin.write(ENTER); // welcome
+    await flush();
+    instance.stdin.write(ENTER); // fontcheck
+    await flush();
+    instance.stdin.write(ENTER); // preset
+    await flush();
+    instance.stdin.write(ENTER); // segments_left
+    await flush();
+    instance.stdin.write(ENTER); // segments_right
+    await flush();
+    instance.stdin.write(ENTER); // style
+    await flush();
+    instance.stdin.write(SPACE); // select zsh
+    await flush();
+    instance.stdin.write(ENTER); // -> done (skips installing)
+    await flush();
+
+    return instance;
+  }
+
+  it('skips the install step and lands on the dry-run summary', async () => {
+    const instance = await runDryWizard();
+
+    const frame = instance.lastFrame();
+    expect(frame).toContain('Dry run');
+    expect(frame).toContain('Tasks that would run');
+    expect(frame).toContain('Generated config');
+  });
+
+  it('never writes any config or rc files in dry-run mode', async () => {
+    await runDryWizard();
+
+    expect(mockWriteConfig).not.toHaveBeenCalled();
+    expect(mockApplyShellConfig).not.toHaveBeenCalled();
+  });
+});

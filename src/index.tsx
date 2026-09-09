@@ -38,10 +38,12 @@ Usage:
   shell-configurator              start the wizard
   shell-configurator --help       show this help
   shell-configurator --version    print the version
+  shell-configurator --dry-run    preview changes without installing
 
 Options:
-  -h, --help     Show this help and exit
-  -v, --version  Print the version and exit
+  -h, --help       Show this help and exit
+  -v, --version    Print the version and exit
+  -d, --dry-run    Generate config in-memory and show a summary; installs nothing
 `);
 }
 
@@ -60,6 +62,12 @@ export function handleCliArgs(): boolean {
   return false;
 }
 
+/** Extract the --dry-run / --no-install flag from argv. */
+export function hasDryRunFlag(): boolean {
+  const args = process.argv.slice(2);
+  return args.includes('--dry-run') || args.includes('--no-install') || args.includes('-d');
+}
+
 process.on('uncaughtException', (err) => reportFatal('ShellConfigurator crashed', err));
 process.on('unhandledRejection', (err) => reportFatal('ShellConfigurator crashed', err));
 
@@ -69,7 +77,7 @@ if (handleCliArgs()) {
 
 const app = render(
   <ErrorBoundary onError={(err) => reportFatal('ShellConfigurator hit a render error', err)}>
-    <App />
+    <App dryRun={hasDryRunFlag()} />
   </ErrorBoundary>
 );
 

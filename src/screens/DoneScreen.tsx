@@ -2,8 +2,9 @@ import { Box, Text, useApp, useInput } from 'ink';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { getShell } from '../config/shells.ts';
 import { getShellConfigPath } from '../generators/shellRc.ts';
+import { generateToml } from '../generators/starship.ts';
 import { NERD_FONTS } from '../services/installer.ts';
-import { rcTaskId } from '../services/installTasks.ts';
+import { buildTaskList, rcTaskId } from '../services/installTasks.ts';
 import { fontIdToInstall, type InstallStatus, type WizardState } from '../types.ts';
 
 interface DoneScreenProps {
@@ -63,11 +64,13 @@ export function DoneScreen({ state }: DoneScreenProps) {
   const chshStatus = taskStatus(state, 'chsh');
   const chshOk = chshStatus === 'done';
 
-  const heading = noResults
-    ? 'Finished — no results recorded'
-    : hasFailures
-      ? 'Finished with errors'
-      : 'All done!';
+  const heading = state.dryRun
+    ? 'Dry run — no changes were made'
+    : noResults
+      ? 'Finished — no results recorded'
+      : hasFailures
+        ? 'Finished with errors'
+        : 'All done!';
 
   return (
     <WizardLayout state={state} hidePreview>
@@ -83,36 +86,72 @@ export function DoneScreen({ state }: DoneScreenProps) {
           </Text>
         )}
 
-        <Box flexDirection="column" marginTop={1} gap={1}>
-          <Box flexDirection="column">
-            <Box flexDirection="row" gap={1}>
-              <StatusMark status={configStatus} />
-              <Text>
-                {configStatus === 'done' ? 'Per-shell config written' : 'Config not written'}
-              </Text>
-            </Box>
-            {configStatus === 'done' &&
-              state.selectedShells.map((shellId) => (
-                <Box key={shellId} marginLeft={3} flexDirection="row" gap={1}>
-                  <Text color="cyan">{getShellConfigPath(shellId)}</Text>
-                  <Text color="gray">(for {shellId})</Text>
+        {state.dryRun && (
+          <>
+            <Text color="yellow" italic>
+              In real mode the wizard would install{' '}
+              {[`Starship${fontId ? ` (${fontLabel})` : ''}`, ...state.selectedShells].join(', ')}{' '}
+              and write the config below.
+            </Text>
+
+            <Box marginTop={1} flexDirection="column" gap={1}>
+              <Text bold>Tasks that would run</Text>
+              {buildTaskList(state).map((task) => (
+                <Box key={task.id} flexDirection="row" gap={1}>
+                  <Text color="gray">would-run</Text>
+                  <Text color="gray">{task.label}</Text>
                 </Box>
               ))}
-            {configStatus === 'failed' && (
-              <Box marginLeft={3}>
-                <Text color="red" italic>
-                  {taskError(state, 'config')}
+            </Box>
+
+            <Box marginTop={1} flexDirection="column" gap={1}>
+              <Text bold>Generated config</Text>
+              {state.selectedShells.map((shellId) => (
+                <Box key={shellId} flexDirection="column">
+                  <Text color="cyan">{getShellConfigPath(shellId)}</Text>
+                  <Box marginLeft={2}>
+                    <Text color="gray" dimColor>
+                      {generateToml(state)}
+                    </Text>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          </>
+        )}
+
+        <Box flexDirection="column" marginTop={1} gap={1}>
+          {!state.dryRun && (
+            <Box flexDirection="column">
+              <Box flexDirection="row" gap={1}>
+                <StatusMark status={configStatus} />
+                <Text>
+                  {configStatus === 'done' ? 'Per-shell config written' : 'Config not written'}
                 </Text>
               </Box>
-            )}
-            {taskNote(state, 'config') && (
-              <Box marginLeft={3}>
-                <Text color="gray" italic>
-                  {taskNote(state, 'config')}
-                </Text>
-              </Box>
-            )}
-          </Box>
+              {configStatus === 'done' &&
+                state.selectedShells.map((shellId) => (
+                  <Box key={shellId} marginLeft={3} flexDirection="row" gap={1}>
+                    <Text color="cyan">{getShellConfigPath(shellId)}</Text>
+                    <Text color="gray">(for {shellId})</Text>
+                  </Box>
+                ))}
+              {configStatus === 'failed' && (
+                <Box marginLeft={3}>
+                  <Text color="red" italic>
+                    {taskError(state, 'config')}
+                  </Text>
+                </Box>
+              )}
+              {taskNote(state, 'config') && (
+                <Box marginLeft={3}>
+                  <Text color="gray" italic>
+                    {taskNote(state, 'config')}
+                  </Text>
+                </Box>
+              )}
+            </Box>
+          )}
 
           {fontId && (
             <Box flexDirection="column">
@@ -207,23 +246,36 @@ export function DoneScreen({ state }: DoneScreenProps) {
         </Box>
 
         <Box marginTop={1} flexDirection="column">
-          <Text color="gray">Restart your terminal to see the new prompt.</Text>
-          {state.skipStarshipInstall && (
-            <Text color="yellow">
-              Starship is not installed, so shell init lines were not added. Install it (e.g.{' '}
-              <Text color="cyan">curl -sS https://starship.rs/install.sh | sh</Text>), then re-run
-              the wizard to configure your shells.
-            </Text>
+          {state.dryRun ? (
+            <>
+              <Text color="gray">
+                Run without <Text color="cyan">--dry-run</Text> to apply these changes.
+              </Text>
+              <Text color="gray">
+                Run <Text color="cyan">starship print-config</Text> to view the generated config.
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text color="gray">Restart your terminal to see the new prompt.</Text>
+              {state.skipStarshipInstall && (
+                <Text color="yellow">
+                  Starship is not installed, so shell init lines were not added. Install it (e.g.{' '}
+                  <Text color="cyan">curl -sS https://starship.rs/install.sh | sh</Text>), then
+                  re-run the wizard to configure your shells.
+                </Text>
+              )}
+              {fontId && fontStatus === 'done' && (
+                <Text color="yellow">
+                  Remember to set <Text color="cyan">{fontLabel} Nerd Font</Text> in your terminal
+                  emulator settings.
+                </Text>
+              )}
+              <Text color="gray">
+                Run <Text color="cyan">starship print-config</Text> to view the generated config.
+              </Text>
+            </>
           )}
-          {fontId && fontStatus === 'done' && (
-            <Text color="yellow">
-              Remember to set <Text color="cyan">{fontLabel} Nerd Font</Text> in your terminal
-              emulator settings.
-            </Text>
-          )}
-          <Text color="gray">
-            Run <Text color="cyan">starship print-config</Text> to view the generated config.
-          </Text>
         </Box>
       </Box>
 

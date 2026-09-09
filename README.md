@@ -41,9 +41,10 @@ shell-configurator
 ### Command line options
 
 ```text
-shell-configurator              start the wizard
-shell-configurator --help       show usage and exit
-shell-configurator --version    print the version and exit
+shell-configurator                start the wizard
+shell-configurator --help         show usage and exit
+shell-configurator --version      print the version and exit
+shell-configurator --dry-run      preview the config without installing (also -d, --no-install)
 ```
 
 ### Via curl (requires Node.js 22+)

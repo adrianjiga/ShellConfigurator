@@ -47,6 +47,21 @@ describe('getNextStep', () => {
     const state = stateWith('done', { nerdFontToInstall: NO_NERD_FONT });
     expect(getNextStep(state)).toBe(state);
   });
+
+  it('skips installing when in dry-run mode', () => {
+    const next = getNextStep(stateWith('shells', { dryRun: true, selectedShells: ['zsh'] }));
+    expect(next.step).toBe('done');
+  });
+
+  it('enters installing normally when not in dry-run mode', () => {
+    const next = getNextStep(stateWith('shells', { dryRun: false, selectedShells: ['zsh'] }));
+    expect(next.step).toBe('installing');
+  });
+
+  it('can still not advance when a dry-run skip lands beyond the last step', () => {
+    const state = stateWith('done', { dryRun: true });
+    expect(getNextStep(state)).toBe(state);
+  });
 });
 
 describe('getPrevStep', () => {

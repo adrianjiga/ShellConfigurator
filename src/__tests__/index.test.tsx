@@ -15,7 +15,7 @@ vi.mock('../app.tsx', () => ({
 }));
 
 import { render } from 'ink';
-import { handleCliArgs, reportFatal, restoreTerminal } from '../index.tsx';
+import { handleCliArgs, hasDryRunFlag, reportFatal, restoreTerminal } from '../index.tsx';
 
 describe('index CLI handling', () => {
   const originalArgv = process.argv.slice();
@@ -62,6 +62,39 @@ describe('index CLI handling', () => {
     process.argv = ['node', 'index.tsx', 'somefile'];
     const result = handleCliArgs();
     expect(result).toBe(false);
+  });
+});
+
+describe('hasDryRunFlag', () => {
+  const originalArgv = process.argv.slice();
+
+  afterEach(() => {
+    process.argv = originalArgv;
+  });
+
+  it('returns true when --dry-run is present', () => {
+    process.argv = ['node', 'index.tsx', '--dry-run'];
+    expect(hasDryRunFlag()).toBe(true);
+  });
+
+  it('returns true when --no-install is present', () => {
+    process.argv = ['node', 'index.tsx', '--no-install'];
+    expect(hasDryRunFlag()).toBe(true);
+  });
+
+  it('returns true when -d is present', () => {
+    process.argv = ['node', 'index.tsx', '-d'];
+    expect(hasDryRunFlag()).toBe(true);
+  });
+
+  it('returns false when neither flag is present', () => {
+    process.argv = ['node', 'index.tsx'];
+    expect(hasDryRunFlag()).toBe(false);
+  });
+
+  it('returns false when --version is passed', () => {
+    process.argv = ['node', 'index.tsx', '--version'];
+    expect(hasDryRunFlag()).toBe(false);
   });
 });
 

@@ -11,8 +11,8 @@ import { WelcomeScreen } from './screens/WelcomeScreen.tsx';
 import { getNextStep, getPrevStep } from './stepMachine.ts';
 import { DEFAULT_STATE, type WizardState, type WizardStep } from './types.ts';
 
-export function App() {
-  const [state, setState] = useState<WizardState>(DEFAULT_STATE);
+export function App({ dryRun = false }: { dryRun?: boolean }) {
+  const [state, setState] = useState<WizardState>(() => ({ ...DEFAULT_STATE, dryRun }));
 
   function updateState(update: Partial<WizardState>) {
     setState((prev) => ({ ...prev, ...update }));

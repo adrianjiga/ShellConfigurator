@@ -22,6 +22,13 @@ export function getNextStep(state: WizardState, update?: Partial<WizardState>): 
     nextStep = skipped;
   }
 
+  // In dry-run mode the installing step is skipped entirely.
+  if (nextStep === 'installing' && merged.dryRun) {
+    const skipped = STEP_ORDER[currentIndex + 2];
+    if (!skipped) return state;
+    nextStep = skipped;
+  }
+
   return { ...merged, step: nextStep };
 }
 
