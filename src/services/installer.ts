@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -36,8 +37,14 @@ export const NERD_FONTS: Array<{ id: string; label: string; zipName: string }> =
 
 const NERD_FONTS_BASE_URL = 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download';
 
+/** GitHub REST endpoint whose asset digests are the checksums we verify against. */
+const NERD_FONTS_API_URL = 'https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest';
+
 /** Cap on how long the font download may hang before it is aborted. */
 const FONT_DOWNLOAD_TIMEOUT_MS = 60_000;
+
+/** Same idea for the checksum lookup: a stuck metadata fetch must not wedge the install. */
+const FONT_CHECKSUM_TIMEOUT_MS = 30_000;
 
 const FONT_FILE_RE = /\.(ttf|otf|woff2?)$/i;
 
@@ -122,6 +129,35 @@ export function getNerdFontsDir(): string {
     : path.join(os.homedir(), '.local', 'share', 'fonts');
 }
 
+/**
+ * The SHA-256 GitHub publishes for a release asset, as a bare hex string.
+ *
+ * GitHub's releases API returns `assets[].digest` (a "sha256:<hex>" string) for
+ * every uploaded file. Total verification without a second trust domain: the
+ * digest comes from GitHub's API over the same HTTPS channel the download uses,
+ * so a MITM that swapped the archive would have to rewrite the API metadata too.
+ */
+async function fetchAssetChecksum(assetName: string, signal: AbortSignal): Promise<string> {
+  const response = await fetch(NERD_FONTS_API_URL, {
+    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'shell-configurator' },
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to look up font checksum: HTTP ${response.status}`);
+  }
+
+  const release = (await response.json()) as {
+    assets?: Array<{ name?: string; digest?: string }>;
+  };
+  const digest = release.assets?.find((asset) => asset.name === assetName)?.digest;
+  if (!digest?.startsWith('sha256:')) {
+    throw new Error(
+      `No sha256 digest published for ${assetName}; refusing to install an unverified archive.`
+    );
+  }
+  return digest.slice('sha256:'.length);
+}
+
 export async function installNerdFont(fontId: string): Promise<void> {
   const font = NERD_FONTS.find((f) => f.id === fontId);
   if (!font) throw new Error(`Unknown font: ${fontId}`);
@@ -149,6 +185,21 @@ export async function installNerdFont(fontId: string): Promise<void> {
     throw new Error(
       `Refusing to install ${font.zipName}: archive is larger than ` +
         `${MAX_FONT_ARCHIVE_BYTES} bytes.`
+    );
+  }
+
+  // Verify the download against GitHub's published asset digest before anything
+  // extracted from it reaches the filesystem.
+  const expectedDigest = await fetchAssetChecksum(
+    font.zipName,
+    AbortSignal.timeout(FONT_CHECKSUM_TIMEOUT_MS)
+  );
+  const actualDigest = createHash('sha256').update(buffer).digest('hex');
+  if (actualDigest !== expectedDigest) {
+    throw new Error(
+      `Checksum mismatch for ${font.zipName}: expected sha256:${expectedDigest}, ` +
+        `got sha256:${actualDigest}. The download was tampered with or GitHub's ` +
+        `digest does not match; refusing to install.`
     );
   }
 
