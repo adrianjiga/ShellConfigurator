@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import * as os from 'node:os';
 import * as nodePath from 'node:path';
 import { parse } from '@iarna/toml';
 import { PRESETS } from '../dist/config/presets.js';
@@ -23,42 +22,16 @@ import {
   isStarshipInstalledAsync,
 } from '../dist/services/detector.js';
 import { commandExistsAsync } from '../dist/services/exec.js';
-import { getMissingStarshipPathDir, SCRIPT_INSTALL_BIN_DIR } from '../dist/services/installer.js';
+import {
+  getMissingStarshipPathDir,
+  installStarship,
+  SCRIPT_INSTALL_BIN_DIR,
+} from '../dist/services/installer.js';
 import { DEFAULT_STATE } from '../dist/types.js';
+import { die, requireScratchHome } from './ci/smokeHome.mjs';
 
 const expectedPm = process.env.EXPECTED_PM;
 let failures = 0;
-
-function die(message) {
-  console.error(message);
-  process.exit(2);
-}
-
-function requireScratchHome() {
-  const homeDir = process.env.HOME;
-  if (!homeDir) die('Refusing to run: HOME is not set.');
-
-  const underTmp = homeDir.startsWith('/tmp/');
-  const markerPath = nodePath.join(homeDir, '.shellconfigurator-smoke');
-  const acknowledged = existsSync(markerPath);
-  if (!underTmp && !acknowledged) {
-    die(
-      `Refusing to run: HOME (${homeDir}) is not a scratch directory. This smoke harness ` +
-        'writes into and deletes files under HOME. Run it in a container with HOME under ' +
-        `/tmp, or create '${markerPath}' to acknowledge a scratch home.`
-    );
-  }
-  if (!os.homedir().startsWith(homeDir)) {
-    die(
-      `Refusing to run: os.homedir() resolves ${os.homedir()}, outside HOME (${homeDir}), ` +
-        'which would redirect rc-file writes to the wrong location.'
-    );
-  }
-
-  const xdg = process.env.XDG_CONFIG_HOME?.trim();
-  process.env.XDG_CONFIG_HOME = xdg?.startsWith(homeDir) ? xdg : nodePath.join(homeDir, '.config');
-  return homeDir;
-}
 
 const homeDir = requireScratchHome();
 
@@ -348,6 +321,43 @@ await check('writeShellConfig backs up and restoreConfigBackups restores', () =>
 
   rmSync(configBaseDir, { recursive: true, force: true });
 });
+
+async function withRetry(fn, attempts = 3, delayMs = 2000) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt < attempts - 1) await new Promise((r) => setTimeout(r, delayMs * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
+await check('installStarship downloads and runs a working binary', async () => {
+  assert.equal((await isStarshipInstalledAsync()).installed, false, 'container must start clean');
+  await withRetry(() => installStarship('script'));
+
+  const binary = nodePath.join(SCRIPT_INSTALL_BIN_DIR, 'starship');
+  assert.ok(existsSync(binary), 'no binary after install');
+
+  const prevPath = process.env.PATH;
+  process.env.PATH = `${SCRIPT_INSTALL_BIN_DIR}${nodePath.delimiter}${prevPath ?? ''}`;
+  try {
+    const detected = await isStarshipInstalledAsync();
+    assert.equal(detected.installed, true, 'installed binary not detected');
+    assert.ok(
+      /starship\s+\d+\.\d+\.\d+/.test(detected.version ?? ''),
+      `unexpected version: ${detected.version}`
+    );
+    assert.equal(getMissingStarshipPathDir(), null, 'PATH fix-up still needed after real install');
+  } finally {
+    process.env.PATH = prevPath;
+  }
+});
+
+rmSync(homeDir, { recursive: true, force: true });
 
 if (failures > 0) {
   console.error(`\n${failures} check(s) FAILED`);
