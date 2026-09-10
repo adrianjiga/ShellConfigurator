@@ -70,7 +70,7 @@ jobs:
       - run: echo "All quality checks passed."
 
   distro-smoke:
-    name: Distro smoke (${{ matrix.image }})
+    name: Distro smoke (${{ matrix.package-manager }}, ${{ matrix.image }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
