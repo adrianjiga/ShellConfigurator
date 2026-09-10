@@ -92,14 +92,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run non-destructive smoke test in ${{ matrix.image }}
-        # The build is explicit: docker-smoke.mjs imports from dist/, which would
-        # otherwise exist only as a side effect of npm ci running the prepare script.
-        # sh is the entrypoint because alpine:latest ships no bash; the per-image
-        # setup makes bash available before the bash-driven harness runs.
         run: |
           docker run --rm \
-            -v "$PWD":/app \
+            -v "$PWD":/app:ro \
             -w /app \
             -e EXPECTED_PM=${{ matrix.package-manager }} \
+            -e SHELL=/bin/bash \
             ${{ matrix.image }} \
-            sh -eu -c "${{ matrix.setup }} && bash -euxo pipefail -c 'bash scripts/ci/distro-setup.sh && HOME=/tmp/smoke-home npm ci && HOME=/tmp/smoke-home npm run build && HOME=/tmp/smoke-home node scripts/docker-smoke.mjs'"
+            sh -eu -c "${{ matrix.setup }} && bash -euxo pipefail -c 'bash scripts/ci/distro-setup.sh && cp -a /app /tmp/src && cd /tmp/src && HOME=/tmp/smoke-home npm ci && HOME=/tmp/smoke-home npm run build && HOME=/tmp/smoke-home node scripts/docker-smoke.mjs'"
