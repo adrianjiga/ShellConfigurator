@@ -206,9 +206,18 @@ describe('installStarship', () => {
       ['-fsS', '-o', expect.stringContaining('install.sh'), 'https://starship.rs/install.sh'],
       { stdio: 'inherit' }
     );
-    expect(mockSpawn).toHaveBeenCalledWith('sh', [expect.stringContaining('install.sh'), '--yes'], {
-      stdio: 'inherit',
-    });
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'env',
+      [
+        'POSIXLY_CORRECT=1',
+        'sh',
+        expect.stringContaining('install.sh'),
+        '--yes',
+        '--bin-dir',
+        SCRIPT_INSTALL_BIN_DIR,
+      ],
+      { stdio: 'inherit' }
+    );
   });
 
   it('fails when the download fails instead of reporting success', async () => {

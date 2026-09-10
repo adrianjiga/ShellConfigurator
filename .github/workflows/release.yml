@@ -53,7 +53,7 @@ jobs:
           npm stage publish --provenance --access public --ignore-scripts
       - name: Build release notes from conventional commits
         shell: bash
-        run: scripts/release-notes.sh > "$RUNNER_TEMP/release-notes.md"
+        run: scripts/releaseNotes.sh > "$RUNNER_TEMP/release-notes.md"
       - name: Create GitHub release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:

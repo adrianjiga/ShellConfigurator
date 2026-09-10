@@ -73,8 +73,19 @@ export async function installStarship(pm: PackageManager): Promise<void> {
       if (!fs.existsSync(scriptPath) || fs.statSync(scriptPath).size === 0) {
         throw new Error(`Downloaded an empty install script from ${STARSHIP_INSTALL_URL}`);
       }
-      // Installs to ~/.local/bin, no sudo needed
-      await runCommand(['sh', scriptPath, '--yes']);
+      // --bin-dir pins the drop location: without it the script defaults to
+      // /usr/local/bin, which is root-owned and would trigger a sudo prompt.
+      // POSIXLY_CORRECT keeps the script happy on distros where /bin/sh is bash.
+      fs.mkdirSync(SCRIPT_INSTALL_BIN_DIR, { recursive: true });
+      await runCommand([
+        'env',
+        'POSIXLY_CORRECT=1',
+        'sh',
+        scriptPath,
+        '--yes',
+        '--bin-dir',
+        SCRIPT_INSTALL_BIN_DIR,
+      ]);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }

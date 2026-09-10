@@ -8,6 +8,9 @@ on:
 
 permissions: read-all
 
+env:
+  NODE_VERSION: v22.23.2
+
 jobs:
   lint:
     name: Lint
@@ -67,7 +70,7 @@ jobs:
       - run: echo "All quality checks passed."
 
   distro-smoke:
-    name: Distro smoke (${{ matrix.image }})
+    name: Distro smoke (${{ matrix.package-manager }}, ${{ matrix.image }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -76,30 +79,56 @@ jobs:
           - image: ubuntu:24.04
             package-manager: apt
             setup: true
+            finalize: true
+            wizard-check: true
           - image: debian:bookworm-slim
             package-manager: apt
             setup: true
+            finalize: true
+            wizard-check: true
           - image: fedora:41
             package-manager: dnf
             setup: true
+            finalize: true
+            wizard-check: true
           - image: archlinux:latest
             package-manager: pacman
             setup: true
+            finalize: true
+            wizard-check: true
           - image: alpine:latest
             package-manager: apk
             # Alpine ships no bash; install it before the harness starts.
             setup: apk add --no-cache bash
+            finalize: true
+            wizard-check: true
+          - image: debian:bookworm-slim
+            package-manager: brew
+            setup: mkdir -p /usr/local/bin && printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/brew && chmod +x /usr/local/bin/brew
+            finalize: true
+            wizard-check: true
+          - image: debian:bookworm-slim
+            package-manager: script
+            setup: true
+            finalize: sed -i s/^ID=debian/ID=smoke/ /etc/os-release && mv /usr/bin/apt-get /usr/bin/apt-get.disabled
+            wizard-check: HOME=/tmp/smoke-home node scripts/ci/wizardSmoke.mjs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: /tmp/node-tarball-cache
+          key: node-${{ runner.arch }}-${{ env.NODE_VERSION }}
+          restore-keys: node-${{ runner.arch }}-
       - name: Run non-destructive smoke test in ${{ matrix.image }}
-        # The build is explicit: docker-smoke.mjs imports from dist/, which would
-        # otherwise exist only as a side effect of npm ci running the prepare script.
-        # sh is the entrypoint because alpine:latest ships no bash; the per-image
-        # setup makes bash available before the bash-driven harness runs.
         run: |
+          mkdir -p /tmp/node-tarball-cache
           docker run --rm \
-            -v "$PWD":/app \
+            -v "$PWD":/app:ro \
+            -v /tmp/node-tarball-cache:/node-cache \
             -w /app \
             -e EXPECTED_PM=${{ matrix.package-manager }} \
+            -e NODE_TARBALL_DIR=/node-cache \
+            -e NODE_VERSION=${{ env.NODE_VERSION }} \
+            -e SHELL=/bin/bash \
             ${{ matrix.image }} \
-            sh -eu -c "${{ matrix.setup }} && bash -euxo pipefail -c 'bash scripts/ci/distro-setup.sh && HOME=/tmp/smoke-home npm ci && HOME=/tmp/smoke-home npm run build && HOME=/tmp/smoke-home node scripts/docker-smoke.mjs'"
+            sh -eu -c "${{ matrix.setup }} && bash -euxo pipefail -c 'bash scripts/ci/distroSetup.sh && ${{ matrix.finalize }} && cp -a /app /tmp/src && cd /tmp/src && HOME=/tmp/smoke-home npm ci && HOME=/tmp/smoke-home npm run build && HOME=/tmp/smoke-home node scripts/dockerSmoke.mjs && ${{ matrix.wizard-check }}'"
