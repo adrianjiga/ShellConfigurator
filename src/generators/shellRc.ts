@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { getShell, type ShellDef } from '../config/shells.ts';
+import { getShell, isShellId, type ShellDef } from '../config/shells.ts';
 import type { ShellId } from '../types.ts';
 
 export interface WriteConfigResult {
@@ -105,13 +105,12 @@ export function restoreConfigBackups(): RestoredConfig[] {
       entries = [];
     }
     const shells = new Set(
-      entries.map((e) => /^(.+)\.toml\.bak-.*$/.exec(e)?.[1]).filter((s): s is string => Boolean(s))
+      entries.map((e) => /^(.+)\.toml\.bak-.*$/.exec(e)?.[1]).filter(isShellId)
     );
     for (const shellId of shells) {
-      if (!getShell(shellId as ShellId)) continue;
       const backup = newestBackup(shellsDir, `${shellId}.toml`);
       if (!backup) continue;
-      restored.push(restoreOne(shellId as ShellId, getShellConfigPath(shellId as ShellId), backup));
+      restored.push(restoreOne(shellId, getShellConfigPath(shellId), backup));
     }
   }
 
@@ -149,8 +148,7 @@ export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigRes
 
   let backedUpTo: string | undefined;
   if (fs.existsSync(configPath)) {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    backedUpTo = `${configPath}.bak-${stamp}`;
+    backedUpTo = `${configPath}.bak-${stamp()}`;
     fs.copyFileSync(configPath, backedUpTo);
   }
 
@@ -206,7 +204,7 @@ export interface ApplyShellConfigOptions {
  * STARSHIP_CONFIG export for a shell, in that shell's own syntax. Null for
  * shells without a script rc file (nushell, powershell).
  */
-function starshipConfigLine(shellId: ShellId): string | null {
+export function starshipConfigLine(shellId: ShellId): string | null {
   const shell = getShell(shellId);
   if (!shell?.rcFile) return null;
   const configPath = getShellConfigPath(shellId);
@@ -228,6 +226,25 @@ function ensureRcDir(rcPath: string): void {
       { cause: err }
     );
   }
+}
+
+/**
+ * Computes the PATH, STARSHIP_CONFIG, and init lines that should be appended,
+ * skipping any already present in the cleaned rc file.
+ */
+function buildAdditionLines(
+  shell: ShellDef,
+  cleaned: string,
+  options: ApplyShellConfigOptions
+): string[] {
+  const pathDir = options.ensurePathDir;
+  const pathLine = pathDir && shell.pathLine ? shell.pathLine(pathDir) : null;
+  const configLine = starshipConfigLine(shell.id);
+  return [
+    ...(pathLine && !cleaned.includes(pathLine) ? [pathLine] : []),
+    ...(configLine && !cleaned.includes(configLine) ? [configLine] : []),
+    ...(!cleaned.includes(shell.initLine) ? [shell.initLine] : []),
+  ];
 }
 
 export function applyShellConfig(
@@ -254,13 +271,10 @@ export function applyShellConfig(
 
   // Drop a stale unset guard a later "reset" run may have left.
   const cleaned = removeShellConfiguratorBlocks(existing, [starshipUnsetLine(shellId)!]);
-  // Persist removals before appending below.
   if (cleaned !== existing) fs.writeFileSync(rcPath, cleaned, 'utf8');
 
   // The PATH and STARSHIP_CONFIG lines must come before the init line, or
   // `starship init` cannot resolve either the binary or its config.
-  const pathDir = options.ensurePathDir;
-  const pathLine = pathDir && shell.pathLine ? shell.pathLine(pathDir) : null;
   const configLine = starshipConfigLine(shellId);
 
   // Idempotent: skip if already configured (check for the full block we'd add).
@@ -268,17 +282,16 @@ export function applyShellConfig(
     return { applied: false, note: 'already configured' };
   }
 
-  const lines = [
-    ...(pathLine && !cleaned.includes(pathLine) ? [pathLine] : []),
-    ...(configLine && !cleaned.includes(configLine) ? [configLine] : []),
-    ...(!cleaned.includes(shell.initLine) ? [shell.initLine] : []),
-  ];
+  const lines = buildAdditionLines(shell, cleaned, options);
   const addition = `\n${BLOCK_MARKER}\n${lines.join('\n')}\n`;
   fs.appendFileSync(rcPath, addition, 'utf8');
 
   return {
     applied: true,
-    note: pathLine ? `${pathDir} added to PATH` : undefined,
+    note:
+      options.ensurePathDir && shell.pathLine
+        ? `${options.ensurePathDir} added to PATH`
+        : undefined,
   };
 }
 

@@ -7,7 +7,8 @@ import type { PackageManager, ShellId } from '../types.ts';
 import { commandExists, commandPath, runCommand } from './exec.ts';
 import { type ExtractedFontFile, extractFontFiles } from './fontExtractor.ts';
 
-// Package names per shell per package manager
+// Package names per shell per package manager. Missing combos are intentional
+// (powershell is brew/pacman-only), so `undefined` is a valid lookup.
 const SHELL_PACKAGES: Record<ShellId, Partial<Record<PackageManager, string>>> = {
   bash: { pacman: 'bash', apt: 'bash', dnf: 'bash', brew: 'bash', apk: 'bash' },
   zsh: { pacman: 'zsh', apt: 'zsh', dnf: 'zsh', brew: 'zsh', apk: 'zsh' },
@@ -16,13 +17,13 @@ const SHELL_PACKAGES: Record<ShellId, Partial<Record<PackageManager, string>>> =
   powershell: { pacman: 'powershell', brew: 'powershell' },
 };
 
-const INSTALL_CMDS: Record<PackageManager, (pkg: string) => string[]> = {
+/** The scripted path is a separate code branch; omitting it here makes a stray lookup a type error. */
+const INSTALL_CMDS: Record<Exclude<PackageManager, 'script'>, (pkg: string) => string[]> = {
   pacman: (pkg) => ['sudo', 'pacman', '-S', '--noconfirm', pkg],
   apt: (pkg) => ['sudo', 'apt-get', 'install', '-y', pkg],
   dnf: (pkg) => ['sudo', 'dnf', 'install', '-y', pkg],
   brew: (pkg) => ['brew', 'install', pkg],
   apk: (pkg) => ['sudo', 'apk', 'add', '--no-cache', pkg],
-  script: (_) => [],
 };
 
 // Nerd Font definitions: id → GitHub release zip name
@@ -35,6 +36,11 @@ export const NERD_FONTS: Array<{ id: string; label: string; zipName: string }> =
   { id: 'SourceCodePro', label: 'Source Code Pro', zipName: 'SourceCodePro.zip' },
 ];
 
+/** The human-readable name for a font id, falling back to the raw id itself. */
+export function fontLabel(fontId: string): string {
+  return NERD_FONTS.find((f) => f.id === fontId)?.label ?? fontId;
+}
+
 const NERD_FONTS_BASE_URL = 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download';
 
 /** GitHub REST endpoint whose asset digests are the checksums we verify against. */
@@ -43,7 +49,9 @@ const NERD_FONTS_API_URL = 'https://api.github.com/repos/ryanoasis/nerd-fonts/re
 /** Cap on how long the font download may hang before it is aborted. */
 const FONT_DOWNLOAD_TIMEOUT_MS = 60_000;
 
-/** Same idea for the checksum lookup: a stuck metadata fetch must not wedge the install. */
+/**
+ * The same idea for the checksum lookup: a stuck metadata fetch must not wedge the install.
+ */
 const FONT_CHECKSUM_TIMEOUT_MS = 30_000;
 
 /** Nerd Font archives run to tens of MB; anything far past that is not a font archive. */
@@ -92,9 +100,7 @@ export async function installStarship(pm: PackageManager): Promise<void> {
     return;
   }
 
-  const cmdArgs = INSTALL_CMDS[pm]('starship');
-  if (cmdArgs.length === 0) throw new Error(`No install method for package manager: ${pm}`);
-  await runCommand(cmdArgs);
+  await runCommand(INSTALL_CMDS[pm]('starship'));
 }
 
 /**
@@ -167,24 +173,17 @@ async function fetchAssetChecksum(assetName: string, signal: AbortSignal): Promi
   return digest.slice('sha256:'.length);
 }
 
-export async function installNerdFont(fontId: string): Promise<void> {
-  const font = NERD_FONTS.find((f) => f.id === fontId);
-  if (!font) throw new Error(`Unknown font: ${fontId}`);
+async function downloadFont(zipName: string): Promise<Buffer> {
+  const url = `${NERD_FONTS_BASE_URL}/${zipName}`;
 
-  const fontsDir = getNerdFontsDir();
-  fs.mkdirSync(fontsDir, { recursive: true });
-
-  const url = `${NERD_FONTS_BASE_URL}/${font.zipName}`;
-
-  // Download. A hung connection would otherwise block the whole install phase
-  // with no way to cancel, so the request carries its own timeout.
+  // A hung connection would otherwise block the install phase with no way to cancel.
   const response = await fetch(url, { signal: AbortSignal.timeout(FONT_DOWNLOAD_TIMEOUT_MS) });
   if (!response.ok) throw new Error(`Failed to download font: HTTP ${response.status}`);
 
-  const declaredSize = Number(response.headers?.get?.('content-length') ?? 0);
+  const declaredSize = Number(response.headers.get('content-length') ?? '0');
   if (declaredSize > MAX_FONT_ARCHIVE_BYTES) {
     throw new Error(
-      `Refusing to download ${font.zipName}: ${declaredSize} bytes exceeds the ` +
+      `Refusing to download ${zipName}: ${declaredSize} bytes exceeds the ` +
         `${MAX_FONT_ARCHIVE_BYTES} byte limit.`
     );
   }
@@ -192,58 +191,65 @@ export async function installNerdFont(fontId: string): Promise<void> {
   const buffer = Buffer.from(await response.arrayBuffer());
   if (buffer.byteLength > MAX_FONT_ARCHIVE_BYTES) {
     throw new Error(
-      `Refusing to install ${font.zipName}: archive is larger than ` +
-        `${MAX_FONT_ARCHIVE_BYTES} bytes.`
+      `Refusing to install ${zipName}: archive is larger than ` + `${MAX_FONT_ARCHIVE_BYTES} bytes.`
     );
   }
+  return buffer;
+}
 
-  // Verify the download against GitHub's published asset digest before anything
-  // extracted from it reaches the filesystem.
-  const expectedDigest = await fetchAssetChecksum(
-    font.zipName,
-    AbortSignal.timeout(FONT_CHECKSUM_TIMEOUT_MS)
-  );
+function verifyChecksum(zipName: string, buffer: Buffer, expectedDigest: string): void {
   const actualDigest = createHash('sha256').update(buffer).digest('hex');
   if (actualDigest !== expectedDigest) {
     throw new Error(
-      `Checksum mismatch for ${font.zipName}: expected sha256:${expectedDigest}, ` +
+      `Checksum mismatch for ${zipName}: expected sha256:${expectedDigest}, ` +
         `got sha256:${actualDigest}. The download was tampered with or GitHub's ` +
         `digest does not match; refusing to install.`
     );
   }
+}
 
-  // Extracted by a sandboxed worker rather than shelling out to `unzip`, which
-  // is absent on minimal systems and needed its own detection and
-  // platform-specific error. Only font files survive the worker's filter, so
-  // non-font payloads (LICENSE.md, readme.md) stay out.
+async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> {
   let fontFiles: ExtractedFontFile[];
   try {
     fontFiles = await extractFontFiles(buffer);
   } catch (err) {
-    throw new Error(
-      `Could not extract ${font.zipName}: ${err instanceof Error ? err.message : err}`,
-      { cause: err }
-    );
+    throw new Error(`Could not extract ${zipName}: ${err instanceof Error ? err.message : err}`, {
+      cause: err,
+    });
   }
   if (fontFiles.length === 0) {
-    throw new Error(`No font files found in ${font.zipName}`);
+    throw new Error(`No font files found in ${zipName}`);
   }
 
+  const fontsDir = getNerdFontsDir();
+  fs.mkdirSync(fontsDir, { recursive: true });
+
   for (const file of fontFiles) {
-    // The worker already flattens entry paths to basenames, so a crafted zip
-    // cannot write outside fontsDir. Do not join onto the raw entry path.
+    // The worker flattens entry paths to basenames; do not join onto the raw path.
     fs.writeFileSync(path.join(fontsDir, file.name), file.bytes);
   }
 
-  // Refresh font cache (Linux only — macOS picks up ~/Library/Fonts automatically).
   // Non-fatal: fc-cache may be absent on minimal systems.
   if (process.platform !== 'darwin') {
     try {
       await runCommand(['fc-cache', '-f']);
     } catch {
-      // ignore — cache refresh is best-effort
+      // ignore
     }
   }
+}
+
+export async function installNerdFont(fontId: string): Promise<void> {
+  const font = NERD_FONTS.find((f) => f.id === fontId);
+  if (!font) throw new Error(`Unknown font: ${fontId}`);
+
+  const buffer = await downloadFont(font.zipName);
+  const expectedDigest = await fetchAssetChecksum(
+    font.zipName,
+    AbortSignal.timeout(FONT_CHECKSUM_TIMEOUT_MS)
+  );
+  verifyChecksum(font.zipName, buffer, expectedDigest);
+  await installFontFiles(font.zipName, buffer);
 }
 
 export async function setDefaultShell(shellId: ShellId): Promise<void> {
@@ -263,7 +269,7 @@ export async function setDefaultShell(shellId: ShellId): Promise<void> {
     throw new Error(
       `Could not set ${binary} as the default shell. If ${shellPath} isn't listed in ` +
         `/etc/shells, add it first (e.g. 'echo ${shellPath} | sudo tee -a /etc/shells'). ` +
-        `Cause: ${err instanceof Error ? err.message : err}`,
+        `${err instanceof Error ? err.message : err}`,
       { cause: err }
     );
   }

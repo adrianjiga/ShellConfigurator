@@ -10,9 +10,21 @@ import { ShellScreen } from './screens/ShellScreen.tsx';
 import { StyleScreen } from './screens/StyleScreen.tsx';
 import { WelcomeScreen } from './screens/WelcomeScreen.tsx';
 import { getNextStep, getPrevStep } from './stepMachine.ts';
-import { DEFAULT_STATE, type WizardState, type WizardStep } from './types.ts';
+import {
+  assertNever,
+  DEFAULT_STATE,
+  type InstallTask,
+  type WizardState,
+  type WizardStep,
+} from './types.ts';
 
-export function App({ dryRun = false }: { dryRun?: boolean }) {
+interface AppProps {
+  dryRun?: boolean;
+  /** Receives the completed install results so the entry point can set the exit code. */
+  onInstallOutcome?: (results: InstallTask[] | undefined) => void;
+}
+
+export function App({ dryRun = false, onInstallOutcome }: AppProps) {
   const [state, setState] = useState<WizardState>(() => ({ ...DEFAULT_STATE, dryRun }));
 
   function updateState(update: Partial<WizardState>) {
@@ -24,10 +36,7 @@ export function App({ dryRun = false }: { dryRun?: boolean }) {
   }
 
   function finishInstall(update?: Partial<WizardState>) {
-    // Exit non-zero when anything failed, so the wizard is usable from a script.
-    if (update?.installResults?.some((t) => t.status === 'failed')) {
-      process.exitCode = 1;
-    }
+    onInstallOutcome?.(update?.installResults);
     advanceTo('done', update);
   }
 
@@ -90,5 +99,9 @@ export function App({ dryRun = false }: { dryRun?: boolean }) {
 
     case 'done':
       return <DoneScreen state={state} />;
+
+    default:
+      // Exhaustiveness: adding a step to STEP_ORDER should fail the build here.
+      return assertNever(state.step);
   }
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { MODULES } from '../../config/modules.ts';
 import { PALETTES } from '../../config/palettes.ts';
 import { PRESETS } from '../../config/presets.ts';
+import { SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../../config/promptSymbols.ts';
 import { generateToml } from '../../generators/starship.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
@@ -216,11 +217,8 @@ describe('modules selected on both sides', () => {
   });
 });
 
-// The powerline separators the generator emits, spelled as escapes because they
-// live in the Nerd Font private use area and do not survive copy-paste intact.
-const SEPARATOR_RIGHT = '\ue0b0';
-const SEPARATOR_LEFT = '\ue0b2';
-
+// The separators are asserted via the shared module the generator and preview
+// consume, so a drift in the single source fails these tests too.
 describe('powerline segments', () => {
   const powerlineState: WizardState = {
     ...base,

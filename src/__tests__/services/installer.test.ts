@@ -85,6 +85,7 @@ function okResponse(overrides: Partial<Response> = {}): Response {
   return {
     ok: true,
     status: 200,
+    headers: { get: () => null } as unknown as Headers,
     arrayBuffer: async () => new ArrayBuffer(0),
     ...overrides,
   } as unknown as Response;
@@ -143,9 +144,10 @@ function respondWithZip(files: Record<string, string>): ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Defaults: commands succeed, all binaries exist, fetch succeeds
+  // Defaults: commands succeed, all binaries exist on PATH, fetch succeeds
   spawnOutcome({ status: 0 });
-  mockExecFileSync.mockReturnValue('');
+  // `command -v` prints the path on success, and exec.ts treats empty output as "missing".
+  mockExecFileSync.mockReturnValue('/usr/bin/curl\n');
   mockMkdirSync.mockImplementation(() => undefined);
   mockMkdtempSync.mockReturnValue('/tmp/shellconf-font-test');
   mockWriteFileSync.mockImplementation(() => undefined);
@@ -249,7 +251,7 @@ describe('installStarship', () => {
   it('throws a clear error when curl is missing for the script path', async () => {
     mockExecFileSync.mockImplementation((_cmd: string, args: string[]) => {
       if (args[3] === 'curl') throw new Error('command not found');
-      return '';
+      return '/bin/sh\n';
     });
 
     await expect(installStarship('script')).rejects.toThrow('"curl" is not installed');
@@ -503,7 +505,7 @@ describe('setDefaultShell', () => {
 
 describe('getMissingStarshipPathDir', () => {
   it('returns null when starship is already on PATH', () => {
-    mockExecFileSync.mockReturnValue('');
+    mockExecFileSync.mockReturnValue('/usr/local/bin/starship\n');
     expect(getMissingStarshipPathDir()).toBeNull();
   });
 

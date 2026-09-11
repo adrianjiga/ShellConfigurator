@@ -1,10 +1,10 @@
 import { cleanup, render } from 'ink-testing-library';
-import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstallingScreen } from '../../screens/InstallingScreen.tsx';
 import type { InstallTaskDeps } from '../../services/installTasks.ts';
 import type { InstallTask, WizardState } from '../../types.ts';
 import { DEFAULT_STATE } from '../../types.ts';
+import { flush, waitFor } from '../helpers/wait.ts';
 
 const mocks = vi.hoisted(() => ({
   buildTaskList: vi.fn<(state: WizardState) => InstallTask[]>(),
@@ -59,28 +59,20 @@ function setup() {
   return { instance, onNext };
 }
 
-async function flush() {
-  await act(async () => {});
-}
-
-/** Polls until `check` passes so the 1.2s advance delay never blocks a test. */
-async function waitFor(check: () => unknown): Promise<void> {
-  const started = Date.now();
-  while (Date.now() - started < 5000) {
-    if (check()) return;
-    await new Promise((r) => setTimeout(r, 25));
-  }
-  throw new Error('timed out waiting for a condition in InstallingScreen');
-}
-
 /** A positive task fixture exercising every status, error, and note branch. */
 function statusFixture(): InstallTask[] {
   return [
     { id: 'starship', label: 'Install Starship', status: 'running' },
-    { id: 'rc', label: 'Configure zsh', status: 'failed', error: 'Unknown shell', note: 'hidden' },
+    {
+      id: 'rc_zsh',
+      label: 'Configure zsh',
+      status: 'failed',
+      error: 'Unknown shell',
+      note: 'hidden',
+    },
     { id: 'config', label: 'Write config', status: 'done', note: 'shared config saved' },
     { id: 'font', label: 'Install Nerd Font', status: 'skipped' },
-    { id: 'shell', label: 'Set default shell', status: 'pending' },
+    { id: 'shell_zsh', label: 'Set default shell', status: 'pending' },
   ];
 }
 
@@ -152,7 +144,7 @@ describe('InstallingScreen', () => {
   it('advances with the results once every task has finished', async () => {
     const results: InstallTask[] = [
       { id: 'starship', label: 'Install Starship', status: 'done' },
-      { id: 'rc', label: 'Configure zsh', status: 'failed', error: 'Unknown shell' },
+      { id: 'rc_zsh', label: 'Configure zsh', status: 'failed', error: 'Unknown shell' },
     ];
     mocks.buildTaskList.mockReturnValue(results);
     mocks.runInstallTasks.mockResolvedValue(results);

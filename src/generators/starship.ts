@@ -1,20 +1,22 @@
-import { type ConfigurableModuleId, getModule, type ModuleId } from '../config/modules.ts';
+import {
+  type ConfigurableModuleId,
+  getModule,
+  isConfigurableModule,
+  type ModuleId,
+} from '../config/modules.ts';
 import { getPalette, type PaletteColorName } from '../config/palettes.ts';
-import type { CharacterSymbol, WizardState } from '../types.ts';
+import { CHARACTER_SYMBOLS, SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../config/promptSymbols.ts';
+import type { WizardState } from '../types.ts';
 import { tomlBasic, tomlLiteral } from './toml.ts';
 
-const SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> = {
-  arrow: { success: '❯', error: '❯' },
-  lambda: { success: 'λ', error: 'λ' },
-  dollar: { success: '\\$', error: '\\$' },
-};
-
 /**
- * Powerline separators, U+E0B0 and U+E0B2. These live in the Nerd Font private use
- * area, so a powerline prompt is only ever generated when a Nerd Font is present.
+ * Escapes a character symbol for starship's format string. The symbols are stored
+ * as the user sees them, but `$` opens a module variable and `\` escapes the next
+ * character, so both must be backslash-escaped in the generated config.
  */
-const SEPARATOR_RIGHT = '\ue0b0';
-const SEPARATOR_LEFT = '\ue0b2';
+function escapeFormatLiteral(symbol: string): string {
+  return symbol.replace(/[\\$]/g, (c) => `\\${c}`);
+}
 
 /**
  * A style expression for a palette colour.
@@ -27,11 +29,8 @@ function styleExpression(name: PaletteColorName, powerline: boolean): string {
   return powerline ? `bold fg:fg bg:${name}` : `bold ${name}`;
 }
 
-function buildFormatString(modules: ModuleId[]): string {
-  return modules
-    .filter((m) => m !== 'character')
-    .map((m) => `$${m}`)
-    .join('');
+function buildFormatString(segments: ConfigurableModuleId[]): string {
+  return segments.map((m) => `$${m}`).join('');
 }
 
 /**
@@ -77,11 +76,13 @@ function moduleBlock(id: ModuleId, ctx: BlockContext): string {
   // sits on its own line below the prompt, where there is nothing to interlock
   // with, so it is never drawn as a powerline segment.
   if (id === 'character') {
-    const symbol = SYMBOLS[state.characterSymbol];
+    const symbol = CHARACTER_SYMBOLS[state.characterSymbol];
+    const success = escapeFormatLiteral(symbol.success);
+    const error = escapeFormatLiteral(symbol.error);
     return `
 [character]
-success_symbol = ${tomlLiteral(`[${symbol.success}](bold ok)`)}
-error_symbol   = ${tomlLiteral(`[${symbol.error}](bold err)`)}
+success_symbol = ${tomlLiteral(`[${success}](bold ok)`)}
+error_symbol   = ${tomlLiteral(`[${error}](bold err)`)}
 `.trim();
   }
 
@@ -133,8 +134,11 @@ export function generateToml(state: WizardState): string {
   const leftModules = [...new Set(state.leftModules)];
   const rightModules = [...new Set(state.rightModules)].filter((id) => !leftModules.includes(id));
 
-  const leftFormat = buildFormatString(leftModules);
-  const rightFormat = buildFormatString(rightModules);
+  const leftSegments = leftModules.filter(isConfigurableModule);
+  const rightSegments = rightModules.filter(isConfigurableModule);
+
+  const leftFormat = buildFormatString(leftSegments);
+  const rightFormat = buildFormatString(rightSegments);
 
   // Use $fill to right-align modules on the same line, then \n$character
   // on a second line. This avoids right_format which shells pin to the
@@ -145,13 +149,6 @@ export function generateToml(state: WizardState): string {
   }
   parts.push('\\n$character');
   const format = parts.filter(Boolean).join('');
-
-  // Separators are tinted with the neighbouring segment's colour, so each side is
-  // walked in the order it renders. The character is excluded: it is on its own
-  // line and is not part of either run.
-  const isSegment = (id: ModuleId): id is ConfigurableModuleId => id !== 'character';
-  const leftSegments = leftModules.filter(isSegment);
-  const rightSegments = rightModules.filter(isSegment);
 
   // On the left the separator points at the next segment; on the right, the
   // previous one. Either way the segment at the outer end has no neighbour.

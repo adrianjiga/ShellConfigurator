@@ -23,7 +23,15 @@ vi.mock('../generators/shellRc.ts', () => ({
 }));
 
 import { render } from 'ink';
-import { handleCliArgs, hasDryRunFlag, reportFatal, restoreTerminal } from '../index.tsx';
+import {
+  applyInstallOutcomeExitCode,
+  handleCliArgs,
+  hasDryRunFlag,
+  recordInstallOutcome,
+  reportFatal,
+  restoreTerminal,
+} from '../index.tsx';
+import type { InstallTask } from '../types.ts';
 
 describe('index CLI handling', () => {
   const originalArgv = process.argv.slice();
@@ -57,6 +65,12 @@ describe('index CLI handling', () => {
     const result = handleCliArgs();
     expect(result).toBe(true);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Usage:'));
+  });
+
+  it('documents the --no-install alias in help', () => {
+    process.argv = ['node', 'index.tsx', '--help'];
+    handleCliArgs();
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('--no-install'));
   });
 
   it('does not consume args when unknown flags are passed', () => {
@@ -199,6 +213,30 @@ describe('index restoreTerminal', () => {
       throw new Error('EPIPE');
     }) as typeof process.stdout.write;
     expect(() => restoreTerminal()).not.toThrow();
+  });
+});
+
+describe('index install-outcome exit code', () => {
+  afterEach(() => {
+    process.exitCode = 0;
+  });
+
+  it('leaves the exit code alone when every task succeeded', () => {
+    recordInstallOutcome([{ id: 'config', label: 'Copy config', status: 'done' } as InstallTask]);
+    applyInstallOutcomeExitCode();
+    expect(process.exitCode ?? 0).toBe(0);
+  });
+
+  it('applies exit code 1 when a task failed', () => {
+    recordInstallOutcome([{ id: 'config', label: 'Copy config', status: 'failed' } as InstallTask]);
+    applyInstallOutcomeExitCode();
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('treats missing results as success', () => {
+    recordInstallOutcome(undefined);
+    applyInstallOutcomeExitCode();
+    expect(process.exitCode ?? 0).toBe(0);
   });
 });
 

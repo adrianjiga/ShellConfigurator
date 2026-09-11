@@ -17,6 +17,14 @@ describe('getNextStep', () => {
     expect(getNextStep(state)).toBe(state);
   });
 
+  it('preserves a pending update even when already on the last step', () => {
+    const state = stateWith('done');
+    const next = getNextStep(state, { installResults: [] });
+    expect(next).not.toBe(state);
+    expect(next.step).toBe('done');
+    expect(next.installResults).toEqual([]);
+  });
+
   it('applies the update and advances', () => {
     const next = getNextStep(stateWith('welcome'), { starshipInstalled: true });
     expect(next.step).toBe('fontcheck');

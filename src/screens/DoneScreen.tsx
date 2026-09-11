@@ -1,53 +1,31 @@
 import { Box, Text, useApp, useInput } from 'ink';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { getShell } from '../config/shells.ts';
+import { type ReportedStatus, statusMark } from '../config/status.ts';
 import { getShellConfigPath } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
-import { NERD_FONTS } from '../services/installer.ts';
+import { fontLabel } from '../services/installer.ts';
 import { buildTaskList, rcTaskId } from '../services/installTasks.ts';
-import { fontIdToInstall, type InstallStatus, type WizardState } from '../types.ts';
+import { fontIdToInstall, type InstallTask, type WizardState } from '../types.ts';
 
 interface DoneScreenProps {
   state: WizardState;
 }
 
-/** 'unknown' means no result was recorded — the task never ran, or the run was cut short. */
-type ReportedStatus = InstallStatus | 'unknown';
-
-/**
- * Never defaults a missing result to success: an absent task is reported as
- * 'unknown' so an interrupted run cannot render as an all-green summary.
- */
-function taskStatus(state: WizardState, id: string): ReportedStatus {
-  return state.installResults.find((t) => t.id === id)?.status ?? 'unknown';
+/** One scan per task; callers read .status/.error/.note from the same result. */
+function task(state: WizardState, id: string): InstallTask | undefined {
+  return state.installResults.find((t) => t.id === id);
 }
-
-function taskError(state: WizardState, id: string) {
-  return state.installResults.find((t) => t.id === id)?.error;
-}
-
-function taskNote(state: WizardState, id: string) {
-  return state.installResults.find((t) => t.id === id)?.note;
-}
-
-const STATUS_MARK: Record<ReportedStatus, { icon: string; color: string }> = {
-  done: { icon: '✓', color: 'green' },
-  skipped: { icon: '–', color: 'gray' },
-  failed: { icon: '✗', color: 'red' },
-  pending: { icon: '?', color: 'yellow' },
-  running: { icon: '?', color: 'yellow' },
-  unknown: { icon: '?', color: 'yellow' },
-};
 
 function StatusMark({ status }: { status: ReportedStatus }) {
-  const { icon, color } = STATUS_MARK[status];
+  const { icon, color } = statusMark(status);
   return <Text color={color}>{icon}</Text>;
 }
 
 export function DoneScreen({ state }: DoneScreenProps) {
   const { exit } = useApp();
   const fontId = fontIdToInstall(state.nerdFontToInstall);
-  const fontLabel = fontId ? (NERD_FONTS.find((f) => f.id === fontId)?.label ?? fontId) : null;
+  const fontName = fontId ? fontLabel(fontId) : null;
 
   const failures = state.installResults.filter((t) => t.status === 'failed');
   const hasFailures = failures.length > 0;
@@ -59,10 +37,10 @@ export function DoneScreen({ state }: DoneScreenProps) {
     }
   });
 
-  const configStatus = taskStatus(state, 'config');
-  const fontStatus = taskStatus(state, 'font');
-  const chshStatus = taskStatus(state, 'chsh');
-  const chshOk = chshStatus === 'done';
+  const configTask = task(state, 'config');
+  const fontTask = task(state, 'font');
+  const chshTask = task(state, 'chsh');
+  const chshOk = chshTask?.status === 'done';
 
   const heading = state.dryRun
     ? 'Dry run — no changes were made'
@@ -90,7 +68,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
           <>
             <Text color="yellow" italic>
               In real mode the wizard would install{' '}
-              {[`Starship${fontId ? ` (${fontLabel})` : ''}`, ...state.selectedShells].join(', ')}{' '}
+              {[`Starship${fontId ? ` (${fontName})` : ''}`, ...state.selectedShells].join(', ')}{' '}
               and write the config below.
             </Text>
 
@@ -124,29 +102,31 @@ export function DoneScreen({ state }: DoneScreenProps) {
           {!state.dryRun && (
             <Box flexDirection="column">
               <Box flexDirection="row" gap={1}>
-                <StatusMark status={configStatus} />
+                <StatusMark status={configTask?.status ?? 'unknown'} />
                 <Text>
-                  {configStatus === 'done' ? 'Per-shell config written' : 'Config not written'}
+                  {configTask?.status === 'done'
+                    ? 'Per-shell config written'
+                    : 'Config not written'}
                 </Text>
               </Box>
-              {configStatus === 'done' &&
+              {configTask?.status === 'done' &&
                 state.selectedShells.map((shellId) => (
                   <Box key={shellId} marginLeft={3} flexDirection="row" gap={1}>
                     <Text color="cyan">{getShellConfigPath(shellId)}</Text>
                     <Text color="gray">(for {shellId})</Text>
                   </Box>
                 ))}
-              {configStatus === 'failed' && (
+              {configTask?.status === 'failed' && (
                 <Box marginLeft={3}>
                   <Text color="red" italic>
-                    {taskError(state, 'config')}
+                    {configTask.error}
                   </Text>
                 </Box>
               )}
-              {taskNote(state, 'config') && (
+              {configTask?.note && (
                 <Box marginLeft={3}>
                   <Text color="gray" italic>
-                    {taskNote(state, 'config')}
+                    {configTask.note}
                   </Text>
                 </Box>
               )}
@@ -156,16 +136,16 @@ export function DoneScreen({ state }: DoneScreenProps) {
           {fontId && (
             <Box flexDirection="column">
               <Box flexDirection="row" gap={1}>
-                <StatusMark status={fontStatus} />
+                <StatusMark status={fontTask?.status ?? 'unknown'} />
                 <Text>
-                  Nerd Font {fontStatus === 'done' ? 'installed' : 'not installed'}:{' '}
-                  <Text color="cyan">{fontLabel}</Text>
+                  Nerd Font {fontTask?.status === 'done' ? 'installed' : 'not installed'}:{' '}
+                  <Text color="cyan">{fontName}</Text>
                 </Text>
               </Box>
-              {fontStatus === 'failed' && (
+              {fontTask?.status === 'failed' && (
                 <Box marginLeft={3}>
                   <Text color="red" italic>
-                    {taskError(state, 'font')}
+                    {fontTask.error}
                   </Text>
                 </Box>
               )}
@@ -175,16 +155,16 @@ export function DoneScreen({ state }: DoneScreenProps) {
           {state.selectedShells.map((shellId) => {
             const shell = getShell(shellId);
             const wasInstalled = state.installedShells.includes(shellId);
-            const installStatus = taskStatus(state, `shell_${shellId}`);
-            const installOk = wasInstalled || installStatus === 'done';
+            const installTask = task(state, `shell_${shellId}`);
+            const installOk = wasInstalled || installTask?.status === 'done';
             // Each shell has its own rc task, so one shell failing no longer
             // marks the others as failed.
-            const rcStatus = taskStatus(state, rcTaskId(shellId));
-            const rcNote = taskNote(state, rcTaskId(shellId));
+            const rcTask = task(state, rcTaskId(shellId));
+            const rcNote = rcTask?.note;
             return (
               <Box key={shellId} flexDirection="column">
                 <Box flexDirection="row" gap={1}>
-                  <StatusMark status={rcStatus} />
+                  <StatusMark status={rcTask?.status ?? 'unknown'} />
                   <Text>{shell?.label ?? shellId.charAt(0).toUpperCase() + shellId.slice(1)}:</Text>
                   {!wasInstalled && (
                     <Text color={installOk ? 'cyan' : 'red'}>
@@ -192,35 +172,35 @@ export function DoneScreen({ state }: DoneScreenProps) {
                     </Text>
                   )}
                   <Text color="gray">
-                    {rcStatus === 'done'
+                    {rcTask?.status === 'done'
                       ? `init line added to ${shell?.rcFile}`
-                      : rcStatus === 'skipped'
+                      : rcTask?.status === 'skipped'
                         ? shell?.rcFile
                           ? (rcNote ?? 'skipped')
                           : rcNote === 'already configured'
                             ? 'already configured'
                             : 'set up manually'
-                        : rcStatus === 'failed'
+                        : rcTask?.status === 'failed'
                           ? 'not configured'
                           : 'status unknown'}
                   </Text>
                 </Box>
-                {installStatus === 'failed' && !wasInstalled && (
+                {installTask?.status === 'failed' && !wasInstalled && (
                   <Box marginLeft={3}>
                     <Text color="red" italic>
-                      {taskError(state, `shell_${shellId}`)}
+                      {installTask.error}
                     </Text>
                   </Box>
                 )}
-                {rcStatus === 'failed' && (
+                {rcTask?.status === 'failed' && (
                   <Box marginLeft={3}>
                     <Text color="red" italic>
-                      {taskError(state, rcTaskId(shellId))}
+                      {rcTask.error}
                     </Text>
                   </Box>
                 )}
                 {/* Manual-only shells (nushell, powershell) show the init command, unless it was already applied. */}
-                {rcStatus === 'skipped' &&
+                {rcTask?.status === 'skipped' &&
                   !shell?.rcFile &&
                   shell?.initLine &&
                   rcNote !== 'already configured' && (
@@ -228,20 +208,21 @@ export function DoneScreen({ state }: DoneScreenProps) {
                       <Text color="cyan">{shell.initLine}</Text>
                     </Box>
                   )}
-                {(rcStatus === 'done' || (rcStatus === 'skipped' && !shell?.rcFile)) && rcNote && (
-                  <Box marginLeft={3}>
-                    <Text color="gray" italic>
-                      {rcNote}
-                    </Text>
-                  </Box>
-                )}
+                {(rcTask?.status === 'done' || (rcTask?.status === 'skipped' && !shell?.rcFile)) &&
+                  rcNote && (
+                    <Box marginLeft={3}>
+                      <Text color="gray" italic>
+                        {rcNote}
+                      </Text>
+                    </Box>
+                  )}
               </Box>
             );
           })}
 
           {state.setDefaultShell && (
             <Box flexDirection="row" gap={1}>
-              <StatusMark status={chshStatus} />
+              <StatusMark status={chshTask?.status ?? 'unknown'} />
               <Text>
                 Default shell {chshOk ? 'set to' : 'not set to'}{' '}
                 <Text color="cyan">{state.setDefaultShell}</Text>
@@ -270,9 +251,9 @@ export function DoneScreen({ state }: DoneScreenProps) {
                   re-run the wizard to configure your shells.
                 </Text>
               )}
-              {fontId && fontStatus === 'done' && (
+              {fontId && fontTask?.status === 'done' && (
                 <Text color="yellow">
-                  Remember to set <Text color="cyan">{fontLabel} Nerd Font</Text> in your terminal
+                  Remember to set <Text color="cyan">{fontName} Nerd Font</Text> in your terminal
                   emulator settings.
                 </Text>
               )}

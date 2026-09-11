@@ -335,9 +335,10 @@ const PALETTE_DEFS = {
 
 export type PaletteId = keyof typeof PALETTE_DEFS;
 
-export const PALETTES: readonly PaletteDef[] = (Object.keys(PALETTE_DEFS) as PaletteId[]).map(
-  (id) => ({ id, ...PALETTE_DEFS[id] })
-);
+/** The intersection pins `id` to the literal union, so `p.id` needs no cast. */
+export const PALETTES: readonly (PaletteDef & { id: PaletteId })[] = (
+  Object.keys(PALETTE_DEFS) as PaletteId[]
+).map((id) => ({ id, ...PALETTE_DEFS[id] }));
 
 export function getPalette(id: PaletteId): PaletteDef {
   return { id, ...PALETTE_DEFS[id] };

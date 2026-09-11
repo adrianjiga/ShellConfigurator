@@ -17,13 +17,16 @@ export interface PresetDef {
   powerline: boolean;
 }
 
+/** The directory/git/character core nearly every preset starts from. */
+const CORE: ModuleId[] = ['directory', 'git_branch', 'git_status', 'character'];
+
 export const PRESETS: PresetDef[] = [
   {
     id: 'custom',
     label: 'Custom (start from scratch)',
     description: 'Choose each option manually',
     requiresNerdFont: false,
-    leftModules: ['directory', 'git_branch', 'git_status', 'character'],
+    leftModules: CORE,
     rightModules: [],
     palette: 'default',
     powerline: false,
@@ -43,7 +46,7 @@ export const PRESETS: PresetDef[] = [
     label: 'No Nerd Font',
     description: 'Pure Unicode/text symbols in base ANSI colours',
     requiresNerdFont: false,
-    leftModules: ['directory', 'git_branch', 'git_status', 'character'],
+    leftModules: CORE,
     rightModules: ['cmd_duration'],
     palette: 'terminal',
     powerline: false,
@@ -53,7 +56,7 @@ export const PRESETS: PresetDef[] = [
     label: 'Plain Text',
     description: 'ASCII-only in white and grey, maximum compatibility',
     requiresNerdFont: false,
-    leftModules: ['directory', 'git_branch', 'git_status', 'character'],
+    leftModules: CORE,
     rightModules: [],
     palette: 'mono',
     powerline: false,
@@ -93,7 +96,7 @@ export const PRESETS: PresetDef[] = [
     label: 'Tokyo Night',
     description: 'Dark theme with blue and purple tones',
     requiresNerdFont: true,
-    leftModules: ['directory', 'git_branch', 'git_status', 'character'],
+    leftModules: CORE,
     rightModules: ['nodejs', 'python', 'cmd_duration'],
     palette: 'tokyo-night',
     powerline: false,
@@ -113,7 +116,7 @@ export const PRESETS: PresetDef[] = [
     label: 'Jetpack',
     description: 'Pseudo-minimalist teals, inspired by Geometry/Spaceship',
     requiresNerdFont: true,
-    leftModules: ['directory', 'git_branch', 'git_status', 'character'],
+    leftModules: CORE,
     rightModules: ['cmd_duration', 'time'],
     palette: 'jetpack',
     powerline: false,
@@ -133,7 +136,7 @@ export const PRESETS: PresetDef[] = [
     label: 'No Runtime Versions',
     description: 'Cool greys, hides language versions (ideal for containers)',
     requiresNerdFont: false,
-    leftModules: ['directory', 'git_branch', 'git_status', 'character'],
+    leftModules: CORE,
     rightModules: [],
     palette: 'slate',
     powerline: false,

@@ -33,6 +33,16 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
   const [cursor, setCursor] = useState(0);
   const isInitialMount = useRef(true);
 
+  const applyModules = (commit: (update: Partial<WizardState>) => void, modules: ModuleId[]) => {
+    const update = side === 'left' ? { leftModules: modules } : { rightModules: modules };
+    commit(update);
+  };
+
+  const orderedForSide = (): ModuleId[] => {
+    const ordered = orderedModules(enabled);
+    return side === 'left' ? [...ordered, 'character'] : ordered;
+  };
+
   // Push live updates to parent state so preview stays in sync (skip initial mount)
   // onUpdate is a fresh closure each parent render; including it would loop on every state push.
   // biome-ignore lint/correctness/useExhaustiveDependencies: onUpdate loops on every state push.
@@ -41,23 +51,11 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
       isInitialMount.current = false;
       return;
     }
-    const ordered = orderedModules(enabled);
-    const modules: ModuleId[] = side === 'left' ? [...ordered, 'character'] : ordered;
-    if (side === 'left') {
-      onUpdate({ leftModules: modules });
-    } else {
-      onUpdate({ rightModules: modules });
-    }
+    applyModules(onUpdate, orderedForSide());
   }, [enabled, side]);
 
   function saveAndProceed() {
-    const ordered = orderedModules(enabled);
-    const modules: ModuleId[] = side === 'left' ? [...ordered, 'character'] : ordered;
-    if (side === 'left') {
-      onNext({ leftModules: modules });
-    } else {
-      onNext({ rightModules: modules });
-    }
+    applyModules(onNext, orderedForSide());
   }
 
   useInput((char, key) => {
@@ -135,7 +133,8 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
                   )}
                 </Box>
                 {isActive && !isTaken && (
-                  <Box paddingLeft={6}>
+                  // Aligned to the box-marker column, same convention as ShellScreen.
+                  <Box marginLeft={4}>
                     <Text color="gray" italic>
                       {mod.description}
                     </Text>

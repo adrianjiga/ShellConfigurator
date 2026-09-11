@@ -1,9 +1,9 @@
 import { cleanup, render } from 'ink-testing-library';
-import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FontSelectScreen } from '../../screens/FontSelectScreen.tsx';
 import { DEFAULT_STATE } from '../../types.ts';
 import { pressEsc } from '../helpers/ink.ts';
+import { flush } from '../helpers/wait.ts';
 
 vi.mock('../../services/installer.ts', () => ({
   NERD_FONTS: [
@@ -25,10 +25,6 @@ function setup() {
     <FontSelectScreen state={{ ...DEFAULT_STATE }} onNext={onNext} onBack={onBack} />
   );
   return { instance, onNext, onBack };
-}
-
-async function flush() {
-  await act(async () => {});
 }
 
 describe('FontSelectScreen', () => {

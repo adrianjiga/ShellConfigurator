@@ -4,26 +4,32 @@ import { resumeUi, suspendUi } from './tty.ts';
 
 const execFileP = promisify(execFile);
 
-/**
- * `command -v` is used rather than `which`, which is absent on minimal, Fedora,
- * and Alpine images. The command name is passed as `$1` instead of being spliced
- * into the script, so it can never be interpreted as shell syntax.
- */
+// `command -v` is used rather than `which`, which is absent on minimal, Fedora,
+// and Alpine images. The command name is passed as `$1` so it can never become
+// shell syntax — it is data, not script text.
 const COMMAND_EXISTS_SCRIPT = 'command -v "$1"';
 
-export function commandExists(cmd: string): boolean {
+function probeArgs(cmd: string): string[] {
+  return ['-c', COMMAND_EXISTS_SCRIPT, 'sh', cmd];
+}
+
+/** The absolute path of a command, or null when it is not on PATH. */
+function probe(cmd: string): string | null {
   try {
-    execFileSync('sh', ['-c', COMMAND_EXISTS_SCRIPT, 'sh', cmd], { stdio: 'pipe' });
-    return true;
+    return execFileSync('sh', probeArgs(cmd), { encoding: 'utf8', stdio: 'pipe' }).trim() || null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function commandExists(cmd: string): boolean {
+  return probe(cmd) !== null;
 }
 
 export async function commandExistsAsync(cmd: string): Promise<boolean> {
   try {
-    await execFileP('sh', ['-c', COMMAND_EXISTS_SCRIPT, 'sh', cmd]);
-    return true;
+    const { stdout } = await execFileP('sh', probeArgs(cmd), { encoding: 'utf8' });
+    return stdout.trim().length > 0;
   } catch {
     return false;
   }
@@ -35,16 +41,8 @@ export async function runCapture(cmd: string, args: string[]): Promise<string> {
   return stdout.trim();
 }
 
-/** Absolute path of a command, or null when it is not on PATH. */
 export function commandPath(cmd: string): string | null {
-  try {
-    return execFileSync('sh', ['-c', COMMAND_EXISTS_SCRIPT, 'sh', cmd], {
-      encoding: 'utf8',
-      stdio: 'pipe',
-    }).trim();
-  } catch {
-    return null;
-  }
+  return probe(cmd);
 }
 
 /** The child currently holding the terminal, so a cancel request can kill it. */

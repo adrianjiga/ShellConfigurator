@@ -46,6 +46,8 @@ export const SHELLS: ShellDef[] = [
     pathLine: (dir) => `fish_add_path ${dir}`,
   },
   {
+    // Three semicolon-joined steps: 1) create vendor/autoload, 2) write the
+    // STARSHIP_CONFIG export-env file, 3) write the starship init file.
     id: 'nushell',
     binary: 'nu',
     label: 'Nushell',
@@ -70,6 +72,14 @@ export function getShell(id: ShellId): ShellDef | undefined {
 }
 
 /** Executable name for a shell, e.g. 'nu' for nushell. */
+const SHELL_IDS: readonly ShellId[] = SHELLS.map((s) => s.id);
+
+export function isShellId(id: unknown): id is ShellId {
+  return typeof id === 'string' && (SHELL_IDS as readonly string[]).includes(id);
+}
+
 export function getShellBinary(id: ShellId): string {
-  return SHELLS.find((s) => s.id === id)?.binary ?? id;
+  const shell = getShell(id);
+  if (!shell) throw new Error(`Unknown shell: ${id}`);
+  return shell.binary;
 }

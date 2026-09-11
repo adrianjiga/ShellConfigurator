@@ -8,6 +8,10 @@ const readFileP = promisify(fs.readFile);
 
 // Async throughout: these run during the Ink render loop and must not block it.
 
+const APT_DISTROS = ['ubuntu', 'debian', 'linuxmint', 'pop', 'elementary'];
+const DNF_DISTROS = ['fedora', 'rhel', 'centos', 'rocky', 'alma'];
+const PACMAN_DISTROS = ['arch', 'manjaro', 'endeavouros', 'cachyos', 'garuda'];
+
 /** Reads the distro id from /etc/os-release, e.g. "ubuntu" or "fedora". */
 async function readOsReleaseIdAsync(): Promise<string | null> {
   try {
@@ -30,10 +34,10 @@ export async function detectPackageManagerAsync(): Promise<PackageManager> {
 
   const id = await readOsReleaseIdAsync();
   if (id) {
-    if (['ubuntu', 'debian', 'linuxmint', 'pop', 'elementary'].includes(id)) return 'apt';
-    if (['fedora', 'rhel', 'centos', 'rocky', 'alma'].includes(id)) return 'dnf';
-    if (['arch', 'manjaro', 'endeavouros', 'cachyos', 'garuda'].includes(id)) return 'pacman';
-    if (['alpine'].includes(id)) return 'apk';
+    if (APT_DISTROS.includes(id)) return 'apt';
+    if (DNF_DISTROS.includes(id)) return 'dnf';
+    if (PACMAN_DISTROS.includes(id)) return 'pacman';
+    if (id === 'alpine') return 'apk';
   }
 
   const [hasApt, hasDnf, hasApk] = await Promise.all([
@@ -66,6 +70,8 @@ export async function detectInstalledShellsAsync(): Promise<ShellId[]> {
   return results.filter(({ exists }) => exists).map(({ id }) => id);
 }
 
+const byName = (name: string) => SHELLS.find((s) => s.binary === name || s.id === name);
+
 /**
  * Best-effort detection of the shell the wizard is running in, so it can be
  * pre-selected. Reads $SHELL first, falling back to the process command name.
@@ -74,17 +80,15 @@ export async function detectInstalledShellsAsync(): Promise<ShellId[]> {
 export async function detectCurrentShellAsync(): Promise<ShellId | null> {
   const envPath = process.env.SHELL?.trim();
   if (envPath) {
-    const name = envPath.split('/').pop() ?? '';
-    const match = SHELLS.find((s) => s.binary === name || s.id === name);
+    const match = byName(envPath.split('/').pop() ?? '');
     if (match) return match.id;
   }
   try {
     const comm = (await runCapture('ps', ['-p', `${process.pid}`, '-o', 'comm='])).trim();
-    const name = comm.split('/').pop() ?? '';
-    const match = SHELLS.find((s) => s.binary === name || s.id === name);
+    const match = byName(comm.split('/').pop() ?? '');
     if (match) return match.id;
   } catch {
-    // Fall through to null.
+    // fall through to null
   }
   return null;
 }

@@ -1,11 +1,10 @@
 import { cleanup, render } from 'ink-testing-library';
-import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PALETTES } from '../../config/palettes.ts';
 import { StyleScreen } from '../../screens/StyleScreen.tsx';
 import { DEFAULT_STATE } from '../../types.ts';
-
 import { pressEsc } from '../helpers/ink.ts';
+import { flush } from '../helpers/wait.ts';
 
 afterEach(cleanup);
 
@@ -18,10 +17,6 @@ function setup(overrides = {}) {
     <StyleScreen state={state} onNext={onNext} onUpdate={onUpdate} onBack={onBack} />
   );
   return { instance, onNext, onUpdate, onBack, state };
-}
-
-async function flush() {
-  await act(async () => {});
 }
 
 describe('StyleScreen', () => {

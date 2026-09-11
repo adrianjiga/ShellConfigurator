@@ -10,7 +10,10 @@ interface FontCheckScreenProps {
   onBack: () => void;
 }
 
-const items = [
+type FontChoice = 'have' | 'install' | 'none';
+type Item<V> = { label: string; value: V };
+
+const items: Item<FontChoice>[] = [
   {
     label: 'Yes, I already have one',
     value: 'have',
@@ -30,13 +33,12 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
     if (key.escape) onBack();
   });
 
-  function handleSelect(item: { value: string }) {
+  function handleSelect(item: Item<FontChoice>) {
     switch (item.value) {
       case 'have':
         onNext({ hasNerdFont: true, nerdFontToInstall: NO_NERD_FONT });
         break;
       case 'install':
-        // app.tsx will route to font_select step
         onNext({ hasNerdFont: true, nerdFontToInstall: { kind: 'select' } });
         break;
       case 'none':

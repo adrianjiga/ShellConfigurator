@@ -14,7 +14,11 @@ interface PresetScreenProps {
 
 export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
   const compatible = PRESETS.filter((p) => !p.requiresNerdFont || state.hasNerdFont);
-  const [highlightedId, setHighlightedId] = useState<string>(compatible[0]?.id ?? '');
+  const [highlightedId, setHighlightedId] = useState<string>(() => {
+    const first = compatible[0];
+    if (!first) throw new Error('No compatible presets available');
+    return first.id;
+  });
 
   const items = compatible.map((p) => ({
     label: p.requiresNerdFont ? `${p.label} ★` : p.label,

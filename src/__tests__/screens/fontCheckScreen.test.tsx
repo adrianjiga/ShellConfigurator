@@ -1,9 +1,9 @@
 import { cleanup, render } from 'ink-testing-library';
-import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FontCheckScreen } from '../../screens/FontCheckScreen.tsx';
 import { DEFAULT_STATE, NO_NERD_FONT } from '../../types.ts';
 import { pressEsc } from '../helpers/ink.ts';
+import { flush } from '../helpers/wait.ts';
 
 afterEach(() => {
   cleanup();
@@ -17,10 +17,6 @@ function setup() {
     <FontCheckScreen state={{ ...DEFAULT_STATE }} onNext={onNext} onBack={onBack} />
   );
   return { instance, onNext, onBack };
-}
-
-async function flush() {
-  await act(async () => {});
 }
 
 describe('FontCheckScreen', () => {

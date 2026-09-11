@@ -12,9 +12,15 @@ env:
   NODE_VERSION: v22.23.2
 
 jobs:
-  lint:
-    name: Lint
+  # One matrix job instead of four copy-pasted check jobs: lint, format:check,
+  # typecheck, and build are all "checkout the repo, npm ci, run a script".
+  quality-checks:
+    name: ${{ matrix.check }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [lint, format:check, typecheck, build]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -22,50 +28,14 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci
-      - run: npm run lint
+      - run: npm run ${{ matrix.check }}
 
-  format:
-    name: Format
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '22'
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run format:check
-
-  typecheck:
-    name: Typecheck
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '22'
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run typecheck
-
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '22'
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run build
-
-  # Aggregates the lint/format/typecheck/build jobs into one required check so
-  # the master ruleset stays stable when a step is added or renamed.
+  # Aggregates the quality checks into one required check so the master ruleset
+  # stays stable when a step is added or renamed.
   quality-gate:
     name: Quality gate
     runs-on: ubuntu-latest
-    needs: [lint, format, typecheck, build]
+    needs: [quality-checks]
     steps:
       - run: echo "All quality checks passed."
 
@@ -121,14 +91,9 @@ jobs:
           restore-keys: node-${{ runner.arch }}-
       - name: Run non-destructive smoke test in ${{ matrix.image }}
         run: |
-          mkdir -p /tmp/node-tarball-cache
-          docker run --rm \
-            -v "$PWD":/app:ro \
-            -v /tmp/node-tarball-cache:/node-cache \
-            -w /app \
-            -e EXPECTED_PM=${{ matrix.package-manager }} \
-            -e NODE_TARBALL_DIR=/node-cache \
-            -e NODE_VERSION=${{ env.NODE_VERSION }} \
-            -e SHELL=/bin/bash \
-            ${{ matrix.image }} \
-            sh -eu -c "${{ matrix.setup }} && bash -euxo pipefail -c 'bash scripts/ci/distroSetup.sh && ${{ matrix.finalize }} && cp -a /app /tmp/src && cd /tmp/src && HOME=/tmp/smoke-home npm ci && HOME=/tmp/smoke-home npm run build && HOME=/tmp/smoke-home node scripts/dockerSmoke.mjs && ${{ matrix.wizard-check }}'"
+          bash scripts/ci/distroSmoke.sh \
+            "${{ matrix.image }}" \
+            "${{ matrix.package-manager }}" \
+            "${{ matrix.setup }}" \
+            "${{ matrix.finalize }}" \
+            "${{ matrix.wizard-check }}"

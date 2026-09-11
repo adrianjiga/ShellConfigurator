@@ -37,37 +37,41 @@ async function waitForFrame(predicate, label, timeoutMs = 30000) {
   throw new Error(`Timed out waiting for ${label}:\n${show()}`);
 }
 
-async function press(key) {
+async function press(key, expected, timeoutMs = 30000) {
   instance.stdin.write(key);
-  await sleep(150);
+  if (expected) {
+    await waitForFrame((frame) => frame.includes(expected), expected, timeoutMs);
+    return;
+  }
+  // Wait briefly for the frame to react rather than always sleeping a fixed
+  // pause; a key that had no visible effect (e.g. at the end of a list) just
+  // falls through once the grace period passes.
+  const before = show();
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline) {
+    if (show() !== before) return;
+    await sleep(150);
+  }
 }
 
 try {
   await waitForFrame((frame) => frame.includes('Package manager:'), 'WelcomeScreen detection');
-  await press(ENTER);
-  await waitForFrame((frame) => frame.includes('Nerd Font check'), 'fontcheck step');
+  await press(ENTER, 'Nerd Font check');
   await press(DOWN);
   await press(DOWN);
-  await press(ENTER);
-  await waitForFrame((frame) => frame.includes('Choose a starting preset'), 'preset step');
-  await press(ENTER);
-  await waitForFrame((frame) => frame.includes('Left prompt segments'), 'segments_left step');
-  await press(ENTER);
-  await waitForFrame((frame) => frame.includes('Right prompt segments'), 'segments_right step');
-  await press(ENTER);
-  await waitForFrame((frame) => frame.includes('Style options'), 'style step');
-  await press(ENTER);
-  await waitForFrame((frame) => frame.includes('[installed]'), 'shell detection');
-  await press(ENTER);
-  await waitForFrame((frame) => frame.includes('Review your configuration'), 'review step');
+  await press(ENTER, 'Choose a starting preset');
+  await press(ENTER, 'Left prompt segments');
+  await press(ENTER, 'Right prompt segments');
+  await press(ENTER, 'Style options');
+  await press(ENTER, '[installed]');
+  await press(ENTER, 'Review your configuration');
 
   const review = show();
   assert.ok(review.includes('Starship'), 'review missing Starship task');
   assert.ok(review.includes('Write config files'), 'review missing config task');
   assert.ok(review.includes('Configure bash'), 'review missing bash rc task');
 
-  await press(ENTER);
-  await waitForFrame((frame) => frame.includes('to exit'), 'done screen', 240000);
+  await press(ENTER, 'to exit', 240000);
 
   const done = show();
   assert.ok(done.includes('All done!'), `install reported errors:\n${done}`);

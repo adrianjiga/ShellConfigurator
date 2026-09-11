@@ -1,10 +1,9 @@
 import { cleanup, render } from 'ink-testing-library';
-import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SegmentsScreen } from '../../screens/SegmentsScreen.tsx';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
-
 import { pressEsc } from '../helpers/ink.ts';
+import { flush } from '../helpers/wait.ts';
 
 afterEach(cleanup);
 
@@ -25,9 +24,6 @@ function setup(overrides: Partial<WizardState> = {}) {
 }
 
 // Flush Ink's render + useInput effect re-subscription deterministically.
-async function flush() {
-  await act(async () => {});
-}
 
 describe('SegmentsScreen', () => {
   it('renders the configurable modules without character', async () => {
@@ -46,8 +42,9 @@ describe('SegmentsScreen', () => {
     const descriptionLine = lines.find((l) => l.includes('Current user (shown when SSH or root)'));
     expect(toggleLine).toBeTruthy();
     expect(descriptionLine).toBeTruthy();
-    // The description starts in the same column as the label, aligned under it.
-    expect(descriptionLine!.indexOf('Current user')).toBe(toggleLine!.indexOf('Username'));
+    // The description is indented one column past the toggle marker, in the
+    // same margin-based convention ShellScreen uses (margin 4).
+    expect(descriptionLine!.indexOf('Current user')).toBe(toggleLine!.indexOf('[ ]') + 2);
     // And it sits on its own line, never on the toggle/label line.
     expect(descriptionLine).not.toContain('[✓]');
   });

@@ -1,10 +1,9 @@
 import { cleanup, render } from 'ink-testing-library';
-import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ReviewScreen } from '../../screens/ReviewScreen.tsx';
 import { DEFAULT_STATE } from '../../types.ts';
-
 import { pressEsc } from '../helpers/ink.ts';
+import { flush } from '../helpers/wait.ts';
 
 afterEach(() => {
   cleanup();
@@ -22,10 +21,6 @@ function setup(overrides: Partial<typeof DEFAULT_STATE> = {}) {
   const onBack = vi.fn();
   const instance = render(<ReviewScreen state={state} onNext={onNext} onBack={onBack} />);
   return { instance, onNext, onBack, state };
-}
-
-async function flush() {
-  await act(async () => {});
 }
 
 describe('ReviewScreen', () => {

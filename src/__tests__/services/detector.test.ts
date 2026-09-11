@@ -33,7 +33,8 @@ import {
   isStarshipInstalledAsync,
 } from '../../services/detector.ts';
 
-function execFileSucceeds(stdout = '') {
+// `command -v` always prints a path on success, so a found command must have non-empty stdout.
+function execFileSucceeds(stdout = '/usr/bin/cmd') {
   mockExecFile.mockImplementation((...args: unknown[]) => {
     const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
     cb(null, stdout, '');

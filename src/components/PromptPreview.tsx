@@ -1,17 +1,8 @@
 import { Box, Text } from 'ink';
-import { type ConfigurableModuleId, getModule, type ModuleId } from '../config/modules.ts';
+import { getModule, isConfigurableModule, type ModuleId } from '../config/modules.ts';
 import { getPalette, inkColor, type PaletteColorName } from '../config/palettes.ts';
-import type { CharacterSymbol, WizardState } from '../types.ts';
-
-const CHAR_SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> = {
-  arrow: { success: '❯', error: '❯' },
-  lambda: { success: 'λ', error: 'λ' },
-  dollar: { success: '$', error: '$' },
-};
-
-/** The same separators the generator emits (U+E0B0 / U+E0B2). */
-const SEPARATOR_RIGHT = '\ue0b0';
-const SEPARATOR_LEFT = '\ue0b2';
+import { CHARACTER_SYMBOLS, SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../config/promptSymbols.ts';
+import type { WizardState } from '../types.ts';
 
 interface PromptPreviewProps {
   state: WizardState;
@@ -26,12 +17,10 @@ export function PromptPreview({ state }: PromptPreviewProps) {
 
   const color = (name: PaletteColorName) => inkColor(palette.colors[name]);
 
-  const isSegment = (id: ModuleId): id is ConfigurableModuleId => id !== 'character';
-
   function renderCharacter() {
     return (
       <Text key="character" color={color('ok')} bold>
-        {CHAR_SYMBOLS[characterSymbol].success}{' '}
+        {CHARACTER_SYMBOLS[characterSymbol].success}{' '}
       </Text>
     );
   }
@@ -42,7 +31,7 @@ export function PromptPreview({ state }: PromptPreviewProps) {
    * colour, which is the same interlocking the generator writes into the config.
    */
   function renderSide(ids: ModuleId[], side: 'left' | 'right') {
-    const segments = ids.filter(isSegment);
+    const segments = ids.filter(isConfigurableModule);
 
     return segments.flatMap((id, i) => {
       const def = getModule(id);
@@ -75,7 +64,7 @@ export function PromptPreview({ state }: PromptPreviewProps) {
     });
   }
 
-  const leftSegmentCount = leftModules.filter(isSegment).length;
+  const leftSegmentCount = leftModules.filter(isConfigurableModule).length;
 
   return (
     <Box flexDirection="column">

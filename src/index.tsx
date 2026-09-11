@@ -4,24 +4,30 @@ import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { restoreConfigBackups } from './generators/shellRc.ts';
+import { restoreTty } from './services/tty.ts';
+import type { InstallTask } from './types.ts';
 
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   .version as string;
+
+let installFailed = false;
+
+/** Records whether the install finished with any failed task. */
+export function recordInstallOutcome(results: InstallTask[] | undefined): void {
+  installFailed = results?.some((t) => t.status === 'failed') ?? false;
+}
+
+/** Applies the recorded install outcome as the process exit code. */
+export function applyInstallOutcomeExitCode(): void {
+  if (installFailed) process.exitCode = 1;
+}
 
 /**
  * Ink puts the terminal in raw mode and hides the cursor; if the process dies
  * without unwinding that, the user's shell is left unusable.
  */
 export function restoreTerminal(): void {
-  try {
-    if (process.stdin.isTTY && process.stdin.setRawMode) {
-      process.stdin.setRawMode(false);
-    }
-    // Show cursor again.
-    process.stdout.write('\u001B[?25h');
-  } catch {
-    // Nothing useful to do if even this fails.
-  }
+  restoreTty();
 }
 
 export function reportFatal(prefix: string, err: unknown): void {
@@ -46,6 +52,7 @@ Options:
   -h, --help       Show this help and exit
   -v, --version    Print the version and exit
   -d, --dry-run    Generate config in-memory and show a summary; installs nothing
+  --no-install     Alias for --dry-run
   --restore        Copy the newest .bak-* snapshot back over the shared and
                    per-shell configs created by earlier wizard runs
 `);
@@ -98,11 +105,14 @@ if (handleCliArgs()) {
 
 const app = render(
   <ErrorBoundary onError={(err) => reportFatal('ShellConfigurator hit a render error', err)}>
-    <App dryRun={hasDryRunFlag()} />
+    <App dryRun={hasDryRunFlag()} onInstallOutcome={recordInstallOutcome} />
   </ErrorBoundary>
 );
 
 app
   .waitUntilExit()
-  .then(restoreTerminal)
+  .then(() => {
+    applyInstallOutcomeExitCode();
+    restoreTerminal();
+  })
   .catch((err) => reportFatal('ShellConfigurator exited abnormally', err));

@@ -1,7 +1,7 @@
 import { parse } from '@iarna/toml';
 import { cleanup, render } from 'ink-testing-library';
-import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { flush, waitFor } from './helpers/wait.ts';
 
 // Only the side-effecting edges are stubbed. generateToml, the step machine, the
 // screens, and runInstallTasks all run for real, so this exercises the whole
@@ -36,6 +36,7 @@ vi.mock('../generators/shellRc.ts', () => ({
   resetSharedShellConfig: mockResetSharedConfig,
   backupSharedConfig: vi.fn(() => null),
   getShellConfigPath: () => '/tmp/starship.toml',
+  starshipConfigLine: () => 'export STARSHIP_CONFIG="/tmp/starship.toml"',
 }));
 
 vi.mock('../services/installer.ts', () => ({
@@ -46,9 +47,11 @@ vi.mock('../services/installer.ts', () => ({
   setDefaultShell: vi.fn().mockResolvedValue(undefined),
   getMissingStarshipPathDir: vi.fn(() => null),
   getNerdFontsDir: () => '/tmp/fonts',
+  fontLabel: (id: string) => id,
 }));
 
 import { App } from '../app.tsx';
+import type { InstallTask } from '../types.ts';
 
 const ENTER = '\r';
 const SPACE = ' ';
@@ -67,16 +70,13 @@ afterEach(() => {
 });
 beforeEach(() => vi.clearAllMocks());
 
-async function flush() {
-  await act(async () => {});
-}
-
 /** Walks the wizard to the end and returns the TOML that was written. */
 async function runWizard(
   keys: string[],
-  instanceOut?: { instance: ReturnType<typeof render> }
+  instanceOut?: { instance: ReturnType<typeof render> },
+  appProps: Parameters<typeof App>[0] = {}
 ): Promise<string> {
-  const instance = render(<App />);
+  const instance = render(<App {...appProps} />);
   await flush();
   if (instanceOut) instanceOut.instance = instance;
 
@@ -95,14 +95,6 @@ async function runWizard(
 }
 
 /** The InstallingScreen advances to Done ~1.2s after the chain ends; wait for it. */
-async function waitForDone(instance: { lastFrame: () => string | undefined }): Promise<void> {
-  const started = Date.now();
-  while (Date.now() - started < 5000) {
-    await new Promise((r) => setTimeout(r, 25));
-    if (instance.lastFrame()?.includes('Done')) return;
-  }
-  throw new Error('never reached the done screen');
-}
 
 describe('full wizard walkthrough', () => {
   it('writes parseable TOML reflecting the default choices', async () => {
@@ -189,22 +181,31 @@ describe('full wizard walkthrough', () => {
   });
 
   it('keeps a clean exit code when every step succeeded', async () => {
+    const recordOutcome = vi.fn();
     const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
-    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER], out);
-    await waitForDone(out.instance);
+    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER], out, {
+      onInstallOutcome: recordOutcome,
+    });
+    await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
+    const results = recordOutcome.mock.calls.at(-1)?.[0] as InstallTask[] | undefined;
+    expect(results?.some((t) => t.status === 'failed')).toBe(false);
     expect(process.exitCode ?? 0).toBe(0);
   });
 
-  it('exits non-zero when an install step fails', async () => {
+  it('reports a failed install for a non-zero exit', async () => {
     // { applied: false } with no note makes the rc step fail ("Unknown shell"),
-    // which must surface as a non-zero exit so scripts can detect the failure.
+    // which must surface so scripts can detect the failure.
     mockApplyShellConfig.mockReturnValueOnce({ applied: false });
+    const recordOutcome = vi.fn();
     const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
-    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER], out);
-    await waitForDone(out.instance);
+    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER], out, {
+      onInstallOutcome: recordOutcome,
+    });
+    await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
-    expect(process.exitCode).toBe(1);
+    const results = recordOutcome.mock.calls.at(-1)?.[0] as InstallTask[] | undefined;
+    expect(results?.some((t) => t.status === 'failed')).toBe(true);
   });
 
   it('installs a chosen Nerd Font through the font_select flow', async () => {
@@ -225,7 +226,7 @@ describe('full wizard walkthrough', () => {
       ],
       out
     );
-    await waitForDone(out.instance);
+    await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
     expect(toml).toContain('$character');
     expect(mockInstallNerdFont).toHaveBeenCalledTimes(1);
@@ -237,6 +238,7 @@ describe('full wizard walkthrough', () => {
     // installNerdFont failing must not poison the generated config: hasNerdFont
     // is forced off so the result avoids glyphs the user's terminal can't render.
     mockInstallNerdFont.mockRejectedValue(new Error('Checksum mismatch'));
+    const recordOutcome = vi.fn();
     const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
     const toml = await runWizard(
       [
@@ -252,14 +254,16 @@ describe('full wizard walkthrough', () => {
         ENTER, // -> review
         ENTER, // -> installing
       ],
-      out
+      out,
+      { onInstallOutcome: recordOutcome }
     );
-    await waitForDone(out.instance);
+    await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
     // git_branch under hasNerdFont:false uses the plain-text "on " fallback.
     expect(toml).toContain('symbol = "on "');
     expect(toml).not.toContain('symbol = " "');
-    expect(process.exitCode).toBe(1);
+    const results = recordOutcome.mock.calls.at(-1)?.[0] as InstallTask[] | undefined;
+    expect(results?.some((t) => t.status === 'failed')).toBe(true);
   });
 
   it('installs a shell the machine does not have', async () => {
@@ -281,7 +285,7 @@ describe('full wizard walkthrough', () => {
       ],
       out
     );
-    await waitForDone(out.instance);
+    await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
     expect(toml).toContain('$character');
     expect(mockInstallShell).toHaveBeenCalledTimes(1);

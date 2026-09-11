@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useRef, useState } from 'react';
 import { WizardLayout } from '../components/WizardLayout.tsx';
+import { statusMark } from '../config/status.ts';
 import { killActiveCommand } from '../services/exec.ts';
 import {
   buildTaskList,
@@ -8,28 +9,12 @@ import {
   runInstallTasks,
 } from '../services/installTasks.ts';
 import { isUiSuspended, subscribeToUiSuspension } from '../services/tty.ts';
-import type { InstallStatus, InstallTask, WizardState } from '../types.ts';
+import type { InstallTask, WizardState } from '../types.ts';
 
 interface InstallingScreenProps {
   state: WizardState;
   onNext: (update?: Partial<WizardState>) => void;
 }
-
-const STATUS_ICONS: Record<InstallStatus, string> = {
-  pending: '[ ]',
-  running: '[~]',
-  done: '[✓]',
-  failed: '[✗]',
-  skipped: '[–]',
-};
-
-const STATUS_COLORS: Record<InstallStatus, string> = {
-  pending: 'gray',
-  running: 'yellow',
-  done: 'green',
-  failed: 'red',
-  skipped: 'gray',
-};
 
 export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const [tasks, setTasks] = useState<InstallTask[]>(() => buildTaskList(state));
@@ -114,9 +99,9 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
           {tasks.map((task) => (
             <Box key={task.id} flexDirection="column">
               <Box flexDirection="row" gap={1}>
-                <Text color={STATUS_COLORS[task.status]}>{STATUS_ICONS[task.status]}</Text>
+                <Text color={statusMark(task.status).color}>[{statusMark(task.status).icon}]</Text>
                 <Text
-                  color={task.status === 'running' ? 'white' : STATUS_COLORS[task.status]}
+                  color={task.status === 'running' ? 'white' : statusMark(task.status).color}
                   bold={task.status === 'running'}
                 >
                   {task.label}
