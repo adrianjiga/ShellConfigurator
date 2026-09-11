@@ -86,6 +86,33 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['-o', '/tmp/out.toml']).outputFile).toBe('/tmp/out.toml');
     });
 
+    it('--preset=id inline value', () => {
+      expect(parseCliArgs(['--preset=catppuccin']).preset).toBe('catppuccin');
+    });
+
+    it('--shells=zsh,bash inline value', () => {
+      expect(parseCliArgs(['--shells=zsh,bash']).shells).toEqual(['zsh', 'bash']);
+    });
+
+    it('--state=card.json inline value', () => {
+      expect(parseCliArgs(['--state=card.json']).stateFile).toBe('card.json');
+    });
+
+    it('-o=out.toml short flag inline value', () => {
+      expect(parseCliArgs(['-o=out.toml']).outputFile).toBe('out.toml');
+    });
+
+    it('does not reuse the next token after an inline value', () => {
+      const f = parseCliArgs(['--preset=catppuccin', '--no-powerline']);
+      expect(f.preset).toBe('catppuccin');
+      expect(f.powerline).toBe(false);
+    });
+
+    it('ignores an inline value on a boolean flag', () => {
+      const f = parseCliArgs(['--powerline=true']);
+      expect(f.powerline).toBeUndefined();
+    });
+
     it('--output maps to outputFile', () => {
       expect(parseCliArgs(['--output', 'out.toml']).outputFile).toBe('out.toml');
     });

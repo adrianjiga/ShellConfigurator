@@ -304,12 +304,13 @@ describe('runApply', () => {
 
   it('runs the install pipeline and records a successful run in history', async () => {
     mockRunInstallTasks.mockResolvedValue(doneTasks as never);
-    await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }));
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }), 'apply --shells zsh');
 
     expect(mockRunInstallTasks).toHaveBeenCalled();
     expect(mockAppendHistory).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'apply',
+        command: 'apply --shells zsh',
         results: doneTasks,
         exitCode: 0,
       })

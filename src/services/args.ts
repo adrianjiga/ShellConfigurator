@@ -48,13 +48,21 @@ const SHORT_FLAGS: Record<string, string> = {
   '-h': '--help',
 };
 
+/** Splits a token into its long-form name and any inline `=` value. */
+function splitToken(token: string): { name: string; inlineValue?: string } {
+  const eq = token.indexOf('=');
+  if (eq === -1) return { name: token };
+  return { name: token.slice(0, eq), inlineValue: token.slice(eq + 1) };
+}
+
 export function parseCliArgs(argv: string[]): CliFlags {
   const result: CliFlags = { subcommand: null, help: false, version: false, restore: false };
 
   let subcommandSeen = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
-    const flag = SHORT_FLAGS[arg] ?? arg;
+    const token = splitToken(arg);
+    const flag = SHORT_FLAGS[token.name] ?? token.name;
 
     if (!flag.startsWith('-')) {
       if (!subcommandSeen && (flag === 'generate' || flag === 'apply')) {
@@ -64,43 +72,47 @@ export function parseCliArgs(argv: string[]): CliFlags {
       continue;
     }
 
-    // Boolean flags — the value is the flag itself.
-    switch (flag) {
-      case '--help':
-        result.help = true;
-        continue;
-      case '--version':
-        result.version = true;
-        continue;
-      case '--restore':
-      case '--undo':
-        result.restore = true;
-        continue;
-      case '--dry-run':
-        result.dryRun = true;
-        continue;
-      case '--no-install':
-        result.dryRun = true;
-        continue;
-      case '--powerline':
-        result.powerline = true;
-        continue;
-      case '--no-powerline':
-        result.powerline = false;
-        continue;
-      case '--has-nerd-font':
-        result.hasNerdFont = true;
-        continue;
-      case '--no-nerd-font':
-        result.hasNerdFont = false;
-        continue;
-      case '--skip-starship':
-        result.skipStarship = true;
-        continue;
+    // Boolean flags — the value is the flag itself. `--flag=x` is not boolean
+    // (an `=` implies a value), so it falls through to the value handling.
+    if (token.inlineValue === undefined) {
+      switch (flag) {
+        case '--help':
+          result.help = true;
+          continue;
+        case '--version':
+          result.version = true;
+          continue;
+        case '--restore':
+        case '--undo':
+          result.restore = true;
+          continue;
+        case '--dry-run':
+          result.dryRun = true;
+          continue;
+        case '--no-install':
+          result.dryRun = true;
+          continue;
+        case '--powerline':
+          result.powerline = true;
+          continue;
+        case '--no-powerline':
+          result.powerline = false;
+          continue;
+        case '--has-nerd-font':
+          result.hasNerdFont = true;
+          continue;
+        case '--no-nerd-font':
+          result.hasNerdFont = false;
+          continue;
+        case '--skip-starship':
+          result.skipStarship = true;
+          continue;
+      }
     }
 
-    // Value flags — the next token is the value (skip it only when it exists).
-    const value = argv[i + 1];
+    // Value flags — the inline `=` value, else the next token (skip it only when
+    // it exists; the token we consumed is never reused).
+    const value = token.inlineValue ?? argv[i + 1];
     if (value === undefined || value.startsWith('-')) continue;
 
     switch (flag) {
@@ -138,13 +150,8 @@ export function parseCliArgs(argv: string[]): CliFlags {
       default:
         continue;
     }
-    i++;
+    if (token.inlineValue === undefined) i++;
   }
 
   return result;
-}
-
-/** True when argv targets a headless subcommand (`generate` or `apply`). */
-export function isHeadlessArgv(argv: string[]): boolean {
-  return parseCliArgs(argv).subcommand !== null;
 }

@@ -165,7 +165,7 @@ export async function runHeadlessCommand(argv: string[]): Promise<boolean> {
     return true;
   }
   if (flags.subcommand === 'apply') {
-    await runApply(flags);
+    await runApply(flags, argv.join(' '));
     return true;
   }
   return false;

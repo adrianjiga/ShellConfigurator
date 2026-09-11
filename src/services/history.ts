@@ -5,10 +5,10 @@ import { stateDir } from './paths.ts';
 import { serializeState } from './state.ts';
 
 /**
- * What a recorded run did. `install` is the interactive wizard; the others are
- * headless or day-2 lifecycle commands.
+ * What a recorded run did. `install` is the interactive wizard; `apply` is a
+ * headless run; the rest are day-2 lifecycle commands.
  */
-export type HistoryKind = 'install' | 'apply' | 'generate' | 'uninstall' | 'rollback';
+export type HistoryKind = 'install' | 'apply' | 'uninstall' | 'rollback';
 
 /**
  * One entry in history.jsonl: a single JSON object per line. The version field

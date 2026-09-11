@@ -217,8 +217,9 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
  * The full `apply` subcommand: headless run of the same install pipeline the
  * wizard drives. `--dry-run` prints the task plan and the TOML that would be
  * written without touching the system; a real run records itself in history.
+ * `command` is the original invocation line stored for reproducibility.
  */
-export async function runApply(flags: CliFlags): Promise<void> {
+export async function runApply(flags: CliFlags, command?: string): Promise<void> {
   const state = await prepareApplyState(flags);
 
   // Refuse a real run with no targets before it touches the system: the config
@@ -258,6 +259,7 @@ export async function runApply(flags: CliFlags): Promise<void> {
       version: 1,
       timestamp: new Date().toISOString(),
       kind: 'apply',
+      command,
       results,
       exitCode: failed ? 1 : 0,
     });
