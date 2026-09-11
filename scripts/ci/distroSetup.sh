@@ -36,17 +36,24 @@ if [ "$node_major" -lt 22 ]; then
   esac
   node_version="${NODE_VERSION:-v22.23.2}"
   tarball="node-${node_version}-linux-${node_arch}.tar.gz"
+
+  # Download once into the cache dir when provided (GitHub caches it across
+  # runs); otherwise fetch into a throwaway temp file. curl+extract is a single
+  # path either way.
   if [ -n "${NODE_TARBALL_DIR:-}" ]; then
     mkdir -p "$NODE_TARBALL_DIR"
-    cached_tarball="$NODE_TARBALL_DIR/$tarball"
-    if [ ! -f "$cached_tarball" ]; then
-      curl -fsSL "https://nodejs.org/dist/${node_version}/${tarball}" -o "$cached_tarball"
+    tarball_path="$NODE_TARBALL_DIR/$tarball"
+    if [ ! -f "$tarball_path" ]; then
+      curl -fsSL "https://nodejs.org/dist/${node_version}/${tarball}" -o "$tarball_path"
     fi
-    tar -xzf "$cached_tarball" -C /usr/local --strip-components=1
   else
-    curl -fsSL "https://nodejs.org/dist/${node_version}/${tarball}" -o /tmp/node.tar.gz
-    tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1
-    rm /tmp/node.tar.gz
+    tarball_path="/tmp/$tarball"
+    curl -fsSL "https://nodejs.org/dist/${node_version}/${tarball}" -o "$tarball_path"
+  fi
+
+  tar -xzf "$tarball_path" -C /usr/local --strip-components=1
+  if [ -z "${NODE_TARBALL_DIR:-}" ]; then
+    rm -f "$tarball_path"
   fi
   hash -r
 fi
