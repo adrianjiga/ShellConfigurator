@@ -69,7 +69,7 @@ describe('parseState', () => {
   it('starts runtime fields at their defaults', () => {
     const restored = parseState(serializeState(sampleState));
     expect(restored.step).toBe('welcome');
-    expect(restored.starshipInstalled).toBe(false);
+    expect(restored.hasNerdFont).toBe(false);
     expect(restored.packageManager).toBe('script');
     expect(restored.installedShells).toEqual([]);
     expect(restored.dryRun).toBe(false);

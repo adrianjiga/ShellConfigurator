@@ -26,9 +26,9 @@ describe('getNextStep', () => {
   });
 
   it('applies the update and advances', () => {
-    const next = getNextStep(stateWith('welcome'), { starshipInstalled: true });
+    const next = getNextStep(stateWith('welcome'), { hasNerdFont: true });
     expect(next.step).toBe('fontcheck');
-    expect(next.starshipInstalled).toBe(true);
+    expect(next.hasNerdFont).toBe(true);
   });
 
   it('routes to font_select when the user wants to install a font', () => {

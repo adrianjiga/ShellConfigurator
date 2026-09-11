@@ -52,7 +52,6 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
   useInput((_, key) => {
     if (key.return && detection?.starship.installed) {
       onNext({
-        starshipInstalled: true,
         packageManager: detection.pm,
       });
     }
@@ -72,7 +71,7 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
     if (!detection) return;
     switch (item.value) {
       case 'auto':
-        onNext({ starshipInstalled: false, packageManager: detection.pm });
+        onNext({ packageManager: detection.pm });
         break;
       case 'manual':
         setShowManualHelp(true);
@@ -90,7 +89,6 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
         break;
       case 'continue':
         onNext({
-          starshipInstalled: false,
           packageManager: detection.pm,
           skipStarshipInstall: true,
         });

@@ -46,17 +46,10 @@ const CORE_MODULES: ModuleId[] = ['directory', 'git_branch', 'git_status', 'char
 /** The runtime fields a parsed card starts with; detection fills them per run. */
 function runtimeDefaults(): Pick<
   WizardState,
-  | 'step'
-  | 'starshipInstalled'
-  | 'hasNerdFont'
-  | 'packageManager'
-  | 'installedShells'
-  | 'dryRun'
-  | 'installResults'
+  'step' | 'hasNerdFont' | 'packageManager' | 'installedShells' | 'dryRun' | 'installResults'
 > {
   return {
     step: 'welcome',
-    starshipInstalled: false,
     hasNerdFont: false,
     packageManager: 'script',
     installedShells: [],
