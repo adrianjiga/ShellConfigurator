@@ -124,6 +124,12 @@ export function stateFromFlags(flags: CliFlags): WizardState {
         palette: preset.palette,
         powerline: preset.powerline,
       };
+      // A preset that needs Nerd Font glyphs implies the machine renders them —
+      // the wizard only offers those presets to users who already have a font.
+      // An explicit --has-nerd-font / --no-nerd-font (or a later --font) still wins.
+      if (flags.hasNerdFont === undefined) {
+        state = { ...state, hasNerdFont: preset.requiresNerdFont };
+      }
     }
   }
 

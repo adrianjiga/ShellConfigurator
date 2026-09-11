@@ -77,6 +77,23 @@ describe('stateFromFlags', () => {
     expect(state.rightModules).toContain('time');
   });
 
+  it('infers hasNerdFont from a preset that needs one', () => {
+    expect(stateFromFlags(flags({ preset: 'pastel-powerline' })).hasNerdFont).toBe(true);
+    expect(stateFromFlags(flags({ preset: 'pure-prompt' })).hasNerdFont).toBe(false);
+  });
+
+  it('lets an explicit --no-nerd-font beat the preset inference', () => {
+    const state = stateFromFlags(flags({ preset: 'pastel-powerline', hasNerdFont: false }));
+    expect(state.hasNerdFont).toBe(false);
+    expect(state.powerline).toBe(true);
+  });
+
+  it('lets a --font install imply hasNerdFont after a plain preset', () => {
+    const state = stateFromFlags(flags({ preset: 'pure-prompt', font: 'FiraCode' }));
+    expect(state.hasNerdFont).toBe(true);
+    expect(state.nerdFontToInstall).toEqual({ kind: 'install', id: 'FiraCode' });
+  });
+
   it('lets explicit flags override the preset', () => {
     const state = stateFromFlags(
       flags({ preset: 'pastel-powerline', palette: 'tokyo-night', powerline: false })
