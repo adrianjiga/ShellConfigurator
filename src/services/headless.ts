@@ -115,7 +115,15 @@ export function stateFromFlags(flags: CliFlags): WizardState {
   validateFlagValues(flags);
   let state: WizardState;
   if (flags.stateFile) {
-    state = parseState(fs.readFileSync(flags.stateFile, 'utf8'));
+    let json: string;
+    try {
+      json = fs.readFileSync(flags.stateFile, 'utf8');
+    } catch (err) {
+      throw new CliUsageError(
+        `Could not read state card '${flags.stateFile}': ${errorMessage(err)}`
+      );
+    }
+    state = parseState(json);
   } else {
     state = { ...DEFAULT_STATE };
   }
@@ -180,12 +188,22 @@ export function runGenerate(flags: CliFlags): void {
   // the decisions while the TOML is the artifact. When only the card is wanted,
   // nothing else goes to stdout.
   if (flags.exportFile) {
-    fs.writeFileSync(flags.exportFile, serializeState(state));
+    try {
+      fs.writeFileSync(flags.exportFile, serializeState(state));
+    } catch (err) {
+      throw new CliUsageError(
+        `Could not write state card to '${flags.exportFile}': ${errorMessage(err)}`
+      );
+    }
   }
 
   const toml = generateToml(state);
   if (flags.outputFile) {
-    fs.writeFileSync(flags.outputFile, toml);
+    try {
+      fs.writeFileSync(flags.outputFile, toml);
+    } catch (err) {
+      throw new CliUsageError(`Could not write TOML to '${flags.outputFile}': ${errorMessage(err)}`);
+    }
   } else if (!flags.exportFile) {
     process.stdout.write(toml);
   }

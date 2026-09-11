@@ -7,6 +7,7 @@ import {
   type ShellId,
   type WizardState,
 } from '../types.ts';
+import { CliUsageError } from './errors.ts';
 
 /**
  * The public, versioned state-card format (D2). A card captures only what the
@@ -102,11 +103,13 @@ function parseNerdFontChoice(value: unknown): NerdFontChoice {
   if (kind === 'install') {
     const id = (value as { id?: unknown }).id;
     if (typeof id !== 'string' || id.length === 0) {
-      throw new Error("Invalid state card: nerdFontToInstall kind 'install' requires a font id");
+      throw new CliUsageError(
+        "Invalid state card: nerdFontToInstall kind 'install' requires a font id"
+      );
     }
     return { kind: 'install', id };
   }
-  throw new Error(`Invalid state card: unknown nerdFontToInstall kind '${String(kind)}'`);
+  throw new CliUsageError(`Invalid state card: unknown nerdFontToInstall kind '${String(kind)}'`);
 }
 
 /**
@@ -121,12 +124,12 @@ export function parseState(json: string): WizardState {
   try {
     card = JSON.parse(json);
   } catch {
-    throw new Error('Invalid state card: not valid JSON');
+    throw new CliUsageError('Invalid state card: not valid JSON');
   }
 
   const version = (card as StateCard | null)?.version;
   if (version !== STATE_VERSION) {
-    throw new Error(
+    throw new CliUsageError(
       `Unsupported state card version: ${String(version)} (expected ${STATE_VERSION}). ` +
         `This card was written by a newer ShellConfigurator; upgrade to read it.`
     );
@@ -134,7 +137,7 @@ export function parseState(json: string): WizardState {
 
   const wizard = (card as StateCard).wizard;
   if (!wizard || typeof wizard !== 'object') {
-    throw new Error('Invalid state card: missing wizard object');
+    throw new CliUsageError('Invalid state card: missing wizard object');
   }
 
   const selectedShells = isStringArray(wizard.selectedShells)

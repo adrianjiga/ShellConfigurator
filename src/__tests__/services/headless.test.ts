@@ -43,6 +43,7 @@ vi.mock('../../services/history.ts', () => ({
 import type { CliFlags } from '../../services/args.ts';
 import type { ModuleId } from '../../config/modules.ts';
 import { runApply, runGenerate, stateFromFlags } from '../../services/headless.ts';
+import { CliUsageError } from '../../services/errors.ts';
 import { STATE_VERSION, serializeState } from '../../services/state.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
@@ -238,6 +239,17 @@ describe('stateFromFlags', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('reports a missing state card file as a usage error', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      expect(() => stateFromFlags(flags({ stateFile: path.join(dir, 'missing.json') }))).toThrow(
+        /Could not read state card/
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('runGenerate', () => {
@@ -297,6 +309,30 @@ describe('runGenerate', () => {
       expect(JSON.parse(fs.readFileSync(card, 'utf8'))).toMatchObject({ version: 1 });
       expect(fs.readFileSync(out, 'utf8')).toContain('format');
       expect(stdoutWrite).not.toHaveBeenCalled();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports an unwritable -o path as a usage error', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const out = path.join(dir, 'missing-dir', 'starship.toml');
+      expect(() => runGenerate(flags({ preset: 'pure-prompt', outputFile: out }))).toThrow(
+        CliUsageError
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports an unwritable --export path as a usage error', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const out = path.join(dir, 'missing-dir', 'card.json');
+      expect(() => runGenerate(flags({ preset: 'pure-prompt', exportFile: out }))).toThrow(
+        CliUsageError
+      );
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

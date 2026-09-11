@@ -369,6 +369,12 @@ describe('index headless routing', () => {
     await expect(runHeadlessCommand(['generate', '--palette', 'nope'])).rejects.toThrow(/palette/);
   });
 
+  it('surfaces a missing state card as a CliUsageError', async () => {
+    await expect(runHeadlessCommand(['generate', '--state', '/no/such/card.json'])).rejects.toThrow(
+      /Could not read state card/
+    );
+  });
+
   it('refuses a bare apply before it ever installs', async () => {
     await expect(runHeadlessCommand(['apply'])).rejects.toThrow(/at least one shell/);
     expect(mockAppendHistory).not.toHaveBeenCalled();
