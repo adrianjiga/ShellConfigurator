@@ -85,15 +85,36 @@ export function serializeState(state: WizardState): string {
   return `${JSON.stringify(card, null, 2)}\n`;
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((v) => typeof v === 'string');
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((v) => typeof v === 'string');
+
+/**
+ * Resolves a card's `nerdFontToInstall` to a concrete choice. `none` and
+ * missing degrade to the no-font default; anything `kind`-shaped that cannot
+ * produce a runnable choice is a hard error instead of being passed through to
+ * the installer as garbage.
+ */
+function parseNerdFontChoice(value: unknown): NerdFontChoice {
+  if (typeof value !== 'object' || value === null) return NO_NERD_FONT;
+  const kind = (value as { kind?: unknown }).kind;
+  if (kind === undefined || kind === 'none') return NO_NERD_FONT;
+  if (kind === 'select') return { kind: 'select' };
+  if (kind === 'install') {
+    const id = (value as { id?: unknown }).id;
+    if (typeof id !== 'string' || id.length === 0) {
+      throw new Error("Invalid state card: nerdFontToInstall kind 'install' requires a font id");
+    }
+    return { kind: 'install', id };
+  }
+  throw new Error(`Invalid state card: unknown nerdFontToInstall kind '${String(kind)}'`);
 }
 
 /**
  * Parses a state card into a wizard state. Fails loudly on an unknown version
  * (a card written by a newer tool) rather than guessing. Present-but-malformed
  * fields fall back to their defaults so a hand-edited card degrades instead of
- * crashing the generator.
+ * crashing the generator; a structurally broken `nerdFontToInstall` is a hard
+ * error because an `{kind:'install'}` without an id crashes the installer.
  */
 export function parseState(json: string): WizardState {
   let card: unknown;
@@ -116,7 +137,6 @@ export function parseState(json: string): WizardState {
     throw new Error('Invalid state card: missing wizard object');
   }
 
-  const nerdFont = wizard.nerdFontToInstall;
   const selectedShells = isStringArray(wizard.selectedShells)
     ? (wizard.selectedShells as ShellId[])
     : [];
@@ -136,10 +156,7 @@ export function parseState(json: string): WizardState {
     palette: typeof wizard.palette === 'string' ? (wizard.palette as PaletteId) : 'default',
     powerline: wizard.powerline === true,
     selectedShells,
-    nerdFontToInstall:
-      nerdFont && typeof nerdFont === 'object' && 'kind' in nerdFont
-        ? (nerdFont as NerdFontChoice)
-        : NO_NERD_FONT,
+    nerdFontToInstall: parseNerdFontChoice(wizard.nerdFontToInstall),
     setDefaultShell: typeof wizard.setDefaultShell === 'string' ? wizard.setDefaultShell : null,
     skipStarshipInstall: wizard.skipStarshipInstall === true,
     hasNerdFont: wizard.hasNerdFont === true,

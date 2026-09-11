@@ -5,7 +5,7 @@ import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { restoreConfigBackups } from './generators/shellRc.ts';
 import { parseCliArgs } from './services/args.ts';
-import { errorMessage } from './services/errors.ts';
+import { CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate } from './services/headless.ts';
 import { appendHistory, writeSnapshot } from './services/history.ts';
 import { restoreTty } from './services/tty.ts';
@@ -63,6 +63,12 @@ export function restoreTerminal(): void {
 
 export function reportFatal(prefix: string, err: unknown): void {
   restoreTerminal();
+  // A user mistake in the headless flags/card reads clean — no stack, exit 2.
+  if (err instanceof CliUsageError) {
+    process.stderr.write(`\nshell-configurator: ${err.message}\n`);
+    process.exitCode = 2;
+    return;
+  }
   const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
   process.stderr.write(`\n${prefix}: ${message}\n`);
   process.exitCode = 1;

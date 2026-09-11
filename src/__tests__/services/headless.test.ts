@@ -85,9 +85,28 @@ describe('stateFromFlags', () => {
     expect(state.powerline).toBe(false);
   });
 
-  it('filters unknown shell ids from --shells', () => {
-    const state = stateFromFlags(flags({ shells: ['zsh', 'csh', 'fish'] }));
-    expect(state.selectedShells).toEqual(['zsh', 'fish']);
+  it('throws CliUsageError for an unknown shell id', () => {
+    expect(() => stateFromFlags(flags({ shells: ['zsh', 'csh'] }))).toThrow(/csh/);
+  });
+
+  it('throws CliUsageError for an unknown preset', () => {
+    expect(() => stateFromFlags(flags({ preset: 'nonexistent' }))).toThrow(/preset/);
+  });
+
+  it('throws CliUsageError for an unknown palette', () => {
+    expect(() => stateFromFlags(flags({ palette: 'rainbow-brite' }))).toThrow(/palette/);
+  });
+
+  it('throws CliUsageError for an unknown character symbol', () => {
+    expect(() => stateFromFlags(flags({ characterSymbol: 'spiral' }))).toThrow(/character/);
+  });
+
+  it('throws CliUsageError for an unknown shell id in --set-default', () => {
+    expect(() => stateFromFlags(flags({ setDefaultShell: 'elvish' }))).toThrow(/set-default/);
+  });
+
+  it('throws CliUsageError for an unknown Nerd Font', () => {
+    expect(() => stateFromFlags(flags({ font: 'ComicMono' }))).toThrow(/Nerd Font/);
   });
 
   it('maps --font to an install and infers hasNerdFont', () => {
@@ -125,6 +144,44 @@ describe('stateFromFlags', () => {
       expect(state.palette).toBe('vivid');
       expect(state.powerline).toBe(true);
       expect(state.selectedShells).toEqual(['bash']);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a state card with an install nerdFontToInstall missing an id', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = path.join(dir, 'bad.json');
+      const wizard = {
+        preset: null,
+        leftModules: ['directory'],
+        rightModules: [],
+        characterSymbol: 'arrow',
+        palette: 'default',
+        powerline: false,
+        selectedShells: [],
+        nerdFontToInstall: { kind: 'install' },
+        setDefaultShell: null,
+        skipStarshipInstall: false,
+        hasNerdFont: false,
+      };
+      fs.writeFileSync(card, JSON.stringify({ version: 1, wizard }));
+      expect(() => stateFromFlags(flags({ stateFile: card }))).toThrow(
+        /install.*requires a font id/
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a state card that defers the font to the interactive picker', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = writeFixtureCard(dir, {
+        nerdFontToInstall: { kind: 'select' },
+      });
+      expect(() => stateFromFlags(flags({ stateFile: card }))).toThrow(/interactive picker/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

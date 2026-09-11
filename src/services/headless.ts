@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { PALETTES } from '../config/palettes.ts';
 import { PRESETS } from '../config/presets.ts';
 import { SHELLS } from '../config/shells.ts';
 import { statusMark } from '../config/status.ts';
@@ -12,12 +13,86 @@ import {
 } from '../types.ts';
 import type { CliFlags } from './args.ts';
 import { detectInstalledShellsAsync, detectPackageManagerAsync } from './detector.ts';
-import { errorMessage } from './errors.ts';
+import { CliUsageError, errorMessage } from './errors.ts';
 import { appendHistory } from './history.ts';
+import { NERD_FONTS } from './installer.ts';
 import { buildTaskList, DEFAULT_INSTALL_TASK_DEPS, runInstallTasks } from './installTasks.ts';
 import { parseState, serializeState } from './state.ts';
 
 const SHELL_IDS = new Set<string>(SHELLS.map((s) => s.id));
+const PRESET_IDS = PRESETS.map((p) => p.id);
+const PALETTE_IDS: string[] = PALETTES.map((p) => p.id);
+const CHARACTER_SYMBOLS: readonly CharacterSymbol[] = ['arrow', 'lambda', 'dollar'];
+const FONT_IDS = new Set<string>(NERD_FONTS.map((f) => f.id));
+
+function unknown(what: string, value: string, valid: readonly string[]): CliUsageError {
+  return new CliUsageError(`Unknown ${what}: '${value}' (expected one of: ${valid.join(', ')})`);
+}
+
+/**
+ * Fail-fast validation of the public flag surface (D2). Every value that can
+ * reach the generator must be one it understands: a typo'd `--preset`,
+ * `--palette`, `--character`, `--set-default`, `--shells` or `--font` must
+ * error before any install work, not crash deep in the generator with a
+ * confusing TypeError or silently change the result.
+ */
+export function validateFlagValues(flags: CliFlags): void {
+  if (flags.shells) {
+    for (const shell of flags.shells) {
+      if (!SHELL_IDS.has(shell)) throw unknown('shell id (--shells)', shell, [...SHELL_IDS]);
+    }
+  }
+  if (flags.preset && !PRESET_IDS.includes(flags.preset)) {
+    throw unknown('preset (--preset)', flags.preset, PRESET_IDS);
+  }
+  if (flags.palette && !PALETTE_IDS.includes(flags.palette)) {
+    throw unknown('palette (--palette)', flags.palette, PALETTE_IDS);
+  }
+  if (
+    flags.characterSymbol &&
+    !CHARACTER_SYMBOLS.includes(flags.characterSymbol as CharacterSymbol)
+  ) {
+    throw unknown('character symbol (--character)', flags.characterSymbol, [...CHARACTER_SYMBOLS]);
+  }
+  if (flags.setDefaultShell && !SHELL_IDS.has(flags.setDefaultShell)) {
+    throw unknown('shell id (--set-default)', flags.setDefaultShell, [...SHELL_IDS]);
+  }
+  if (flags.font && flags.font !== 'none' && !FONT_IDS.has(flags.font)) {
+    throw unknown('Nerd Font (--font)', flags.font, ['none', ...FONT_IDS]);
+  }
+}
+
+/**
+ * Same fail-fast discipline for a merged state — mainly the values that come
+ * from a state card rather than the flags, which the parser's lenient coercion
+ * lets through. `stateFromFlags` re-checks so the card path cannot bypass it.
+ */
+function assertValidState(state: WizardState): void {
+  if (state.preset !== null && !PRESET_IDS.includes(state.preset)) {
+    throw unknown('preset', state.preset, PRESET_IDS);
+  }
+  if (!PALETTE_IDS.includes(state.palette)) {
+    throw unknown('palette', state.palette, PALETTE_IDS);
+  }
+  if (!CHARACTER_SYMBOLS.includes(state.characterSymbol)) {
+    throw unknown('character symbol', state.characterSymbol, [...CHARACTER_SYMBOLS]);
+  }
+  if (state.setDefaultShell !== null && !SHELL_IDS.has(state.setDefaultShell)) {
+    throw unknown('shell id (--set-default)', state.setDefaultShell, [...SHELL_IDS]);
+  }
+  for (const shell of state.selectedShells) {
+    if (!SHELL_IDS.has(shell)) throw unknown('shell id', shell, [...SHELL_IDS]);
+  }
+  const font = state.nerdFontToInstall;
+  if (font.kind === 'install' && !FONT_IDS.has(font.id)) {
+    throw unknown('Nerd Font', font.id, [...FONT_IDS]);
+  }
+  if (font.kind === 'select') {
+    throw new CliUsageError(
+      'The state card defers the font choice to the interactive picker; pass --font <id> or --font none instead.'
+    );
+  }
+}
 
 /**
  * Builds a WizardState from CLI flags (and optionally a state card), reusing the
@@ -30,6 +105,7 @@ const SHELL_IDS = new Set<string>(SHELLS.map((s) => s.id));
  *   defaults — `apply` fills those via detection before running.
  */
 export function stateFromFlags(flags: CliFlags): WizardState {
+  validateFlagValues(flags);
   let state: WizardState;
   if (flags.stateFile) {
     state = parseState(fs.readFileSync(flags.stateFile, 'utf8'));
@@ -79,6 +155,7 @@ export function stateFromFlags(flags: CliFlags): WizardState {
     }
   }
 
+  assertValidState(state);
   return state;
 }
 

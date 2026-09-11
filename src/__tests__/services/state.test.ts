@@ -93,6 +93,22 @@ describe('parseState', () => {
     expect(restored.nerdFontToInstall).toEqual({ kind: 'none' });
   });
 
+  it('rejects an install nerdFontToInstall missing a font id', () => {
+    const card = {
+      version: STATE_VERSION,
+      wizard: { nerdFontToInstall: { kind: 'install' } },
+    };
+    expect(() => parseState(JSON.stringify(card))).toThrow(/install.*requires a font id/);
+  });
+
+  it('rejects an unknown nerdFontToInstall kind', () => {
+    const card = {
+      version: STATE_VERSION,
+      wizard: { nerdFontToInstall: { kind: 'mystery' } },
+    };
+    expect(() => parseState(JSON.stringify(card))).toThrow(/unknown nerdFontToInstall kind/);
+  });
+
   it('defaults absent modules to the core set', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
     delete card.wizard.leftModules;

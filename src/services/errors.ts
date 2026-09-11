@@ -7,3 +7,15 @@
 export function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
+
+/**
+ * A mistake in the user-supplied headless flags or state card — a typo'd
+ * --preset, an unknown palette, a torn card. Rendered as a bare message with
+ * no stack trace, and a conventional exit code 2 for CLI misuse.
+ */
+export class CliUsageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CliUsageError';
+  }
+}

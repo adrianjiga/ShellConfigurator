@@ -52,6 +52,7 @@ import {
   reportFatal,
   restoreTerminal,
 } from '../index.tsx';
+import { CliUsageError } from '../services/errors.ts';
 import type { InstallTask, WizardState } from '../types.ts';
 
 describe('index CLI handling', () => {
@@ -352,5 +353,14 @@ describe('index reportFatal', () => {
     reportFatal('prefix', 'some string');
     expect(stderrWrite).toHaveBeenCalledWith('\nprefix: some string\n');
     expect(process.exitCode).toBe(1);
+  });
+
+  it('reports CLI misuse cleanly and exits 2', () => {
+    reportFatal('prefix', new CliUsageError('Unknown preset: nope'));
+    expect(stderrWrite).toHaveBeenCalledWith('\nshell-configurator: Unknown preset: nope\n');
+    expect(stderrWrite).not.toHaveBeenCalledWith(
+      expect.stringContaining('prefix:') as unknown as string
+    );
+    expect(process.exitCode).toBe(2);
   });
 });
