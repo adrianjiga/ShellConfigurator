@@ -23,6 +23,16 @@ const { mockAppendHistory, mockWriteSnapshot } = vi.hoisted(() => ({
   mockWriteSnapshot: vi.fn(() => 'snap-abc123'),
 }));
 
+vi.mock('../services/detector.ts', async () => {
+  const actual =
+    await vi.importActual<typeof import('../services/detector.ts')>('../services/detector.ts');
+  return {
+    ...actual,
+    detectInstalledShellsAsync: vi.fn().mockResolvedValue(['zsh']),
+    detectPackageManagerAsync: vi.fn().mockResolvedValue('apt'),
+  };
+});
+
 vi.mock('../generators/shellRc.ts', async () => {
   const actual = await vi.importActual<typeof import('../generators/shellRc.ts')>(
     '../generators/shellRc.ts'
@@ -51,6 +61,7 @@ import {
   recordInstallOutcome,
   reportFatal,
   restoreTerminal,
+  runHeadlessCommand,
 } from '../index.tsx';
 import { CliUsageError } from '../services/errors.ts';
 import type { InstallTask, WizardState } from '../types.ts';
@@ -325,6 +336,58 @@ describe('index wizard history recording', () => {
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not record this run'));
     warn.mockRestore();
+  });
+});
+
+describe('index headless routing', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+    mockAppendHistory.mockReset();
+  });
+
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+    vi.clearAllMocks();
+  });
+
+  it('dispatches generate and prints the TOML', async () => {
+    const routed = await runHeadlessCommand(['generate', '--preset', 'pure-prompt']);
+
+    expect(routed).toBe(true);
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('format'));
+  });
+
+  it('returns false for a plain global flag, leaving it for the wizard', async () => {
+    expect(await runHeadlessCommand(['--help'])).toBe(false);
+    expect(await runHeadlessCommand(['--bogus'])).toBe(false);
+  });
+
+  it('surfaces a bogus flag as a CliUsageError', async () => {
+    await expect(runHeadlessCommand(['apply', '--preset', 'nope'])).rejects.toThrow(CliUsageError);
+    await expect(runHeadlessCommand(['generate', '--palette', 'nope'])).rejects.toThrow(/palette/);
+  });
+
+  it('refuses a bare apply before it ever installs', async () => {
+    await expect(runHeadlessCommand(['apply'])).rejects.toThrow(/at least one shell/);
+    expect(mockAppendHistory).not.toHaveBeenCalled();
+  });
+
+  it('runs an apply dry-run through the router and prints the plan', async () => {
+    const routed = await runHeadlessCommand(['apply', '--dry-run', '--shells', 'zsh']);
+
+    expect(routed).toBe(true);
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('dry run'));
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Targets: zsh'));
+    expect(mockAppendHistory).not.toHaveBeenCalled();
+  });
+
+  it('accepts equals-syntax through the router', async () => {
+    const routed = await runHeadlessCommand(['generate', '--preset=pure-prompt']);
+
+    expect(routed).toBe(true);
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('format'));
   });
 });
 
