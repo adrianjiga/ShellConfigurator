@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-apt_sources=(-o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3)
-
 if command -v apt-get >/dev/null 2>&1; then
-  # apt guards against nothing by default: a wedged mirror would stall the job
-  # until GitHub's 6-hour cap. Bound each request and retry once before failing.
-  if ! apt-get update -qq "${apt_sources[@]}"; then
+  # apt guards against nothing by default: a wedged mirror never returns, so the
+  # job stalls until GitHub's 6-hour cap. timeout is the hard backstop.
+  if ! timeout 300 apt-get update -qq -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3; then
     sleep 10
-    apt-get update -qq "${apt_sources[@]}"
+    timeout 300 apt-get update -qq -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3
   fi
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${apt_sources[@]}" nodejs npm curl tar
+  DEBIAN_FRONTEND=noninteractive timeout 300 apt-get install -y -qq -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3 nodejs npm curl tar
 elif command -v dnf >/dev/null 2>&1; then
   dnf install -y -q nodejs npm curl tar
 elif command -v pacman >/dev/null 2>&1; then
@@ -51,11 +49,11 @@ if [ "$node_major" -lt 22 ]; then
     mkdir -p "$NODE_TARBALL_DIR"
     tarball_path="$NODE_TARBALL_DIR/$tarball"
     if [ ! -f "$tarball_path" ]; then
-      curl -fsSL "https://nodejs.org/dist/${node_version}/${tarball}" -o "$tarball_path"
+      curl --max-time 300 -fsSL "https://nodejs.org/dist/${node_version}/${tarball}" -o "$tarball_path"
     fi
   else
     tarball_path="/tmp/$tarball"
-    curl -fsSL "https://nodejs.org/dist/${node_version}/${tarball}" -o "$tarball_path"
+    curl --max-time 300 -fsSL "https://nodejs.org/dist/${node_version}/${tarball}" -o "$tarball_path"
   fi
 
   tar -xzf "$tarball_path" -C /usr/local --strip-components=1
