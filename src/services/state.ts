@@ -36,6 +36,9 @@ export interface StateCard {
     nerdFontToInstall: NerdFontChoice;
     setDefaultShell: ShellId | null;
     skipStarshipInstall: boolean;
+    /** Whether the shell should keep the shared starship.toml (adopt mode)
+     *  instead of a regenerated per-shell config. */
+    keepExistingConfig: boolean;
     /** Whether the generating machine renders Nerd Font glyphs already. */
     hasNerdFont: boolean;
   };
@@ -46,7 +49,13 @@ const CORE_MODULES: ModuleId[] = ['directory', 'git_branch', 'git_status', 'char
 /** The runtime fields a parsed card starts with; detection fills them per run. */
 function runtimeDefaults(): Pick<
   WizardState,
-  'step' | 'hasNerdFont' | 'packageManager' | 'installedShells' | 'dryRun' | 'installResults'
+  | 'step'
+  | 'hasNerdFont'
+  | 'packageManager'
+  | 'installedShells'
+  | 'dryRun'
+  | 'installResults'
+  | 'sharedConfigToml'
 > {
   return {
     step: 'welcome',
@@ -55,6 +64,7 @@ function runtimeDefaults(): Pick<
     installedShells: [],
     dryRun: false,
     installResults: [],
+    sharedConfigToml: null,
   };
 }
 
@@ -73,6 +83,7 @@ export function serializeState(state: WizardState): string {
       nerdFontToInstall: state.nerdFontToInstall,
       setDefaultShell: state.setDefaultShell,
       skipStarshipInstall: state.skipStarshipInstall,
+      keepExistingConfig: state.keepExistingConfig,
       hasNerdFont: state.hasNerdFont,
     },
   };
@@ -155,6 +166,7 @@ export function parseState(json: string): WizardState {
     nerdFontToInstall: parseNerdFontChoice(wizard.nerdFontToInstall),
     setDefaultShell: typeof wizard.setDefaultShell === 'string' ? wizard.setDefaultShell : null,
     skipStarshipInstall: wizard.skipStarshipInstall === true,
+    keepExistingConfig: wizard.keepExistingConfig === true,
     hasNerdFont: wizard.hasNerdFont === true,
   };
 }

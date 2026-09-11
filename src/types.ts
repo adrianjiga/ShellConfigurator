@@ -96,6 +96,12 @@ export interface WizardState {
    *  Font for the separator glyphs, so the generator falls back to the plain
    *  layout when one is missing. */
   powerline: boolean;
+  /** Adopt mode: keep the shared ~/.config/starship.toml instead of writing
+   *  per-shell configs, wiring shells to that one file. */
+  keepExistingConfig: boolean;
+  /** Config content fetched via --import-url, to be placed as the shared config.
+   *  Runtime field: never serialized into a state card. */
+  sharedConfigToml: string | null;
   selectedShells: ShellId[];
   packageManager: PackageManager;
   installedShells: ShellId[];
@@ -116,6 +122,8 @@ export const DEFAULT_STATE: WizardState = {
   characterSymbol: 'arrow',
   palette: 'default',
   powerline: false,
+  keepExistingConfig: false,
+  sharedConfigToml: null,
   selectedShells: [],
   packageManager: 'script',
   installedShells: [],
