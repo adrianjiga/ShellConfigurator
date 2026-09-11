@@ -15,6 +15,7 @@ const {
   mockRmSync,
   mockExistsSync,
   mockStatSync,
+  mockReadFileSync,
 } = vi.hoisted(() => ({
   mockSpawn: vi.fn(),
   mockExecFileSync: vi.fn(),
@@ -26,6 +27,7 @@ const {
   mockRmSync: vi.fn(),
   mockExistsSync: vi.fn(),
   mockStatSync: vi.fn(),
+  mockReadFileSync: vi.fn(),
 }));
 
 vi.mock('child_process', () => ({
@@ -46,6 +48,7 @@ vi.mock('fs', () => ({
   rmSync: mockRmSync,
   existsSync: mockExistsSync,
   statSync: mockStatSync,
+  readFileSync: mockReadFileSync,
 }));
 
 import {
@@ -155,6 +158,12 @@ beforeEach(() => {
   mockRmSync.mockImplementation(() => undefined);
   mockExistsSync.mockReturnValue(true);
   mockStatSync.mockReturnValue({ size: 1024 });
+  // No font cache by default: the pin file is "missing" so cachedFont() is null.
+  mockReadFileSync.mockImplementation(() => {
+    const err = new Error('ENOENT') as Error & { code?: string };
+    err.code = 'ENOENT';
+    throw err;
+  });
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okResponse()));
 });
 
@@ -371,8 +380,10 @@ describe('installNerdFont', () => {
     await installNerdFont('FiraCode');
 
     const written = mockWriteFileSync.mock.calls.map((c) => c[0] as string);
-    expect(written).toEqual([path.join(getNerdFontsDir(), 'Pwned.ttf')]);
-    expect(written[0]).not.toContain('..');
+    expect(written).toContain(path.join(getNerdFontsDir(), 'Pwned.ttf'));
+    for (const file of written) {
+      expect(path.normalize(file)).not.toContain(`..`);
+    }
   });
 
   it('never shells out to unzip', async () => {
@@ -394,6 +405,54 @@ describe('installNerdFont', () => {
     } finally {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     }
+  });
+
+  it('pins a freshly verified archive into the font cache', async () => {
+    const zip = zipWith({ 'FiraCodeNerdFont-Regular.ttf': 'font' });
+    stubFontFetch(() => okResponse({ arrayBuffer: async () => zip }), hexDigest(zip));
+
+    await installNerdFont('FiraCode');
+
+    const written = mockWriteFileSync.mock.calls.map((c) => c[0] as string);
+    expect(written.some((f) => f.includes('FiraCode.zip'))).toBe(true);
+    const pinCall = mockWriteFileSync.mock.calls.find((c) =>
+      String(c[0]).endsWith('FiraCode.sha256')
+    );
+    expect(pinCall?.[1]).toBe(`${hexDigest(zip)}\n`);
+  });
+
+  it('reuses a verified cache entry instead of downloading', async () => {
+    const zip = zipWith({ 'FiraCodeNerdFont-Regular.ttf': 'from-cache' });
+    const digest = hexDigest(zip);
+    // The pin says we have this exact archive; cachedFont() trusts it offline.
+    mockReadFileSync.mockImplementation((file: string) => {
+      if (String(file).endsWith('FiraCode.sha256')) return `${digest}\n`;
+      if (String(file).endsWith('FiraCode.zip')) return Buffer.from(zip);
+      const err = new Error('ENOENT') as Error & { code?: string };
+      err.code = 'ENOENT';
+      throw err;
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const note = await installNerdFont('FiraCode');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(note).toBe('installed Fira Code from cache');
+    const written = mockWriteFileSync.mock.calls.map((c) => c[0] as string);
+    expect(written).toContain(path.join(getNerdFontsDir(), 'FiraCodeNerdFont-Regular.ttf'));
+  });
+
+  it('re-downloads when the cached archive fails its pinned digest', async () => {
+    // A pin exists but the archive bytes do not match it — treated as absent.
+    mockReadFileSync.mockImplementation((file: string) =>
+      String(file).endsWith('FiraCode.sha256') ? 'tampered\n' : 'tampered'
+    );
+    const fetchMock = respondWithZip({ 'FiraCodeNerdFont-Regular.ttf': 'fresh' });
+
+    await installNerdFont('FiraCode');
+
+    expect(fetchMock).toHaveBeenCalled();
   });
 });
 
