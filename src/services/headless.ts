@@ -169,15 +169,17 @@ export function stateFromFlags(flags: CliFlags): WizardState {
 export function runGenerate(flags: CliFlags): void {
   const state = stateFromFlags(flags);
 
+  // --export and -o are siblings, not alternatives: the versioned card records
+  // the decisions while the TOML is the artifact. When only the card is wanted,
+  // nothing else goes to stdout.
   if (flags.exportFile) {
     fs.writeFileSync(flags.exportFile, serializeState(state));
-    return;
   }
 
   const toml = generateToml(state);
   if (flags.outputFile) {
     fs.writeFileSync(flags.outputFile, toml);
-  } else {
+  } else if (!flags.exportFile) {
     process.stdout.write(toml);
   }
 }

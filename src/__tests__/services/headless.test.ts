@@ -251,6 +251,21 @@ describe('runGenerate', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('--export and -o both write when given together', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = path.join(dir, 'card.json');
+      const out = path.join(dir, 'starship.toml');
+      runGenerate(flags({ preset: 'pure-prompt', exportFile: card, outputFile: out }));
+
+      expect(JSON.parse(fs.readFileSync(card, 'utf8'))).toMatchObject({ version: 1 });
+      expect(fs.readFileSync(out, 'utf8')).toContain('format');
+      expect(stdoutWrite).not.toHaveBeenCalled();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('runApply', () => {
