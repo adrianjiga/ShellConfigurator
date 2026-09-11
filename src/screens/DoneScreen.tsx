@@ -1,18 +1,16 @@
 import { Box, Text, useApp, useInput } from 'ink';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { getShell } from '../config/shells.ts';
+import { type ReportedStatus, statusMark } from '../config/status.ts';
 import { getShellConfigPath } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
-import { NERD_FONTS } from '../services/installer.ts';
+import { fontLabel } from '../services/installer.ts';
 import { buildTaskList, rcTaskId } from '../services/installTasks.ts';
-import { fontIdToInstall, type InstallStatus, type WizardState } from '../types.ts';
+import { fontIdToInstall, type WizardState } from '../types.ts';
 
 interface DoneScreenProps {
   state: WizardState;
 }
-
-/** 'unknown' means no result was recorded — the task never ran, or the run was cut short. */
-type ReportedStatus = InstallStatus | 'unknown';
 
 /**
  * Never defaults a missing result to success: an absent task is reported as
@@ -30,24 +28,15 @@ function taskNote(state: WizardState, id: string) {
   return state.installResults.find((t) => t.id === id)?.note;
 }
 
-const STATUS_MARK: Record<ReportedStatus, { icon: string; color: string }> = {
-  done: { icon: '✓', color: 'green' },
-  skipped: { icon: '–', color: 'gray' },
-  failed: { icon: '✗', color: 'red' },
-  pending: { icon: '?', color: 'yellow' },
-  running: { icon: '?', color: 'yellow' },
-  unknown: { icon: '?', color: 'yellow' },
-};
-
 function StatusMark({ status }: { status: ReportedStatus }) {
-  const { icon, color } = STATUS_MARK[status];
+  const { icon, color } = statusMark(status);
   return <Text color={color}>{icon}</Text>;
 }
 
 export function DoneScreen({ state }: DoneScreenProps) {
   const { exit } = useApp();
   const fontId = fontIdToInstall(state.nerdFontToInstall);
-  const fontLabel = fontId ? (NERD_FONTS.find((f) => f.id === fontId)?.label ?? fontId) : null;
+  const fontName = fontId ? fontLabel(fontId) : null;
 
   const failures = state.installResults.filter((t) => t.status === 'failed');
   const hasFailures = failures.length > 0;
@@ -90,7 +79,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
           <>
             <Text color="yellow" italic>
               In real mode the wizard would install{' '}
-              {[`Starship${fontId ? ` (${fontLabel})` : ''}`, ...state.selectedShells].join(', ')}{' '}
+              {[`Starship${fontId ? ` (${fontName})` : ''}`, ...state.selectedShells].join(', ')}{' '}
               and write the config below.
             </Text>
 
@@ -159,7 +148,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
                 <StatusMark status={fontStatus} />
                 <Text>
                   Nerd Font {fontStatus === 'done' ? 'installed' : 'not installed'}:{' '}
-                  <Text color="cyan">{fontLabel}</Text>
+                  <Text color="cyan">{fontName}</Text>
                 </Text>
               </Box>
               {fontStatus === 'failed' && (
@@ -272,7 +261,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
               )}
               {fontId && fontStatus === 'done' && (
                 <Text color="yellow">
-                  Remember to set <Text color="cyan">{fontLabel} Nerd Font</Text> in your terminal
+                  Remember to set <Text color="cyan">{fontName} Nerd Font</Text> in your terminal
                   emulator settings.
                 </Text>
               )}

@@ -4,7 +4,7 @@ import { WizardLayout } from '../components/WizardLayout.tsx';
 import { getShell } from '../config/shells.ts';
 import { getShellConfigPath, starshipConfigLine } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
-import { NERD_FONTS } from '../services/installer.ts';
+import { fontLabel } from '../services/installer.ts';
 import { buildTaskList, TASK_IDS } from '../services/installTasks.ts';
 import { fontIdToInstall, type ShellId, type WizardState } from '../types.ts';
 
@@ -30,7 +30,7 @@ function rcSnippet(shellId: ShellId): string[] {
 
 export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
   const fontId = fontIdToInstall(state.nerdFontToInstall);
-  const fontLabel = fontId ? (NERD_FONTS.find((f) => f.id === fontId)?.label ?? fontId) : null;
+  const fontName = fontId ? fontLabel(fontId) : null;
   const tasks = buildTaskList(state);
 
   useInput((char, key) => {
@@ -92,7 +92,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
 
         {fontId && (
           <Text color="gray">
-            Nerd Font <Text color="cyan">{fontLabel}</Text> will be downloaded and installed.
+            Nerd Font <Text color="cyan">{fontName}</Text> will be downloaded and installed.
           </Text>
         )}
       </Box>

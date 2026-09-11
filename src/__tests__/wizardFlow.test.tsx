@@ -47,6 +47,7 @@ vi.mock('../services/installer.ts', () => ({
   setDefaultShell: vi.fn().mockResolvedValue(undefined),
   getMissingStarshipPathDir: vi.fn(() => null),
   getNerdFontsDir: () => '/tmp/fonts',
+  fontLabel: (id: string) => id,
 }));
 
 import { App } from '../app.tsx';

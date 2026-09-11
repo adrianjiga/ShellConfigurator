@@ -19,11 +19,11 @@ import {
 import { detectInstalledShellsAsync, isStarshipInstalledAsync } from './detector.ts';
 import { errorMessage } from './errors.ts';
 import {
+  fontLabel,
   getMissingStarshipPathDir,
   installNerdFont,
   installShell,
   installStarship,
-  NERD_FONTS,
   setDefaultShell,
 } from './installer.ts';
 
@@ -91,8 +91,7 @@ export function buildTaskList(state: WizardState): InstallTask[] {
   // Nerd Font (only when a concrete font was chosen)
   const fontId = fontIdToInstall(state.nerdFontToInstall);
   if (fontId) {
-    const fontLabel = NERD_FONTS.find((f) => f.id === fontId)?.label ?? fontId;
-    tasks.push({ id: TASK_IDS.font, label: `Nerd Font (${fontLabel})`, status: 'pending' });
+    tasks.push({ id: TASK_IDS.font, label: `Nerd Font (${fontLabel(fontId)})`, status: 'pending' });
   }
 
   // Shells that need installing

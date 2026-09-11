@@ -35,6 +35,11 @@ export const NERD_FONTS: Array<{ id: string; label: string; zipName: string }> =
   { id: 'SourceCodePro', label: 'Source Code Pro', zipName: 'SourceCodePro.zip' },
 ];
 
+/** The human-readable name for a font id, falling back to the raw id itself. */
+export function fontLabel(fontId: string): string {
+  return NERD_FONTS.find((f) => f.id === fontId)?.label ?? fontId;
+}
+
 const NERD_FONTS_BASE_URL = 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download';
 
 /** GitHub REST endpoint whose asset digests are the checksums we verify against. */
