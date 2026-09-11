@@ -1,17 +1,8 @@
 import { Box, Text } from 'ink';
 import { type ConfigurableModuleId, getModule, type ModuleId } from '../config/modules.ts';
 import { getPalette, inkColor, type PaletteColorName } from '../config/palettes.ts';
-import type { CharacterSymbol, WizardState } from '../types.ts';
-
-const CHAR_SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> = {
-  arrow: { success: '❯', error: '❯' },
-  lambda: { success: 'λ', error: 'λ' },
-  dollar: { success: '$', error: '$' },
-};
-
-/** The same separators the generator emits (U+E0B0 / U+E0B2). */
-const SEPARATOR_RIGHT = '\ue0b0';
-const SEPARATOR_LEFT = '\ue0b2';
+import { CHARACTER_SYMBOLS, SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../config/promptSymbols.ts';
+import type { WizardState } from '../types.ts';
 
 interface PromptPreviewProps {
   state: WizardState;
@@ -31,7 +22,7 @@ export function PromptPreview({ state }: PromptPreviewProps) {
   function renderCharacter() {
     return (
       <Text key="character" color={color('ok')} bold>
-        {CHAR_SYMBOLS[characterSymbol].success}{' '}
+        {CHARACTER_SYMBOLS[characterSymbol].success}{' '}
       </Text>
     );
   }
