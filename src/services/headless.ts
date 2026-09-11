@@ -212,6 +212,17 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
  */
 export async function runApply(flags: CliFlags): Promise<void> {
   const state = await prepareApplyState(flags);
+
+  // Refuse a real run with no targets before it touches the system: the config
+  // task would only fail after Starship was already installed. (A --dry-run of
+  // an empty plan is still a useful preview.)
+  if (!flags.dryRun && state.selectedShells.length === 0) {
+    throw new CliUsageError(
+      'apply configures at least one shell, but none are selected. ' +
+        'Pass --shells <id,...> or a --state card that selects shells.'
+    );
+  }
+
   const tasks = buildTaskList(state);
 
   if (flags.dryRun) {

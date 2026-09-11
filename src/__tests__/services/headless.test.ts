@@ -292,11 +292,41 @@ describe('runApply', () => {
       { id: 'starship', label: 'Install Starship', status: 'failed', error: 'boom' },
     ];
     mockRunInstallTasks.mockResolvedValue(failedTasks as never);
-    await runApply(flags({ subcommand: 'apply' }));
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }));
 
     expect(mockAppendHistory).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 1 }));
     expect(process.exitCode).toBe(1);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Install Starship'));
+  });
+
+  it('refuses a real run with no target shells before installing anything', async () => {
+    await expect(runApply(flags({ subcommand: 'apply' }))).rejects.toThrow(/at least one shell/);
+
+    expect(mockRunInstallTasks).not.toHaveBeenCalled();
+    expect(mockAppendHistory).not.toHaveBeenCalled();
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('refuses to apply an exported card that selects no shells', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = path.join(dir, 'card.json');
+      fs.writeFileSync(card, serializeState({ ...DEFAULT_STATE, selectedShells: [] }));
+      await expect(runApply(flags({ subcommand: 'apply', stateFile: card }))).rejects.toThrow(
+        /at least one shell/
+      );
+
+      expect(mockRunInstallTasks).not.toHaveBeenCalled();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('still dry-runs an empty plan as a preview', async () => {
+    await runApply(flags({ subcommand: 'apply', dryRun: true }));
+
+    const output = stdoutWrite.mock.calls.map((c) => String(c[0])).join('');
+    expect(output).toContain('(none)');
   });
 
   it('survives a history write failure', async () => {
