@@ -78,7 +78,7 @@ describe('parseState', () => {
 
   it('defaults present-but-malformed choices instead of crashing', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
-    card.wizard.leftModules = [42];
+    card.wizard.leftModules = [42] as never;
     card.wizard.palette = 7 as never;
     card.wizard.characterSymbol = 'twirl' as never;
     const restored = parseState(JSON.stringify(card));
@@ -111,7 +111,7 @@ describe('parseState', () => {
 
   it('defaults absent modules to the core set', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
-    delete card.wizard.leftModules;
+    card.wizard.leftModules = undefined as never;
     const restored = parseState(JSON.stringify(card));
     expect(restored.leftModules).toContain('directory');
   });

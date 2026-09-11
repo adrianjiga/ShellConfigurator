@@ -367,7 +367,9 @@ describe('runApply', () => {
 
     expect(mockRunInstallTasks).not.toHaveBeenCalled();
     expect(mockAppendHistory).not.toHaveBeenCalled();
-    const output = stdoutWrite.mock.calls.map((c) => String(c[0])).join('');
+    const output = stdoutWrite.mock.calls
+      .map((call: [string, ...unknown[]]) => String(call[0]))
+      .join('');
     expect(output).toContain('dry run');
     expect(output).toContain('Targets: bash');
     expect(output).toContain('Generated starship.toml');
@@ -387,7 +389,9 @@ describe('runApply', () => {
       })
     );
     expect(process.exitCode).toBeUndefined();
-    const output = stdoutWrite.mock.calls.map((c) => String(c[0])).join('');
+    const output = stdoutWrite.mock.calls
+      .map((call: [string, ...unknown[]]) => String(call[0]))
+      .join('');
     expect(output).toContain('Install Starship');
   });
 
@@ -429,7 +433,9 @@ describe('runApply', () => {
   it('still dry-runs an empty plan as a preview', async () => {
     await runApply(flags({ subcommand: 'apply', dryRun: true }));
 
-    const output = stdoutWrite.mock.calls.map((c) => String(c[0])).join('');
+    const output = stdoutWrite.mock.calls
+      .map((call: [string, ...unknown[]]) => String(call[0]))
+      .join('');
     expect(output).toContain('(none)');
   });
 

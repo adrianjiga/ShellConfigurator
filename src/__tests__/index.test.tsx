@@ -20,7 +20,7 @@ const { mockRestoreConfigBackups } = vi.hoisted(() => ({
 
 const { mockAppendHistory, mockWriteSnapshot } = vi.hoisted(() => ({
   mockAppendHistory: vi.fn(),
-  mockWriteSnapshot: vi.fn(() => 'snap-abc123'),
+  mockWriteSnapshot: vi.fn<(state: WizardState, timestamp: string) => string>(() => 'snap-abc123'),
 }));
 
 vi.mock('../services/detector.ts', async () => {
@@ -64,7 +64,7 @@ import {
   runHeadlessCommand,
 } from '../index.tsx';
 import { CliUsageError } from '../services/errors.ts';
-import type { InstallTask, WizardState } from '../types.ts';
+import { DEFAULT_STATE, type InstallTask, type WizardState } from '../types.ts';
 
 describe('index CLI handling', () => {
   const originalArgv = process.argv.slice();
@@ -285,9 +285,10 @@ describe('index wizard history recording', () => {
 
   it('records a run snapshot when results come back with the state', () => {
     recordInstallOutcome(done, {
+      ...DEFAULT_STATE,
       preset: 'pure-prompt',
       selectedShells: ['zsh'],
-    } as WizardState);
+    });
 
     expect(mockWriteSnapshot).toHaveBeenCalledTimes(1);
     expect(mockWriteSnapshot.mock.calls.at(-1)?.[0]).toMatchObject({
@@ -309,9 +310,10 @@ describe('index wizard history recording', () => {
     recordInstallOutcome(
       [{ id: 'config', label: 'Copy config', status: 'failed' } as InstallTask],
       {
+        ...DEFAULT_STATE,
         preset: 'pure-prompt',
         selectedShells: [],
-      } as WizardState
+      }
     );
 
     expect(mockAppendHistory).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 1 }));
@@ -331,7 +333,7 @@ describe('index wizard history recording', () => {
     const warn = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
 
     expect(() =>
-      recordInstallOutcome(done, { preset: 'pure-prompt', selectedShells: [] } as WizardState)
+      recordInstallOutcome(done, { ...DEFAULT_STATE, preset: 'pure-prompt', selectedShells: [] })
     ).not.toThrow();
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not record this run'));
