@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+apt_sources=(-o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3)
+
 if command -v apt-get >/dev/null 2>&1; then
-  apt-get update -qq
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs npm curl tar
+  # apt guards against nothing by default: a wedged mirror would stall the job
+  # until GitHub's 6-hour cap. Bound each request and retry once before failing.
+  if ! apt-get update -qq "${apt_sources[@]}"; then
+    sleep 10
+    apt-get update -qq "${apt_sources[@]}"
+  fi
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${apt_sources[@]}" nodejs npm curl tar
 elif command -v dnf >/dev/null 2>&1; then
   dnf install -y -q nodejs npm curl tar
 elif command -v pacman >/dev/null 2>&1; then
