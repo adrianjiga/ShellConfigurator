@@ -27,10 +27,9 @@ jobs:
       # ships an older npm, so upgrade here.
       - run: npm install -g npm@11
       - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      # master is gated on lint/format/typecheck, the full suite, and the
+      # distro-smoke matrix before this tag could exist, so the suite is not
+      # re-run here. Only the packed-tarball boot check below adds signal.
       # --silent keeps prepare output off stdout so only the tarball name lands
       # in GITHUB_ENV.
       - name: Package release tarball

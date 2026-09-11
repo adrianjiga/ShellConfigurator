@@ -27,8 +27,8 @@ fi
 
 category() {
   case "$1" in
-    'feat'*!:) echo break ;;
-    'fix'*!:) echo break ;;
+    feat!*) echo break ;;
+    fix!*) echo break ;;
     feat*) echo feat ;;
     fix*) echo fix ;;
     docs*) echo docs ;;
