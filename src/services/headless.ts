@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { MODULES } from '../config/modules.ts';
 import { PALETTES } from '../config/palettes.ts';
 import { PRESETS } from '../config/presets.ts';
 import { SHELLS } from '../config/shells.ts';
@@ -20,6 +21,7 @@ import { buildTaskList, DEFAULT_INSTALL_TASK_DEPS, runInstallTasks } from './ins
 import { parseState, serializeState } from './state.ts';
 
 const SHELL_IDS = new Set<string>(SHELLS.map((s) => s.id));
+const MODULE_IDS = new Set<string>([...MODULES.map((m) => m.id), 'character']);
 const PRESET_IDS = PRESETS.map((p) => p.id);
 const PALETTE_IDS: string[] = PALETTES.map((p) => p.id);
 const CHARACTER_SYMBOLS: readonly CharacterSymbol[] = ['arrow', 'lambda', 'dollar'];
@@ -66,6 +68,8 @@ export function validateFlagValues(flags: CliFlags): void {
  * Same fail-fast discipline for a merged state — mainly the values that come
  * from a state card rather than the flags, which the parser's lenient coercion
  * lets through. `stateFromFlags` re-checks so the card path cannot bypass it.
+ * Module ids are checked here too (left/right), since a hand-edited card can
+ * carry one the generator would otherwise render as a dead `[bogus]` stub.
  */
 function assertValidState(state: WizardState): void {
   if (state.preset !== null && !PRESET_IDS.includes(state.preset)) {
@@ -76,6 +80,9 @@ function assertValidState(state: WizardState): void {
   }
   if (!CHARACTER_SYMBOLS.includes(state.characterSymbol)) {
     throw unknown('character symbol', state.characterSymbol, [...CHARACTER_SYMBOLS]);
+  }
+  for (const moduleId of [...state.leftModules, ...state.rightModules]) {
+    if (!MODULE_IDS.has(moduleId)) throw unknown('module', moduleId, [...MODULE_IDS]);
   }
   if (state.setDefaultShell !== null && !SHELL_IDS.has(state.setDefaultShell)) {
     throw unknown('shell id (--set-default)', state.setDefaultShell, [...SHELL_IDS]);

@@ -41,6 +41,7 @@ vi.mock('../../services/history.ts', () => ({
 }));
 
 import type { CliFlags } from '../../services/args.ts';
+import type { ModuleId } from '../../config/modules.ts';
 import { runApply, runGenerate, stateFromFlags } from '../../services/headless.ts';
 import { STATE_VERSION, serializeState } from '../../services/state.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
@@ -199,6 +200,40 @@ describe('stateFromFlags', () => {
         nerdFontToInstall: { kind: 'select' },
       });
       expect(() => stateFromFlags(flags({ stateFile: card }))).toThrow(/interactive picker/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('throws CliUsageError for an unknown module in a state card left slot', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = writeFixtureCard(dir, {
+        leftModules: ['directory', 'sentinel'] as ModuleId[],
+      });
+      expect(() => stateFromFlags(flags({ stateFile: card }))).toThrow(/sentinel/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('throws CliUsageError for an unknown module in a state card right slot', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = writeFixtureCard(dir, {
+        rightModules: ['time', 'bogus_module'] as ModuleId[],
+      });
+      expect(() => stateFromFlags(flags({ stateFile: card }))).toThrow(/bogus_module/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts the character module inside a state card', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = writeFixtureCard(dir, { leftModules: ['directory', 'character'] });
+      expect(stateFromFlags(flags({ stateFile: card })).leftModules).toContain('character');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
