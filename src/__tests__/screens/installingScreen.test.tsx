@@ -77,10 +77,16 @@ async function waitFor(check: () => unknown): Promise<void> {
 function statusFixture(): InstallTask[] {
   return [
     { id: 'starship', label: 'Install Starship', status: 'running' },
-    { id: 'rc', label: 'Configure zsh', status: 'failed', error: 'Unknown shell', note: 'hidden' },
+    {
+      id: 'rc_zsh',
+      label: 'Configure zsh',
+      status: 'failed',
+      error: 'Unknown shell',
+      note: 'hidden',
+    },
     { id: 'config', label: 'Write config', status: 'done', note: 'shared config saved' },
     { id: 'font', label: 'Install Nerd Font', status: 'skipped' },
-    { id: 'shell', label: 'Set default shell', status: 'pending' },
+    { id: 'shell_zsh', label: 'Set default shell', status: 'pending' },
   ];
 }
 
@@ -152,7 +158,7 @@ describe('InstallingScreen', () => {
   it('advances with the results once every task has finished', async () => {
     const results: InstallTask[] = [
       { id: 'starship', label: 'Install Starship', status: 'done' },
-      { id: 'rc', label: 'Configure zsh', status: 'failed', error: 'Unknown shell' },
+      { id: 'rc_zsh', label: 'Configure zsh', status: 'failed', error: 'Unknown shell' },
     ];
     mocks.buildTaskList.mockReturnValue(results);
     mocks.runInstallTasks.mockResolvedValue(results);

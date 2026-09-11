@@ -6,6 +6,15 @@ export type CharacterSymbol = 'arrow' | 'lambda' | 'dollar';
 export type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'apk' | 'script';
 export type InstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
+/** Every task the install chain can report on, named so callers can't typo one. */
+export type InstallTaskId =
+  | 'starship'
+  | 'font'
+  | 'config'
+  | 'chsh'
+  | `shell_${ShellId}`
+  | `rc_${ShellId}`;
+
 /**
  * What the user decided about a Nerd Font. A discriminated union rather than a
  * nullable string with a sentinel, so "no font step", "route to the picker", and
@@ -29,7 +38,7 @@ export function fontIdToInstall(choice: NerdFontChoice): string | null {
 }
 
 export interface InstallTask {
-  id: string;
+  id: InstallTaskId;
   label: string;
   status: InstallStatus;
   error?: string;

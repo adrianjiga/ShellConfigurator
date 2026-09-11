@@ -5,7 +5,7 @@ import { getShell } from '../config/shells.ts';
 import { getShellConfigPath, starshipConfigLine } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import { NERD_FONTS } from '../services/installer.ts';
-import { buildTaskList } from '../services/installTasks.ts';
+import { buildTaskList, TASK_IDS } from '../services/installTasks.ts';
 import { fontIdToInstall, type ShellId, type WizardState } from '../types.ts';
 
 interface ReviewScreenProps {
@@ -60,7 +60,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
           {tasks.map((task) => (
             <Box key={task.id} flexDirection="row" gap={1} marginLeft={1}>
               <Text color="cyan">•</Text>
-              <Text color={task.id === 'config' ? 'green' : 'gray'}>{task.label}</Text>
+              <Text color={task.id === TASK_IDS.config ? 'green' : 'gray'}>{task.label}</Text>
             </Box>
           ))}
         </Box>
