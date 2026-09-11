@@ -106,7 +106,7 @@ generate options (the config — a versioned state card with --export):
   --set-default <shell>  Make a shell the login default
   --skip-starship      Do not install or require Starship
   -o <file>            Write the TOML here instead of stdout
-  --export <file>      Write the state card here instead of TOML
+  --export <file>      Write the state card here (add -o to keep the TOML too)
   --import <file>      Start from a saved state card instead of flags
 
 apply options (a headless install from a state card):

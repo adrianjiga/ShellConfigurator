@@ -31,7 +31,7 @@ export interface CliFlags {
   stateFile?: string;
   /** Where TOML is written (-o); missing means stdout. */
   outputFile?: string;
-  /** Write the versioned state card here instead of TOML (--export). */
+  /** Write the versioned state card here (add -o to keep the TOML too) (--export). */
   exportFile?: string;
   dryRun?: boolean;
   // Global flags, kept for parity with index.tsx's existing surface.
