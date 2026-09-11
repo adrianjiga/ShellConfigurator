@@ -84,7 +84,6 @@ export const STEP_ORDER: WizardStep[] = [
 
 export interface WizardState {
   step: WizardStep;
-  starshipInstalled: boolean;
   hasNerdFont: boolean;
   preset: string | null;
   leftModules: ModuleId[];
@@ -110,7 +109,6 @@ export interface WizardState {
 
 export const DEFAULT_STATE: WizardState = {
   step: 'welcome',
-  starshipInstalled: false,
   hasNerdFont: false,
   preset: null,
   leftModules: ['directory', 'git_branch', 'git_status', 'character'],

@@ -49,7 +49,7 @@ describe('WelcomeScreen', () => {
     instance.stdin.write(ENTER);
     await flush();
 
-    expect(onNext).toHaveBeenCalledWith({ starshipInstalled: true, packageManager: 'apt' });
+    expect(onNext).toHaveBeenCalledWith({ packageManager: 'apt' });
   });
 
   it('installs automatically when Starship is missing', async () => {
@@ -61,7 +61,7 @@ describe('WelcomeScreen', () => {
     instance.stdin.write(ENTER);
     await flush();
 
-    expect(onNext).toHaveBeenCalledWith({ starshipInstalled: false, packageManager: 'apt' });
+    expect(onNext).toHaveBeenCalledWith({ packageManager: 'apt' });
   });
 
   it('offers a manual install, then continue without installing', async () => {
@@ -83,7 +83,6 @@ describe('WelcomeScreen', () => {
     await flush();
 
     expect(onNext).toHaveBeenCalledWith({
-      starshipInstalled: false,
       packageManager: 'script',
       skipStarshipInstall: true,
     });
@@ -111,6 +110,6 @@ describe('WelcomeScreen', () => {
     instance.stdin.write(ENTER);
     await flush();
 
-    expect(onNext).toHaveBeenCalledWith({ starshipInstalled: true, packageManager: 'apt' });
+    expect(onNext).toHaveBeenCalledWith({ packageManager: 'apt' });
   });
 });

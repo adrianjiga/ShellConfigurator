@@ -18,9 +18,40 @@ const { mockRestoreConfigBackups } = vi.hoisted(() => ({
   mockRestoreConfigBackups: vi.fn(),
 }));
 
-vi.mock('../generators/shellRc.ts', () => ({
-  restoreConfigBackups: mockRestoreConfigBackups,
+const { mockAppendHistory, mockWriteSnapshot } = vi.hoisted(() => ({
+  mockAppendHistory: vi.fn(),
+  mockWriteSnapshot: vi.fn<(state: WizardState, timestamp: string) => string>(() => 'snap-abc123'),
 }));
+
+vi.mock('../services/detector.ts', async () => {
+  const actual =
+    await vi.importActual<typeof import('../services/detector.ts')>('../services/detector.ts');
+  return {
+    ...actual,
+    detectInstalledShellsAsync: vi.fn().mockResolvedValue(['zsh']),
+    detectPackageManagerAsync: vi.fn().mockResolvedValue('apt'),
+  };
+});
+
+vi.mock('../generators/shellRc.ts', async () => {
+  const actual = await vi.importActual<typeof import('../generators/shellRc.ts')>(
+    '../generators/shellRc.ts'
+  );
+  return {
+    ...actual,
+    restoreConfigBackups: mockRestoreConfigBackups,
+  };
+});
+
+vi.mock('../services/history.ts', async () => {
+  const actual =
+    await vi.importActual<typeof import('../services/history.ts')>('../services/history.ts');
+  return {
+    ...actual,
+    appendHistory: mockAppendHistory,
+    writeSnapshot: mockWriteSnapshot,
+  };
+});
 
 import { render } from 'ink';
 import {
@@ -30,8 +61,10 @@ import {
   recordInstallOutcome,
   reportFatal,
   restoreTerminal,
+  runHeadlessCommand,
 } from '../index.tsx';
-import type { InstallTask } from '../types.ts';
+import { CliUsageError } from '../services/errors.ts';
+import { DEFAULT_STATE, type InstallTask, type WizardState } from '../types.ts';
 
 describe('index CLI handling', () => {
   const originalArgv = process.argv.slice();
@@ -240,6 +273,132 @@ describe('index install-outcome exit code', () => {
   });
 });
 
+describe('index wizard history recording', () => {
+  const done = [{ id: 'config', label: 'Copy config', status: 'done' } as InstallTask];
+
+  afterEach(() => {
+    mockAppendHistory.mockReset();
+    mockWriteSnapshot.mockReset();
+    // Reset installFailed so later exit-code assertions are not poisoned.
+    recordInstallOutcome(undefined);
+  });
+
+  it('records a run snapshot when results come back with the state', () => {
+    recordInstallOutcome(done, {
+      ...DEFAULT_STATE,
+      preset: 'pure-prompt',
+      selectedShells: ['zsh'],
+    });
+
+    expect(mockWriteSnapshot).toHaveBeenCalledTimes(1);
+    expect(mockWriteSnapshot.mock.calls.at(-1)?.[0]).toMatchObject({
+      preset: 'pure-prompt',
+      selectedShells: ['zsh'],
+    });
+    expect(mockAppendHistory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: 1,
+        kind: 'install',
+        snapshotId: 'snap-abc123',
+        exitCode: 0,
+        results: done,
+      })
+    );
+  });
+
+  it('records exit 1 when the run had a failed task', () => {
+    recordInstallOutcome(
+      [{ id: 'config', label: 'Copy config', status: 'failed' } as InstallTask],
+      {
+        ...DEFAULT_STATE,
+        preset: 'pure-prompt',
+        selectedShells: [],
+      }
+    );
+
+    expect(mockAppendHistory).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 1 }));
+  });
+
+  it('does not record history without a final state', () => {
+    recordInstallOutcome(done);
+
+    expect(mockWriteSnapshot).not.toHaveBeenCalled();
+    expect(mockAppendHistory).not.toHaveBeenCalled();
+  });
+
+  it('warns instead of dying when the history write fails', () => {
+    mockWriteSnapshot.mockImplementation(() => {
+      throw new Error('disk full');
+    });
+    const warn = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+
+    expect(() =>
+      recordInstallOutcome(done, { ...DEFAULT_STATE, preset: 'pure-prompt', selectedShells: [] })
+    ).not.toThrow();
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not record this run'));
+    warn.mockRestore();
+  });
+});
+
+describe('index headless routing', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+    mockAppendHistory.mockReset();
+  });
+
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+    vi.clearAllMocks();
+  });
+
+  it('dispatches generate and prints the TOML', async () => {
+    const routed = await runHeadlessCommand(['generate', '--preset', 'pure-prompt']);
+
+    expect(routed).toBe(true);
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('format'));
+  });
+
+  it('returns false for a plain global flag, leaving it for the wizard', async () => {
+    expect(await runHeadlessCommand(['--help'])).toBe(false);
+    expect(await runHeadlessCommand(['--bogus'])).toBe(false);
+  });
+
+  it('surfaces a bogus flag as a CliUsageError', async () => {
+    await expect(runHeadlessCommand(['apply', '--preset', 'nope'])).rejects.toThrow(CliUsageError);
+    await expect(runHeadlessCommand(['generate', '--palette', 'nope'])).rejects.toThrow(/palette/);
+  });
+
+  it('surfaces a missing state card as a CliUsageError', async () => {
+    await expect(runHeadlessCommand(['generate', '--state', '/no/such/card.json'])).rejects.toThrow(
+      /Could not read state card/
+    );
+  });
+
+  it('refuses a bare apply before it ever installs', async () => {
+    await expect(runHeadlessCommand(['apply'])).rejects.toThrow(/at least one shell/);
+    expect(mockAppendHistory).not.toHaveBeenCalled();
+  });
+
+  it('runs an apply dry-run through the router and prints the plan', async () => {
+    const routed = await runHeadlessCommand(['apply', '--dry-run', '--shells', 'zsh']);
+
+    expect(routed).toBe(true);
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('dry run'));
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Targets: zsh'));
+    expect(mockAppendHistory).not.toHaveBeenCalled();
+  });
+
+  it('accepts equals-syntax through the router', async () => {
+    const routed = await runHeadlessCommand(['generate', '--preset=pure-prompt']);
+
+    expect(routed).toBe(true);
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('format'));
+  });
+});
+
 describe('index reportFatal', () => {
   let stderrWrite: ReturnType<typeof vi.spyOn>;
 
@@ -265,5 +424,14 @@ describe('index reportFatal', () => {
     reportFatal('prefix', 'some string');
     expect(stderrWrite).toHaveBeenCalledWith('\nprefix: some string\n');
     expect(process.exitCode).toBe(1);
+  });
+
+  it('reports CLI misuse cleanly and exits 2', () => {
+    reportFatal('prefix', new CliUsageError('Unknown preset: nope'));
+    expect(stderrWrite).toHaveBeenCalledWith('\nshell-configurator: Unknown preset: nope\n');
+    expect(stderrWrite).not.toHaveBeenCalledWith(
+      expect.stringContaining('prefix:') as unknown as string
+    );
+    expect(process.exitCode).toBe(2);
   });
 });

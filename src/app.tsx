@@ -20,8 +20,9 @@ import {
 
 interface AppProps {
   dryRun?: boolean;
-  /** Receives the completed install results so the entry point can set the exit code. */
-  onInstallOutcome?: (results: InstallTask[] | undefined) => void;
+  /** Receives the completed install results and final state so the entry point
+   *  can set the exit code and record the run in history. */
+  onInstallOutcome?: (results: InstallTask[] | undefined, state: WizardState) => void;
 }
 
 export function App({ dryRun = false, onInstallOutcome }: AppProps) {
@@ -36,7 +37,8 @@ export function App({ dryRun = false, onInstallOutcome }: AppProps) {
   }
 
   function finishInstall(update?: Partial<WizardState>) {
-    onInstallOutcome?.(update?.installResults);
+    const finalState: WizardState = { ...state, ...update, step: 'done' };
+    onInstallOutcome?.(finalState.installResults, finalState);
     advanceTo('done', update);
   }
 

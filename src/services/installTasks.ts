@@ -30,9 +30,10 @@ import {
 export interface InstallTaskDeps {
   isStarshipInstalled: () => Promise<{ installed: boolean; version?: string }>;
   installStarship: (pm: PackageManager) => Promise<void>;
-  installNerdFont: (fontId: string) => Promise<void>;
   installShell: (shellId: ShellId, pm: PackageManager) => Promise<void>;
   setDefaultShell: (shellId: ShellId) => Promise<void>;
+  /** Installs a Nerd Font; resolves with a note when it came from the cache. */
+  installNerdFont: (fontId: string) => Promise<string | undefined>;
   generateToml: (state: WizardState) => string;
   writeShellConfig: (toml: string, shellId: ShellId) => WriteConfigResult;
   /** Snapshots the shared starship.toml before per-shell configs shadow it. Null when none exists. */
@@ -197,7 +198,9 @@ export async function runInstallTasks(
   if (fontId) {
     fontInstallFailed =
       (await runTask(TASK_IDS.font, async () => {
-        await deps.installNerdFont(fontId);
+        // A cache note (e.g. "installed from cache") is shown as task detail.
+        const note = await deps.installNerdFont(fontId);
+        return note ? { status: 'done', patch: { note } } : undefined;
       })) === 'failed';
   }
 

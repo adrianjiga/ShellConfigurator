@@ -1,9 +1,9 @@
-import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { getShellBinary } from '../config/shells.ts';
 import type { PackageManager, ShellId } from '../types.ts';
+import { cachedFont, cacheFont, sha256Digest } from './cache.ts';
 import { commandExists, commandPath, runCommand } from './exec.ts';
 import { type ExtractedFontFile, extractFontFiles } from './fontExtractor.ts';
 
@@ -198,7 +198,7 @@ async function downloadFont(zipName: string): Promise<Buffer> {
 }
 
 function verifyChecksum(zipName: string, buffer: Buffer, expectedDigest: string): void {
-  const actualDigest = createHash('sha256').update(buffer).digest('hex');
+  const actualDigest = sha256Digest(buffer);
   if (actualDigest !== expectedDigest) {
     throw new Error(
       `Checksum mismatch for ${zipName}: expected sha256:${expectedDigest}, ` +
@@ -239,9 +239,21 @@ async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> 
   }
 }
 
-export async function installNerdFont(fontId: string): Promise<void> {
+/**
+ * Installs a Nerd Font (or confirms it is on the machine). A verified archive in
+ * the font cache (P1.1) skips the download entirely — so re-runs, repair (#20)
+ * and rollback survive offline / rate-limit situations. Returns a note when the
+ * font came from cache, so the task list can explain why there was no download.
+ */
+export async function installNerdFont(fontId: string): Promise<string | undefined> {
   const font = NERD_FONTS.find((f) => f.id === fontId);
   if (!font) throw new Error(`Unknown font: ${fontId}`);
+
+  const cached = cachedFont(fontId);
+  if (cached) {
+    await installFontFiles(font.zipName, fs.readFileSync(cached.path));
+    return `installed ${font.label} from cache`;
+  }
 
   const buffer = await downloadFont(font.zipName);
   const expectedDigest = await fetchAssetChecksum(
@@ -250,6 +262,10 @@ export async function installNerdFont(fontId: string): Promise<void> {
   );
   verifyChecksum(font.zipName, buffer, expectedDigest);
   await installFontFiles(font.zipName, buffer);
+
+  // Pin the verified archive so a later run reuses it without re-downloading.
+  cacheFont(fontId, buffer);
+  return undefined;
 }
 
 export async function setDefaultShell(shellId: ShellId): Promise<void> {
