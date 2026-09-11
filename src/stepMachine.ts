@@ -4,31 +4,32 @@ import { STEP_ORDER, shouldVisitFontSelect, type WizardState, type WizardStep } 
 const TERMINAL_STEPS: WizardStep[] = ['installing', 'done'];
 
 /**
- * Returns the state advanced to the next step, honoring the conditional
- * font_select skip. If there is no next step, the original state is returned
- * unchanged (any pending update is discarded).
+ * The first step after `currentIndex` that this state must actually visit,
+ * walking past conditional steps whose condition is false:
+ * - font_select is skipped when no font is being installed;
+ * - installing is skipped entirely in dry-run mode.
+ * Returns undefined when the walk runs off the end of the order.
+ */
+function skipConditional(state: WizardState, currentIndex: number): WizardStep | undefined {
+  for (let i = currentIndex + 1; i < STEP_ORDER.length; i += 1) {
+    const candidate = STEP_ORDER[i];
+    const mustSkip =
+      (candidate === 'font_select' && !shouldVisitFontSelect(state.nerdFontToInstall)) ||
+      (candidate === 'installing' && state.dryRun);
+    if (!mustSkip) return candidate;
+  }
+  return undefined;
+}
+
+/**
+ * Returns the state advanced to the next step, honoring the conditional step
+ * skips. A pending update is always merged in — even when no further step
+ * exists, so an update is never silently dropped at the end boundary.
  */
 export function getNextStep(state: WizardState, update?: Partial<WizardState>): WizardState {
   const merged = { ...state, ...update };
-  const currentIndex = STEP_ORDER.indexOf(merged.step);
-  let nextStep = STEP_ORDER[currentIndex + 1];
-
-  if (!nextStep) return state;
-
-  // Skip font_select if the user doesn't want to install a font
-  if (nextStep === 'font_select' && !shouldVisitFontSelect(merged.nerdFontToInstall)) {
-    const skipped = STEP_ORDER[currentIndex + 2];
-    if (!skipped) return state;
-    nextStep = skipped;
-  }
-
-  // In dry-run mode the installing step is skipped entirely.
-  if (nextStep === 'installing' && merged.dryRun) {
-    const skipped = STEP_ORDER[currentIndex + 2];
-    if (!skipped) return state;
-    nextStep = skipped;
-  }
-
+  const nextStep = skipConditional(merged, STEP_ORDER.indexOf(merged.step));
+  if (!nextStep) return update ? merged : state;
   return { ...merged, step: nextStep };
 }
 
@@ -41,14 +42,11 @@ export function getPrevStep(state: WizardState): WizardState {
   // every install, including chsh and the config overwrite.
   if (TERMINAL_STEPS.includes(state.step)) return state;
 
-  const currentIndex = STEP_ORDER.indexOf(state.step);
-  let prevIndex = currentIndex - 1;
-
-  // Skip font_select when going back if we never intended to visit it
-  if (STEP_ORDER[prevIndex] === 'font_select' && !shouldVisitFontSelect(state.nerdFontToInstall)) {
-    prevIndex -= 1;
+  // Walk backwards past font_select when we never intended to visit it.
+  for (let i = STEP_ORDER.indexOf(state.step) - 1; i >= 0; i -= 1) {
+    const candidate = STEP_ORDER[i];
+    if (candidate === 'font_select' && !shouldVisitFontSelect(state.nerdFontToInstall)) continue;
+    return { ...state, step: candidate };
   }
-
-  const prevStep = STEP_ORDER[prevIndex];
-  return prevStep ? { ...state, step: prevStep } : state;
+  return state;
 }

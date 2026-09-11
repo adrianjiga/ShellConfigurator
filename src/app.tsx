@@ -10,7 +10,7 @@ import { ShellScreen } from './screens/ShellScreen.tsx';
 import { StyleScreen } from './screens/StyleScreen.tsx';
 import { WelcomeScreen } from './screens/WelcomeScreen.tsx';
 import { getNextStep, getPrevStep } from './stepMachine.ts';
-import { DEFAULT_STATE, type WizardState, type WizardStep } from './types.ts';
+import { assertNever, DEFAULT_STATE, type WizardState, type WizardStep } from './types.ts';
 
 export function App({ dryRun = false }: { dryRun?: boolean }) {
   const [state, setState] = useState<WizardState>(() => ({ ...DEFAULT_STATE, dryRun }));
@@ -90,5 +90,9 @@ export function App({ dryRun = false }: { dryRun?: boolean }) {
 
     case 'done':
       return <DoneScreen state={state} />;
+
+    default:
+      // Exhaustiveness: adding a step to STEP_ORDER should fail the build here.
+      return assertNever(state.step);
   }
 }

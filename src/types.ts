@@ -37,6 +37,15 @@ export function fontIdToInstall(choice: NerdFontChoice): string | null {
   return choice.kind === 'install' ? choice.id : null;
 }
 
+/**
+ * Compile-time exhaustiveness guard for discriminated unions: once every branch
+ * is handled by a caller, a default `return assertNever(x)` flags any new member
+ * that was missed.
+ */
+export function assertNever(value: never, message = `Unhandled value: ${String(value)}`): never {
+  throw new Error(message);
+}
+
 export interface InstallTask {
   id: InstallTaskId;
   label: string;
