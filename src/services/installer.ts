@@ -1,9 +1,9 @@
-import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { getShellBinary } from '../config/shells.ts';
 import type { PackageManager, ShellId } from '../types.ts';
+import { sha256Digest } from './cache.ts';
 import { commandExists, commandPath, runCommand } from './exec.ts';
 import { type ExtractedFontFile, extractFontFiles } from './fontExtractor.ts';
 
@@ -198,7 +198,7 @@ async function downloadFont(zipName: string): Promise<Buffer> {
 }
 
 function verifyChecksum(zipName: string, buffer: Buffer, expectedDigest: string): void {
-  const actualDigest = createHash('sha256').update(buffer).digest('hex');
+  const actualDigest = sha256Digest(buffer);
   if (actualDigest !== expectedDigest) {
     throw new Error(
       `Checksum mismatch for ${zipName}: expected sha256:${expectedDigest}, ` +
