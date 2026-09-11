@@ -5,7 +5,7 @@ import { type ReportedStatus, statusMark } from '../config/status.ts';
 import { getShellConfigPath } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import { fontLabel } from '../services/installer.ts';
-import { buildTaskList, rcTaskId } from '../services/installTasks.ts';
+import { buildTaskList, rcTaskId, TASK_IDS } from '../services/installTasks.ts';
 import { fontIdToInstall, type InstallTask, type WizardState } from '../types.ts';
 
 interface DoneScreenProps {
@@ -37,9 +37,9 @@ export function DoneScreen({ state }: DoneScreenProps) {
     }
   });
 
-  const configTask = task(state, 'config');
-  const fontTask = task(state, 'font');
-  const chshTask = task(state, 'chsh');
+  const configTask = task(state, TASK_IDS.config);
+  const fontTask = task(state, TASK_IDS.font);
+  const chshTask = task(state, TASK_IDS.chsh);
   const chshOk = chshTask?.status === 'done';
 
   const heading = state.dryRun
