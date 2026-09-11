@@ -4,17 +4,17 @@ import { STEP_ORDER, type WizardState, type WizardStep } from '../types.ts';
 import { PromptPreview } from './PromptPreview.tsx';
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  welcome: '1. Welcome',
-  fontcheck: '2. Font',
-  font_select: '3. Font Pick',
-  preset: '4. Preset',
-  segments_left: '5. Left',
-  segments_right: '6. Right',
-  style: '7. Style',
-  shells: '8. Shell',
-  review: '9. Review',
-  installing: '10. Installing',
-  done: '11. Done',
+  welcome: 'Welcome',
+  fontcheck: 'Font',
+  font_select: 'Font Pick',
+  preset: 'Preset',
+  segments_left: 'Left',
+  segments_right: 'Right',
+  style: 'Style',
+  shells: 'Shell',
+  review: 'Review',
+  installing: 'Installing',
+  done: 'Done',
 };
 
 interface WizardLayoutProps {
@@ -54,7 +54,7 @@ export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps
             </Text>
           );
         })}
-        <Text color="gray"> {STEP_LABELS[state.step]}</Text>
+        <Text color="gray">{` ${currentIndex + 1}. ${STEP_LABELS[state.step]}`}</Text>
       </Box>
 
       {/* Main content */}

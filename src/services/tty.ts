@@ -59,6 +59,18 @@ export function resumeUi(): void {
   }
 }
 
+export const SHOW_CURSOR = '\u001B[?25h';
+
+/** Returns the terminal to normal mode after a child process or raw-mode UI. */
+export function restoreTty(): void {
+  setRawModeStandard(false);
+  try {
+    process.stdout.write(SHOW_CURSOR);
+  } catch {
+    // Stream already gone; nothing to restore.
+  }
+}
+
 /** Test-only: drops listeners and clears the depth so tests cannot leak state. */
 export function resetUiSuspension(): void {
   if (process.env.VITEST !== 'true') return;

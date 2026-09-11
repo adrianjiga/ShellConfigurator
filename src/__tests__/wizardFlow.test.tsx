@@ -51,6 +51,7 @@ vi.mock('../services/installer.ts', () => ({
 }));
 
 import { App } from '../app.tsx';
+import type { InstallTask } from '../types.ts';
 
 const ENTER = '\r';
 const SPACE = ' ';
@@ -72,9 +73,10 @@ beforeEach(() => vi.clearAllMocks());
 /** Walks the wizard to the end and returns the TOML that was written. */
 async function runWizard(
   keys: string[],
-  instanceOut?: { instance: ReturnType<typeof render> }
+  instanceOut?: { instance: ReturnType<typeof render> },
+  appProps: Parameters<typeof App>[0] = {}
 ): Promise<string> {
-  const instance = render(<App />);
+  const instance = render(<App {...appProps} />);
   await flush();
   if (instanceOut) instanceOut.instance = instance;
 
@@ -179,22 +181,31 @@ describe('full wizard walkthrough', () => {
   });
 
   it('keeps a clean exit code when every step succeeded', async () => {
+    const recordOutcome = vi.fn();
     const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
-    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER], out);
+    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER], out, {
+      onInstallOutcome: recordOutcome,
+    });
     await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
+    const results = recordOutcome.mock.calls.at(-1)?.[0] as InstallTask[] | undefined;
+    expect(results?.some((t) => t.status === 'failed')).toBe(false);
     expect(process.exitCode ?? 0).toBe(0);
   });
 
-  it('exits non-zero when an install step fails', async () => {
+  it('reports a failed install for a non-zero exit', async () => {
     // { applied: false } with no note makes the rc step fail ("Unknown shell"),
-    // which must surface as a non-zero exit so scripts can detect the failure.
+    // which must surface so scripts can detect the failure.
     mockApplyShellConfig.mockReturnValueOnce({ applied: false });
+    const recordOutcome = vi.fn();
     const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
-    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER], out);
+    await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER], out, {
+      onInstallOutcome: recordOutcome,
+    });
     await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
-    expect(process.exitCode).toBe(1);
+    const results = recordOutcome.mock.calls.at(-1)?.[0] as InstallTask[] | undefined;
+    expect(results?.some((t) => t.status === 'failed')).toBe(true);
   });
 
   it('installs a chosen Nerd Font through the font_select flow', async () => {
@@ -227,6 +238,7 @@ describe('full wizard walkthrough', () => {
     // installNerdFont failing must not poison the generated config: hasNerdFont
     // is forced off so the result avoids glyphs the user's terminal can't render.
     mockInstallNerdFont.mockRejectedValue(new Error('Checksum mismatch'));
+    const recordOutcome = vi.fn();
     const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
     const toml = await runWizard(
       [
@@ -242,14 +254,16 @@ describe('full wizard walkthrough', () => {
         ENTER, // -> review
         ENTER, // -> installing
       ],
-      out
+      out,
+      { onInstallOutcome: recordOutcome }
     );
     await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
     // git_branch under hasNerdFont:false uses the plain-text "on " fallback.
     expect(toml).toContain('symbol = "on "');
     expect(toml).not.toContain('symbol = " "');
-    expect(process.exitCode).toBe(1);
+    const results = recordOutcome.mock.calls.at(-1)?.[0] as InstallTask[] | undefined;
+    expect(results?.some((t) => t.status === 'failed')).toBe(true);
   });
 
   it('installs a shell the machine does not have', async () => {
