@@ -4,6 +4,8 @@ import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { restoreConfigBackups } from './generators/shellRc.ts';
+import { parseCliArgs } from './services/args.ts';
+import { runApply, runGenerate } from './services/headless.ts';
 import { restoreTty } from './services/tty.ts';
 import type { InstallTask } from './types.ts';
 
@@ -43,6 +45,8 @@ Interactive terminal wizard for configuring Starship.
 
 Usage:
   shell-configurator              start the wizard
+  shell-configurator generate     render a starship.toml from flags
+  shell-configurator apply        run a full install headlessly
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
@@ -55,6 +59,24 @@ Options:
   --no-install     Alias for --dry-run
   --restore        Copy the newest .bak-* snapshot back over the shared and
                    per-shell configs created by earlier wizard runs
+
+generate options (the config — a versioned state card with --export):
+  --preset <id>        Seed modules, palette and powerline from a preset
+  --palette <id>       Override the colour palette
+  --powerline, --no-powerline   Draw segments as interlocking coloured blocks
+  --shells <id,...>    Shells to configure: zsh,bash,fish,nushell,powershell
+  --font <none|font>   Nerd Font to install, or 'none' to skip fonts
+  --has-nerd-font, --no-nerd-font   Already render Nerd Font glyphs (auto toggles with --font)
+  --character <arrow|lambda|dollar> The prompt character symbol
+  --set-default <shell>  Make a shell the login default
+  --skip-starship      Do not install or require Starship
+  -o <file>            Write the TOML here instead of stdout
+  --export <file>      Write the state card here instead of TOML
+  --import <file>      Start from a saved state card instead of flags
+
+apply options (a headless install from a state card):
+  --state <file>       The state card describing the install (also: --import)
+  --dry-run            Print the plan and generated config; change nothing
 `);
 }
 
@@ -96,23 +118,42 @@ export function hasDryRunFlag(): boolean {
   return args.includes('--dry-run') || args.includes('--no-install') || args.includes('-d');
 }
 
+/**
+ * Runs a headless subcommand (`generate` or `apply`) to completion, returning
+ * true when argv targeted one so the Ink wizard is skipped entirely. Errors
+ * propagate for the caller's fatal handler — headless runs never render.
+ */
+export async function runHeadlessCommand(argv: string[]): Promise<boolean> {
+  const flags = parseCliArgs(argv);
+  if (flags.subcommand === 'generate') {
+    runGenerate(flags);
+    return true;
+  }
+  if (flags.subcommand === 'apply') {
+    await runApply(flags);
+    return true;
+  }
+  return false;
+}
+
 process.on('uncaughtException', (err) => reportFatal('ShellConfigurator crashed', err));
 process.on('unhandledRejection', (err) => reportFatal('ShellConfigurator crashed', err));
 
-if (handleCliArgs()) {
-  process.exit(0);
+async function main(): Promise<void> {
+  // Global flags first (--version/--help/--restore), then headless subcommands;
+  // whichever consumes the args keeps the process from starting Ink.
+  if (handleCliArgs()) return;
+  if (await runHeadlessCommand(process.argv.slice(2))) return;
+
+  const app = render(
+    <ErrorBoundary onError={(err) => reportFatal('ShellConfigurator hit a render error', err)}>
+      <App dryRun={hasDryRunFlag()} onInstallOutcome={recordInstallOutcome} />
+    </ErrorBoundary>
+  );
+
+  await app.waitUntilExit();
+  applyInstallOutcomeExitCode();
+  restoreTerminal();
 }
 
-const app = render(
-  <ErrorBoundary onError={(err) => reportFatal('ShellConfigurator hit a render error', err)}>
-    <App dryRun={hasDryRunFlag()} onInstallOutcome={recordInstallOutcome} />
-  </ErrorBoundary>
-);
-
-app
-  .waitUntilExit()
-  .then(() => {
-    applyInstallOutcomeExitCode();
-    restoreTerminal();
-  })
-  .catch((err) => reportFatal('ShellConfigurator exited abnormally', err));
+main().catch((err) => reportFatal('ShellConfigurator exited abnormally', err));

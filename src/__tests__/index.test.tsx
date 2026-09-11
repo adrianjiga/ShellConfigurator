@@ -18,9 +18,15 @@ const { mockRestoreConfigBackups } = vi.hoisted(() => ({
   mockRestoreConfigBackups: vi.fn(),
 }));
 
-vi.mock('../generators/shellRc.ts', () => ({
-  restoreConfigBackups: mockRestoreConfigBackups,
-}));
+vi.mock('../generators/shellRc.ts', async () => {
+  const actual = await vi.importActual<typeof import('../generators/shellRc.ts')>(
+    '../generators/shellRc.ts'
+  );
+  return {
+    ...actual,
+    restoreConfigBackups: mockRestoreConfigBackups,
+  };
+});
 
 import { render } from 'ink';
 import {
