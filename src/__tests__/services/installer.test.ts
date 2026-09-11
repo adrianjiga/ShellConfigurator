@@ -85,6 +85,7 @@ function okResponse(overrides: Partial<Response> = {}): Response {
   return {
     ok: true,
     status: 200,
+    headers: { get: () => null } as unknown as Headers,
     arrayBuffer: async () => new ArrayBuffer(0),
     ...overrides,
   } as unknown as Response;
