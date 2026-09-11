@@ -1,11 +1,10 @@
 import { cleanup, render } from 'ink-testing-library';
-import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShellScreen } from '../../screens/ShellScreen.tsx';
 import { detectCurrentShellAsync, detectInstalledShellsAsync } from '../../services/detector.ts';
 import { DEFAULT_STATE, type ShellId } from '../../types.ts';
-
 import { pressEsc } from '../helpers/ink.ts';
+import { flush } from '../helpers/wait.ts';
 
 vi.mock('../../services/detector.ts', () => ({
   detectCurrentShellAsync: vi.fn(),
@@ -26,10 +25,6 @@ function setup() {
     <ShellScreen state={state} onNext={onNext} onUpdate={onUpdate} onBack={onBack} />
   );
   return { instance, onNext, onUpdate, onBack, state };
-}
-
-async function flush() {
-  await act(async () => {});
 }
 
 describe('ShellScreen', () => {

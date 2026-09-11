@@ -1,10 +1,10 @@
 import { cleanup, render } from 'ink-testing-library';
-import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstallingScreen } from '../../screens/InstallingScreen.tsx';
 import type { InstallTaskDeps } from '../../services/installTasks.ts';
 import type { InstallTask, WizardState } from '../../types.ts';
 import { DEFAULT_STATE } from '../../types.ts';
+import { flush, waitFor } from '../helpers/wait.ts';
 
 const mocks = vi.hoisted(() => ({
   buildTaskList: vi.fn<(state: WizardState) => InstallTask[]>(),
@@ -57,20 +57,6 @@ function setup() {
   const onNext = vi.fn();
   const instance = render(<InstallingScreen state={{ ...DEFAULT_STATE }} onNext={onNext} />);
   return { instance, onNext };
-}
-
-async function flush() {
-  await act(async () => {});
-}
-
-/** Polls until `check` passes so the 1.2s advance delay never blocks a test. */
-async function waitFor(check: () => unknown): Promise<void> {
-  const started = Date.now();
-  while (Date.now() - started < 5000) {
-    if (check()) return;
-    await new Promise((r) => setTimeout(r, 25));
-  }
-  throw new Error('timed out waiting for a condition in InstallingScreen');
 }
 
 /** A positive task fixture exercising every status, error, and note branch. */

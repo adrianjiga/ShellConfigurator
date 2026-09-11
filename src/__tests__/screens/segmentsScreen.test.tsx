@@ -1,10 +1,9 @@
 import { cleanup, render } from 'ink-testing-library';
-import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SegmentsScreen } from '../../screens/SegmentsScreen.tsx';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
-
 import { pressEsc } from '../helpers/ink.ts';
+import { flush } from '../helpers/wait.ts';
 
 afterEach(cleanup);
 
@@ -25,9 +24,6 @@ function setup(overrides: Partial<WizardState> = {}) {
 }
 
 // Flush Ink's render + useInput effect re-subscription deterministically.
-async function flush() {
-  await act(async () => {});
-}
 
 describe('SegmentsScreen', () => {
   it('renders the configurable modules without character', async () => {

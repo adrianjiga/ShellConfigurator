@@ -1,7 +1,7 @@
 import { parse } from '@iarna/toml';
 import { cleanup, render } from 'ink-testing-library';
-import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { flush, waitFor } from './helpers/wait.ts';
 
 // Only the side-effecting edges are stubbed. generateToml, the step machine, the
 // screens, and runInstallTasks all run for real, so this exercises the whole
@@ -69,10 +69,6 @@ afterEach(() => {
 });
 beforeEach(() => vi.clearAllMocks());
 
-async function flush() {
-  await act(async () => {});
-}
-
 /** Walks the wizard to the end and returns the TOML that was written. */
 async function runWizard(
   keys: string[],
@@ -97,14 +93,6 @@ async function runWizard(
 }
 
 /** The InstallingScreen advances to Done ~1.2s after the chain ends; wait for it. */
-async function waitForDone(instance: { lastFrame: () => string | undefined }): Promise<void> {
-  const started = Date.now();
-  while (Date.now() - started < 5000) {
-    await new Promise((r) => setTimeout(r, 25));
-    if (instance.lastFrame()?.includes('Done')) return;
-  }
-  throw new Error('never reached the done screen');
-}
 
 describe('full wizard walkthrough', () => {
   it('writes parseable TOML reflecting the default choices', async () => {
@@ -193,7 +181,7 @@ describe('full wizard walkthrough', () => {
   it('keeps a clean exit code when every step succeeded', async () => {
     const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
     await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER], out);
-    await waitForDone(out.instance);
+    await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
     expect(process.exitCode ?? 0).toBe(0);
   });
@@ -204,7 +192,7 @@ describe('full wizard walkthrough', () => {
     mockApplyShellConfig.mockReturnValueOnce({ applied: false });
     const out: { instance: ReturnType<typeof render> } = { instance: undefined as never };
     await runWizard([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER], out);
-    await waitForDone(out.instance);
+    await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
     expect(process.exitCode).toBe(1);
   });
@@ -227,7 +215,7 @@ describe('full wizard walkthrough', () => {
       ],
       out
     );
-    await waitForDone(out.instance);
+    await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
     expect(toml).toContain('$character');
     expect(mockInstallNerdFont).toHaveBeenCalledTimes(1);
@@ -256,7 +244,7 @@ describe('full wizard walkthrough', () => {
       ],
       out
     );
-    await waitForDone(out.instance);
+    await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
     // git_branch under hasNerdFont:false uses the plain-text "on " fallback.
     expect(toml).toContain('symbol = "on "');
@@ -283,7 +271,7 @@ describe('full wizard walkthrough', () => {
       ],
       out
     );
-    await waitForDone(out.instance);
+    await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
     expect(toml).toContain('$character');
     expect(mockInstallShell).toHaveBeenCalledTimes(1);

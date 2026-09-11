@@ -21,12 +21,7 @@ describe('buildTaskList', () => {
     expect(tasks.map((t) => t.id)).not.toContain('starship');
   });
 
-  it('omits the font task when nerdFontToInstall is null', () => {
-    const tasks = buildTaskList({ ...DEFAULT_STATE, nerdFontToInstall: NO_NERD_FONT });
-    expect(tasks.map((t) => t.id)).not.toContain('font');
-  });
-
-  it('omits the font task for the font_select sentinel value', () => {
+  it('omits the font task when no font is being installed', () => {
     const tasks = buildTaskList({ ...DEFAULT_STATE, nerdFontToInstall: NO_NERD_FONT });
     expect(tasks.map((t) => t.id)).not.toContain('font');
   });

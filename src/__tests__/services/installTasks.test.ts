@@ -1,30 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { type InstallTaskDeps, runInstallTasks } from '../../services/installTasks.ts';
-import { DEFAULT_STATE, type InstallTask, NO_NERD_FONT, type WizardState } from '../../types.ts';
-
-function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
-  return {
-    isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
-    installStarship: vi.fn().mockResolvedValue(undefined),
-    installNerdFont: vi.fn().mockResolvedValue(undefined),
-    installShell: vi.fn().mockResolvedValue(undefined),
-    setDefaultShell: vi.fn().mockResolvedValue(undefined),
-    generateToml: vi.fn(() => 'format = "$character"'),
-    writeShellConfig: vi.fn(() => ({ path: '/home/u/.config/starship/zsh.toml' })),
-    backupSharedConfig: vi.fn(() => null),
-    applyShellConfig: vi.fn(() => ({ applied: true })),
-    resetSharedShellConfig: vi.fn(() => ({ applied: false })),
-    getShellsUsingStarship: vi.fn().mockResolvedValue([]),
-    getMissingStarshipPathDir: vi.fn(() => null),
-    ...overrides,
-  };
-}
+import { runInstallTasks } from '../../services/installTasks.ts';
+import { DEFAULT_STATE, NO_NERD_FONT, type WizardState } from '../../types.ts';
+import { fakeDeps } from '../helpers/installTasks.ts';
 
 function state(overrides: Partial<WizardState> = {}): WizardState {
   return { ...DEFAULT_STATE, packageManager: 'apt', ...overrides };
 }
-
-const task = (results: InstallTask[]) => results;
 
 describe('runInstallTasks', () => {
   it('installs starship when it is missing and not skipped', async () => {
@@ -32,7 +13,7 @@ describe('runInstallTasks', () => {
     const results = await runInstallTasks(state(), deps, vi.fn());
 
     expect(deps.installStarship).toHaveBeenCalledWith('apt');
-    expect(task(results).find((t) => t.id === 'starship')?.status).toBe('done');
+    expect(results.find((t) => t.id === 'starship')?.status).toBe('done');
   });
 
   it('skips the install when starship is already present', async () => {
@@ -42,7 +23,7 @@ describe('runInstallTasks', () => {
     const results = await runInstallTasks(state(), deps, vi.fn());
 
     expect(deps.installStarship).not.toHaveBeenCalled();
-    const starship = task(results).find((t) => t.id === 'starship');
+    const starship = results.find((t) => t.id === 'starship');
     expect(starship?.status).toBe('skipped');
     expect(starship?.label).toContain('starship 1.20');
   });
@@ -52,7 +33,7 @@ describe('runInstallTasks', () => {
     const results = await runInstallTasks(state({ skipStarshipInstall: true }), deps, vi.fn());
 
     expect(deps.installStarship).not.toHaveBeenCalled();
-    expect(task(results).some((t) => t.id === 'starship')).toBe(false);
+    expect(results.some((t) => t.id === 'starship')).toBe(false);
   });
 
   it('installs a concrete nerd font but ignores the sentinel', async () => {

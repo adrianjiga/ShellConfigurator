@@ -1,9 +1,9 @@
 import { cleanup, render } from 'ink-testing-library';
-import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WelcomeScreen } from '../../screens/WelcomeScreen.tsx';
 import { detectPackageManagerAsync, isStarshipInstalledAsync } from '../../services/detector.ts';
 import { DEFAULT_STATE } from '../../types.ts';
+import { flush } from '../helpers/wait.ts';
 
 vi.mock('../../services/detector.ts', () => ({
   detectPackageManagerAsync: vi.fn(),
@@ -23,10 +23,6 @@ function setup() {
   const onNext = vi.fn();
   const instance = render(<WelcomeScreen state={{ ...DEFAULT_STATE }} onNext={onNext} />);
   return { instance, onNext };
-}
-
-async function flush() {
-  await act(async () => {});
 }
 
 const ENTER = '\r';

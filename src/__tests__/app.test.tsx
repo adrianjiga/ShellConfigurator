@@ -1,8 +1,7 @@
 import { cleanup, render } from 'ink-testing-library';
-import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { pressEsc } from './helpers/ink.ts';
+import { flush } from './helpers/wait.ts';
 
 // Detection is the only thing WelcomeScreen and ShellScreen do on mount; stub it so
 // the wizard is driven purely by keystrokes.
@@ -21,10 +20,6 @@ const DOWN = '[B';
 
 afterEach(cleanup);
 beforeEach(() => vi.clearAllMocks());
-
-async function flush() {
-  await act(async () => {});
-}
 
 function setup() {
   const instance = render(<App />);
