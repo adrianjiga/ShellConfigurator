@@ -18,6 +18,11 @@ const { mockRestoreConfigBackups } = vi.hoisted(() => ({
   mockRestoreConfigBackups: vi.fn(),
 }));
 
+const { mockAppendHistory, mockWriteSnapshot } = vi.hoisted(() => ({
+  mockAppendHistory: vi.fn(),
+  mockWriteSnapshot: vi.fn(() => 'snap-abc123'),
+}));
+
 vi.mock('../generators/shellRc.ts', async () => {
   const actual = await vi.importActual<typeof import('../generators/shellRc.ts')>(
     '../generators/shellRc.ts'
@@ -25,6 +30,16 @@ vi.mock('../generators/shellRc.ts', async () => {
   return {
     ...actual,
     restoreConfigBackups: mockRestoreConfigBackups,
+  };
+});
+
+vi.mock('../services/history.ts', async () => {
+  const actual =
+    await vi.importActual<typeof import('../services/history.ts')>('../services/history.ts');
+  return {
+    ...actual,
+    appendHistory: mockAppendHistory,
+    writeSnapshot: mockWriteSnapshot,
   };
 });
 
@@ -37,7 +52,7 @@ import {
   reportFatal,
   restoreTerminal,
 } from '../index.tsx';
-import type { InstallTask } from '../types.ts';
+import type { InstallTask, WizardState } from '../types.ts';
 
 describe('index CLI handling', () => {
   const originalArgv = process.argv.slice();
@@ -243,6 +258,72 @@ describe('index install-outcome exit code', () => {
     recordInstallOutcome(undefined);
     applyInstallOutcomeExitCode();
     expect(process.exitCode ?? 0).toBe(0);
+  });
+});
+
+describe('index wizard history recording', () => {
+  const done = [{ id: 'config', label: 'Copy config', status: 'done' } as InstallTask];
+
+  afterEach(() => {
+    mockAppendHistory.mockReset();
+    mockWriteSnapshot.mockReset();
+    // Reset installFailed so later exit-code assertions are not poisoned.
+    recordInstallOutcome(undefined);
+  });
+
+  it('records a run snapshot when results come back with the state', () => {
+    recordInstallOutcome(done, {
+      preset: 'pure-prompt',
+      selectedShells: ['zsh'],
+    } as WizardState);
+
+    expect(mockWriteSnapshot).toHaveBeenCalledTimes(1);
+    expect(mockWriteSnapshot.mock.calls.at(-1)?.[0]).toMatchObject({
+      preset: 'pure-prompt',
+      selectedShells: ['zsh'],
+    });
+    expect(mockAppendHistory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: 1,
+        kind: 'install',
+        snapshotId: 'snap-abc123',
+        exitCode: 0,
+        results: done,
+      })
+    );
+  });
+
+  it('records exit 1 when the run had a failed task', () => {
+    recordInstallOutcome(
+      [{ id: 'config', label: 'Copy config', status: 'failed' } as InstallTask],
+      {
+        preset: 'pure-prompt',
+        selectedShells: [],
+      } as WizardState
+    );
+
+    expect(mockAppendHistory).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 1 }));
+  });
+
+  it('does not record history without a final state', () => {
+    recordInstallOutcome(done);
+
+    expect(mockWriteSnapshot).not.toHaveBeenCalled();
+    expect(mockAppendHistory).not.toHaveBeenCalled();
+  });
+
+  it('warns instead of dying when the history write fails', () => {
+    mockWriteSnapshot.mockImplementation(() => {
+      throw new Error('disk full');
+    });
+    const warn = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+
+    expect(() =>
+      recordInstallOutcome(done, { preset: 'pure-prompt', selectedShells: [] } as WizardState)
+    ).not.toThrow();
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not record this run'));
+    warn.mockRestore();
   });
 });
 

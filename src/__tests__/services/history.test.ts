@@ -7,7 +7,11 @@ import {
   type HistoryRecord,
   historyFilePath,
   readHistory,
+  snapshotDir,
+  snapshotPath,
+  writeSnapshot,
 } from '../../services/history.ts';
+import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
 let tmpDir: string;
 const savedEnv = { ...process.env };
@@ -95,5 +99,42 @@ describe('appendHistory / readHistory', () => {
     fs.writeFileSync(file, `${good}\n\n{"version":1,"kind":"install","timestamp":"torn\n`, 'utf8');
 
     expect(readHistory()).toEqual([record('apply', { exitCode: 0 })]);
+  });
+});
+
+describe('snapshotDir / snapshotPath / writeSnapshot', () => {
+  it('roots snapshots under the app state dir', () => {
+    expect(snapshotDir()).toBe(path.join(tmpDir, 'shell-configurator', 'snapshots'));
+  });
+
+  it('writes the state card as a file returning its id', () => {
+    const state: WizardState = {
+      ...DEFAULT_STATE,
+      preset: 'catppuccin-powerline',
+      selectedShells: ['zsh'],
+    };
+    const id = writeSnapshot(state, '2026-01-02T03:04:05.000Z');
+
+    expect(id).toBe('2026-01-02T03-04-05.000Z');
+    expect(snapshotPath(id)).toBe(
+      path.join(tmpDir, 'shell-configurator', 'snapshots', '2026-01-02T03-04-05.000Z.json')
+    );
+    const card = JSON.parse(fs.readFileSync(snapshotPath(id), 'utf8')) as {
+      version: number;
+      wizard: { preset: string; selectedShells: string[] };
+    };
+    expect(card.version).toBe(1);
+    expect(card.wizard.preset).toBe('catppuccin-powerline');
+    expect(card.wizard.selectedShells).toEqual(['zsh']);
+  });
+
+  it('is unique per timestamp and re-writable for an id', () => {
+    const first = writeSnapshot(DEFAULT_STATE, '2026-01-02T03:04:05.000Z');
+    const second = writeSnapshot(DEFAULT_STATE, '2026-01-02T03:04:06.000Z');
+
+    expect(first).not.toBe(second);
+    // Same id overwrites the same card — idempotent snapshots.
+    expect(writeSnapshot(DEFAULT_STATE, '2026-01-02T03:04:05.000Z')).toBe(first);
+    expect(fs.readdirSync(snapshotDir())).toHaveLength(2);
   });
 });

@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { InstallTask } from '../types.ts';
+import type { InstallTask, WizardState } from '../types.ts';
 import { stateDir } from './paths.ts';
+import { serializeState } from './state.ts';
 
 /**
  * What a recorded run did. `install` is the interactive wizard; the others are
@@ -49,6 +50,32 @@ export function appendHistory(record: HistoryRecord): void {
 /** True when the failure is simply that the file does not exist yet. */
 function isMissingFile(err: unknown): boolean {
   return (err as { code?: string }).code === 'ENOENT';
+}
+
+/**
+ * The per-run snapshot store: <stateDir>/snapshots/. Each snapshot is the
+ * versioned state card the run applied, resolved later by `snapshotId` during
+ * `uninstall`/`--rollback` (#14).
+ */
+export function snapshotDir(): string {
+  return path.join(stateDir(), 'snapshots');
+}
+
+/** The absolute path of a snapshot card on disk. */
+export function snapshotPath(snapshotId: string): string {
+  return path.join(snapshotDir(), `${snapshotId}.json`);
+}
+
+/**
+ * Snapshot the user choices of a run as a versioned card file and return its id.
+ * The id is a slugged ISO timestamp — printable, sortable, and unique at the
+ * frequency runs happen. Best-effort callers let a failure become a warning.
+ */
+export function writeSnapshot(state: WizardState, timestamp?: string): string {
+  const id = (timestamp ?? new Date().toISOString()).replaceAll(':', '-');
+  fs.mkdirSync(snapshotDir(), { recursive: true });
+  fs.writeFileSync(snapshotPath(id), serializeState(state), 'utf8');
+  return id;
 }
 
 /**
