@@ -2,7 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { getShell } from '../config/shells.ts';
-import { getShellConfigPath } from '../generators/shellRc.ts';
+import { getShellConfigPath, starshipConfigLine } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import { NERD_FONTS } from '../services/installer.ts';
 import { buildTaskList } from '../services/installTasks.ts';
@@ -14,16 +14,6 @@ interface ReviewScreenProps {
   onBack: () => void;
 }
 
-/** The rc lines `applyShellConfig` will append, for shells with a real rc file. */
-function rcConfigLine(shellId: ShellId): string | null {
-  const shell = getShell(shellId);
-  if (!shell?.rcFile) return null;
-  const configPath = getShellConfigPath(shellId);
-  return shellId === 'fish'
-    ? `set -gx STARSHIP_CONFIG ${configPath}`
-    : `export STARSHIP_CONFIG="${configPath}"`;
-}
-
 /**
  * Preview of one shell's wiring: the STARSHIP_CONFIG export plus the init line
  * that get appended to its rc file, or the manual setup command for shells
@@ -32,7 +22,7 @@ function rcConfigLine(shellId: ShellId): string | null {
 function rcSnippet(shellId: ShellId): string[] {
   const shell = getShell(shellId);
   if (!shell) return [];
-  const configLine = rcConfigLine(shellId);
+  const configLine = starshipConfigLine(shellId);
   if (configLine) return [configLine, shell.initLine];
   // Manual-only shells (nushell, powershell): the note plus the command to run.
   return shell.manualNote ? [shell.manualNote, shell.initLine] : [shell.initLine];

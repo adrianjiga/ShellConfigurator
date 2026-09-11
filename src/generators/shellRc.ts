@@ -206,7 +206,7 @@ export interface ApplyShellConfigOptions {
  * STARSHIP_CONFIG export for a shell, in that shell's own syntax. Null for
  * shells without a script rc file (nushell, powershell).
  */
-function starshipConfigLine(shellId: ShellId): string | null {
+export function starshipConfigLine(shellId: ShellId): string | null {
   const shell = getShell(shellId);
   if (!shell?.rcFile) return null;
   const configPath = getShellConfigPath(shellId);
