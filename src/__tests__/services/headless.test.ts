@@ -40,10 +40,10 @@ vi.mock('../../services/history.ts', () => ({
   appendHistory: mockAppendHistory,
 }));
 
-import type { CliFlags } from '../../services/args.ts';
 import type { ModuleId } from '../../config/modules.ts';
-import { runApply, runGenerate, stateFromFlags } from '../../services/headless.ts';
+import type { CliFlags } from '../../services/args.ts';
 import { CliUsageError } from '../../services/errors.ts';
+import { runApply, runGenerate, stateFromFlags } from '../../services/headless.ts';
 import { STATE_VERSION, serializeState } from '../../services/state.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 

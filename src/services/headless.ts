@@ -202,7 +202,9 @@ export function runGenerate(flags: CliFlags): void {
     try {
       fs.writeFileSync(flags.outputFile, toml);
     } catch (err) {
-      throw new CliUsageError(`Could not write TOML to '${flags.outputFile}': ${errorMessage(err)}`);
+      throw new CliUsageError(
+        `Could not write TOML to '${flags.outputFile}': ${errorMessage(err)}`
+      );
     }
   } else if (!flags.exportFile) {
     process.stdout.write(toml);
