@@ -1,4 +1,9 @@
-import { type ConfigurableModuleId, getModule, type ModuleId } from '../config/modules.ts';
+import {
+  type ConfigurableModuleId,
+  getModule,
+  isConfigurableModule,
+  type ModuleId,
+} from '../config/modules.ts';
 import { getPalette, type PaletteColorName } from '../config/palettes.ts';
 import { CHARACTER_SYMBOLS, SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../config/promptSymbols.ts';
 import type { WizardState } from '../types.ts';
@@ -24,11 +29,8 @@ function styleExpression(name: PaletteColorName, powerline: boolean): string {
   return powerline ? `bold fg:fg bg:${name}` : `bold ${name}`;
 }
 
-function buildFormatString(modules: ModuleId[]): string {
-  return modules
-    .filter((m) => m !== 'character')
-    .map((m) => `$${m}`)
-    .join('');
+function buildFormatString(segments: ConfigurableModuleId[]): string {
+  return segments.map((m) => `$${m}`).join('');
 }
 
 /**
@@ -132,8 +134,11 @@ export function generateToml(state: WizardState): string {
   const leftModules = [...new Set(state.leftModules)];
   const rightModules = [...new Set(state.rightModules)].filter((id) => !leftModules.includes(id));
 
-  const leftFormat = buildFormatString(leftModules);
-  const rightFormat = buildFormatString(rightModules);
+  const leftSegments = leftModules.filter(isConfigurableModule);
+  const rightSegments = rightModules.filter(isConfigurableModule);
+
+  const leftFormat = buildFormatString(leftSegments);
+  const rightFormat = buildFormatString(rightSegments);
 
   // Use $fill to right-align modules on the same line, then \n$character
   // on a second line. This avoids right_format which shells pin to the
@@ -144,13 +149,6 @@ export function generateToml(state: WizardState): string {
   }
   parts.push('\\n$character');
   const format = parts.filter(Boolean).join('');
-
-  // Separators are tinted with the neighbouring segment's colour, so each side is
-  // walked in the order it renders. The character is excluded: it is on its own
-  // line and is not part of either run.
-  const isSegment = (id: ModuleId): id is ConfigurableModuleId => id !== 'character';
-  const leftSegments = leftModules.filter(isSegment);
-  const rightSegments = rightModules.filter(isSegment);
 
   // On the left the separator points at the next segment; on the right, the
   // previous one. Either way the segment at the outer end has no neighbour.

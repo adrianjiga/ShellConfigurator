@@ -75,6 +75,9 @@ export type ConfigurableModuleId =
  *  screen, so it is not a placeable module and has no MODULE_DEFS entry. */
 export type ModuleId = ConfigurableModuleId | 'character';
 
+export const isConfigurableModule = (id: ModuleId): id is ConfigurableModuleId =>
+  id !== 'character';
+
 const MODULE_DEFS = {
   username: {
     label: 'Username',
