@@ -2,7 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import { useEffect, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
-import { inkColor, PALETTES, type PaletteColorName } from '../config/palettes.ts';
+import { inkColor, PALETTES, type PaletteColorName, type PaletteId } from '../config/palettes.ts';
 import type { CharacterSymbol, WizardState } from '../types.ts';
 
 interface StyleScreenProps {
@@ -33,33 +33,25 @@ const POWERLINE_OPTIONS: { value: boolean; label: string; description: string }[
 type FocusSection = 'char' | 'color' | 'powerline';
 
 export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProps) {
-  const [charIdx, setCharIdx] = useState(() =>
-    Math.max(
-      0,
-      CHAR_OPTIONS.findIndex((o) => o.value === state.characterSymbol)
-    )
-  );
-  const [colorIdx, setColorIdx] = useState(() =>
-    Math.max(
-      0,
-      PALETTES.findIndex((o) => o.id === state.palette)
-    )
-  );
-  const [powerlineIdx, setPowerlineIdx] = useState(() =>
-    POWERLINE_OPTIONS.findIndex((o) => o.value === state.powerline)
-  );
+  const [characterSymbol, setCharacterSymbol] = useState<CharacterSymbol>(state.characterSymbol);
+  const [palette, setPalette] = useState<PaletteId>(state.palette);
+  const [powerline, setPowerline] = useState<boolean>(state.powerline);
   const [focus, setFocus] = useState<FocusSection>('char');
   const isInitialMount = useRef(true);
 
+  const charIdx = CHAR_OPTIONS.findIndex((o) => o.value === characterSymbol);
+  const colorIdx = PALETTES.findIndex((o) => o.id === palette);
+  const powerlineIdx = POWERLINE_OPTIONS.findIndex((o) => o.value === powerline);
+
   const selection = (): Partial<WizardState> => ({
-    characterSymbol: CHAR_OPTIONS[charIdx]!.value,
-    palette: PALETTES[colorIdx]!.id as WizardState['palette'],
-    powerline: POWERLINE_OPTIONS[powerlineIdx]!.value,
+    characterSymbol,
+    palette,
+    powerline,
   });
 
-  // Push live updates to parent state so preview stays in sync (skip initial mount)
-  // onUpdate is a fresh closure each render; including it would loop on every state
-  // push. `selection` closes over the same three index values.
+  // Push live updates to parent state so preview stays in sync (skip initial
+  // mount). onUpdate is a fresh closure each render; including it would loop on
+  // every state push.
   // biome-ignore lint/correctness/useExhaustiveDependencies: onUpdate is a fresh closure each render.
   useEffect(() => {
     if (isInitialMount.current) {
@@ -67,7 +59,7 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
       return;
     }
     onUpdate(selection());
-  }, [charIdx, colorIdx, powerlineIdx]);
+  }, [characterSymbol, palette, powerline]);
 
   useInput((_, key) => {
     if (key.escape) {
@@ -86,14 +78,18 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
     }
 
     if (focus === 'char') {
-      if (key.upArrow) setCharIdx((i) => Math.max(0, i - 1));
-      if (key.downArrow) setCharIdx((i) => Math.min(CHAR_OPTIONS.length - 1, i + 1));
+      if (key.upArrow) setCharacterSymbol(CHAR_OPTIONS[Math.max(0, charIdx - 1)].value);
+      if (key.downArrow)
+        setCharacterSymbol(CHAR_OPTIONS[Math.min(CHAR_OPTIONS.length - 1, charIdx + 1)].value);
     } else if (focus === 'color') {
-      if (key.upArrow) setColorIdx((i) => Math.max(0, i - 1));
-      if (key.downArrow) setColorIdx((i) => Math.min(PALETTES.length - 1, i + 1));
+      if (key.upArrow) setPalette(PALETTES[Math.max(0, colorIdx - 1)].id);
+      if (key.downArrow) setPalette(PALETTES[Math.min(PALETTES.length - 1, colorIdx + 1)].id);
     } else {
-      if (key.upArrow) setPowerlineIdx((i) => Math.max(0, i - 1));
-      if (key.downArrow) setPowerlineIdx((i) => Math.min(POWERLINE_OPTIONS.length - 1, i + 1));
+      if (key.upArrow) setPowerline(POWERLINE_OPTIONS[Math.max(0, powerlineIdx - 1)].value);
+      if (key.downArrow)
+        setPowerline(
+          POWERLINE_OPTIONS[Math.min(POWERLINE_OPTIONS.length - 1, powerlineIdx + 1)].value
+        );
     }
   });
 
@@ -162,7 +158,7 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
               </Text>
             </Box>
           ))}
-          {POWERLINE_OPTIONS[powerlineIdx]!.value && !state.hasNerdFont && (
+          {powerline && !state.hasNerdFont && (
             <Text color="yellow">
               {'  '}Powerline separators need a Nerd Font — a plain prompt will be generated
               instead.

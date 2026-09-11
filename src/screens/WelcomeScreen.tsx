@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { detectPackageManagerAsync, isStarshipInstalledAsync } from '../services/detector.ts';
@@ -16,6 +16,10 @@ interface Detection {
   pm: PackageManager;
 }
 
+type InstallChoice = 'auto' | 'manual';
+type ManualChoice = 'recheck' | 'continue';
+type Item<V> = { label: string; value: V };
+
 const PM_LABELS: Record<PackageManager, string> = {
   pacman: 'pacman (Arch)',
   apt: 'apt (Debian/Ubuntu)',
@@ -29,21 +33,21 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
   const [detection, setDetection] = useState<Detection | null>(null);
   const [showManualHelp, setShowManualHelp] = useState(false);
 
+  const runDetection = useCallback(async (shouldDrop: () => boolean = () => false) => {
+    const [pm, starship] = await Promise.all([
+      detectPackageManagerAsync(),
+      isStarshipInstalledAsync(),
+    ]);
+    if (!shouldDrop()) setDetection({ pm, starship });
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-
-    (async () => {
-      const [pm, starship] = await Promise.all([
-        detectPackageManagerAsync(),
-        isStarshipInstalledAsync(),
-      ]);
-      if (!cancelled) setDetection({ pm, starship });
-    })();
-
+    void runDetection(() => cancelled);
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [runDetection]);
 
   useInput((_, key) => {
     if (key.return && detection?.starship.installed) {
@@ -54,39 +58,43 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
     }
   });
 
-  const installItems = [
+  const installItems: Item<InstallChoice>[] = [
     { label: 'Install automatically', value: 'auto' },
     { label: "I'll install it manually", value: 'manual' },
   ];
 
-  const manualItems = [
+  const manualItems: Item<ManualChoice>[] = [
     { label: 'Re-check (I installed it)', value: 'recheck' },
     { label: 'Continue without Starship', value: 'continue' },
   ];
 
-  function handleInstallChoice(item: { value: string }) {
+  function handleInstallChoice(item: Item<InstallChoice>) {
     if (!detection) return;
-    if (item.value === 'auto') {
-      onNext({ starshipInstalled: false, packageManager: detection.pm });
-    }
-    if (item.value === 'manual') {
-      setShowManualHelp(true);
+    switch (item.value) {
+      case 'auto':
+        onNext({ starshipInstalled: false, packageManager: detection.pm });
+        break;
+      case 'manual':
+        setShowManualHelp(true);
+        break;
     }
   }
 
-  async function handleManualChoice(item: { value: string }) {
+  async function handleManualChoice(item: Item<ManualChoice>) {
     if (!detection) return;
-    if (item.value === 'recheck') {
-      setShowManualHelp(false);
-      setDetection(null);
-      const [pm, starship] = await Promise.all([
-        detectPackageManagerAsync(),
-        isStarshipInstalledAsync(),
-      ]);
-      setDetection({ pm, starship });
-    }
-    if (item.value === 'continue') {
-      onNext({ starshipInstalled: false, packageManager: detection.pm, skipStarshipInstall: true });
+    switch (item.value) {
+      case 'recheck':
+        setShowManualHelp(false);
+        setDetection(null);
+        await runDetection();
+        break;
+      case 'continue':
+        onNext({
+          starshipInstalled: false,
+          packageManager: detection.pm,
+          skipStarshipInstall: true,
+        });
+        break;
     }
   }
 
