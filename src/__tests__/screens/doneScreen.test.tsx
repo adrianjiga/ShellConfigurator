@@ -8,11 +8,17 @@ import { flush } from '../helpers/wait.ts';
 
 const mocks = vi.hoisted(() => ({
   exit: vi.fn(),
+  restoreConfigBackups: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock('ink', async (importOriginal) => {
   const ink = await importOriginal<typeof import('ink')>();
   return { ...ink, useApp: () => ({ exit: mocks.exit }) };
+});
+
+vi.mock('../../generators/shellRc.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../generators/shellRc.ts')>();
+  return { ...actual, restoreConfigBackups: mocks.restoreConfigBackups };
 });
 
 afterEach(() => {
@@ -196,5 +202,35 @@ describe('DoneScreen over real install results', () => {
     await flush();
 
     expect(mocks.exit).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores the newest backups and lists them with r', async () => {
+    mocks.restoreConfigBackups.mockReturnValue([
+      { what: 'zsh', restoredTo: '/home/u/.config/starship/zsh.toml', restoredFrom: '/home/u/.config/starship/zsh.toml.bak-x' },
+      { what: 'shared', restoredTo: '/home/u/.config/starship.toml', restoredFrom: '/home/u/.config/starship.toml.bak-x' },
+    ]);
+    const instance = render(<DoneScreen state={DEFAULT_STATE} />);
+    await flush();
+
+    instance.stdin.write('r');
+    await flush();
+
+    const frame = instance.lastFrame() ?? '';
+    expect(mocks.exit).not.toHaveBeenCalled();
+    expect(mocks.restoreConfigBackups).toHaveBeenCalledTimes(1);
+    expect(frame).toContain('Restored configs from their newest backups:');
+    expect(frame).toContain('zsh: /home/u/.config/starship/zsh.toml (from');
+    expect(frame).toContain('shared: /home/u/.config/starship.toml (from');
+  });
+
+  it('reports when there are no backups to restore with r', async () => {
+    mocks.restoreConfigBackups.mockReturnValue([]);
+    const instance = render(<DoneScreen state={DEFAULT_STATE} />);
+    await flush();
+
+    instance.stdin.write('r');
+    await flush();
+
+    expect(instance.lastFrame()).toContain('nothing to restore');
   });
 });

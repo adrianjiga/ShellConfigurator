@@ -1,8 +1,13 @@
 import { Box, Text, useApp, useInput } from 'ink';
+import { useState } from 'react';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { getShell } from '../config/shells.ts';
 import { type ReportedStatus, statusMark } from '../config/status.ts';
-import { getShellConfigPath } from '../generators/shellRc.ts';
+import {
+  getShellConfigPath,
+  restoreConfigBackups,
+  type RestoredConfig,
+} from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import { fontLabel } from '../services/installer.ts';
 import { buildTaskList, rcTaskId, TASK_IDS } from '../services/installTasks.ts';
@@ -26,6 +31,8 @@ export function DoneScreen({ state }: DoneScreenProps) {
   const { exit } = useApp();
   const fontId = fontIdToInstall(state.nerdFontToInstall);
   const fontName = fontId ? fontLabel(fontId) : null;
+  // Null until the user presses r, so a single keypress runs the restore once.
+  const [restored, setRestored] = useState<RestoredConfig[] | null>(null);
 
   const failures = state.installResults.filter((t) => t.status === 'failed');
   const hasFailures = failures.length > 0;
@@ -34,6 +41,12 @@ export function DoneScreen({ state }: DoneScreenProps) {
   useInput((char, key) => {
     if (key.return || key.escape || char.toLowerCase() === 'q') {
       exit();
+      return;
+    }
+    // One-key undo: copy the newest backups back over the configs (the same
+    // code path the CLI's --restore flag runs).
+    if (char.toLowerCase() === 'r' && restored === null) {
+      setRestored(restoreConfigBackups());
     }
   });
 
@@ -272,6 +285,28 @@ export function DoneScreen({ state }: DoneScreenProps) {
         <Text color="cyan">Enter</Text>
         <Text color="gray"> to exit.</Text>
       </Box>
+
+      <Box marginTop={1}>
+        <Text color="gray">
+          Press <Text color="cyan">r</Text> to undo with the newest backups (the{' '}
+          <Text color="cyan">--restore</Text> CLI action).
+        </Text>
+      </Box>
+
+      {restored !== null && (
+        <Box flexDirection="column" marginTop={1} gap={0}>
+          <Text color="cyan">
+            {restored.length > 0
+              ? 'Restored configs from their newest backups:'
+              : 'No ShellConfigurator backups found — nothing to restore.'}
+          </Text>
+          {restored.map((r) => (
+            <Text key={r.what} color="gray" dimColor>
+              {r.what}: {r.restoredTo} (from {r.restoredFrom})
+            </Text>
+          ))}
+        </Box>
+      )}
     </WizardLayout>
   );
 }
