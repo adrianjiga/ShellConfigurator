@@ -1,6 +1,6 @@
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { InstallingScreen } from '../../screens/InstallingScreen.tsx';
+import { InstallingScreen, setAdvanceDelayForTests } from '../../screens/InstallingScreen.tsx';
 import type { InstallTaskDeps } from '../../services/installTasks.ts';
 import type { InstallTask, WizardState } from '../../types.ts';
 import { DEFAULT_STATE } from '../../types.ts';
@@ -51,6 +51,7 @@ afterEach(() => {
 beforeEach(() => {
   mocks.buildTaskList.mockReturnValue([]);
   mocks.isUiSuspended.mockReturnValue(false);
+  setAdvanceDelayForTests(0);
 });
 
 function setup() {
@@ -139,6 +140,35 @@ describe('InstallingScreen', () => {
 
     expect(instance.lastFrame()).toContain('Cancelling');
     expect(mocks.killActiveCommand).toHaveBeenCalled();
+  });
+
+  it('cancels the run on an uppercase C', async () => {
+    mocks.buildTaskList.mockReturnValue(statusFixture());
+    mocks.runInstallTasks.mockReturnValue(new Promise<InstallTask[]>(() => {}));
+    const { instance } = setup();
+    await flush();
+
+    instance.stdin.write('C');
+    await flush();
+
+    expect(instance.lastFrame()).toContain('Cancelling');
+    expect(mocks.killActiveCommand).toHaveBeenCalled();
+  });
+
+  it('does not advance after an unmount while the run is still finishing', async () => {
+    mocks.buildTaskList.mockReturnValue(statusFixture());
+    let resolveRun: (tasks: InstallTask[]) => void = () => {};
+    mocks.runInstallTasks.mockImplementation(
+      () => new Promise<InstallTask[]>((resolve) => (resolveRun = resolve))
+    );
+    const { instance, onNext } = setup();
+    await flush();
+
+    instance.unmount();
+    resolveRun([{ id: 'starship', label: 'Install Starship', status: 'done' }]);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(onNext).not.toHaveBeenCalled();
   });
 
   it('advances with the results once every task has finished', async () => {
