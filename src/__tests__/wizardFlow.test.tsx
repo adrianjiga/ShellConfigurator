@@ -32,6 +32,7 @@ const { mockWriteConfig, mockApplyShellConfig, mockResetSharedConfig } = vi.hois
 
 vi.mock('../generators/shellRc.ts', () => ({
   writeShellConfig: mockWriteConfig,
+  writeSharedConfig: vi.fn(() => ({ path: '/tmp/starship.toml' })),
   applyShellConfig: mockApplyShellConfig,
   resetSharedShellConfig: mockResetSharedConfig,
   backupSharedConfig: vi.fn(() => null),

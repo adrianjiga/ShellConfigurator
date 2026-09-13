@@ -42,6 +42,7 @@ describe('parseCliArgs', () => {
       ['--has-nerd-font', 'hasNerdFont', true],
       ['--no-nerd-font', 'hasNerdFont', false],
       ['--skip-starship', 'skipStarship', true],
+      ['--adopt', 'adopt', true],
     ];
 
     it.each(cases)('%s sets %s to %s', (arg, key, expected) => {
@@ -92,6 +93,12 @@ describe('parseCliArgs', () => {
 
     it('--shells=zsh,bash inline value', () => {
       expect(parseCliArgs(['--shells=zsh,bash']).shells).toEqual(['zsh', 'bash']);
+    });
+
+    it('--import-url takes next token', () => {
+      expect(parseCliArgs(['--import-url', 'https://example.com/starship.toml']).importUrl).toBe(
+        'https://example.com/starship.toml'
+      );
     });
 
     it('--state=card.json inline value', () => {

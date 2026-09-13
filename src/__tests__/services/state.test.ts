@@ -115,4 +115,19 @@ describe('parseState', () => {
     const restored = parseState(JSON.stringify(card));
     expect(restored.leftModules).toContain('directory');
   });
+
+  it('round-trips the keep-existing-config decision', () => {
+    const restored = parseState(serializeState({ ...sampleState, keepExistingConfig: true }));
+    expect(restored.keepExistingConfig).toBe(true);
+  });
+
+  it('defaults keep-existing-config to false and never persists sharedConfigToml', () => {
+    const restored = parseState(
+      serializeState({ ...sampleState, keepExistingConfig: false, sharedConfigToml: '# x' })
+    );
+    expect(restored.keepExistingConfig).toBe(false);
+    expect(restored.sharedConfigToml).toBeNull();
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    expect(card.wizard).not.toHaveProperty('sharedConfigToml');
+  });
 });

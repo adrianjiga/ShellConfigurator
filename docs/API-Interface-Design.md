@@ -47,6 +47,8 @@ interface WizardState {
   nerdFontToInstall: NerdFontChoice; // {kind:'none'|'select'|'install',id}
   setDefaultShell: ShellId | null; // Shell to set via chsh
   skipStarshipInstall: boolean; // "Continue without Starship" — skips install + RC steps
+  keepExistingConfig: boolean; // Adopt mode: keep the shared starship.toml as-is
+  sharedConfigToml: string | null; // Imported shared config (--import-url); runtime-only, never serialized
   installResults: InstallTask[]; // Final task statuses from InstallingScreen
 }
 ```

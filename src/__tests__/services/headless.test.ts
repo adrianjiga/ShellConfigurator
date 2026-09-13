@@ -44,6 +44,7 @@ import type { ModuleId } from '../../config/modules.ts';
 import type { CliFlags } from '../../services/args.ts';
 import { CliUsageError } from '../../services/errors.ts';
 import { runApply, runGenerate, stateFromFlags } from '../../services/headless.ts';
+import { DEFAULT_INSTALL_TASK_DEPS } from '../../services/installTasks.ts';
 import { STATE_VERSION, serializeState } from '../../services/state.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
@@ -144,6 +145,11 @@ describe('stateFromFlags', () => {
     const state = stateFromFlags(flags({ font: 'Meslo', hasNerdFont: false }));
     expect(state.nerdFontToInstall).toEqual({ kind: 'install', id: 'Meslo' });
     expect(state.hasNerdFont).toBe(false);
+  });
+
+  it('--adopt keeps the existing shared config', () => {
+    const state = stateFromFlags(flags({ adopt: true }));
+    expect(state.keepExistingConfig).toBe(true);
   });
 
   it('applies the remaining scalar flags', () => {
@@ -261,6 +267,16 @@ describe('runGenerate', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('rejects --adopt on the generate subcommand', () => {
+    expect(() => runGenerate(flags({ adopt: true }))).toThrow(/apply subcommand/);
+  });
+
+  it('rejects --import-url on the generate subcommand', () => {
+    expect(() => runGenerate(flags({ importUrl: 'https://example.com/starship.toml' }))).toThrow(
+      /apply subcommand/
+    );
   });
 
   it('writes the generated TOML to stdout by default', () => {
@@ -448,5 +464,98 @@ describe('runApply', () => {
 
     expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('could not record this run'));
     expect(process.exitCode).toBeUndefined();
+  });
+
+  it('adopts an imported URL in dry-run instead of generating a TOML', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('[character]\nsuccess_symbol = "…"\n', { status: 200 })
+    );
+
+    await runApply(
+      flags({
+        subcommand: 'apply',
+        shells: ['zsh'],
+        importUrl: 'https://gist.example/raw',
+        dryRun: true,
+      })
+    );
+
+    const output = stdoutWrite.mock.calls
+      .map((call: [string, ...unknown[]]) => String(call[0]))
+      .join('');
+    expect(output).toContain('Config to keep');
+    expect(output).toContain('success_symbol = "…"');
+    expect(output).not.toContain('Generated starship.toml');
+    expect(mockRunInstallTasks).not.toHaveBeenCalled();
+  });
+
+  it('feeds the fetched config into the install as the shared config', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('[character]\nsuccess_symbol = "…"\n', { status: 200 })
+    );
+    const fakeTask = { id: 'config', label: 'Keep existing Starship config', status: 'done' };
+    mockRunInstallTasks.mockResolvedValue([fakeTask] as never);
+
+    await runApply(
+      flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'https://gist.example/raw' })
+    );
+
+    expect(mockRunInstallTasks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keepExistingConfig: true,
+        sharedConfigToml: '[character]\nsuccess_symbol = "…"\n',
+      }),
+      DEFAULT_INSTALL_TASK_DEPS,
+      expect.any(Function)
+    );
+  });
+
+  it('adopts the existing shared config when --adopt is passed without --import-url', async () => {
+    const fakeTask = { id: 'config', label: 'Keep existing Starship config', status: 'done' };
+    mockRunInstallTasks.mockResolvedValue([fakeTask] as never);
+
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'], adopt: true, dryRun: true }));
+
+    const output = stdoutWrite.mock.calls
+      .map((call: [string, ...unknown[]]) => String(call[0]))
+      .join('');
+    expect(output).toContain('Config to keep');
+    expect(output).not.toContain('Generated starship.toml');
+  });
+
+  it('rejects a non-http import URL', async () => {
+    await expect(
+      runApply(flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'ftp://nope' }))
+    ).rejects.toThrow(/http\(s\) URL/);
+  });
+
+  it('rejects an HTTP error when fetching an imported config', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
+
+    await expect(
+      runApply(
+        flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'https://example.com/404' })
+      )
+    ).rejects.toThrow(/HTTP 404/);
+  });
+
+  it('rejects an empty body from a URL fetch', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 200 }));
+
+    await expect(
+      runApply(
+        flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'https://example.com/empty' })
+      )
+    ).rejects.toThrow(/no config content/);
+  });
+
+  it('reports a network failure when fetching an imported config', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ENOTFOUND'));
+
+    await expect(
+      runApply(
+        flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'https://offline.test/raw' })
+      )
+    ).rejects.toThrow(/Could not fetch.*ENOTFOUND/);
   });
 });

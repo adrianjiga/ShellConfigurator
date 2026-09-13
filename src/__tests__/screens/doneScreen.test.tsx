@@ -15,6 +15,7 @@ function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
     setDefaultShell: vi.fn().mockResolvedValue(undefined),
     generateToml: vi.fn(() => 'format = "$character"'),
     writeShellConfig: vi.fn(() => ({ path: '/home/u/.config/starship/zsh.toml' })),
+    writeSharedConfig: vi.fn(() => ({ path: '/home/u/.config/starship.toml' })),
     backupSharedConfig: vi.fn(() => null),
     applyShellConfig: vi.fn(() => ({ applied: true })),
     resetSharedShellConfig: vi.fn(() => ({ applied: false })),

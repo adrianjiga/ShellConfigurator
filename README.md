@@ -5,18 +5,20 @@
 [![npm](https://img.shields.io/npm/v/shell-configurator)](https://www.npmjs.com/package/shell-configurator)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-An interactive terminal wizard for configuring [Starship](https://starship.rs/) — a cross-shell prompt. Inspired by `p10k configure`, it walks you through every choice and applies everything automatically.
+An interactive terminal wizard for configuring [Starship](https://starship.rs/), a cross-shell prompt. Inspired by `p10k configure`, it walks you through every choice and applies everything automatically.
 
 ## Features
 
-- **Live preview** — see your prompt update in real time as you make choices
-- **Cross-shell** — configure zsh, bash, fish, nushell, and PowerShell in one run
-- **Automated installation** — installs Starship, Nerd Fonts (downloads verified against their published SHA-256 digest, extraction sandboxed in a worker), and any missing shells for you
-- **12 presets** — from minimal plain-text to Tokyo Night, Gruvbox Rainbow, and Catppuccin
-- **12 colour palettes** — one behind every preset, and any of them usable with any preset
-- **Powerline prompts** — interlocking coloured blocks with Nerd Font separators
-- **Segment picker** — choose exactly which modules appear on the left and right of your prompt
-- **Style tuning** — palette, segment style, and character symbol selection
+- **Live preview**: see your prompt update in real time as you make choices
+- **Cross-shell**: configure zsh, bash, fish, nushell, and PowerShell in one run
+- **Automated installation**: installs Starship, Nerd Fonts (downloads verified against their published SHA-256 digest, extraction sandboxed in a worker), and any missing shells for you
+- **12 presets**: from minimal plain-text to Tokyo Night, Gruvbox Rainbow, and Catppuccin
+- **12 colour palettes**: one behind every preset, and any of them usable with any preset
+- **Powerline prompts**: interlocking coloured blocks with Nerd Font separators
+- **Segment picker**: choose exactly which modules appear on the left and right of your prompt
+- **Style tuning**: palette, segment style, and character symbol selection
+- **Headless mode**: the same logic is driven from a state card or flags via the `generate` and `apply` subcommands, for scripting and CI
+- **Adopt-existing-config**: keep your current `~/.config/starship.toml` (or import one from a URL) and only install fonts, Starship, missing shells, and the shell wiring
 
 ## Requirements
 
@@ -42,11 +44,41 @@ shell-configurator
 
 ```text
 shell-configurator                start the wizard
+shell-configurator generate       render a starship.toml from flags
+shell-configurator apply          run a full install headlessly from a state card
+shell-configurator apply --adopt  keep the existing shared config and wire shells to it
+shell-configurator apply --import-url <url>   fetch a shared config (gist/URL) and adopt it (implies --adopt)
 shell-configurator --help         show usage and exit
 shell-configurator --version      print the version and exit
 shell-configurator --dry-run      preview the config without installing (also -d, --no-install)
 shell-configurator --restore      restore the shared and per-shell configs from their newest backup
 ```
+
+### Adopt-existing config
+
+Brownfield users already have a `~/.config/starship.toml` they want to keep.
+Instead of generating per-shell configs that shadow it, run:
+
+```bash
+shell-configurator apply --adopt [--shells zsh,bash,fish]
+```
+
+The wizard's normal work is skipped in adopt mode: your `starship.toml` stays in
+place and untouched, and every selected shell is wired straight to it (the rc
+blocks get the `starship init` line with no `STARSHIP_CONFIG` export). Fonts,
+Starship, and missing shells are still installed.
+
+To adopt a config shared elsewhere, such as a gist:
+
+```bash
+shell-configurator apply --import-url https://gist.github.com/user/abc123/raw/starship.toml
+```
+
+The fetched TOML is written to `~/.config/starship.toml` (backing up anything
+already there) and the shells are wired to it. `--import-url` implies `--adopt`.
+
+Both flags only make sense with the `apply` subcommand, so they are rejected
+elsewhere with a usage error.
 
 ### Via curl (requires Node.js 22+)
 
@@ -55,7 +87,7 @@ curl -fsSL https://raw.githubusercontent.com/adrianjiga/ShellConfigurator/master
 ```
 
 This downloads the latest release to a per-user directory and symlinks the
-binary into `~/.local/bin` — no root required. Safe to re-run for updates.
+binary into `~/.local/bin`; no root required. Safe to re-run for updates.
 
 ### From a clone
 
@@ -87,12 +119,13 @@ All releases, including changelogs and install tarballs, are published on
 
 ## What gets installed / configured
 
-- **Starship** — via your package manager, or `curl` if none is detected
-- **Nerd Font** — downloaded from the official nerd-fonts GitHub release, its SHA-256 checked against the digest published for that release, and extracted in an isolated worker before being installed to `~/Library/Fonts/` (macOS) or `~/.local/share/fonts/` (Linux)
-- **Shells** — installed via your package manager if not already present
-- **Per-shell Starship configs** — `~/.config/starship/<shell>.toml` for every selected shell, so each shell keeps its own prompt; the shared `~/.config/starship.toml` is never overwritten
-- **Shell RC files** — each selected shell gets a `STARSHIP_CONFIG` export pointing at its own config plus the `starship init` line (appended idempotently); shells left unselected get an `unset` guard so a configured parent's prompt doesn't leak in
-- **Nushell** — `nu` has no rc file, so its setup command pins `STARSHIP_CONFIG` at startup via a `vendor/autoload` `export-env` file instead
+- **Starship**: via your package manager, or `curl` if none is detected
+- **Nerd Font**: downloaded from the official nerd-fonts GitHub release, its SHA-256 checked against the digest published for that release, and extracted in an isolated worker before being installed to `~/Library/Fonts/` (macOS) or `~/.local/share/fonts/` (Linux)
+- **Shells**: installed via your package manager if not already present
+- **Per-shell Starship configs**: `~/.config/starship/<shell>.toml` for every selected shell, so each shell keeps its own prompt; the shared `~/.config/starship.toml` is never overwritten
+- **Adopt mode**: `apply --adopt` (or `--import-url`) keeps the shared `~/.config/starship.toml` as the one prompt every shell reads; no per-shell files are written, and the rc blocks carry no `STARSHIP_CONFIG` export
+- **Shell RC files**: each selected shell gets a `STARSHIP_CONFIG` export pointing at its own config plus the `starship init` line (appended idempotently); shells left unselected get an `unset` guard so a configured parent's prompt doesn't leak in
+- **Nushell**: `nu` has no rc file, so its setup command pins `STARSHIP_CONFIG` at startup via a `vendor/autoload` `export-env` file instead
 
 ## Supported Nerd Fonts
 

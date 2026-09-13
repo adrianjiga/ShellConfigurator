@@ -140,6 +140,12 @@ style  = "bold purple"
 
 The shared `~/.config/starship.toml` is never touched, so a shell bootstrapped globally (or another tool) keeps working.
 
+**Adopt mode** (`keepExistingConfig`, set by `apply --adopt`/`--import-url`) is the exception to both of the above. No per-shell files are written at all; instead:
+
+- If `sharedConfigToml` is set (the config was fetched via `--import-url`), `writeSharedConfig(toml)` writes it to the shared path, backing up anything already there (`starship.toml.bak-<timestamp>`).
+- Otherwise the existing shared config is left untouched and merely snapshotted via `backupSharedConfig()` so a re-run can restore it.
+- Every selected shell is then wired to read that shared file.
+
 ### Shell Init Line Injection
 
 `applyShellConfig(shellId)` appends the Starship init line to the shell's RC file together with a
@@ -175,6 +181,15 @@ inheriting a `STARSHIP_CONFIG` leaked from a configured parent shell. Both funct
 other's old blocks, so "per-shell" and "shared" stay mutually exclusive no matter how many times the
 wizard is re-run.
 
+**Adopt mode** reorders the three states rather than adding a fourth surface. `applyShellConfig`
+with `pointAtSharedConfig: true` still writes the `starship init` line, but omits the
+`STARSHIP_CONFIG` export, so the shell falls back to the shared `~/.config/starship.toml` by
+Starship's own default. The block is emitted under a distinct marker,
+`# Added by ShellConfigurator (shared config)`, so a later non-adopt run can recognise and drop it;
+the per-shell `export` a non-adopt run strips the adopt block, keeping adopt and non-adopt
+mutually exclusive in both directions. In adopt mode no `STARSHIP_CONFIG` points at per-shell files,
+because none exist.
+
 ---
 
 ## Installer Task System
@@ -191,11 +206,13 @@ wizard is re-run.
 | Nerd Font   | `nerdFontToInstall.kind === 'install'`  | Download and install font                                   |
 | Shell(s)    | Selected shell not in `installedShells` | Install via package manager                                 |
 | Set default | `setDefaultShell` is set                | Run `chsh -s <path>`                                        |
-| Config      | Always                                  | Write per-shell configs (`~/.config/starship/<shell>.toml`) |
-| RC files    | Not `skipStarshipInstall`               | One task per shell: init line + `STARSHIP_CONFIG` pin       |
+| Config      | Always                                  | Write per-shell configs, or keep/adopt the shared config |
+| RC files    | Not `skipStarshipInstall`               | One task per shell: init line + `STARSHIP_CONFIG` pin    |
 
-The Config task writes _per-shell_ configs, one per selected shell; the shared
-`~/.config/starship.toml` is never touched. The RC step is one task per shell so
+The Config task writes _per-shell_ configs, one per selected shell, and the shared
+`~/.config/starship.toml` is only snapshotted. In adopt mode the Config task instead either keeps
+the existing shared config or writes the `--import-url` fetch, and the RC tasks run with
+`pointAtSharedConfig` so the shells read that shared file with no `STARSHIP_CONFIG` export. The RC step is one task per shell so
 a failure in one does not taint the others, and it is followed by a final
 best-effort pass that writes an `unset STARSHIP_CONFIG` guard into any
 Starship-running shell that wasn't selected (`resetSharedShellConfig`), so a

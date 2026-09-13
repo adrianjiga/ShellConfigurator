@@ -162,6 +162,7 @@ export function stateFromFlags(flags: CliFlags): WizardState {
   }
   if (flags.skipStarship) state = { ...state, skipStarshipInstall: true };
   if (flags.hasNerdFont !== undefined) state = { ...state, hasNerdFont: flags.hasNerdFont };
+  if (flags.adopt) state = { ...state, keepExistingConfig: true };
 
   if (flags.font) {
     state = {
@@ -182,6 +183,9 @@ export function stateFromFlags(flags: CliFlags): WizardState {
 
 /** The full `generate` subcommand: TOML (or a state card) from flags. */
 export function runGenerate(flags: CliFlags): void {
+  if (flags.adopt || flags.importUrl) {
+    throw new CliUsageError('--adopt and --import-url are only valid with the apply subcommand.');
+  }
   const state = stateFromFlags(flags);
 
   // --export and -o are siblings, not alternatives: the versioned card records
@@ -228,11 +232,44 @@ function printTasks(tasks: InstallTask[]): void {
 }
 
 /**
+ * Fetches a starship.toml from a gist/URL (`--import-url`) and folds it into
+ * adopt mode: the downloaded content becomes the shared config every wired
+ * shell reads, so the wizard never regenerates. Fails loud on a bad scheme,
+ * an HTTP error, or an empty body.
+ */
+async function fetchImportedConfig(url: string): Promise<string> {
+  if (!/^https?:\/\//.test(url)) {
+    throw new CliUsageError(`--import-url expects an http(s) URL, got '${url}'`);
+  }
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch (err) {
+    throw new CliUsageError(`Could not fetch '${url}': ${errorMessage(err)}`);
+  }
+  if (!response.ok) {
+    throw new CliUsageError(`Could not fetch '${url}': HTTP ${response.status}`);
+  }
+  const content = await response.text();
+  if (content.trim().length === 0) {
+    throw new CliUsageError(`'${url}' returned no config content`);
+  }
+  return content;
+}
+
+/**
  * Fills the runtime fields `apply` needs that `stateFromFlags` leaves defaulted:
  * which shells are installed, and which package manager installs should use.
  */
 async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
-  const state = stateFromFlags(flags);
+  let state = stateFromFlags(flags);
+  if (flags.importUrl) {
+    state = {
+      ...state,
+      keepExistingConfig: true,
+      sharedConfigToml: await fetchImportedConfig(flags.importUrl),
+    };
+  }
   const [installedShells, packageManager] = await Promise.all([
     detectInstalledShellsAsync(),
     detectPackageManagerAsync(),
@@ -268,8 +305,16 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
         `will ${state.skipStarshipInstall ? 'skip' : 'install'} Starship\n`
     );
     printTasks(tasks);
-    process.stdout.write('\nGenerated starship.toml:\n\n');
-    process.stdout.write(generateToml(state));
+    if (state.keepExistingConfig) {
+      process.stdout.write('\nConfig to keep (no per-shell TOML is generated):\n\n');
+      if (state.sharedConfigToml) {
+        process.stdout.write(state.sharedConfigToml);
+        if (!state.sharedConfigToml.endsWith('\n')) process.stdout.write('\n');
+      }
+    } else {
+      process.stdout.write('\nGenerated starship.toml:\n\n');
+      process.stdout.write(generateToml(state));
+    }
     return;
   }
 
