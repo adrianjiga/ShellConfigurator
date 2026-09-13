@@ -52,6 +52,7 @@ vi.mock('../services/installer.ts', () => ({
 }));
 
 import { App } from '../app.tsx';
+import { setAdvanceDelayForTests } from '../screens/InstallingScreen.tsx';
 import type { InstallTask } from '../types.ts';
 
 const ENTER = '\r';
@@ -69,7 +70,10 @@ afterEach(() => {
   mockInstallShell.mockReset().mockResolvedValue(undefined);
   mockInstallNerdFont.mockReset().mockResolvedValue(undefined);
 });
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  setAdvanceDelayForTests(0);
+});
 
 /** Walks the wizard to the end and returns the TOML that was written. */
 async function runWizard(
