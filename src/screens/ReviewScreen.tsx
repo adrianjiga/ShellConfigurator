@@ -2,7 +2,12 @@ import { Box, Text, useInput } from 'ink';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { getShell } from '../config/shells.ts';
-import { getShellConfigPath, starshipConfigLine } from '../generators/shellRc.ts';
+import {
+  ADOPT_MARKER,
+  getSharedConfigPath,
+  getShellConfigPath,
+  starshipConfigLine,
+} from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import { fontLabel } from '../services/installer.ts';
 import { buildTaskList, TASK_IDS } from '../services/installTasks.ts';
@@ -17,14 +22,16 @@ interface ReviewScreenProps {
 /**
  * Preview of one shell's wiring: the STARSHIP_CONFIG export plus the init line
  * that get appended to its rc file, or the manual setup command for shells
- * without an rc file (nushell, powershell).
+ * without an rc file (nushell, powershell). In adopt mode no export is added —
+ * the shell reads the shared starship.toml — so only the init line is shown.
  */
-function rcSnippet(shellId: ShellId): string[] {
+function rcSnippet(shellId: ShellId, pointAtSharedConfig: boolean): string[] {
   const shell = getShell(shellId);
   if (!shell) return [];
-  const configLine = starshipConfigLine(shellId);
+  const configLine = pointAtSharedConfig ? null : starshipConfigLine(shellId);
   if (configLine) return [configLine, shell.initLine];
-  // Manual-only shells (nushell, powershell): the note plus the command to run.
+  // Manual-only shells (nushell, powershell): the note plus the command to run,
+  // or adopt mode where the shared config needs no export.
   return shell.manualNote ? [shell.manualNote, shell.initLine] : [shell.initLine];
 }
 
@@ -66,16 +73,44 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
         </Box>
 
         <Box flexDirection="column" marginTop={1} gap={1}>
-          <Text bold>Configuration to write</Text>
+          <Text bold>{state.keepExistingConfig ? 'Config to keep' : 'Configuration to write'}</Text>
           {state.selectedShells.map((shellId) => {
             const shell = getShell(shellId);
             const label = shell?.label ?? shellId;
+            if (state.keepExistingConfig) {
+              // Adopt mode: every shell reads the shared config, so the preview
+              // shows that file and the rc wiring — never a generated per-shell TOML.
+              return (
+                <Box key={shellId} flexDirection="column" marginLeft={1}>
+                  <Text color="cyan" bold>
+                    {getSharedConfigPath()} (shared)
+                  </Text>
+                  <Box marginLeft={2}>
+                    <Text color="yellow">{ADOPT_MARKER}</Text>
+                  </Box>
+                  {rcSnippet(shellId, true).map((line) => (
+                    <Box key={line} marginLeft={2}>
+                      <Text color="yellow">{line}</Text>
+                    </Box>
+                  ))}
+                  <Box marginLeft={2}>
+                    {state.sharedConfigToml ? (
+                      <Text color="gray" dimColor>
+                        {state.sharedConfigToml}
+                      </Text>
+                    ) : (
+                      <Text color="gray">The existing config above will be kept as-is.</Text>
+                    )}
+                  </Box>
+                </Box>
+              );
+            }
             return (
               <Box key={shellId} flexDirection="column" marginLeft={1}>
                 <Text color="cyan" bold>
                   {getShellConfigPath(shellId)} ({label})
                 </Text>
-                {rcSnippet(shellId).map((line) => (
+                {rcSnippet(shellId, false).map((line) => (
                   <Box key={line} marginLeft={2}>
                     <Text color="yellow">{line}</Text>
                   </Box>

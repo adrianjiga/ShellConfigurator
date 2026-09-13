@@ -202,7 +202,7 @@ const BLOCK_MARKER = '# Added by ShellConfigurator';
  * Adopt-mode block marker: these blocks carry only the init line (no
  * STARSHIP_CONFIG export), so a later non-adopt run can recognise and drop them.
  */
-const ADOPT_MARKER = '# Added by ShellConfigurator (shared config)';
+export const ADOPT_MARKER = '# Added by ShellConfigurator (shared config)';
 
 /**
  * Drops every "Added by ShellConfigurator" block containing any needle, so a
