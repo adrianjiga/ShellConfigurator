@@ -94,10 +94,7 @@ export function runCommand(args: string[], options: { signal?: AbortSignal } = {
       cancelled = true;
       // Armed before the SIGTERM so a child that reacts instantly still finds
       // the timer set (and settle clears it) — never a dangling SIGKILL.
-      escalationTimer = setTimeout(
-        () => child.kill('SIGKILL'),
-        KILL_ESCALATION_DELAY_MS
-      );
+      escalationTimer = setTimeout(() => child.kill('SIGKILL'), KILL_ESCALATION_DELAY_MS);
       // SIGTERM first so a well-behaved child quits cleanly; a child that
       // ignores it (a hung pacman transaction hook, a sudo that already gave up
       // its terminal) must not be able to wedge cancellation forever, so it is

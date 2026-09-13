@@ -16,11 +16,7 @@ function setup(hasNerdFont = false) {
   const onNext = vi.fn();
   const onBack = vi.fn();
   const instance = render(
-    <PresetScreen
-      state={{ ...DEFAULT_STATE, hasNerdFont }}
-      onNext={onNext}
-      onBack={onBack}
-    />
+    <PresetScreen state={{ ...DEFAULT_STATE, hasNerdFont }} onNext={onNext} onBack={onBack} />
   );
   return { instance, onNext, onBack };
 }
