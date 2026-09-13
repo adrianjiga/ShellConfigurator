@@ -29,6 +29,10 @@ export interface CliFlags {
   skipStarship?: boolean;
   /** A state card to use as the base for the run (--import/--state). */
   stateFile?: string;
+  /** Adopt the existing ~/.config/starship.toml instead of regenerating it. */
+  adopt?: boolean;
+  /** Fetch a starship.toml from a URL and adopt it as the shared config. */
+  importUrl?: string;
   /** Where TOML is written (-o); missing means stdout. */
   outputFile?: string;
   /** Write the versioned state card here (add -o to keep the TOML too) (--export). */
@@ -107,6 +111,9 @@ export function parseCliArgs(argv: string[]): CliFlags {
         case '--skip-starship':
           result.skipStarship = true;
           continue;
+        case '--adopt':
+          result.adopt = true;
+          continue;
       }
     }
 
@@ -140,6 +147,9 @@ export function parseCliArgs(argv: string[]): CliFlags {
       case '--import':
       case '--state':
         result.stateFile = value;
+        break;
+      case '--import-url':
+        result.importUrl = value;
         break;
       case '--output':
         result.outputFile = value;
