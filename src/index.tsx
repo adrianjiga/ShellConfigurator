@@ -171,6 +171,14 @@ export async function runHeadlessCommand(argv: string[]): Promise<boolean> {
     await runApply(flags, argv.join(' '));
     return true;
   }
+  // No subcommand: the interactive wizard runs next — adopt/import are headless
+  // apply-options, so silently dropping them here would fake a successful adopt.
+  if (flags.adopt || flags.importUrl) {
+    throw new CliUsageError(
+      '--adopt and --import-url require the apply subcommand. ' +
+        'Usage: shell-configurator apply --adopt [--shells <id,...>]'
+    );
+  }
   return false;
 }
 

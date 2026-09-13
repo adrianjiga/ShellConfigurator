@@ -366,6 +366,13 @@ describe('index headless routing', () => {
     expect(await runHeadlessCommand(['--bogus'])).toBe(false);
   });
 
+  it('rejects adopt flags that lack the apply subcommand instead of dropping them', async () => {
+    await expect(runHeadlessCommand(['--adopt'])).rejects.toThrow(/require the apply subcommand/);
+    await expect(
+      runHeadlessCommand(['--import-url', 'https://example.com/starship.toml'])
+    ).rejects.toThrow(/require the apply subcommand/);
+  });
+
   it('surfaces a bogus flag as a CliUsageError', async () => {
     await expect(runHeadlessCommand(['apply', '--preset', 'nope'])).rejects.toThrow(CliUsageError);
     await expect(runHeadlessCommand(['generate', '--palette', 'nope'])).rejects.toThrow(/palette/);
