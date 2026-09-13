@@ -240,9 +240,11 @@ describe('applyShellConfig', () => {
   it('adopt mode repairs an rc left pointing at a per-shell config', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() =>
-      ['# Added by ShellConfigurator', `export STARSHIP_CONFIG="${expectedConfigPath}"`, 'eval "$(starship init zsh)"'].join(
-        '\n'
-      )
+      [
+        '# Added by ShellConfigurator',
+        `export STARSHIP_CONFIG="${expectedConfigPath}"`,
+        'eval "$(starship init zsh)"',
+      ].join('\n')
     );
 
     const result = applyShellConfig('zsh', { pointAtSharedConfig: true });
