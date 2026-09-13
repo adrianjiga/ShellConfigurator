@@ -18,6 +18,7 @@ import {
   CommandCancelledError,
   commandExists,
   commandPath,
+  KILL_ESCALATION_DELAY_MS,
   killActiveCommand,
   runCommand,
 } from '../../services/exec.ts';
@@ -203,6 +204,61 @@ describe('runCommand', () => {
 
     await expect(promise).rejects.toBeInstanceOf(CommandCancelledError);
     expect(isUiSuspended()).toBe(false);
+  });
+
+  it('escalates to SIGKILL when a cancelled child ignores SIGTERM', async () => {
+    vi.useFakeTimers();
+    try {
+      const child = new EventEmitter() as EventEmitter & { kill: ReturnType<typeof vi.fn> };
+      // SIGTERM-immune: the child swallows SIGTERM and only exits on SIGKILL,
+      // which is the hang the escalation exists to break.
+      child.kill = vi.fn((signal: string) => {
+        if (signal === 'SIGKILL') child.emit('exit', null, 'SIGKILL');
+      });
+      mockSpawn.mockImplementation(() => child);
+
+      const controller = new AbortController();
+      const promise = runCommand(['pacman', '-Sy'], { signal: controller.signal });
+      // Attach the handler before the escalation can fire, so the rejection is
+      // never left dangling while the fake timers advance.
+      const result = promise.catch((err) => err);
+
+      controller.abort();
+      // SIGTERM alone must not settle anything yet.
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(child.kill).not.toHaveBeenCalledWith('SIGKILL');
+
+      await vi.advanceTimersByTimeAsync(KILL_ESCALATION_DELAY_MS);
+
+      expect(await result).toBeInstanceOf(CommandCancelledError);
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+      expect(isUiSuspended()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not arm an escalation when the child reacts to SIGTERM', async () => {
+    vi.useFakeTimers();
+    try {
+      spawnOutcome({ hang: true });
+      const controller = new AbortController();
+      const promise = runCommand(['sleep', '100'], { signal: controller.signal });
+      const result = promise.then(
+        () => undefined,
+        () => undefined
+      );
+
+      controller.abort();
+      expect(await result).toBeUndefined();
+
+      // The settle path cleared the escalation timer, so the SIGKILL fallback
+      // never fires even after the grace period elapses.
+      await vi.advanceTimersByTimeAsync(KILL_ESCALATION_DELAY_MS * 2);
+      expect(isUiSuspended()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('killActiveCommand terminates the running child', async () => {
