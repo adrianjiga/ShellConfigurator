@@ -1,4 +1,4 @@
-import type { ModuleId } from '../config/modules.ts';
+import { CORE_MODULES, type ModuleId } from '../config/modules.ts';
 import type { PaletteId } from '../config/palettes.ts';
 import {
   type CharacterSymbol,
@@ -44,7 +44,7 @@ export interface StateCard {
   };
 }
 
-const CORE_MODULES: ModuleId[] = ['directory', 'git_branch', 'git_status', 'character'];
+const CORE_MODULES_DEFAULT = [...CORE_MODULES];
 
 /** The runtime fields a parsed card starts with; detection fills them per run. */
 function runtimeDefaults(): Pick<
@@ -154,7 +154,7 @@ export function parseState(json: string): WizardState {
     leftModules:
       isStringArray(wizard.leftModules) && wizard.leftModules.length > 0
         ? (wizard.leftModules as ModuleId[])
-        : CORE_MODULES,
+        : CORE_MODULES_DEFAULT,
     rightModules: isStringArray(wizard.rightModules) ? (wizard.rightModules as ModuleId[]) : [],
     characterSymbol:
       wizard.characterSymbol === 'lambda' || wizard.characterSymbol === 'dollar'
