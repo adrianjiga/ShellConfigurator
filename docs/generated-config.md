@@ -6,6 +6,10 @@ The wizard ends by writing one `starship.toml` per selected shell. Every file is
 produced by the same pure function, `generateToml(state)`, so this document is a
 reference for what that output looks like and why each part is there.
 
+> **Adopt mode** (`apply --adopt` / `--import-url`) never calls `generateToml`: the shared
+> `~/.config/starship.toml` is kept in place or replaced with the fetched config, and the shells
+> are wired to read it. The output below is the non-adopt per-shell default.
+
 ## Shape of the file
 
 `generateToml` emits, in order:
