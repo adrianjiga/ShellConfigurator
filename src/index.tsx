@@ -4,8 +4,8 @@ import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { restoreConfigBackups } from './generators/shellRc.ts';
-import { parseCliArgs } from './services/args.ts';
 import type { CliFlags } from './services/args.ts';
+import { parseCliArgs } from './services/args.ts';
 import { CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate } from './services/headless.ts';
 import { appendHistory, writeSnapshot } from './services/history.ts';
@@ -151,6 +151,13 @@ export function handleCliArgs(): boolean {
   return false;
 }
 
+/** Prints parser warnings (unknown/malformed flags) to stderr. */
+export function emitFlagWarnings(flags: CliFlags): void {
+  for (const warning of flags.warnings) {
+    process.stderr.write(`shell-configurator: warning: ${warning}\n`);
+  }
+}
+
 /**
  * Runs a headless subcommand (`generate` or `apply`) to completion, returning
  * true when the flags targeted one so the Ink wizard is skipped entirely.
@@ -188,6 +195,7 @@ async function main(): Promise<void> {
   const flags: CliFlags = parseCliArgs(args);
 
   if (handleCliArgs()) return;
+  emitFlagWarnings(flags);
   if (await runHeadlessCommand(flags, args.join(' '))) return;
 
   const app = render(

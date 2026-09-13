@@ -56,6 +56,7 @@ vi.mock('../services/history.ts', async () => {
 import { render } from 'ink';
 import {
   applyInstallOutcomeExitCode,
+  emitFlagWarnings,
   handleCliArgs,
   recordInstallOutcome,
   reportFatal,
@@ -172,6 +173,33 @@ describe('index restore flag', () => {
     handleCliArgs();
 
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Nothing to restore'));
+  });
+});
+
+describe('index flag warnings', () => {
+  let stderrWrite: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+  });
+
+  afterEach(() => {
+    stderrWrite.mockRestore();
+  });
+
+  it('prints each parser warning to stderr', () => {
+    emitFlagWarnings(parseCliArgs(['generate', '--bogus', '--preset']));
+
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining("Unknown flag '--bogus'"));
+    expect(stderrWrite).toHaveBeenCalledWith(
+      expect.stringContaining("Flag '--preset' needs a value")
+    );
+  });
+
+  it('stays silent for a clean parse', () => {
+    emitFlagWarnings(parseCliArgs(['generate', '--preset', 'pure']));
+
+    expect(stderrWrite).not.toHaveBeenCalled();
   });
 });
 
