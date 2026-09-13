@@ -1,4 +1,4 @@
-import type { ModuleId } from './modules.ts';
+import { CORE_MODULES, type ModuleId } from './modules.ts';
 import type { PaletteId } from './palettes.ts';
 
 export interface PresetDef {
@@ -17,16 +17,13 @@ export interface PresetDef {
   powerline: boolean;
 }
 
-/** The directory/git/character core nearly every preset starts from. */
-const CORE: ModuleId[] = ['directory', 'git_branch', 'git_status', 'character'];
-
 export const PRESETS: PresetDef[] = [
   {
     id: 'custom',
     label: 'Custom (start from scratch)',
     description: 'Choose each option manually',
     requiresNerdFont: false,
-    leftModules: CORE,
+    leftModules: CORE_MODULES,
     rightModules: [],
     palette: 'default',
     powerline: false,
@@ -46,7 +43,7 @@ export const PRESETS: PresetDef[] = [
     label: 'No Nerd Font',
     description: 'Pure Unicode/text symbols in base ANSI colours',
     requiresNerdFont: false,
-    leftModules: CORE,
+    leftModules: CORE_MODULES,
     rightModules: ['cmd_duration'],
     palette: 'terminal',
     powerline: false,
@@ -56,7 +53,7 @@ export const PRESETS: PresetDef[] = [
     label: 'Plain Text',
     description: 'ASCII-only in white and grey, maximum compatibility',
     requiresNerdFont: false,
-    leftModules: CORE,
+    leftModules: CORE_MODULES,
     rightModules: [],
     palette: 'mono',
     powerline: false,
@@ -96,7 +93,7 @@ export const PRESETS: PresetDef[] = [
     label: 'Tokyo Night',
     description: 'Dark theme with blue and purple tones',
     requiresNerdFont: true,
-    leftModules: CORE,
+    leftModules: CORE_MODULES,
     rightModules: ['nodejs', 'python', 'cmd_duration'],
     palette: 'tokyo-night',
     powerline: false,
@@ -116,7 +113,7 @@ export const PRESETS: PresetDef[] = [
     label: 'Jetpack',
     description: 'Pseudo-minimalist teals, inspired by Geometry/Spaceship',
     requiresNerdFont: true,
-    leftModules: CORE,
+    leftModules: CORE_MODULES,
     rightModules: ['cmd_duration', 'time'],
     palette: 'jetpack',
     powerline: false,
@@ -136,7 +133,7 @@ export const PRESETS: PresetDef[] = [
     label: 'No Runtime Versions',
     description: 'Cool greys, hides language versions (ideal for containers)',
     requiresNerdFont: false,
-    leftModules: CORE,
+    leftModules: CORE_MODULES,
     rightModules: [],
     palette: 'slate',
     powerline: false,

@@ -68,6 +68,12 @@ export class CommandCancelledError extends Error {
  * and gives no way to cancel. Because the child writes to the same TTY Ink draws
  * on, the UI is suspended for the child's lifetime so the two cannot interleave.
  */
+/**
+ * How long a cancelled command is given to stop on SIGTERM before the
+ * cancellation is escalated to SIGKILL, which no process can ignore.
+ */
+export const KILL_ESCALATION_DELAY_MS = 5000;
+
 export function runCommand(args: string[], options: { signal?: AbortSignal } = {}): Promise<void> {
   const [cmd, ...rest] = args;
   if (!cmd) return Promise.reject(new Error('Empty command'));
@@ -83,14 +89,23 @@ export function runCommand(args: string[], options: { signal?: AbortSignal } = {
     activeChild = child;
 
     let cancelled = false;
+    let escalationTimer: NodeJS.Timeout | undefined;
     const onAbort = () => {
       cancelled = true;
+      // Armed before the SIGTERM so a child that reacts instantly still finds
+      // the timer set (and settle clears it) — never a dangling SIGKILL.
+      escalationTimer = setTimeout(() => child.kill('SIGKILL'), KILL_ESCALATION_DELAY_MS);
+      // SIGTERM first so a well-behaved child quits cleanly; a child that
+      // ignores it (a hung pacman transaction hook, a sudo that already gave up
+      // its terminal) must not be able to wedge cancellation forever, so it is
+      // escalated to SIGKILL after the grace period above.
       child.kill('SIGTERM');
     };
     options.signal?.addEventListener('abort', onAbort, { once: true });
 
     const settle = (fn: () => void) => {
       options.signal?.removeEventListener('abort', onAbort);
+      if (escalationTimer) clearTimeout(escalationTimer);
       if (activeChild === child) activeChild = null;
       resumeUi();
       fn();

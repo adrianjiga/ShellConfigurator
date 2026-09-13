@@ -98,6 +98,28 @@ npm run dev
 
 The wizard exits non-zero if any install step fails, so it can be used in a script.
 
+Exit codes: `0` on success, `1` when an install step failed or a fatal error
+occurred, `2` for a usage error (a bad flag or an unreadable state card).
+
+### Headless mode, state cards and run data
+
+`generate` and `apply` run the same pure logic as the wizard. `generate` prints
+the TOML to stdout (`-o <file>` to capture it); add `--export <file>` to also
+write the versioned state card. A card captures only your choices, so
+`apply --state /path/to/card.json` reproduces the same prompt on any machine:
+
+```bash
+shell-configurator generate --preset tokyo-night --palette gruvbox -o starship.toml --export my-card.json
+shell-configurator apply --state my-card.json
+```
+
+Every run appends one record to `history.jsonl` (under the XDG state dir) and
+snapshots the card it applied, so `--restore` and rollback have something to
+work from. Nerd Font archives are cached under the XDG cache dir, verified
+against their pinned SHA-256 before offline reuse. The state-card schema, the
+run ledger, the font cache, `--restore`, and the full headless flag surface are
+documented in [docs/API-Interface-Design.md](docs/API-Interface-Design.md).
+
 All releases, including changelogs and install tarballs, are published on
 [GitHub Releases](https://github.com/adrianjiga/ShellConfigurator/releases).
 

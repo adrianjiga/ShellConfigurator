@@ -101,10 +101,10 @@ The same predicate runs in reverse for `getPrevStep()` — if the user never int
 
 ### Progress Bar
 
-`WizardLayout` renders a 10-step progress indicator:
+`WizardLayout` renders an 11-step progress indicator:
 
 ```
-● ● ◉ ○ ○ ○ ○ ○ ○ ○  4. Preset
+● ● ◉ ○ ○ ○ ○ ○ ○ ○ ○  4. Preset
 ```
 
 - `●` green = completed
@@ -124,11 +124,10 @@ All wizard state lives in a single `WizardState` object held by `App` via `useSt
 ```typescript
 interface WizardState {
   step: WizardStep;
-  starshipInstalled: boolean;
   hasNerdFont: boolean;
   preset: string | null;
-  leftModules: string[];
-  rightModules: string[];
+  leftModules: ModuleId[];
+  rightModules: ModuleId[];
   characterSymbol: CharacterSymbol;
   palette: PaletteId;
   powerline: boolean;
@@ -140,6 +139,7 @@ interface WizardState {
   skipStarshipInstall: boolean; // "Continue without Starship" — skip install + RC steps
   keepExistingConfig: boolean; // Adopt mode — keep the shared starship.toml (no per-shell writes)
   sharedConfigToml: string | null; // Shared config fetched via --import-url (runtime-only, never serialized)
+  dryRun: boolean; // When true no install or config-write happens — the wizard only previews
   installResults: InstallTask[]; // Final task statuses from InstallingScreen
 }
 ```
@@ -162,7 +162,7 @@ App (owns state)
 
 | Screen                 | Fields Updated                                                            |
 | ---------------------- | ------------------------------------------------------------------------- |
-| WelcomeScreen          | `starshipInstalled`, `packageManager`, `skipStarshipInstall`              |
+| WelcomeScreen          | `packageManager`, `skipStarshipInstall`                                 |
 | FontCheckScreen        | `hasNerdFont`, `nerdFontToInstall`                                        |
 | FontSelectScreen       | `nerdFontToInstall`, `hasNerdFont`                                        |
 | PresetScreen           | `preset`, `leftModules`, `rightModules`, `palette`, `powerline`           |

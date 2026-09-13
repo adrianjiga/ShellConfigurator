@@ -1,4 +1,4 @@
-import type { ModuleId } from './config/modules.ts';
+import { CORE_MODULES, type ModuleId } from './config/modules.ts';
 import type { PaletteId } from './config/palettes.ts';
 
 export type ShellId = 'zsh' | 'bash' | 'fish' | 'nushell' | 'powershell';
@@ -117,7 +117,7 @@ export const DEFAULT_STATE: WizardState = {
   step: 'welcome',
   hasNerdFont: false,
   preset: null,
-  leftModules: ['directory', 'git_branch', 'git_status', 'character'],
+  leftModules: [...CORE_MODULES],
   rightModules: [],
   characterSymbol: 'arrow',
   palette: 'default',

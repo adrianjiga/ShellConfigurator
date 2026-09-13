@@ -3,8 +3,22 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DoneScreen } from '../../screens/DoneScreen.tsx';
 import { type InstallTaskDeps, runInstallTasks } from '../../services/installTasks.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
+import { pressEsc } from '../helpers/ink.ts';
+import { flush } from '../helpers/wait.ts';
 
-afterEach(cleanup);
+const mocks = vi.hoisted(() => ({
+  exit: vi.fn(),
+}));
+
+vi.mock('ink', async (importOriginal) => {
+  const ink = await importOriginal<typeof import('ink')>();
+  return { ...ink, useApp: () => ({ exit: mocks.exit }) };
+});
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
   return {
@@ -153,5 +167,34 @@ describe('DoneScreen over real install results', () => {
 
     expect(frame).toContain('All done!');
     expect(rowFor(frame, 'Zsh')).toContain('init line added');
+  });
+
+  it('exits on Enter', async () => {
+    const instance = render(<DoneScreen state={DEFAULT_STATE} />);
+    await flush();
+
+    instance.stdin.write('\r');
+    await flush();
+
+    expect(mocks.exit).toHaveBeenCalledTimes(1);
+  });
+
+  it('exits on Escape', async () => {
+    const instance = render(<DoneScreen state={DEFAULT_STATE} />);
+    await flush();
+
+    await pressEsc(instance.stdin);
+
+    expect(mocks.exit).toHaveBeenCalledTimes(1);
+  });
+
+  it('exits on q', async () => {
+    const instance = render(<DoneScreen state={DEFAULT_STATE} />);
+    await flush();
+
+    instance.stdin.write('q');
+    await flush();
+
+    expect(mocks.exit).toHaveBeenCalledTimes(1);
   });
 });
