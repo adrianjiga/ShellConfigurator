@@ -49,6 +49,7 @@ vi.mock('../services/installer.ts', () => ({
   getMissingStarshipPathDir: vi.fn(() => null),
   getNerdFontsDir: () => '/tmp/fonts',
   fontLabel: (id: string) => id,
+  shellInstallSupported: (_shellId: string, pm: string) => pm !== 'script',
 }));
 
 import { App } from '../app.tsx';

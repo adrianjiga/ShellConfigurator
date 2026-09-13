@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runInstallTasks } from '../../services/installTasks.ts';
+import { buildTaskList, runInstallTasks } from '../../services/installTasks.ts';
 import { DEFAULT_STATE, NO_NERD_FONT, type WizardState } from '../../types.ts';
 import { fakeDeps } from '../helpers/installTasks.ts';
 
@@ -457,5 +457,34 @@ describe('runInstallTasks', () => {
     );
 
     expect(deps.resetSharedShellConfig).not.toHaveBeenCalled();
+  });
+});
+
+describe('buildTaskList', () => {
+  it('adds an install task with a plain label when the package manager has the shell', () => {
+    const tasks = buildTaskList(
+      state({ packageManager: 'apt', selectedShells: ['zsh'], installedShells: [] })
+    );
+
+    const shellTask = tasks.find((t) => t.id === 'shell_zsh');
+    expect(shellTask?.label).toBe('Install zsh');
+  });
+
+  it('tags a shell the package manager cannot install as manual', () => {
+    const tasks = buildTaskList(
+      state({ packageManager: 'apt', selectedShells: ['powershell'], installedShells: [] })
+    );
+
+    const shellTask = tasks.find((t) => t.id === 'shell_powershell');
+    expect(shellTask?.label).toBe('Install powershell (manual)');
+  });
+
+  it('tags every missing shell as manual under the script fallback', () => {
+    const tasks = buildTaskList(
+      state({ packageManager: 'script', selectedShells: ['zsh', 'bash'], installedShells: [] })
+    );
+
+    expect(tasks.find((t) => t.id === 'shell_zsh')?.label).toBe('Install zsh (manual)');
+    expect(tasks.find((t) => t.id === 'shell_bash')?.label).toBe('Install bash (manual)');
   });
 });

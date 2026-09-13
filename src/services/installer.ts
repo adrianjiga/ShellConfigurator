@@ -118,6 +118,18 @@ export function getMissingStarshipPathDir(): string | null {
     : null;
 }
 
+/**
+ * Whether the current package manager can auto-install a given shell. False for
+ * the script fallback (there is no package concept to run an install through)
+ * and for shell/manager combos without a package entry (e.g. powershell on
+ * apt/dnf/apk). The review/install plan uses this to tag such shells as manual
+ * so the user knows before the run that auto-install will fail.
+ */
+export function shellInstallSupported(shellId: ShellId, pm: PackageManager): boolean {
+  if (pm === 'script') return false;
+  return SHELL_PACKAGES[shellId][pm] != null;
+}
+
 export async function installShell(shellId: ShellId, pm: PackageManager): Promise<void> {
   if (pm === 'script') {
     throw new Error(

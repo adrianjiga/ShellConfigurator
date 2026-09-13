@@ -26,6 +26,7 @@ import {
   installShell,
   installStarship,
   setDefaultShell,
+  shellInstallSupported,
 } from './installer.ts';
 
 export interface InstallTaskDeps {
@@ -99,10 +100,16 @@ export function buildTaskList(state: WizardState): InstallTask[] {
     tasks.push({ id: TASK_IDS.font, label: `Nerd Font (${fontLabel(fontId)})`, status: 'pending' });
   }
 
-  // Shells that need installing
+  // Shells that need installing. A shell the detected package manager has no
+  // package for gets tagged "(manual)" so the plan is honest up front.
   for (const shellId of state.selectedShells) {
     if (!state.installedShells.includes(shellId)) {
-      tasks.push({ id: shellTaskId(shellId), label: `Install ${shellId}`, status: 'pending' });
+      const supported = shellInstallSupported(shellId, state.packageManager);
+      tasks.push({
+        id: shellTaskId(shellId),
+        label: `Install ${shellId}${supported ? '' : ' (manual)'}`,
+        status: 'pending',
+      });
     }
   }
 

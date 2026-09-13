@@ -57,6 +57,7 @@ import {
   installNerdFont,
   installShell,
   installStarship,
+  shellInstallSupported,
   SCRIPT_INSTALL_BIN_DIR,
   setDefaultShell,
 } from '../../services/installer.ts';
@@ -585,5 +586,27 @@ describe('getMissingStarshipPathDir', () => {
     mockExistsSync.mockReturnValue(false);
 
     expect(getMissingStarshipPathDir()).toBeNull();
+  });
+});
+
+describe('shellInstallSupported', () => {
+  it.each(['bash', 'zsh', 'fish', 'nushell'] as const)(
+    'can install %s via a real package manager',
+    (shellId) => {
+      expect(shellInstallSupported(shellId, 'apt')).toBe(true);
+    }
+  );
+
+  it('cannot install powershell via managers with no package for it', () => {
+    expect(shellInstallSupported('powershell', 'apt')).toBe(false);
+    expect(shellInstallSupported('powershell', 'dnf')).toBe(false);
+    expect(shellInstallSupported('powershell', 'apk')).toBe(false);
+    expect(shellInstallSupported('powershell', 'pacman')).toBe(true);
+    expect(shellInstallSupported('powershell', 'brew')).toBe(true);
+  });
+
+  it('cannot auto-install any shell under the script fallback', () => {
+    expect(shellInstallSupported('zsh', 'script')).toBe(false);
+    expect(shellInstallSupported('bash', 'script')).toBe(false);
   });
 });
