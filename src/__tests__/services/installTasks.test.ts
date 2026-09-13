@@ -283,11 +283,7 @@ describe('runInstallTasks', () => {
 
   it('still applies rc files after a successful config write', async () => {
     const deps = fakeDeps();
-    const results = await runInstallTasks(
-      state({ selectedShells: ['zsh'] }),
-      deps,
-      vi.fn()
-    );
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
 
     expect(deps.applyShellConfig).toHaveBeenCalledWith('zsh', expect.anything());
     expect(results.find((t) => t.id === 'rc_zsh')?.status).toBe('done');
