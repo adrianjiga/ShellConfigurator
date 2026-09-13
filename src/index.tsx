@@ -5,6 +5,7 @@ import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { restoreConfigBackups } from './generators/shellRc.ts';
 import { parseCliArgs } from './services/args.ts';
+import type { CliFlags } from './services/args.ts';
 import { CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate } from './services/headless.ts';
 import { appendHistory, writeSnapshot } from './services/history.ts';
@@ -150,25 +151,19 @@ export function handleCliArgs(): boolean {
   return false;
 }
 
-/** Extract the --dry-run / --no-install flag from argv. */
-export function hasDryRunFlag(): boolean {
-  const args = process.argv.slice(2);
-  return args.includes('--dry-run') || args.includes('--no-install') || args.includes('-d');
-}
-
 /**
  * Runs a headless subcommand (`generate` or `apply`) to completion, returning
- * true when argv targeted one so the Ink wizard is skipped entirely. Errors
- * propagate for the caller's fatal handler — headless runs never render.
+ * true when the flags targeted one so the Ink wizard is skipped entirely.
+ * Errors propagate for the caller's fatal handler — headless runs never render.
+ * `command` is the original invocation line, recorded for reproducibility.
  */
-export async function runHeadlessCommand(argv: string[]): Promise<boolean> {
-  const flags = parseCliArgs(argv);
+export async function runHeadlessCommand(flags: CliFlags, command: string): Promise<boolean> {
   if (flags.subcommand === 'generate') {
     runGenerate(flags);
     return true;
   }
   if (flags.subcommand === 'apply') {
-    await runApply(flags, argv.join(' '));
+    await runApply(flags, command);
     return true;
   }
   // No subcommand: the interactive wizard runs next — adopt/import are headless
@@ -187,13 +182,17 @@ process.on('unhandledRejection', (err) => reportFatal('ShellConfigurator crashed
 
 async function main(): Promise<void> {
   // Global flags first (--version/--help/--restore), then headless subcommands;
-  // whichever consumes the args keeps the process from starting Ink.
+  // whichever consumes the args keeps the process from starting Ink. The flags
+  // are parsed once and shared by the router and the wizard's dry-run choice.
+  const args = process.argv.slice(2);
+  const flags: CliFlags = parseCliArgs(args);
+
   if (handleCliArgs()) return;
-  if (await runHeadlessCommand(process.argv.slice(2))) return;
+  if (await runHeadlessCommand(flags, args.join(' '))) return;
 
   const app = render(
     <ErrorBoundary onError={(err) => reportFatal('ShellConfigurator hit a render error', err)}>
-      <App dryRun={hasDryRunFlag()} onInstallOutcome={recordInstallOutcome} />
+      <App dryRun={flags.dryRun ?? false} onInstallOutcome={recordInstallOutcome} />
     </ErrorBoundary>
   );
 

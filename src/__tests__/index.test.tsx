@@ -57,12 +57,12 @@ import { render } from 'ink';
 import {
   applyInstallOutcomeExitCode,
   handleCliArgs,
-  hasDryRunFlag,
   recordInstallOutcome,
   reportFatal,
   restoreTerminal,
   runHeadlessCommand,
 } from '../index.tsx';
+import { parseCliArgs } from '../services/args.ts';
 import { CliUsageError } from '../services/errors.ts';
 import { DEFAULT_STATE, type InstallTask, type WizardState } from '../types.ts';
 
@@ -172,39 +172,6 @@ describe('index restore flag', () => {
     handleCliArgs();
 
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Nothing to restore'));
-  });
-});
-
-describe('hasDryRunFlag', () => {
-  const originalArgv = process.argv.slice();
-
-  afterEach(() => {
-    process.argv = originalArgv;
-  });
-
-  it('returns true when --dry-run is present', () => {
-    process.argv = ['node', 'index.tsx', '--dry-run'];
-    expect(hasDryRunFlag()).toBe(true);
-  });
-
-  it('returns true when --no-install is present', () => {
-    process.argv = ['node', 'index.tsx', '--no-install'];
-    expect(hasDryRunFlag()).toBe(true);
-  });
-
-  it('returns true when -d is present', () => {
-    process.argv = ['node', 'index.tsx', '-d'];
-    expect(hasDryRunFlag()).toBe(true);
-  });
-
-  it('returns false when neither flag is present', () => {
-    process.argv = ['node', 'index.tsx'];
-    expect(hasDryRunFlag()).toBe(false);
-  });
-
-  it('returns false when --version is passed', () => {
-    process.argv = ['node', 'index.tsx', '--version'];
-    expect(hasDryRunFlag()).toBe(false);
   });
 });
 
@@ -344,6 +311,11 @@ describe('index wizard history recording', () => {
 describe('index headless routing', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
 
+  /** Routes argv the same way main() does: parse once, then dispatch. */
+  function route(argv: string[]): ReturnType<typeof runHeadlessCommand> {
+    return runHeadlessCommand(parseCliArgs(argv), argv.join(' '));
+  }
+
   beforeEach(() => {
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
     mockAppendHistory.mockReset();
@@ -355,42 +327,42 @@ describe('index headless routing', () => {
   });
 
   it('dispatches generate and prints the TOML', async () => {
-    const routed = await runHeadlessCommand(['generate', '--preset', 'pure-prompt']);
+    const routed = await route(['generate', '--preset', 'pure-prompt']);
 
     expect(routed).toBe(true);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('format'));
   });
 
   it('returns false for a plain global flag, leaving it for the wizard', async () => {
-    expect(await runHeadlessCommand(['--help'])).toBe(false);
-    expect(await runHeadlessCommand(['--bogus'])).toBe(false);
+    expect(await route(['--help'])).toBe(false);
+    expect(await route(['--bogus'])).toBe(false);
   });
 
   it('rejects adopt flags that lack the apply subcommand instead of dropping them', async () => {
-    await expect(runHeadlessCommand(['--adopt'])).rejects.toThrow(/require the apply subcommand/);
-    await expect(
-      runHeadlessCommand(['--import-url', 'https://example.com/starship.toml'])
-    ).rejects.toThrow(/require the apply subcommand/);
+    await expect(route(['--adopt'])).rejects.toThrow(/require the apply subcommand/);
+    await expect(route(['--import-url', 'https://example.com/starship.toml'])).rejects.toThrow(
+      /require the apply subcommand/
+    );
   });
 
   it('surfaces a bogus flag as a CliUsageError', async () => {
-    await expect(runHeadlessCommand(['apply', '--preset', 'nope'])).rejects.toThrow(CliUsageError);
-    await expect(runHeadlessCommand(['generate', '--palette', 'nope'])).rejects.toThrow(/palette/);
+    await expect(route(['apply', '--preset', 'nope'])).rejects.toThrow(CliUsageError);
+    await expect(route(['generate', '--palette', 'nope'])).rejects.toThrow(/palette/);
   });
 
   it('surfaces a missing state card as a CliUsageError', async () => {
-    await expect(runHeadlessCommand(['generate', '--state', '/no/such/card.json'])).rejects.toThrow(
+    await expect(route(['generate', '--state', '/no/such/card.json'])).rejects.toThrow(
       /Could not read state card/
     );
   });
 
   it('refuses a bare apply before it ever installs', async () => {
-    await expect(runHeadlessCommand(['apply'])).rejects.toThrow(/at least one shell/);
+    await expect(route(['apply'])).rejects.toThrow(/at least one shell/);
     expect(mockAppendHistory).not.toHaveBeenCalled();
   });
 
   it('runs an apply dry-run through the router and prints the plan', async () => {
-    const routed = await runHeadlessCommand(['apply', '--dry-run', '--shells', 'zsh']);
+    const routed = await route(['apply', '--dry-run', '--shells', 'zsh']);
 
     expect(routed).toBe(true);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('dry run'));
@@ -399,7 +371,7 @@ describe('index headless routing', () => {
   });
 
   it('accepts equals-syntax through the router', async () => {
-    const routed = await runHeadlessCommand(['generate', '--preset=pure-prompt']);
+    const routed = await route(['generate', '--preset=pure-prompt']);
 
     expect(routed).toBe(true);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('format'));
