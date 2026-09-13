@@ -33,11 +33,10 @@ The single source of truth for the entire wizard:
 ```typescript
 interface WizardState {
   step: WizardStep; // Current wizard step
-  starshipInstalled: boolean; // Starship detected on system
   hasNerdFont: boolean; // User has or is installing a Nerd Font
   preset: string | null; // Selected preset ID
-  leftModules: string[]; // Module IDs for left prompt
-  rightModules: string[]; // Module IDs for right prompt
+  leftModules: ModuleId[]; // Module IDs for left prompt
+  rightModules: ModuleId[]; // Module IDs for right prompt
   characterSymbol: CharacterSymbol;
   palette: PaletteId; // Colour theme; one per preset, changeable on StyleScreen
   powerline: boolean; // Draw segments as interlocking coloured blocks
@@ -49,6 +48,7 @@ interface WizardState {
   skipStarshipInstall: boolean; // "Continue without Starship" — skips install + RC steps
   keepExistingConfig: boolean; // Adopt mode: keep the shared starship.toml as-is
   sharedConfigToml: string | null; // Imported shared config (--import-url); runtime-only, never serialized
+  dryRun: boolean; // No install or config-write happens — the wizard only previews
   installResults: InstallTask[]; // Final task statuses from InstallingScreen
 }
 ```
@@ -318,6 +318,11 @@ function isStarshipInstalledAsync(): Promise<{ installed: boolean; version?: str
 
 function detectInstalledShellsAsync(): Promise<ShellId[]>;
 // Returns shells found on PATH, one binary check per SHELLS entry
+
+function detectCurrentShellAsync(): Promise<ShellId | null>;
+// Best-effort detection of the shell the wizard runs in (for pre-selecting it
+// on ShellScreen): $SHELL first, then the process command name. null when it
+// cannot be mapped to a known shell.
 ```
 
 ### installer.ts
@@ -329,12 +334,14 @@ function installStarship(pm: PackageManager): Promise<void>;
 function installShell(shellId: ShellId, pm: PackageManager): Promise<void>;
 // Installs a shell via package manager. Throws if pm is 'script'.
 
-function installNerdFont(fontId: string): Promise<void>;
+function installNerdFont(fontId: string): Promise<string | undefined>;
 // Downloads the font zip from GitHub, verifies the archive's SHA-256 against the
 // digest published in the release asset metadata (fails closed on mismatch,
 // missing digest, or lookup failure), then extracts it to the platform-specific
 // fonts directory. Extraction happens in a sandboxed worker (fontExtractor.ts)
-// so malformed archives cannot crash the wizard.
+// so malformed archives cannot crash the wizard. Resolves to a note string when
+// the verified archive was served from the local font cache instead of the
+// network, else undefined.
 // macOS: ~/Library/Fonts (fc-cache skipped), Linux: ~/.local/share/fonts (runs fc-cache)
 
 function setDefaultShell(shellId: ShellId): Promise<void>;
@@ -380,11 +387,16 @@ function buildTaskList(state: WizardState): InstallTask[];
 interface InstallTaskDeps {
   isStarshipInstalled: () => Promise<{ installed: boolean; version?: string }>;
   installStarship: (pm: PackageManager) => Promise<void>;
-  installNerdFont: (fontId: string) => Promise<void>;
+  installNerdFont: (fontId: string) => Promise<string | undefined>;
   installShell: (shellId: ShellId, pm: PackageManager) => Promise<void>;
   setDefaultShell: (shellId: ShellId) => Promise<void>;
   generateToml: (state: WizardState) => string;
   writeShellConfig: (toml: string, shellId: ShellId) => WriteConfigResult;
+  writeSharedConfig: (toml: string) => WriteConfigResult;
+  // One shared ~/.config/starship.toml written in adopt mode only.
+  backupSharedConfig: () => string | null;
+  // Snapshots the existing shared config to a .bak-* file (null when absent),
+  // so --restore can bring it back.
   applyShellConfig: (
     shellId: ShellId,
     opts?: { ensurePathDir?: string | null }
@@ -412,6 +424,108 @@ function runInstallTasks(
 // optional AbortSignal halts the chain at phase boundaries and marks every task
 // that never ran as failed — never silently done.
 ```
+
+---
+
+## Headless CLI & Run Data
+
+The public flag surface in `src/index.tsx`/`src/services/args.ts`, in four groups.
+
+### Interactive
+
+```
+shell-configurator              start the wizard
+shell-configurator --dry-run    preview changes without installing (alias --no-install, -d)
+```
+
+### lifecycle
+
+```
+--restore / --undo    Copy the newest .bak-* backup over the shared and per-shell
+                      configs created by earlier runs (see restoreConfigBackups)
+--version / -v        Print the version
+--help / -h           Print usage
+```
+
+### generate (a config from flags)
+
+```
+shell-configurator generate --preset <id> [flags]
+  --palette <id>           override the colour palette
+  --powerline/--no-powerline
+  --shells <id,...>        zsh,bash,fish,nushell,powershell
+  --font <none|id>         Nerd Font to install, or 'none'
+  --has-nerd-font/--no-nerd-font
+  --character <arrow|lambda|dollar>
+  --set-default <shell>    chsh target
+  --skip-starship          config-only run
+  -o <file>                write the TOML instead of stdout
+  --export <file>          write the state card (add -o to keep the TOML too)
+  --import <file>          start from a state card instead of flags
+```
+
+### apply (an install from a state card)
+
+```
+shell-configurator apply --state <file> [--dry-run] [--adopt] [--import-url <url>]
+  --adopt       keep the shared ~/.config/starship.toml (never writes per-shell files)
+  --import-url  fetch a starship.toml and adopt it (implies --adopt)
+```
+
+### Exit Codes
+
+| Code | Meaning                                                                 |
+| ---- | ----------------------------------------------------------------------- |
+| `0`  | Success.                                                               |
+| `1`  | A wizard install finished with at least one failed task, or a headless run failed (also any fatal crash). |
+| `2`  | `CliUsageError` — a mistake in the flags or an unreadable state card; reads clean with no stack trace. |
+
+### Persisted Run Data
+
+All of it lives under XDG dirs resolved by `src/services/paths.ts`, so the
+tarball stays self-contained and nothing is written next to the binary:
+
+| Path                                          | Contents                                                                |
+| --------------------------------------------- | ----------------------------------------------------------------------- |
+| `$XDG_STATE_HOME` or `~/.local/state`/`shell-configurator/history.jsonl` | Append-only ledger; one JSON `HistoryRecord` per run (`install`/`apply`/…), in file order = chronological order. |
+| `…/snapshots/<iso-timestamp>.json`            | The versioned state card each run applied. The `snapshotId` field in the ledger is the rollback handle that `uninstall`/rollback resolves. |
+| `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/fonts/<id>.zip` + `<id>.sha256` | Font cache: the verified archive plus its pinned SHA-256 pin file. A cached archive is reused offline only while its bytes still match the pin. |
+
+### State Card (`serializeState` / `parseState` in `src/services/state.ts`)
+
+`STATE_VERSION = 1`. A card captures only what the user decided — never wizard
+runtime (step, detection results, task state) — so the same card produces the
+same prompt on any machine. It is what `--export`, `--import`/`--state`, and
+every snapshot use.
+
+```typescript
+{
+  version: 1,
+  wizard: {
+    preset: string | null;
+    leftModules: ModuleId[];
+    rightModules: ModuleId[];
+    characterSymbol: CharacterSymbol;
+    palette: PaletteId;
+    powerline: boolean;
+    selectedShells: ShellId[];
+    nerdFontToInstall: NerdFontChoice;
+    setDefaultShell: ShellId | null;
+    skipStarshipInstall: boolean;
+    keepExistingConfig: boolean;
+    hasNerdFont: boolean;
+  }
+}
+```
+
+`parseState` starts a parsed card from runtime defaults (`step: 'welcome'`,
+detection-based fields cleared) and re-detects per run.
+
+### Backup/Restore
+
+`backupSharedConfig()` copies the existing shared config to `<dir>.bak-<timestamp>`
+before an adopt run overwrites it; `restoreConfigBackups()` copies the newest
+`.bak-*` files back over the shared and per-shell configs (`--restore`).
 
 ---
 

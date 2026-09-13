@@ -60,8 +60,8 @@ time_format = "%H:%M"
 symbol = " "
 
 [character]
-success_symbol = "[❯](bold ok)"
-error_symbol   = "[❯](bold err)"
+success_symbol = '[❯](bold ok)'
+error_symbol   = '[❯](bold err)'
 
 [palettes.default]
 fg              = "black"
@@ -162,14 +162,16 @@ never gets a `<section>` block or a `style` key. It is emitted on its own block:
 
 ```toml
 [character]
-success_symbol = "[❯](bold ok)"
-error_symbol   = "[❯](bold err)"
+success_symbol = '[❯](bold ok)'
+error_symbol   = '[❯](bold err)'
 ```
 
 The symbol (arrow, lambda, or dollar) is chosen on the style screen and carried
 through state unchanged. The `ok` and `err` in the style expressions reference
 the palette's `ok` and `err` colours. The character is drawn as a plain segment,
-never powerline.
+never powerline. The expressions are single-quoted TOML literals (via
+`tomlLiteral`, not `tomlBasic`), so the `\$` escaping the dollar symbol at the
+starship level survives TOML parsing unmangled.
 
 ## The fill block
 

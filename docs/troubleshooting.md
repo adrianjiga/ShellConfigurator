@@ -93,11 +93,14 @@ inject into. After the wizard completes, ShellConfigurator prints the exact
 commands you need to run in those shells. Follow the instructions on the
 **Done** screen.
 
-For Nushell, the wizard creates an `export-env` file in
-`~/.local/share/nushell/vendor/autoload.d/`. Verify it exists:
+For Nushell, the wizard writes nothing for you — it prints a command you run
+once inside Nushell that creates the two files Nushell auto-sources at startup
+(`starship-config.nu` pinning `$env.STARSHIP_CONFIG`, and `starship.nu` with the
+`starship init` output) in `$nu.data-dir/vendor/autoload` — by default
+`~/.local/share/nu/vendor/autoload/`. Verify they exist:
 
 ```nu
-ls ~/.local/share/nushell/vendor/autoload.d/
+ls ~/.local/share/nu/vendor/autoload/
 ```
 
 ---

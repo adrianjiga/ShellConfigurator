@@ -81,7 +81,7 @@ The dollar character symbol requires two layers of escaping:
 Result in generated TOML:
 
 ```toml
-success_symbol = '[\$](green)'
+success_symbol = '[\$](bold ok)'
 ```
 
 ### Fill Block Generation
@@ -108,20 +108,24 @@ add_newline  = true
 symbol = " "
 
 [character]
-success_symbol = '[❯](green)'
-error_symbol   = '[❯](red)'
+success_symbol = '[❯](bold ok)'
+error_symbol   = '[❯](bold err)'
 
 [directory]
-style             = "bold blue"
+style             = "bold directory"
 truncation_length = 3
 truncate_to_repo  = true
 
 [git_branch]
 symbol = "on "
-style  = "bold purple"
+style  = "bold git_branch"
 
 ...
 ```
+
+Styled module blocks reference colours by *name* (`bold directory`) through the
+generated `[palettes.<id>]` table rather than by value, so the whole theme can be
+retuned in one place.
 
 ---
 
@@ -315,15 +319,17 @@ If extraction succeeds but yields no font files, the install fails loudly ("No f
 3. /etc/os-release  → ID match:
    ├── ubuntu, debian, linuxmint, pop, elementary → 'apt'
    ├── fedora, rhel, centos, rocky, alma          → 'dnf'
-   └── arch, manjaro, endeavouros, cachyos, garuda → 'pacman'
+   ├── arch, manjaro, endeavouros, cachyos, garuda → 'pacman'
+   └── alpine                                      → 'apk'
 4. command -v apt-get  → 'apt'       (fallback binary check)
 5. command -v dnf      → 'dnf'       (fallback binary check)
-6. fallback            → 'script'    (curl install script)
+6. command -v apk      → 'apk'       (fallback binary check — Alpine/Alpine-based containers)
+7. fallback            → 'script'    (curl install script)
 ```
 
 **Why command checks come first**: Homebrew can be installed on Linux, and `command -v brew` is faster than reading `/etc/os-release`. Pacman is checked early because Arch-based distros don't always have a predictable OS ID.
 
-**Why binary fallback exists (steps 4-5)**: Some minimal containers or custom distros don't have `/etc/os-release` but do have `apt-get` or `dnf` in PATH.
+**Why binary fallback exists (steps 4-6)**: Some minimal containers or custom distros don't have `/etc/os-release` but do have `apt-get`, `dnf`, or `apk` in PATH — Alpine, for instance, has no OS-release `ID` that maps without its own branch.
 
 ### OS Release Parsing
 
