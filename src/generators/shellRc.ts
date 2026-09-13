@@ -157,6 +157,25 @@ export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigRes
   return { path: configPath, backedUpTo };
 }
 
+/**
+ * Writes the shared ~/.config/starship.toml (adopt mode, e.g. a config fetched
+ * via --import-url), backing up any existing file first. This is the file every
+ * wired shell reads, so it is the one write an adopt-mode run performs.
+ */
+export function writeSharedConfig(toml: string): WriteConfigResult {
+  const configPath = getSharedConfigPath();
+
+  let backedUpTo: string | undefined;
+  if (fs.existsSync(configPath)) {
+    backedUpTo = `${configPath}.bak-${stamp()}`;
+    fs.copyFileSync(configPath, backedUpTo);
+  }
+
+  fs.writeFileSync(configPath, toml, 'utf8');
+
+  return { path: configPath, backedUpTo };
+}
+
 const BLOCK_MARKER = '# Added by ShellConfigurator';
 
 /**
@@ -198,6 +217,10 @@ function removeShellConfiguratorBlocks(content: string, needles: string[]): stri
 export interface ApplyShellConfigOptions {
   /** Directory to prepend to PATH ahead of the init line, when starship is not reachable. */
   ensurePathDir?: string | null;
+  /** Adopt mode: emit no STARSHIP_CONFIG export, so the shell reads the shared
+   *  ~/.config/starship.toml (the user's existing or imported config) instead of
+   *  a per-shell TOML the wizard generated. */
+  pointAtSharedConfig?: boolean;
 }
 
 /**
@@ -239,7 +262,7 @@ function buildAdditionLines(
 ): string[] {
   const pathDir = options.ensurePathDir;
   const pathLine = pathDir && shell.pathLine ? shell.pathLine(pathDir) : null;
-  const configLine = starshipConfigLine(shell.id);
+  const configLine = options.pointAtSharedConfig ? null : starshipConfigLine(shell.id);
   return [
     ...(pathLine && !cleaned.includes(pathLine) ? [pathLine] : []),
     ...(configLine && !cleaned.includes(configLine) ? [configLine] : []),
@@ -275,7 +298,7 @@ export function applyShellConfig(
 
   // The PATH and STARSHIP_CONFIG lines must come before the init line, or
   // `starship init` cannot resolve either the binary or its config.
-  const configLine = starshipConfigLine(shellId);
+  const configLine = options.pointAtSharedConfig ? null : starshipConfigLine(shellId);
 
   // Idempotent: skip if already configured (check for the full block we'd add).
   if (cleaned.includes(configLine ?? shell.initLine)) {

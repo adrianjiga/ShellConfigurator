@@ -20,6 +20,7 @@ import {
   getShellConfigPath,
   resetSharedShellConfig,
   restoreConfigBackups,
+  writeSharedConfig,
   writeShellConfig,
 } from '../../generators/shellRc.ts';
 
@@ -126,6 +127,51 @@ describe('writeShellConfig', () => {
   });
 });
 
+describe('writeSharedConfig', () => {
+  const savedEnv = { ...process.env };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.STARSHIP_CONFIG;
+    delete process.env.XDG_CONFIG_HOME;
+  });
+  afterEach(() => {
+    process.env = { ...savedEnv };
+  });
+
+  const sharedPath = path.join(os.homedir(), '.config', 'starship.toml');
+
+  it('writes toml content to the shared config path', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+
+    const result = writeSharedConfig('[character]\nsuccess_symbol = "…"');
+
+    expect(result.path).toBe(sharedPath);
+    expect(fs.writeFileSync).toHaveBeenCalledWith(
+      sharedPath,
+      '[character]\nsuccess_symbol = "…"',
+      'utf8'
+    );
+  });
+
+  it('backs up an existing shared config before overwriting it', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+
+    const result = writeSharedConfig('# imported');
+
+    expect(result.backedUpTo).toContain(sharedPath);
+    expect(fs.copyFileSync).toHaveBeenCalledWith(sharedPath, expect.stringContaining(sharedPath));
+  });
+
+  it('does not back up when there is no existing shared config', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+
+    const result = writeSharedConfig('# imported');
+
+    expect(result.backedUpTo).toBeUndefined();
+    expect(fs.copyFileSync).not.toHaveBeenCalled();
+  });
+});
+
 describe('applyShellConfig', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -166,6 +212,29 @@ describe('applyShellConfig', () => {
     const appendedContent = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
     const expected = `set -gx STARSHIP_CONFIG ${path.join(os.homedir(), '.config', 'starship', 'fish.toml')}`;
     expect(appendedContent).toContain(expected);
+  });
+
+  it('omits the STARSHIP_CONFIG line when pointing at the shared config', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => '');
+
+    const result = applyShellConfig('zsh', { pointAtSharedConfig: true });
+
+    expect(result.applied).toBe(true);
+    const appendedContent = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
+    expect(appendedContent).not.toContain('STARSHIP_CONFIG');
+    expect(appendedContent).toContain('starship init zsh');
+  });
+
+  it('treats an rc that only has the init line as already configured in adopt mode', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => 'eval "$(starship init zsh)"');
+
+    const result = applyShellConfig('zsh', { pointAtSharedConfig: true });
+
+    expect(result.applied).toBe(false);
+    expect(result.note).toBe('already configured');
+    expect(fs.appendFileSync).not.toHaveBeenCalled();
   });
 
   it('is idempotent — skips when the STARSHIP_CONFIG line is already present', () => {

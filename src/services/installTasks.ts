@@ -4,6 +4,7 @@ import {
   backupSharedConfig,
   resetSharedShellConfig,
   type WriteConfigResult,
+  writeSharedConfig,
   writeShellConfig,
 } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
@@ -36,6 +37,8 @@ export interface InstallTaskDeps {
   installNerdFont: (fontId: string) => Promise<string | undefined>;
   generateToml: (state: WizardState) => string;
   writeShellConfig: (toml: string, shellId: ShellId) => WriteConfigResult;
+  /** Writes the shared starship.toml in adopt mode (e.g. an --import-url fetch). */
+  writeSharedConfig: (toml: string) => WriteConfigResult;
   /** Snapshots the shared starship.toml before per-shell configs shadow it. Null when none exists. */
   backupSharedConfig: () => string | null;
   applyShellConfig: (
@@ -56,6 +59,7 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   setDefaultShell,
   generateToml,
   writeShellConfig,
+  writeSharedConfig,
   backupSharedConfig,
   applyShellConfig,
   resetSharedShellConfig,
@@ -111,8 +115,13 @@ export function buildTaskList(state: WizardState): InstallTask[] {
     });
   }
 
-  // Config write
-  tasks.push({ id: TASK_IDS.config, label: 'Write config files', status: 'pending' });
+  // Config write. In adopt mode the shared config is kept (and possibly replaced
+  // by an --import-url download) instead of regenerating per-shell files.
+  tasks.push({
+    id: TASK_IDS.config,
+    label: state.keepExistingConfig ? 'Keep existing Starship config' : 'Write config files',
+    status: 'pending',
+  });
 
   // RC files — one task per shell so a failure in one does not taint the others
   for (const shellId of state.selectedShells) {
@@ -220,11 +229,34 @@ export async function runInstallTasks(
     });
   }
 
-  // --- Write per-shell starship configs ---
-  // Each selected shell gets its own file; the shared starship.toml is never touched.
+  // --- Config: write per-shell starship configs, or adopt an existing one ---
   await runTask(TASK_IDS.config, async () => {
     if (state.selectedShells.length === 0) {
       throw new Error('No shells selected — nothing to configure');
+    }
+
+    if (state.keepExistingConfig) {
+      // Adopt mode never regenerates: the shared starship.toml (whether already
+      // present or fetched via --import-url) stays the prompt every shell reads.
+      const notes: string[] = [];
+      if (state.sharedConfigToml != null) {
+        const written = deps.writeSharedConfig(state.sharedConfigToml);
+        notes.push(
+          written.backedUpTo
+            ? `shared config saved to ${written.backedUpTo}`
+            : 'wrote the imported config'
+        );
+      } else {
+        // Point at what is already there; snapshot it so a re-run can restore it.
+        try {
+          const sharedBackup = deps.backupSharedConfig();
+          if (sharedBackup) notes.push(`shared config saved to ${sharedBackup}`);
+        } catch {
+          // Non-fatal — the existing config is left untouched regardless.
+        }
+        notes.push('keeping the existing config untouched');
+      }
+      return { status: 'done', patch: { note: notes.join('; ') } };
     }
 
     // hasNerdFont is set optimistically when the user opts into an install. If
@@ -276,7 +308,12 @@ export async function runInstallTasks(
     }
 
     await runTask(taskId, async () => {
-      const result = deps.applyShellConfig(shellId, { ensurePathDir });
+      // Adopt mode omits the STARSHIP_CONFIG export so the shell reads the
+      // shared config that was kept or imported.
+      const result = deps.applyShellConfig(shellId, {
+        ensurePathDir,
+        pointAtSharedConfig: state.keepExistingConfig,
+      });
       if (result.applied) return { status: 'done', patch: { note: result.note } };
       if (result.note) {
         // Not an error: the shell was already configured, or it needs manual

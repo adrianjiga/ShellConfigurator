@@ -155,6 +155,76 @@ describe('runInstallTasks', () => {
     expect(deps.writeShellConfig).toHaveBeenCalled();
   });
 
+  it('adopt mode keeps the shared config instead of writing per-shell files', async () => {
+    const deps = fakeDeps();
+    const results = await runInstallTasks(
+      state({ keepExistingConfig: true, selectedShells: ['zsh'] }),
+      deps,
+      vi.fn()
+    );
+
+    const config = results.find((t) => t.id === 'config');
+    expect(config?.label).toBe('Keep existing Starship config');
+    expect(config?.status).toBe('done');
+    expect(config?.note).toContain('keeping the existing config untouched');
+    expect(deps.backupSharedConfig).toHaveBeenCalled();
+    expect(deps.generateToml).not.toHaveBeenCalled();
+    expect(deps.writeShellConfig).not.toHaveBeenCalled();
+    expect(deps.writeSharedConfig).not.toHaveBeenCalled();
+  });
+
+  it('adopt mode wires shells to the shared config without a STARSHIP_CONFIG export', async () => {
+    const deps = fakeDeps();
+    await runInstallTasks(
+      state({ keepExistingConfig: true, selectedShells: ['zsh', 'bash'] }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.applyShellConfig).toHaveBeenCalledWith('zsh', {
+      ensurePathDir: null,
+      pointAtSharedConfig: true,
+    });
+    expect(deps.applyShellConfig).toHaveBeenCalledWith('bash', {
+      ensurePathDir: null,
+      pointAtSharedConfig: true,
+    });
+  });
+
+  it('adopt mode places an imported config as the shared starship.toml', async () => {
+    const deps = fakeDeps();
+    const results = await runInstallTasks(
+      state({
+        keepExistingConfig: true,
+        sharedConfigToml: '[character]\nsuccess_symbol = "…"',
+        selectedShells: ['zsh'],
+      }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.writeSharedConfig).toHaveBeenCalledWith('[character]\nsuccess_symbol = "…"');
+    expect(deps.writeShellConfig).not.toHaveBeenCalled();
+    expect(deps.generateToml).not.toHaveBeenCalled();
+    expect(results.find((t) => t.id === 'config')?.status).toBe('done');
+  });
+
+  it('adopt mode reports when an imported config replaced an existing one', async () => {
+    const deps = fakeDeps({
+      writeSharedConfig: vi.fn(() => ({
+        path: '/home/u/.config/starship.toml',
+        backedUpTo: '/home/u/.config/starship.toml.bak-2026',
+      })),
+    });
+    const results = await runInstallTasks(
+      state({ keepExistingConfig: true, sharedConfigToml: '# import', selectedShells: ['zsh'] }),
+      deps,
+      vi.fn()
+    );
+
+    expect(results.find((t) => t.id === 'config')?.note).toContain('starship.toml.bak-2026');
+  });
+
   it('regenerates the config without nerd font glyphs when the font install fails', async () => {
     const deps = fakeDeps({
       installNerdFont: vi.fn().mockRejectedValue(new Error('no network')),
@@ -217,6 +287,7 @@ describe('runInstallTasks', () => {
 
     expect(deps.applyShellConfig).toHaveBeenCalledWith('zsh', {
       ensurePathDir: '/home/u/.local/bin',
+      pointAtSharedConfig: false,
     });
   });
 
