@@ -290,9 +290,7 @@ export async function fetchImportedConfig(
 
   const buffer = Buffer.from(await response.arrayBuffer());
   if (buffer.byteLength > maxBytes) {
-    throw new CliUsageError(
-      `Could not fetch '${url}': config exceeds ${maxBytes} bytes`
-    );
+    throw new CliUsageError(`Could not fetch '${url}': config exceeds ${maxBytes} bytes`);
   }
   const content = buffer.toString('utf8');
   if (content.trim().length === 0) {

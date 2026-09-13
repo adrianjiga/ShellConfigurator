@@ -199,6 +199,13 @@ or the manual setup command for nushell/PowerShell), and the generated TOML:
       ...
 ```
 
+**Adopt mode** (`apply --adopt` / `--import-url` reaches review in dry-run only)
+never generates a per-shell TOML. The section header becomes **"Config to keep"**
+and shows the shared path, the `(shared config)` marker, and the init line alone
+(no `STARSHIP_CONFIG` export); a config fetched via `--import-url` is previewed
+inline, otherwise the screen states the existing file will be kept as-is. The plan
+labels shells the package manager cannot auto-install as `Install <shell> (manual)`.
+
 In `--dry-run` mode the same screen appears but states that nothing will be applied;
 `installing` is still skipped afterwards.
 
@@ -233,7 +240,7 @@ If the user chose "Continue without Starship", the Starship task is omitted enti
 
 ---
 
-### 10. Done
+### 11. Done
 
 **Purpose**: Summary of what was installed and configured.
 
@@ -249,7 +256,9 @@ If the user chose "Continue without Starship", the Starship task is omitted enti
 - Post-install instructions (restart terminal, set font in terminal settings)
 - Yellow reminder about Nerd Font terminal setup
 
-**Keys**: `Enter` / `Esc` / `Q` to exit
+**Keys**: `Enter` / `Esc` / `Q` to exit; `r` runs a one-key undo — it copies the
+newest `.bak-*` backups back over the shared and per-shell configs (the same
+code path as the CLI's `--restore`) and prints what was restored.
 
 ---
 

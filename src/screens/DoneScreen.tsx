@@ -5,8 +5,8 @@ import { getShell } from '../config/shells.ts';
 import { type ReportedStatus, statusMark } from '../config/status.ts';
 import {
   getShellConfigPath,
-  restoreConfigBackups,
   type RestoredConfig,
+  restoreConfigBackups,
 } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import { fontLabel } from '../services/installer.ts';

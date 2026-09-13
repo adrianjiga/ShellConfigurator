@@ -21,8 +21,10 @@ try {
   // generate: render a TOML to stdout (brew detection runs, but nothing installs).
   const generated = run([
     'generate',
-    '--preset', 'pastel-powerline',
-    '--shells', 'zsh',
+    '--preset',
+    'pastel-powerline',
+    '--shells',
+    'zsh',
     '--no-nerd-font',
   ]);
   assert.ok(generated.includes('format = "'), 'generate printed no TOML');
