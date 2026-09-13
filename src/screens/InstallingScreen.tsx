@@ -11,6 +11,15 @@ import {
 import { isUiSuspended, subscribeToUiSuspension } from '../services/tty.ts';
 import type { InstallTask, WizardState } from '../types.ts';
 
+export const ADVANCE_AFTER_DONE_MS = 1200;
+let advanceDelayMs = ADVANCE_AFTER_DONE_MS;
+
+/** Test-only: cut the post-install pause so flow tests don't sleep 1.2s per run. */
+export function setAdvanceDelayForTests(ms: number): void {
+  if (process.env.VITEST !== 'true') return;
+  advanceDelayMs = ms;
+}
+
 interface InstallingScreenProps {
   state: WizardState;
   onNext: (update?: Partial<WizardState>) => void;
@@ -52,7 +61,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
       );
 
       // Advance after a brief pause so the user can see the final state
-      await new Promise((r) => setTimeout(r, 1200));
+      await new Promise((r) => setTimeout(r, advanceDelayMs));
       if (!unmounted) onNext({ installResults: results });
     })();
 
