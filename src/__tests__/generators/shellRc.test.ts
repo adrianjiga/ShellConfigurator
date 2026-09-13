@@ -237,6 +237,54 @@ describe('applyShellConfig', () => {
     expect(fs.appendFileSync).not.toHaveBeenCalled();
   });
 
+  it('adopt mode repairs an rc left pointing at a per-shell config', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() =>
+      ['# Added by ShellConfigurator', `export STARSHIP_CONFIG="${expectedConfigPath}"`, 'eval "$(starship init zsh)"'].join(
+        '\n'
+      )
+    );
+
+    const result = applyShellConfig('zsh', { pointAtSharedConfig: true });
+
+    expect(result.applied).toBe(true);
+    const cleanedWrite = vi.mocked(fs.writeFileSync).mock.calls[0]?.[1] as string;
+    expect(cleanedWrite).not.toContain('STARSHIP_CONFIG');
+    const appendedContent = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
+    expect(appendedContent).toContain('starship init zsh');
+    expect(appendedContent).not.toContain('STARSHIP_CONFIG');
+  });
+
+  it('stays idempotent across a second adopt run', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() =>
+      ['# Added by ShellConfigurator (shared config)', 'eval "$(starship init zsh)"'].join('\n')
+    );
+
+    const result = applyShellConfig('zsh', { pointAtSharedConfig: true });
+
+    expect(result.applied).toBe(false);
+    expect(result.note).toBe('already configured');
+    expect(fs.appendFileSync).not.toHaveBeenCalled();
+  });
+
+  it('non-adopt mode replaces an init-only block left by an adopt run', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() =>
+      ['# Added by ShellConfigurator (shared config)', 'eval "$(starship init zsh)"'].join('\n')
+    );
+
+    const result = applyShellConfig('zsh');
+
+    expect(result.applied).toBe(true);
+    const cleanedWrite = vi.mocked(fs.writeFileSync).mock.calls[0]?.[1] as string;
+    expect(cleanedWrite).not.toContain('starship init zsh');
+    const appendedContent = vi.mocked(fs.appendFileSync).mock.calls[0]?.[1] as string;
+    expect(appendedContent.indexOf('STARSHIP_CONFIG')).toBeLessThan(
+      appendedContent.indexOf('starship init zsh')
+    );
+  });
+
   it('is idempotent — skips when the STARSHIP_CONFIG line is already present', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(

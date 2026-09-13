@@ -177,6 +177,11 @@ export function writeSharedConfig(toml: string): WriteConfigResult {
 }
 
 const BLOCK_MARKER = '# Added by ShellConfigurator';
+/**
+ * Adopt-mode block marker: these blocks carry only the init line (no
+ * STARSHIP_CONFIG export), so a later non-adopt run can recognise and drop them.
+ */
+const ADOPT_MARKER = '# Added by ShellConfigurator (shared config)';
 
 /**
  * Drops every "Added by ShellConfigurator" block containing any needle, so a
@@ -188,7 +193,8 @@ function removeShellConfiguratorBlocks(content: string, needles: string[]): stri
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
-    if (line.trim() === BLOCK_MARKER) {
+    // Adopt-mode blocks share the marker prefix, so both are recognised here.
+    if (line.trim() === BLOCK_MARKER || line.trim().startsWith(`${BLOCK_MARKER} `)) {
       const block = [line];
       let j = i + 1;
       while (j < lines.length && lines[j].trim() !== '') {
@@ -292,8 +298,18 @@ export function applyShellConfig(
 
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
 
-  // Drop a stale unset guard a later "reset" run may have left.
-  const cleaned = removeShellConfiguratorBlocks(existing, [starshipUnsetLine(shellId)!]);
+  // Drop stale blocks this run is not the owner of, so the modes stay mutually
+  // exclusive: a leftover "unset" guard from a reset run, an adopt-mode block
+  // when writing per-shell configs, and — in adopt mode — a per-shell export a
+  // previous non-adopt run left pointing at a per-shell TOML.
+  const cleanNeedles = [starshipUnsetLine(shellId)!];
+  if (options.pointAtSharedConfig) {
+    const perShellExport = starshipConfigLine(shellId);
+    if (perShellExport) cleanNeedles.push(perShellExport);
+  } else {
+    cleanNeedles.push(ADOPT_MARKER);
+  }
+  const cleaned = removeShellConfiguratorBlocks(existing, cleanNeedles);
   if (cleaned !== existing) fs.writeFileSync(rcPath, cleaned, 'utf8');
 
   // The PATH and STARSHIP_CONFIG lines must come before the init line, or
@@ -306,7 +322,8 @@ export function applyShellConfig(
   }
 
   const lines = buildAdditionLines(shell, cleaned, options);
-  const addition = `\n${BLOCK_MARKER}\n${lines.join('\n')}\n`;
+  const marker = options.pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
+  const addition = `\n${marker}\n${lines.join('\n')}\n`;
   fs.appendFileSync(rcPath, addition, 'utf8');
 
   return {
