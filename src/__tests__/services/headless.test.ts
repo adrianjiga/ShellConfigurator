@@ -43,7 +43,12 @@ vi.mock('../../services/history.ts', () => ({
 import type { ModuleId } from '../../config/modules.ts';
 import type { CliFlags } from '../../services/args.ts';
 import { CliUsageError } from '../../services/errors.ts';
-import { runApply, runGenerate, fetchImportedConfig, stateFromFlags } from '../../services/headless.ts';
+import {
+  fetchImportedConfig,
+  runApply,
+  runGenerate,
+  stateFromFlags,
+} from '../../services/headless.ts';
 import { DEFAULT_INSTALL_TASK_DEPS } from '../../services/installTasks.ts';
 import { STATE_VERSION, serializeState } from '../../services/state.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
@@ -579,9 +584,9 @@ describe('runApply', () => {
       new DOMException('The operation was aborted', 'TimeoutError')
     );
 
-    await expect(
-      fetchImportedConfig('https://example.com/slow', { timeoutMs: 1 })
-    ).rejects.toThrow(/timed out after 1ms/);
+    await expect(fetchImportedConfig('https://example.com/slow', { timeoutMs: 1 })).rejects.toThrow(
+      /timed out after 1ms/
+    );
   });
 
   it('passes a timeout signal to fetch so a hung request aborts', async () => {

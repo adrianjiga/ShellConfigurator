@@ -206,8 +206,16 @@ describe('DoneScreen over real install results', () => {
 
   it('restores the newest backups and lists them with r', async () => {
     mocks.restoreConfigBackups.mockReturnValue([
-      { what: 'zsh', restoredTo: '/home/u/.config/starship/zsh.toml', restoredFrom: '/home/u/.config/starship/zsh.toml.bak-x' },
-      { what: 'shared', restoredTo: '/home/u/.config/starship.toml', restoredFrom: '/home/u/.config/starship.toml.bak-x' },
+      {
+        what: 'zsh',
+        restoredTo: '/home/u/.config/starship/zsh.toml',
+        restoredFrom: '/home/u/.config/starship/zsh.toml.bak-x',
+      },
+      {
+        what: 'shared',
+        restoredTo: '/home/u/.config/starship.toml',
+        restoredFrom: '/home/u/.config/starship.toml.bak-x',
+      },
     ]);
     const instance = render(<DoneScreen state={DEFAULT_STATE} />);
     await flush();

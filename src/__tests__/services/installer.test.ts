@@ -57,9 +57,9 @@ import {
   installNerdFont,
   installShell,
   installStarship,
-  shellInstallSupported,
   SCRIPT_INSTALL_BIN_DIR,
   setDefaultShell,
+  shellInstallSupported,
 } from '../../services/installer.ts';
 
 interface SpawnOutcome {
