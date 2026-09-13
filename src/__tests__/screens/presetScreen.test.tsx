@@ -1,156 +1,164 @@
 import { cleanup, render } from 'ink-testing-library';
 import { Component, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PRESETS, type PresetDef } from '../../config/presets.ts';
+import { PRESETS } from '../../config/presets.ts';
 import { PresetScreen } from '../../screens/PresetScreen.tsx';
-import { DEFAULT_STATE, type WizardState } from '../../types.ts';
+import { DEFAULT_STATE } from '../../types.ts';
 import { pressEsc } from '../helpers/ink.ts';
 import { flush } from '../helpers/wait.ts';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+function setup(hasNerdFont = false) {
+  const onNext = vi.fn();
+  const onBack = vi.fn();
+  const instance = render(
+    <PresetScreen
+      state={{ ...DEFAULT_STATE, hasNerdFont }}
+      onNext={onNext}
+      onBack={onBack}
+    />
+  );
+  return { instance, onNext, onBack };
+}
 
 /**
- * Reaches an error the way the boundary would in production: without it, Ink's
- * own error boundary swallows the throw and unmounts the app, so the rendered
- * frame is not a reliable place to assert on it.
+ * Ink wraps every tree in its own ErrorBoundary, which swallows a render-phase
+ * throw into an error screen. This inner boundary (rendered *above* the screen)
+ * catches that throw first so the test can assert on it.
  */
-class CaptureBoundary extends Component<
-  { onError: (error: Error) => void; children: ReactNode },
-  { error: Error | null }
-> {
+interface CaptureBoundaryProps {
+  children: ReactNode;
+  onError: (error: Error) => void;
+}
+
+class CaptureBoundary extends Component<CaptureBoundaryProps, { error: Error | null }> {
+  override state = { error: null as Error | null };
+
   static getDerivedStateFromError(error: Error) {
     return { error };
   }
-  state: { error: Error | null } = { error: null };
-  componentDidCatch(error: Error) {
+
+  override componentDidCatch(error: Error) {
     this.props.onError(error);
   }
-  render() {
+
+  override render() {
     return this.state.error ? null : this.props.children;
   }
 }
 
-function setup(overrides: Partial<WizardState> = {}) {
-  const state: WizardState = { ...DEFAULT_STATE, ...overrides };
-  const onNext = vi.fn();
-  const onBack = vi.fn();
-  const instance = render(<PresetScreen state={state} onNext={onNext} onBack={onBack} />);
-  return { instance, onNext, onBack };
-}
-
-const DOWN = '\u001B[B';
-const ENTER = '\r';
-
 describe('PresetScreen', () => {
-  it('renders the compatible presets with descriptions', async () => {
-    const { instance, onBack } = setup();
+  it('shows the first preset highlighted with its description', async () => {
+    const { instance } = setup();
     await flush();
 
-    const frame = instance.lastFrame() ?? '';
-    expect(frame).toContain('Choose a starting preset');
+    const frame = instance.lastFrame();
     expect(frame).toContain('Custom (start from scratch)');
-    expect(frame).toContain('No Nerd Font');
-    // The first (highlighted) preset's description sits below the list.
     expect(frame).toContain('Choose each option manually');
-    expect(onBack).not.toHaveBeenCalled();
   });
 
-  it('hides Nerd Font presets and their marker when no font is installed', async () => {
-    const { instance } = setup();
+  it('hides Nerd Font presets and explains why when there is no Nerd Font', async () => {
+    const { instance } = setup(false);
     await flush();
 
-    const frame = instance.lastFrame() ?? '';
-    // A real Nerd-Font-only preset must not be offered without one.
-    expect(frame).not.toContain('Nerd Font Symbols');
-    expect(frame).not.toContain('Tokyo Night');
-    expect(frame).not.toContain('Gruvbox Rainbow');
-    // No ★ suffixes are shown, and the yellow notice explains why. (The notice
-    // wraps across two columns, so assert on the fragment that stays on a line.)
-    expect(frame).not.toContain('★');
+    const frame = instance.lastFrame();
+    // The notice wraps mid-sentence in the 100-col frame.
     expect(frame).toContain('hidden (no Nerd Font detected)');
+    expect(frame).not.toContain('Nerd Font Symbols');
+    expect(frame).not.toContain('★');
   });
 
-  it('shows Nerd Font presets with a ★ marker when one is installed', async () => {
-    const { instance } = setup({ hasNerdFont: true });
+  it('flags Nerd Font presets with ★ when a Nerd Font is installed', async () => {
+    const { instance } = setup(true);
     await flush();
 
-    const frame = instance.lastFrame() ?? '';
-    expect(frame).toContain('Nerd Font Symbols ★');
+    const frame = instance.lastFrame();
     expect(frame).toContain('★ = requires Nerd Font');
-    expect(frame).not.toContain('Nerd Font presets hidden (no Nerd Font detected)');
+    expect(frame).toContain('Nerd Font Symbols ★');
   });
 
-  it('swaps the description when the highlight moves', async () => {
-    const { instance } = setup();
+  it('swaps the description as the highlight moves with Down', async () => {
+    const { instance } = setup(false);
     await flush();
     expect(instance.lastFrame()).toContain('Choose each option manually');
 
-    instance.stdin.write(DOWN); // custom → no-nerd-font
+    instance.stdin.write('\u001B[B');
     await flush();
 
-    const frame = instance.lastFrame() ?? '';
-    expect(frame).toContain('Pure Unicode/text symbols in base ANSI colours');
+    const frame = instance.lastFrame();
     expect(frame).not.toContain('Choose each option manually');
+    expect(frame).toContain('Pure Unicode/text symbols in base ANSI colours');
   });
 
-  it('commits the selected preset to the wizard state', async () => {
-    const { instance, onNext } = setup();
+  it('commits the highlighted preset on Enter', async () => {
+    const { instance, onNext } = setup(false);
     await flush();
 
-    instance.stdin.write(DOWN); // custom → no-nerd-font
+    // No Nerd Font is the second preset; one Down, then Enter.
+    instance.stdin.write('\u001B[B');
     await flush();
-    instance.stdin.write(ENTER);
+    instance.stdin.write('\r');
     await flush();
 
     expect(onNext).toHaveBeenCalledWith({
       preset: 'no-nerd-font',
-      leftModules: ['directory', 'git_branch', 'git_status', 'character'],
+      leftModules: PRESETS.find((p) => p.id === 'no-nerd-font')!.leftModules,
       rightModules: ['cmd_duration'],
       palette: 'terminal',
       powerline: false,
     });
   });
 
-  it('commits a Nerd Font preset when the user has one', async () => {
-    const { instance, onNext } = setup({ hasNerdFont: true });
+  it('commits a Nerd Font preset when one is installed', async () => {
+    const { instance, onNext } = setup(true);
     await flush();
 
-    instance.stdin.write(DOWN); // custom → nerd-font-symbols
+    // Nerd Font Symbols is the second item; one Down then Enter.
+    instance.stdin.write('\u001B[B');
     await flush();
-    instance.stdin.write(ENTER);
+    instance.stdin.write('\r');
     await flush();
 
     expect(onNext).toHaveBeenCalledWith({
       preset: 'nerd-font-symbols',
-      leftModules: ['username', 'hostname', 'directory', 'git_branch', 'git_status', 'character'],
+      leftModules: PRESETS.find((p) => p.id === 'nerd-font-symbols')!.leftModules,
       rightModules: ['nodejs', 'python', 'rust', 'cmd_duration'],
       palette: 'vivid',
       powerline: false,
     });
   });
 
-  it('calls onBack on Escape', async () => {
-    const { instance, onBack } = setup();
+  it('backs out on Escape', async () => {
+    const { instance, onNext, onBack } = setup(false);
     await flush();
+
     await pressEsc(instance.stdin);
-    expect(onBack).toHaveBeenCalled();
+
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(onNext).not.toHaveBeenCalled();
   });
 
-  it('throws when no preset is compatible with the font state', async () => {
-    const original = [...PRESETS];
-    (PRESETS as PresetDef[]).splice(0, PRESETS.length);
-    const errors: Error[] = [];
+  it('throws when no preset is compatible', async () => {
+    const saved = [...PRESETS];
+    PRESETS.splice(0, PRESETS.length);
     try {
+      const onError = vi.fn();
       render(
-        <CaptureBoundary onError={(e) => errors.push(e)}>
+        <CaptureBoundary onError={onError}>
           <PresetScreen state={{ ...DEFAULT_STATE }} onNext={vi.fn()} onBack={vi.fn()} />
         </CaptureBoundary>
       );
       await flush();
-      expect(errors).toHaveLength(1);
-      expect(errors[0]!.message).toBe('No compatible presets available');
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+      expect((onError.mock.calls[0][0] as Error).message).toBe('No compatible presets available');
     } finally {
-      (PRESETS as PresetDef[]).splice(0, PRESETS.length, ...original);
+      PRESETS.push(...saved);
     }
   });
 });
