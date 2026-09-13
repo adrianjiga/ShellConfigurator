@@ -285,20 +285,30 @@ function writeShellConfig(toml: string, shellId: ShellId): { path: string; backe
 // Writes the TOML to the per-shell config path, backing up any existing
 // file first. Never touches the shared ~/.config/starship.toml.
 
+function writeSharedConfig(toml: string): { path: string; backedUpTo?: string };
+// Adopt mode's one write: the shared ~/.config/starship.toml (e.g. a config
+// fetched via --import-url), backing up anything already there.
+
 function applyShellConfig(
   shellId: ShellId,
-  opts?: { ensurePathDir?: string | null }
+  opts?: { ensurePathDir?: string | null; pointAtSharedConfig?: boolean }
 ): { applied: boolean; note?: string };
-// Appends the STARSHIP_CONFIG pin + init line to the shell's rc file.
-// Returns { applied: false, note } for manual-only shells or when already
-// configured. Drops stale unset-guard blocks from earlier runs first, so
-// a re-run can repair a polluted rc file.
+// Appends the STARSHIP_CONFIG pin + init line to the shell's rc file, or — with
+// pointAtSharedConfig (adopt mode) — the init line alone so the shell reads the
+// shared ~/.config/starship.toml by default. Returns { applied: false, note }
+// for manual-only shells or when already configured. First drops any stale block
+// of the opposite mode (unset guard, adopt block, or per-shell export), so a
+// re-run can repair a polluted rc file.
 
 function resetSharedShellConfig(shellId: ShellId): { applied: boolean; note?: string };
 // Removes any per-shell wiring and appends an unset guard so the shell
 // falls back to the shared ~/.config/starship.toml instead of inheriting
 // a leaked STARSHIP_CONFIG. The mirror image of applyShellConfig.
 ```
+
+Config and rc file writes (per-shell, shared, and rc appends) go through a
+temp-file-and-rename in the same directory, so a crash or interrupted run can
+never leave a half-written file.
 
 ---
 
@@ -399,7 +409,7 @@ interface InstallTaskDeps {
   // so --restore can bring it back.
   applyShellConfig: (
     shellId: ShellId,
-    opts?: { ensurePathDir?: string | null }
+    options?: { ensurePathDir?: string | null; pointAtSharedConfig?: boolean }
   ) => {
     applied: boolean;
     note?: string;
@@ -469,8 +479,16 @@ shell-configurator generate --preset <id> [flags]
 ```
 shell-configurator apply --state <file> [--dry-run] [--adopt] [--import-url <url>]
   --adopt       keep the shared ~/.config/starship.toml (never writes per-shell files)
-  --import-url  fetch a starship.toml and adopt it (implies --adopt)
+  --import-url  fetch a starship.toml and adopt it (implies --adopt; the fetch is
+                bounded — a 10s timeout and a 1 MB cap reject a hung or oversized
+                response, and a non-http(s) URL, HTTP error, or empty body is a
+                usage error)
 ```
+
+Flags may appear before or after the subcommand; when a flag is repeated, the
+last one wins. Unknown or malformed flags (a bogus `--name`, a value on a
+boolean flag, a missing value) are collected as `warnings` on `CliFlags`,
+printed to stderr, and ignored — they never abort the run.
 
 ### Exit Codes
 
@@ -478,7 +496,7 @@ shell-configurator apply --state <file> [--dry-run] [--adopt] [--import-url <url
 | ---- | ----------------------------------------------------------------------- |
 | `0`  | Success.                                                               |
 | `1`  | A wizard install finished with at least one failed task, or a headless run failed (also any fatal crash). |
-| `2`  | `CliUsageError` — a mistake in the flags or an unreadable state card; reads clean with no stack trace. |
+| `2`  | `CliUsageError` — an invalid flag value, `--adopt`/`--import-url` outside `apply`, or an unreadable state card; reads clean with no stack trace. |
 
 ### Persisted Run Data
 

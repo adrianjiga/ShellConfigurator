@@ -142,6 +142,10 @@ retuned in one place.
 2. Backs up any existing per-shell config to `<shell>.toml.bak-<timestamp>` — overwriting is the one irreversible step in the wizard
 3. Writes the new file
 
+Every config and rc write (per-shell, shared, and rc appends) goes through a
+temp-file-and-rename in the same directory, so a crash or interrupted run can
+never leave a half-written config or rc file.
+
 The shared `~/.config/starship.toml` is never touched, so a shell bootstrapped globally (or another tool) keeps working.
 
 **Adopt mode** (`keepExistingConfig`, set by `apply --adopt`/`--import-url`) is the exception to both of the above. No per-shell files are written at all; instead:
@@ -190,8 +194,8 @@ with `pointAtSharedConfig: true` still writes the `starship init` line, but omit
 `STARSHIP_CONFIG` export, so the shell falls back to the shared `~/.config/starship.toml` by
 Starship's own default. The block is emitted under a distinct marker,
 `# Added by ShellConfigurator (shared config)`, so a later non-adopt run can recognise and drop it;
-the per-shell `export` a non-adopt run strips the adopt block, keeping adopt and non-adopt
-mutually exclusive in both directions. In adopt mode no `STARSHIP_CONFIG` points at per-shell files,
+a non-adopt run's per-shell `export` is likewise dropped when a shell flips to adopt, keeping
+adopt and non-adopt mutually exclusive in both directions. In adopt mode no `STARSHIP_CONFIG` points at per-shell files,
 because none exist.
 
 ---
@@ -208,7 +212,7 @@ because none exist.
 | ----------- | --------------------------------------- | ----------------------------------------------------------- |
 | Starship    | Not `skipStarshipInstall`               | Install if not already present                              |
 | Nerd Font   | `nerdFontToInstall.kind === 'install'`  | Download and install font                                   |
-| Shell(s)    | Selected shell not in `installedShells` | Install via package manager                                 |
+| Shell(s)    | Selected shell not in `installedShells` | Install via package manager; auto-uninstallable shells (`shellInstallSupported` = false: the `script` fallback or no package for that manager) are tagged "(manual)" in the plan so the user knows before the run |
 | Set default | `setDefaultShell` is set                | Run `chsh -s <path>`                                        |
 | Config      | Always                                  | Write per-shell configs, or keep/adopt the shared config |
 | RC files    | Not `skipStarshipInstall`               | One task per shell: init line + `STARSHIP_CONFIG` pin    |
@@ -228,6 +232,7 @@ Two failure nuances make the generated config honest:
 
 - If the font install fails but the user opted into one, the Config task **re-generates the TOML with `hasNerdFont: false`** so the written file has no glyphs the terminal cannot render, and notes it.
 - If no shell is selected, the Config task fails with a clear message ("No shells selected — nothing to configure").
+- If the Config task fails for any reason, the RC tasks of the selected shells are **marked failed with the config error** instead of running: an `init` line pointing at a config that was never written would only produce a broken prompt.
 
 ### Task Lifecycle
 
@@ -378,7 +383,9 @@ WelcomeScreen and ShellScreen await them in `useEffect` with a `cancelled` guard
 
 ### Cross-Distro Smoke Testing
 
-The `.github/workflows/ci.yml` `distro-smoke` job runs the non-destructive parts — `detectPackageManagerAsync`, `detectInstalledShellsAsync`, `isStarshipInstalledAsync`, `generateToml` (parsed as TOML for every preset), `applyShellConfig` idempotency, the nushell manual command resolving to its per-shell config, and `applyShellConfig`/`resetSharedShellConfig` staying mutually exclusive across re-runs (stale unset guards dropped, polluted rc files repaired) — all against a scratch `HOME` inside Ubuntu, Debian, Fedora, Arch, and Alpine containers (`scripts/dockerSmoke.mjs`). This exercises the detection chain against real `/etc/os-release` and package-manager layouts without a VM matrix. It caught the `which`-absence issue on Fedora that led to the `command -v` change above. Containers that ship an old Node get a pinned Node 22 tarball from `scripts/ci/distroSetup.sh` first, so every container runs the same engine floor.
+The `.github/workflows/ci.yml` `distro-smoke` job runs the non-destructive parts — `detectPackageManagerAsync`, `detectInstalledShellsAsync`, `isStarshipInstalledAsync`, `generateToml` (parsed as TOML for every preset), `applyShellConfig` idempotency, the nushell manual command resolving to its per-shell config, and `applyShellConfig`/`resetSharedShellConfig` staying mutually exclusive across re-runs (stale unset guards dropped, polluted rc files repaired) — all against a scratch `HOME` inside Ubuntu, Debian, Fedora, Arch, and Alpine containers (`scripts/dockerSmoke.mjs`), plus synthetic `brew` and `script`-only entries. This exercises the detection chain against real `/etc/os-release` and package-manager layouts without a VM matrix. It caught the `which`-absence issue on Fedora that led to the `command -v` change above. Every matrix job also runs `wizard-check` (`scripts/ci/wizardSmoke.mjs`), which drives the *real* `App` from `dist/` through the full install flow in a scratch `HOME`. Containers that ship an old Node get a pinned Node 22 tarball from `scripts/ci/distroSetup.sh` first, so every container runs the same engine floor.
+
+The macOS leg of the Tests workflow (`tests.yml`) builds `dist/` and runs a headless smoke (`scripts/ci/macosSmoke.mjs`) against a scratch `HOME`: it drives the real entrypoint through `generate`/`apply --dry-run --adopt` so the darwin-only paths (brew detection, `~/Library/Fonts`) are exercised without installing or modifying the runner.
 
 ---
 

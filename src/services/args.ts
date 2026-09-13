@@ -4,8 +4,9 @@
  * Deliberately dependency-free and hand-rolled: the tool ships a bundled,
  * offline tarball, so a flag parser must not add a runtime dependency. It
  * recognises the subcommand as the first positional token and then walks the
- * flags; anything unknown is left alone so the same argv can still fall through
- * to the existing global-flag handling.
+ * flags. Anything unknown is collected as a warning rather than an error so
+ * the same argv can still fall through to the existing global-flag handling —
+ * a typo'd flag must be surfaced, but it must not abort the run.
  */
 
 export type Subcommand = 'generate' | 'apply';
@@ -42,6 +43,12 @@ export interface CliFlags {
   help: boolean;
   version: boolean;
   restore: boolean;
+  /**
+   * Problems found while parsing: unknown flags, values given to boolean flags,
+   * and known value flags that got no value. Ignored for the run — the caller
+   * prints them to stderr so the user sees the typo.
+   */
+  warnings: string[];
 }
 
 /** A flag that takes no value, so the next token is not consumed as its value. */
@@ -52,6 +59,37 @@ const SHORT_FLAGS: Record<string, string> = {
   '-h': '--help',
 };
 
+/** Flags whose presence alone is the value. An `=` form is a contradiction. */
+const BOOLEAN_FLAGS = new Set<string>([
+  '--help',
+  '--version',
+  '--restore',
+  '--undo',
+  '--dry-run',
+  '--no-install',
+  '--powerline',
+  '--no-powerline',
+  '--has-nerd-font',
+  '--no-nerd-font',
+  '--skip-starship',
+  '--adopt',
+]);
+
+/** Flags that consume the next token (or an inline `=value`) as their value. */
+const VALUE_FLAGS = new Set<string>([
+  '--preset',
+  '--palette',
+  '--shells',
+  '--font',
+  '--character',
+  '--set-default',
+  '--import',
+  '--state',
+  '--import-url',
+  '--output',
+  '--export',
+]);
+
 /** Splits a token into its long-form name and any inline `=` value. */
 function splitToken(token: string): { name: string; inlineValue?: string } {
   const eq = token.indexOf('=');
@@ -60,7 +98,13 @@ function splitToken(token: string): { name: string; inlineValue?: string } {
 }
 
 export function parseCliArgs(argv: string[]): CliFlags {
-  const result: CliFlags = { subcommand: null, help: false, version: false, restore: false };
+  const result: CliFlags = {
+    subcommand: null,
+    help: false,
+    version: false,
+    restore: false,
+    warnings: [],
+  };
 
   let subcommandSeen = false;
   for (let i = 0; i < argv.length; i++) {
@@ -76,8 +120,8 @@ export function parseCliArgs(argv: string[]): CliFlags {
       continue;
     }
 
-    // Boolean flags — the value is the flag itself. `--flag=x` is not boolean
-    // (an `=` implies a value), so it falls through to the value handling.
+    // Boolean flags — the value is the flag itself. `--flag=x` is not boolean:
+    // a value on a boolean flag is a contradiction, so warn and drop the token.
     if (token.inlineValue === undefined) {
       switch (flag) {
         case '--help':
@@ -115,12 +159,24 @@ export function parseCliArgs(argv: string[]): CliFlags {
           result.adopt = true;
           continue;
       }
+    } else if (BOOLEAN_FLAGS.has(flag)) {
+      result.warnings.push(`Flag '${flag}' does not take a value; ignoring '${arg}'`);
+      continue;
     }
 
     // Value flags — the inline `=` value, else the next token (skip it only when
     // it exists; the token we consumed is never reused).
     const value = token.inlineValue ?? argv[i + 1];
-    if (value === undefined || value.startsWith('-')) continue;
+    const hasValue = value !== undefined && !value.startsWith('-');
+
+    if (!hasValue) {
+      if (VALUE_FLAGS.has(flag)) {
+        result.warnings.push(`Flag '${flag}' needs a value; ignoring it`);
+      } else if (flag.startsWith('-')) {
+        result.warnings.push(`Unknown flag '${flag}'; ignoring it`);
+      }
+      continue;
+    }
 
     switch (flag) {
       case '--preset':
@@ -158,6 +214,7 @@ export function parseCliArgs(argv: string[]): CliFlags {
         result.exportFile = value;
         break;
       default:
+        result.warnings.push(`Unknown flag '${flag}'; ignoring it`);
         continue;
     }
     if (token.inlineValue === undefined) i++;

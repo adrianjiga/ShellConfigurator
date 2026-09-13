@@ -70,6 +70,35 @@ describe('ReviewScreen', () => {
     expect(frame).toContain('$env.STARSHIP_CONFIG');
   });
 
+  it('previews the config to keep and its rc wiring in adopt mode', async () => {
+    const { instance } = setup({
+      keepExistingConfig: true,
+      sharedConfigToml: '[character]\nsuccess_symbol = "…"\n',
+    });
+    await flush();
+
+    const frame = instance.lastFrame();
+    expect(frame).toContain('Config to keep');
+    expect(frame).toContain('Keep existing Starship config');
+    expect(frame).toContain('starship.toml (shared)');
+    expect(frame).toContain('success_symbol = "…"');
+    expect(frame).toContain('starship init zsh');
+    // Adopt mode wires the shell to the shared config: no per-shell export, and
+    // never a freshly generated TOML in the review.
+    expect(frame).not.toContain('STARSHIP_CONFIG="');
+    expect(frame).not.toContain('$directory$git_branch$git_status');
+  });
+
+  it('notes that an adopted config with no import is kept as-is', async () => {
+    const { instance } = setup({ keepExistingConfig: true });
+    await flush();
+
+    const frame = instance.lastFrame();
+    expect(frame).toContain('Config to keep');
+    expect(frame).toContain('will be kept as-is');
+    expect(frame).not.toContain('$directory$git_branch$git_status');
+  });
+
   it('lists a chosen Nerd Font as part of the install plan', async () => {
     const { instance } = setup({ nerdFontToInstall: { kind: 'install', id: 'JetBrainsMono' } });
     await flush();

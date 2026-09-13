@@ -2,7 +2,13 @@
 
 ## Entry Point
 
-The app starts in `src/index.tsx`, which renders the root `App` component using Ink's renderer. Ink is a React-based framework for building interactive CLI applications — it translates a React component tree into terminal output.
+`src/index.tsx` first parses the argv (`parseCliArgs` in `src/services/args.ts`).
+Global flags (`--help`/`--version`/`--restore`) and the headless subcommands
+(`generate`/`apply`, routed via `runHeadlessCommand`) exit before Ink ever
+renders; parser warnings (unknown/malformed flags) go to stderr. Only when no
+subcommand consumed the args does the app render the root `App` component using
+Ink's renderer. Ink is a React-based framework for building interactive CLI
+applications — it translates a React component tree into terminal output.
 
 ## Component Tree
 
@@ -216,34 +222,49 @@ The `character` module is special — it is never shown as a toggle in SegmentsS
 
 ```
 src/
-├── index.tsx                  Entry point (Ink render)
+├── index.tsx                  Entry point: parses CLI, routes headless commands, renders Ink
 ├── app.tsx                    Root component, state owner, step navigation wiring
 ├── stepMachine.ts             Pure getNextStep/getPrevStep step navigation
-├── types.ts                   WizardState, enums, STEP_ORDER, DEFAULT_STATE
+├── types.ts                   WizardState, discriminated unions, STEP_ORDER, DEFAULT_STATE
 ├── config/
-│   ├── modules.ts             Module definitions (16 modules)
+│   ├── modules.ts             Module definitions (16 modules) — palette keying
 │   ├── presets.ts             Preset definitions (12 presets)
-│   └── shells.ts             Shell definitions (5 shells)
+│   ├── shells.ts              Shell definitions (5 shells: binary, rc file, init line)
+│   ├── palettes.ts            Palette definitions (one `PaletteId` per preset)
+│   ├── status.ts              Task status → icon/colour mapping
+│   └── promptSymbols.ts       Prompt character symbol definitions
 ├── components/
 │   ├── WizardLayout.tsx       Screen wrapper + progress bar
 │   ├── PromptPreview.tsx      Live prompt preview
-│   └── NavHints.tsx           Keyboard hint bar
+│   ├── NavHints.tsx           Keyboard hint bar
+│   └── ErrorBoundary.tsx      Border guards render errors without leaving raw mode on
 ├── screens/
-│   ├── WelcomeScreen.tsx      System detection
+│   ├── WelcomeScreen.tsx      System detection (PM, Starship)
 │   ├── FontCheckScreen.tsx    Nerd Font question
 │   ├── FontSelectScreen.tsx   Font picker
 │   ├── PresetScreen.tsx       Preset picker
 │   ├── SegmentsScreen.tsx     Module toggle list (used for left & right)
-│   ├── StyleScreen.tsx        Character + color scheme picker
-│   ├── ShellScreen.tsx        Shell toggle list
-│   ├── ReviewScreen.tsx       Pre-install confirmation (plan + TOML + rc lines)
+│   ├── StyleScreen.tsx        Character + colour scheme picker
+│   ├── ShellScreen.tsx        Shell toggle list + default shell
+│   ├── ReviewScreen.tsx       Pre-install confirmation (plan + config + rc lines)
 │   ├── InstallingScreen.tsx   Renders install progress (runs installTasks service)
-│   └── DoneScreen.tsx         Summary and exit
+│   └── DoneScreen.tsx         Summary, exit, one-key undo (`r` restores backups)
 ├── generators/
 │   ├── starship.ts            TOML config generation
-│   └── shellRc.ts             RC file writing + starship.toml output
+│   ├── shellRc.ts             RC file writing + per-shell/shared config output
+│   └── toml.ts                TOML escaping helpers
 └── services/
-    ├── detector.ts            System detection (PM, shells, Starship)
-    ├── installer.ts           Installation commands (Starship, fonts, shells)
-    └── installTasks.ts        Install task orchestration (buildTaskList, runInstallTasks)
+    ├── args.ts                Hand-rolled, dependency-free CLI flag parser
+    ├── headless.ts            generate/apply subcommands + bounded --import-url fetch
+    ├── detector.ts            Async system detection (PM, shells, Starship)
+    ├── installer.ts           Install commands (Starship, fonts, shells, chsh)
+    ├── installTasks.ts        Install task orchestration (buildTaskList, runInstallTasks)
+    ├── fontExtractor.ts       Sandboxed worker that decompresses font archives
+    ├── state.ts               State card serialization (serializeState / parseState)
+    ├── history.ts             history.jsonl ledger + snapshot writes
+    ├── cache.ts               Verified font archive cache (pin + sha256)
+    ├── exec.ts                Async spawn wrapper (runCommand) + binary checks
+    ├── errors.ts              Error classes (CliUsageError)
+    ├── paths.ts               XDG dir resolution
+    └── tty.ts                 Terminal handover while child commands run
 ```

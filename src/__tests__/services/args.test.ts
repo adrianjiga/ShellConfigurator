@@ -173,4 +173,44 @@ describe('parseCliArgs', () => {
     expect(f.preset).toBeUndefined();
     expect(f.powerline).toBe(false);
   });
+
+  describe('warnings', () => {
+    it('collects none for a clean command line', () => {
+      expect(parseCliArgs(['generate', '--preset', 'pure']).warnings).toEqual([]);
+    });
+
+    it('warns about an unknown flag without treating it as an error', () => {
+      const f = parseCliArgs(['generate', '--bogus']);
+      expect(f.warnings).toEqual([expect.stringContaining("Unknown flag '--bogus'")]);
+      expect(f.subcommand).toBe('generate');
+    });
+
+    it('warns when a boolean flag is given a value', () => {
+      const f = parseCliArgs(['--dry-run=true']);
+      expect(f.dryRun).toBeUndefined();
+      expect(f.warnings).toEqual([
+        expect.stringContaining("Flag '--dry-run' does not take a value"),
+      ]);
+    });
+
+    it('warns when a known value flag is left without a value', () => {
+      expect(parseCliArgs(['--preset']).warnings).toEqual([
+        expect.stringContaining("Flag '--preset' needs a value"),
+      ]);
+      expect(parseCliArgs(['--preset', '--dry-run']).warnings).toEqual([
+        expect.stringContaining("Flag '--preset' needs a value"),
+      ]);
+    });
+
+    it('still parses the rest of the line when a flag warns', () => {
+      const f = parseCliArgs(['generate', '--preset', 'pure', '--bogus']);
+      expect(f.subcommand).toBe('generate');
+      expect(f.preset).toBe('pure');
+      expect(f.warnings).toHaveLength(1);
+    });
+
+    it('warns about an unknown short flag', () => {
+      expect(parseCliArgs(['-z']).warnings).toEqual([expect.stringContaining("Unknown flag '-z'")]);
+    });
+  });
 });

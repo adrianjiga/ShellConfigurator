@@ -42,6 +42,27 @@ function stamp(): string {
 }
 
 /**
+ * Writes a file atomically: the content goes to a temp file in the same
+ * directory, which is then renamed over the target. A crash or error can never
+ * leave a half-written config or rc file, and a reader never sees a truncated
+ * file. On failure the temp file is removed and the original error re-thrown.
+ */
+function writeFileAtomic(filePath: string, content: string): void {
+  const tmpPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.tmp`);
+  try {
+    fs.writeFileSync(tmpPath, content, 'utf8');
+    fs.renameSync(tmpPath, filePath);
+  } catch (err) {
+    try {
+      fs.rmSync(tmpPath, { force: true });
+    } catch {
+      // The temp file may not exist either; the write error is the useful one.
+    }
+    throw err;
+  }
+}
+
+/**
  * Snapshots the shared starship.toml before per-shell configs shadow it. Returns
  * the backup path, or null when there is no shared config to protect. Best-effort:
  * a copy failure returns null rather than throwing, so a backup problem can never
@@ -152,7 +173,7 @@ export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigRes
     fs.copyFileSync(configPath, backedUpTo);
   }
 
-  fs.writeFileSync(configPath, toml, 'utf8');
+  writeFileAtomic(configPath, toml);
 
   return { path: configPath, backedUpTo };
 }
@@ -171,7 +192,7 @@ export function writeSharedConfig(toml: string): WriteConfigResult {
     fs.copyFileSync(configPath, backedUpTo);
   }
 
-  fs.writeFileSync(configPath, toml, 'utf8');
+  writeFileAtomic(configPath, toml);
 
   return { path: configPath, backedUpTo };
 }
@@ -181,7 +202,7 @@ const BLOCK_MARKER = '# Added by ShellConfigurator';
  * Adopt-mode block marker: these blocks carry only the init line (no
  * STARSHIP_CONFIG export), so a later non-adopt run can recognise and drop them.
  */
-const ADOPT_MARKER = '# Added by ShellConfigurator (shared config)';
+export const ADOPT_MARKER = '# Added by ShellConfigurator (shared config)';
 
 /**
  * Drops every "Added by ShellConfigurator" block containing any needle, so a
@@ -310,7 +331,6 @@ export function applyShellConfig(
     cleanNeedles.push(ADOPT_MARKER);
   }
   const cleaned = removeShellConfiguratorBlocks(existing, cleanNeedles);
-  if (cleaned !== existing) fs.writeFileSync(rcPath, cleaned, 'utf8');
 
   // The PATH and STARSHIP_CONFIG lines must come before the init line, or
   // `starship init` cannot resolve either the binary or its config.
@@ -318,13 +338,16 @@ export function applyShellConfig(
 
   // Idempotent: skip if already configured (check for the full block we'd add).
   if (cleaned.includes(configLine ?? shell.initLine)) {
+    // An already-configured rc may still carry a stale opposite-mode block;
+    // write the cleaned file so the modes stay mutually exclusive.
+    if (cleaned !== existing) writeFileAtomic(rcPath, cleaned);
     return { applied: false, note: 'already configured' };
   }
 
   const lines = buildAdditionLines(shell, cleaned, options);
   const marker = options.pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
   const addition = `\n${marker}\n${lines.join('\n')}\n`;
-  fs.appendFileSync(rcPath, addition, 'utf8');
+  writeFileAtomic(rcPath, cleaned + addition);
 
   return {
     applied: true,
@@ -363,13 +386,15 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
     starshipConfigLine(shellId)!,
     shell.initLine,
   ]);
-  if (cleaned !== existing) fs.writeFileSync(rcPath, cleaned, 'utf8');
   const unsetLine = starshipUnsetLine(shellId)!;
 
   if (cleaned.includes(unsetLine)) {
+    // The unset guard is what we'd add; still write the cleaned rc so a stale
+    // per-shell block survives the whole run rather than tainting the shell.
+    if (cleaned !== existing) writeFileAtomic(rcPath, cleaned);
     return { applied: false, note: 'already configured' };
   }
 
-  fs.appendFileSync(rcPath, `\n${BLOCK_MARKER}\n${unsetLine}\n`, 'utf8');
+  writeFileAtomic(rcPath, `${cleaned}\n${BLOCK_MARKER}\n${unsetLine}\n`);
   return { applied: true };
 }

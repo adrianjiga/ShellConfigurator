@@ -26,6 +26,7 @@ import {
   installShell,
   installStarship,
   setDefaultShell,
+  shellInstallSupported,
 } from './installer.ts';
 
 export interface InstallTaskDeps {
@@ -99,10 +100,16 @@ export function buildTaskList(state: WizardState): InstallTask[] {
     tasks.push({ id: TASK_IDS.font, label: `Nerd Font (${fontLabel(fontId)})`, status: 'pending' });
   }
 
-  // Shells that need installing
+  // Shells that need installing. A shell the detected package manager has no
+  // package for gets tagged "(manual)" so the plan is honest up front.
   for (const shellId of state.selectedShells) {
     if (!state.installedShells.includes(shellId)) {
-      tasks.push({ id: shellTaskId(shellId), label: `Install ${shellId}`, status: 'pending' });
+      const supported = shellInstallSupported(shellId, state.packageManager);
+      tasks.push({
+        id: shellTaskId(shellId),
+        label: `Install ${shellId}${supported ? '' : ' (manual)'}`,
+        status: 'pending',
+      });
     }
   }
 
@@ -230,7 +237,7 @@ export async function runInstallTasks(
   }
 
   // --- Config: write per-shell starship configs, or adopt an existing one ---
-  await runTask(TASK_IDS.config, async () => {
+  const configStatus = await runTask(TASK_IDS.config, async () => {
     if (state.selectedShells.length === 0) {
       throw new Error('No shells selected — nothing to configure');
     }
@@ -303,6 +310,18 @@ export async function runInstallTasks(
       update(taskId, {
         status: 'skipped',
         label: `Configure ${shellId} (skipped — install Starship first)`,
+      });
+      continue;
+    }
+
+    // The rc lines point at a per-shell config that was never written: wiring
+    // the shell up anyway would init Starship against a config that does not
+    // exist. Fail the rc step with the config error instead of running it.
+    if (configStatus === 'failed') {
+      const configTask = tasks.find((t) => t.id === TASK_IDS.config);
+      update(taskId, {
+        status: 'failed',
+        error: configTask?.error ?? 'Config was not written',
       });
       continue;
     }

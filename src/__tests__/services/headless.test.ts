@@ -43,7 +43,12 @@ vi.mock('../../services/history.ts', () => ({
 import type { ModuleId } from '../../config/modules.ts';
 import type { CliFlags } from '../../services/args.ts';
 import { CliUsageError } from '../../services/errors.ts';
-import { runApply, runGenerate, stateFromFlags } from '../../services/headless.ts';
+import {
+  fetchImportedConfig,
+  runApply,
+  runGenerate,
+  stateFromFlags,
+} from '../../services/headless.ts';
 import { DEFAULT_INSTALL_TASK_DEPS } from '../../services/installTasks.ts';
 import { STATE_VERSION, serializeState } from '../../services/state.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
@@ -53,6 +58,7 @@ const flags = (partial: Partial<CliFlags>): CliFlags => ({
   help: false,
   version: false,
   restore: false,
+  warnings: [],
   ...partial,
 });
 
@@ -547,6 +553,53 @@ describe('runApply', () => {
         flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'https://example.com/empty' })
       )
     ).rejects.toThrow(/no config content/);
+  });
+
+  it('rejects an oversized imported config based on the declared content-length', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('small', { status: 200, headers: { 'content-length': '9000000' } })
+    );
+
+    await expect(
+      runApply(
+        flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'https://example.com/lies' })
+      )
+    ).rejects.toThrow(/server reports 9000000 bytes/);
+  });
+
+  it('rejects an oversized imported config based on the actual downloaded bytes', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('a'.repeat(1_000_001), { status: 200 })
+    );
+
+    await expect(
+      runApply(
+        flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'https://example.com/huge' })
+      )
+    ).rejects.toThrow(/config exceeds 1000000 bytes/);
+  });
+
+  it('times out a hung import fetch and says how long it waited', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      new DOMException('The operation was aborted', 'TimeoutError')
+    );
+
+    await expect(fetchImportedConfig('https://example.com/slow', { timeoutMs: 1 })).rejects.toThrow(
+      /timed out after 1ms/
+    );
+  });
+
+  it('passes a timeout signal to fetch so a hung request aborts', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('[a]', { status: 200 }));
+
+    await fetchImportedConfig('https://example.com/fast', { timeoutMs: 5 });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://example.com/fast',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
   });
 
   it('reports a network failure when fetching an imported config', async () => {

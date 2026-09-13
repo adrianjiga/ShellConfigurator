@@ -64,6 +64,13 @@ const STARSHIP_INSTALL_URL = 'https://starship.rs/install.sh';
 
 export async function installStarship(pm: PackageManager): Promise<void> {
   if (pm === 'script') {
+    // Accepted risk: when no package manager is detected we fall back to piping
+    // Starship's official install script, which we deliberately run unchanged
+    // (only pinning --bin-dir). That trusts starship.rs, its CDN and the script
+    // over another first-party channel; it is the documented installation path
+    // and the practical only option on package-manager-less systems. The script
+    // is downloaded to a temp dir first and vetted for an empty body, so a
+    // failed or empty download fails the step instead of running garbage.
     if (!commandExists('curl')) {
       throw new Error(
         'Cannot download Starship: "curl" is not installed. Install curl and try again, ' +
@@ -116,6 +123,18 @@ export function getMissingStarshipPathDir(): string | null {
   return fs.existsSync(path.join(SCRIPT_INSTALL_BIN_DIR, 'starship'))
     ? SCRIPT_INSTALL_BIN_DIR
     : null;
+}
+
+/**
+ * Whether the current package manager can auto-install a given shell. False for
+ * the script fallback (there is no package concept to run an install through)
+ * and for shell/manager combos without a package entry (e.g. powershell on
+ * apt/dnf/apk). The review/install plan uses this to tag such shells as manual
+ * so the user knows before the run that auto-install will fail.
+ */
+export function shellInstallSupported(shellId: ShellId, pm: PackageManager): boolean {
+  if (pm === 'script') return false;
+  return SHELL_PACKAGES[shellId][pm] != null;
 }
 
 export async function installShell(shellId: ShellId, pm: PackageManager): Promise<void> {

@@ -231,26 +231,68 @@ function printTasks(tasks: InstallTask[]): void {
   for (const task of tasks) process.stdout.write(`  ${formatTask(task)}\n`);
 }
 
+/** Cap on how long an --import-url fetch may hang before it is aborted. */
+const IMPORT_FETCH_TIMEOUT_MS = 10_000;
+
+/** Cap on how large an --import-url config may be. Starship configs are KBs. */
+const IMPORT_FETCH_MAX_BYTES = 1_000_000;
+
+export interface FetchConfigOptions {
+  /** Abort the request after this many ms. Loose, for tests to shrink the wait. */
+  timeoutMs?: number;
+  /** Reject when the response exceeds this many bytes. */
+  maxBytes?: number;
+}
+
 /**
  * Fetches a starship.toml from a gist/URL (`--import-url`) and folds it into
  * adopt mode: the downloaded content becomes the shared config every wired
  * shell reads, so the wizard never regenerates. Fails loud on a bad scheme,
- * an HTTP error, or an empty body.
+ * an HTTP error, or an empty body. The fetch is bounded: a hung connection is
+ * aborted after a timeout, and an oversized response (declared or actual) is
+ * rejected so a broken or malicious URL cannot hold the run hostage or flood
+ * memory.
  */
-async function fetchImportedConfig(url: string): Promise<string> {
+export async function fetchImportedConfig(
+  url: string,
+  options: FetchConfigOptions = {}
+): Promise<string> {
   if (!/^https?:\/\//.test(url)) {
     throw new CliUsageError(`--import-url expects an http(s) URL, got '${url}'`);
   }
+
+  const timeoutMs = options.timeoutMs ?? IMPORT_FETCH_TIMEOUT_MS;
+  const maxBytes = options.maxBytes ?? IMPORT_FETCH_MAX_BYTES;
+
   let response: Response;
   try {
-    response = await fetch(url);
+    response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
   } catch (err) {
+    // AbortSignal.timeout rejects with a TimeoutError DOMException on timeout.
+    if (err instanceof DOMException && err.name === 'TimeoutError') {
+      throw new CliUsageError(`Could not fetch '${url}': request timed out after ${timeoutMs}ms`);
+    }
     throw new CliUsageError(`Could not fetch '${url}': ${errorMessage(err)}`);
   }
   if (!response.ok) {
     throw new CliUsageError(`Could not fetch '${url}': HTTP ${response.status}`);
   }
-  const content = await response.text();
+
+  // A declared content-length is a cheap first gate; the actual byte count is
+  // the real check, so a lying or chunked server cannot sneak past.
+  const declaredSize = Number(response.headers.get('content-length') ?? '0');
+  if (declaredSize > maxBytes) {
+    throw new CliUsageError(
+      `Could not fetch '${url}': server reports ${declaredSize} bytes, ` +
+        `above the ${maxBytes} byte limit.`
+    );
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.byteLength > maxBytes) {
+    throw new CliUsageError(`Could not fetch '${url}': config exceeds ${maxBytes} bytes`);
+  }
+  const content = buffer.toString('utf8');
   if (content.trim().length === 0) {
     throw new CliUsageError(`'${url}' returned no config content`);
   }

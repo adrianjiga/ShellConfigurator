@@ -47,12 +47,15 @@ shell-configurator                start the wizard
 shell-configurator generate       render a starship.toml from flags
 shell-configurator apply          run a full install headlessly from a state card
 shell-configurator apply --adopt  keep the existing shared config and wire shells to it
-shell-configurator apply --import-url <url>   fetch a shared config (gist/URL) and adopt it (implies --adopt)
+shell-configurator apply --import-url <url>   fetch a shared config (gist/URL) and adopt it (implies --adopt; bounded: 10s timeout, 1 MB max)
 shell-configurator --help         show usage and exit
 shell-configurator --version      print the version and exit
 shell-configurator --dry-run      preview the config without installing (also -d, --no-install)
 shell-configurator --restore      restore the shared and per-shell configs from their newest backup
 ```
+
+Flags may appear before or after the subcommand (e.g. `--dry-run apply --state card.json`);
+when a flag is repeated, the last one wins.
 
 ### Adopt-existing config
 
@@ -76,6 +79,8 @@ shell-configurator apply --import-url https://gist.github.com/user/abc123/raw/st
 
 The fetched TOML is written to `~/.config/starship.toml` (backing up anything
 already there) and the shells are wired to it. `--import-url` implies `--adopt`.
+Fetches are bounded: a hung connection is aborted after 10 seconds, and a config
+over 1 MB is rejected rather than downloaded.
 
 Both flags only make sense with the `apply` subcommand, so they are rejected
 elsewhere with a usage error.
@@ -99,7 +104,10 @@ npm run dev
 The wizard exits non-zero if any install step fails, so it can be used in a script.
 
 Exit codes: `0` on success, `1` when an install step failed or a fatal error
-occurred, `2` for a usage error (a bad flag or an unreadable state card).
+occurred, `2` for a usage error (an invalid flag value, `--adopt`/`--import-url`
+outside `apply`, or an unreadable state card). An unknown or malformed flag (a
+bogus `--name` or a value on a boolean flag) is dropped with a `warning:` on
+stderr and does not abort the run.
 
 ### Headless mode, state cards and run data
 
@@ -135,7 +143,7 @@ All releases, including changelogs and install tarballs, are published on
 | Right segments | Choose modules for the right side                               |
 | Style          | Color scheme and character symbol                               |
 | Shell select   | Pick which shells to configure (shows install status per shell) |
-| Review         | Preview the generated per-shell config and the install plan     |
+| Review         | Preview the config to write (or the shared config to keep in adopt mode) and the install plan |
 | Installing     | Runs all installs and writes config                             |
 | Done           | Summary of everything that was applied                          |
 

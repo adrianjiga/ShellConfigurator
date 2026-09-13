@@ -33,7 +33,9 @@ plus `starship init` line to that shell's rc file.
 - Before installation, the shared path is backed up best-effort so `--restore`
   can offer a way back for the config that previously stood as the default.
 - The installer's config task list one per selected shell, and the review screen
-  shows the per-shell TOML for each chosen shell.
+  shows the per-shell TOML for each chosen shell (in adopt mode — 0002A — the
+  review shows the shared config under "Config to keep" instead, since no
+  per-shell TOML is generated).
 
 ---
 
