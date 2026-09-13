@@ -107,6 +107,14 @@ describe('index CLI handling', () => {
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('--no-install'));
   });
 
+  it('documents that flags can precede or follow the subcommand', () => {
+    process.argv = ['node', 'index.tsx', '--help'];
+    handleCliArgs();
+    expect(stdoutWrite).toHaveBeenCalledWith(
+      expect.stringContaining('before or after the subcommand')
+    );
+  });
+
   it('does not consume args when unknown flags are passed', () => {
     process.argv = ['node', 'index.tsx', '--bogus'];
     const result = handleCliArgs();

@@ -96,6 +96,9 @@ Options:
   --restore        Copy the newest .bak-* snapshot back over the shared and
                    per-shell configs created by earlier wizard runs
 
+  Flags may appear before or after the subcommand (e.g. "--dry-run generate"
+  works like "generate --dry-run"); when a flag is repeated the last one wins.
+
 generate options (the config — a versioned state card with --export):
   --preset <id>        Seed modules, palette and powerline from a preset
   --palette <id>       Override the colour palette
