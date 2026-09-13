@@ -64,6 +64,13 @@ const STARSHIP_INSTALL_URL = 'https://starship.rs/install.sh';
 
 export async function installStarship(pm: PackageManager): Promise<void> {
   if (pm === 'script') {
+    // Accepted risk: when no package manager is detected we fall back to piping
+    // Starship's official install script, which we deliberately run unchanged
+    // (only pinning --bin-dir). That trusts starship.rs, its CDN and the script
+    // over another first-party channel; it is the documented installation path
+    // and the practical only option on package-manager-less systems. The script
+    // is downloaded to a temp dir first and vetted for an empty body, so a
+    // failed or empty download fails the step instead of running garbage.
     if (!commandExists('curl')) {
       throw new Error(
         'Cannot download Starship: "curl" is not installed. Install curl and try again, ' +
