@@ -258,6 +258,41 @@ describe('runInstallTasks', () => {
     expect(deps.generateToml).toHaveBeenCalledWith(expect.objectContaining({ hasNerdFont: true }));
   });
 
+  it('fails the rc steps instead of running them when the config write failed', async () => {
+    const deps = fakeDeps({
+      writeShellConfig: vi.fn(() => {
+        throw new Error('permission denied');
+      }),
+    });
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh', 'bash'] }),
+      deps,
+      vi.fn()
+    );
+
+    const config = results.find((t) => t.id === 'config');
+    expect(config?.status).toBe('failed');
+    expect(config?.error).toContain('permission denied');
+    // Wiring a shell to a config that was never written would init Starship
+    // against a missing file — the rc step must fail, not run.
+    expect(deps.applyShellConfig).not.toHaveBeenCalled();
+    expect(results.find((t) => t.id === 'rc_zsh')?.status).toBe('failed');
+    expect(results.find((t) => t.id === 'rc_zsh')?.error).toContain('permission denied');
+    expect(results.find((t) => t.id === 'rc_bash')?.status).toBe('failed');
+  });
+
+  it('still applies rc files after a successful config write', async () => {
+    const deps = fakeDeps();
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh'] }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.applyShellConfig).toHaveBeenCalledWith('zsh', expect.anything());
+    expect(results.find((t) => t.id === 'rc_zsh')?.status).toBe('done');
+  });
+
   it('isolates rc failures to the shell that failed', async () => {
     const deps = fakeDeps({
       applyShellConfig: vi.fn().mockImplementation((shellId: string) => {

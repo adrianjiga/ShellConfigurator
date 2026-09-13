@@ -230,7 +230,7 @@ export async function runInstallTasks(
   }
 
   // --- Config: write per-shell starship configs, or adopt an existing one ---
-  await runTask(TASK_IDS.config, async () => {
+  const configStatus = await runTask(TASK_IDS.config, async () => {
     if (state.selectedShells.length === 0) {
       throw new Error('No shells selected — nothing to configure');
     }
@@ -303,6 +303,18 @@ export async function runInstallTasks(
       update(taskId, {
         status: 'skipped',
         label: `Configure ${shellId} (skipped — install Starship first)`,
+      });
+      continue;
+    }
+
+    // The rc lines point at a per-shell config that was never written: wiring
+    // the shell up anyway would init Starship against a config that does not
+    // exist. Fail the rc step with the config error instead of running it.
+    if (configStatus === 'failed') {
+      const configTask = tasks.find((t) => t.id === TASK_IDS.config);
+      update(taskId, {
+        status: 'failed',
+        error: configTask?.error ?? 'Config was not written',
       });
       continue;
     }
