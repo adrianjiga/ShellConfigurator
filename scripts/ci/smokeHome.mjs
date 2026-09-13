@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import * as os from 'node:os';
 import * as nodePath from 'node:path';
 
@@ -28,6 +28,10 @@ export function requireScratchHome() {
         'which would redirect rc writes to the wrong location.'
     );
   }
+
+  // The scratch home may not exist yet (e.g. HOME=/tmp/macos-smoke-home on a
+  // fresh runner). Create it so config/rc writes land where expected.
+  mkdirSync(homeDir, { recursive: true });
 
   const xdg = process.env.XDG_CONFIG_HOME?.trim();
   process.env.XDG_CONFIG_HOME = xdg?.startsWith(homeDir) ? xdg : nodePath.join(homeDir, '.config');
