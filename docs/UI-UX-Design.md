@@ -264,9 +264,11 @@ code path as the CLI's `--restore`) and prints what was restored.
 
 ## Prompt Preview
 
-**File**: `src/components/PromptPreview.tsx`
+**Files**: `src/components/PromptPreview.tsx` (panel), `src/services/preview.ts` (rendering)
 
-The preview panel renders a simulated terminal prompt that reflects the current wizard state:
+The panel shows what the prompt will look like. When a real `starship` binary is on
+PATH it renders the current config live through it; otherwise it falls back to a
+simulated terminal prompt:
 
 ```
   $ some-command
@@ -278,12 +280,35 @@ The preview panel renders a simulated terminal prompt that reflects the current 
   3 left segment(s), 2 right
 ```
 
+### Live Rendering via the Starship Binary
+
+When starship is present, `src/services/preview.ts` replaces the simulation with the
+binary's own output:
+
+1. `renderPromptAsync` creates a scratch dir under the cache and writes
+   `generateToml(state)` to `starship.toml` there.
+2. `STARSHIP_CONFIG` is pointed at that file, `HOME` at the scratch dir, and a
+   throwaway `git` repo is scaffolded as the working directory so the
+   directory/git/branch modules render real data.
+3. `starship prompt` runs against the scratch config; its output is painted by the
+   panel with a "rendered live by the starship binary" caption.
+4. The render is debounced (`PREVIEW_DEBOUNCE_MS`) and gated on the preview-relevant
+   state (modules, palette, powerline, character symbol, nerd font, shared-config
+   flag), so a keyboard storm settles on exactly one invocation.
+
+If starship is missing (it is installed later in the flow) or the render fails, the
+simulation below is shown instead; the scratch dir is always cleaned up afterwards.
+
 ### Module Rendering
 
-Each module calls `previewSegment(hasNerdFont)` from its definition to get display text:
+The static fallback calls `previewSegment(hasNerdFont)` from each module definition
+to get display text:
 
 - With Nerd Font: ` main` (branch icon)
 - Without: `on main`
+
+The live render instead shows exactly what the real binary prints for the same config,
+so the two only line up where the generator and the static approximation already agree.
 
 ### Color Application
 
@@ -298,7 +323,13 @@ Colors come from two sources:
 
 ### Update Behavior
 
-The preview re-renders on every state change. Screens that push live updates via `onUpdate` (SegmentsScreen as modules toggle, ShellScreen when detection lands) cause immediate visual feedback; the other screens change the prompt only when the user confirms a choice and the step advances.
+`PromptPreview` re-renders whenever the preview-relevant state changes (modules,
+palette, powerline, character symbol, nerd font, shared-config flag). Screens that
+push live updates via `onUpdate` (SegmentsScreen as modules toggle, ShellScreen when
+detection lands) cause immediate visual feedback; the other screens change the prompt
+only when the user confirms a choice and the step advances. Navigation between steps
+never re-runs starship, because the render is keyed to those fields rather than to the
+step itself.
 
 ---
 
