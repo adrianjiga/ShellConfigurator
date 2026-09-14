@@ -9,7 +9,7 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/),
 
 ## Features
 
-- **Live preview**: see your prompt update in real time as you make choices
+- **Live preview**: see your prompt update in real time, rendered by your installed starship binary when available
 - **Cross-shell**: configure zsh, bash, fish, nushell, and PowerShell in one run
 - **Automated installation**: installs Starship, Nerd Fonts (downloads verified against their published SHA-256 digest, extraction sandboxed in a worker), and any missing shells for you
 - **12 presets**: from minimal plain-text to Tokyo Night, Gruvbox Rainbow, and Catppuccin

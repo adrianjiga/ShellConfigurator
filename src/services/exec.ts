@@ -35,9 +35,20 @@ export async function commandExistsAsync(cmd: string): Promise<boolean> {
   }
 }
 
-/** Runs a command and resolves its trimmed stdout; rejects on a non-zero exit. */
-export async function runCapture(cmd: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileP(cmd, args, { encoding: 'utf8' });
+/**
+ * Runs a command and resolves its trimmed stdout; rejects on a non-zero exit.
+ * `options.env` replaces the whole environment, so callers wanting to extend it
+ * must merge `process.env` themselves.
+ */
+export async function runCapture(
+  cmd: string,
+  args: string[],
+  options: { env?: NodeJS.ProcessEnv } = {}
+): Promise<string> {
+  const { stdout } = await execFileP(cmd, args, {
+    encoding: 'utf8',
+    ...(options.env ? { env: options.env } : {}),
+  });
   return stdout.trim();
 }
 

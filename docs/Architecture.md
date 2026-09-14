@@ -63,7 +63,7 @@ applications — it translates a React component tree into terminal output.
 | Component       | File                               | Purpose                                                                                                |
 | --------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `WizardLayout`  | `src/components/WizardLayout.tsx`  | Wraps every screen. Renders header, progress bar, two-column layout (content + preview), and NavHints. |
-| `PromptPreview` | `src/components/PromptPreview.tsx` | Live prompt visualization in the right column. Updates in real time as state changes.                  |
+| `PromptPreview` | `src/components/PromptPreview.tsx` | Live prompt panel in the right column. Renders the real prompt via the starship binary when installed (`src/services/preview.ts`), else a static approximation. |
 | `NavHints`      | `src/components/NavHints.tsx`      | Renders keyboard shortcut hints at the bottom of each screen.                                          |
 
 ---
@@ -235,7 +235,7 @@ src/
 │   └── promptSymbols.ts       Prompt character symbol definitions
 ├── components/
 │   ├── WizardLayout.tsx       Screen wrapper + progress bar
-│   ├── PromptPreview.tsx      Live prompt preview
+│   ├── PromptPreview.tsx      Live prompt panel (starship binary render)
 │   ├── NavHints.tsx           Keyboard hint bar
 │   └── ErrorBoundary.tsx      Border guards render errors without leaving raw mode on
 ├── screens/
@@ -256,6 +256,7 @@ src/
 └── services/
     ├── args.ts                Hand-rolled, dependency-free CLI flag parser
     ├── headless.ts            generate/apply subcommands + bounded --import-url fetch
+    ├── preview.ts             Live preview: scratch-dir `starship prompt` + static fallback
     ├── detector.ts            Async system detection (PM, shells, Starship)
     ├── installer.ts           Install commands (Starship, fonts, shells, chsh)
     ├── installTasks.ts        Install task orchestration (buildTaskList, runInstallTasks)
