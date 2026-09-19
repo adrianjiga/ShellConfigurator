@@ -54,6 +54,16 @@ vi.mock('../services/history.ts', async () => {
   };
 });
 
+const { mockRunDoctor, mockFormatDoctorReport } = vi.hoisted(() => ({
+  mockRunDoctor: vi.fn(),
+  mockFormatDoctorReport: vi.fn(),
+}));
+
+vi.mock('../services/doctor.ts', () => ({
+  runDoctor: mockRunDoctor,
+  formatDoctorReport: mockFormatDoctorReport,
+}));
+
 import { render } from 'ink';
 import {
   applyInstallOutcomeExitCode,
@@ -412,6 +422,38 @@ describe('index headless routing', () => {
 
     expect(routed).toBe(true);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('format'));
+  });
+
+  it('runs doctor and prints the human report', async () => {
+    mockRunDoctor.mockResolvedValue({ ok: true, findings: [] });
+    mockFormatDoctorReport.mockReturnValue('HEALTHY\n');
+
+    const routed = await route(['doctor']);
+
+    expect(routed).toBe(true);
+    expect(mockRunDoctor).toHaveBeenCalledWith(null);
+    expect(stdoutWrite).toHaveBeenCalledWith('HEALTHY\n');
+    expect(process.exitCode).not.toBe(1);
+  });
+
+  it('prints the doctor report as JSON with --json', async () => {
+    const report = { ok: true, findings: [{ id: 'starship', title: 'Starship', status: 'pass' }] };
+    mockRunDoctor.mockResolvedValue(report);
+
+    await route(['doctor', '--json']);
+
+    expect(stdoutWrite).toHaveBeenCalledWith(`${JSON.stringify(report, null, 2)}\n`);
+    expect(mockFormatDoctorReport).not.toHaveBeenCalled();
+  });
+
+  it('sets a non-zero exit code when a doctor check fails', async () => {
+    process.exitCode = 0;
+    mockRunDoctor.mockResolvedValue({ ok: false, findings: [] });
+    mockFormatDoctorReport.mockReturnValue('FAILED\n');
+
+    await route(['doctor']);
+
+    expect(process.exitCode).toBe(1);
   });
 });
 

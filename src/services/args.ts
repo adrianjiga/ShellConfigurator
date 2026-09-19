@@ -9,7 +9,7 @@
  * a typo'd flag must be surfaced, but it must not abort the run.
  */
 
-export type Subcommand = 'generate' | 'apply';
+export type Subcommand = 'generate' | 'apply' | 'doctor';
 
 export interface CliFlags {
   /** The subcommand, or null when the run is interactive or a plain flag. */
@@ -39,6 +39,8 @@ export interface CliFlags {
   /** Write the versioned state card here (add -o to keep the TOML too) (--export). */
   exportFile?: string;
   dryRun?: boolean;
+  /** Emit machine-readable output instead of the human report (--json). */
+  json?: boolean;
   // Global flags, kept for parity with index.tsx's existing surface.
   help: boolean;
   version: boolean;
@@ -73,6 +75,7 @@ const BOOLEAN_FLAGS = new Set<string>([
   '--no-nerd-font',
   '--skip-starship',
   '--adopt',
+  '--json',
 ]);
 
 /** Flags that consume the next token (or an inline `=value`) as their value. */
@@ -113,7 +116,7 @@ export function parseCliArgs(argv: string[]): CliFlags {
     const flag = SHORT_FLAGS[token.name] ?? token.name;
 
     if (!flag.startsWith('-')) {
-      if (!subcommandSeen && (flag === 'generate' || flag === 'apply')) {
+      if (!subcommandSeen && (flag === 'generate' || flag === 'apply' || flag === 'doctor')) {
         result.subcommand = flag;
         subcommandSeen = true;
       }
@@ -157,6 +160,9 @@ export function parseCliArgs(argv: string[]): CliFlags {
           continue;
         case '--adopt':
           result.adopt = true;
+          continue;
+        case '--json':
+          result.json = true;
           continue;
       }
     } else if (BOOLEAN_FLAGS.has(flag)) {

@@ -21,6 +21,10 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['apply']).subcommand).toBe('apply');
     });
 
+    it('recognises doctor', () => {
+      expect(parseCliArgs(['doctor']).subcommand).toBe('doctor');
+    });
+
     it('ignores unknown positional tokens', () => {
       expect(parseCliArgs(['deploy']).subcommand).toBeNull();
     });
@@ -43,6 +47,7 @@ describe('parseCliArgs', () => {
       ['--no-nerd-font', 'hasNerdFont', false],
       ['--skip-starship', 'skipStarship', true],
       ['--adopt', 'adopt', true],
+      ['--json', 'json', true],
     ];
 
     it.each(cases)('%s sets %s to %s', (arg, key, expected) => {
