@@ -89,6 +89,30 @@ export async function detectTerminalAsync(): Promise<TerminalId | null> {
   return null;
 }
 
+/** Env vars that mean "this is a sandbox, not the user's own machine". */
+const CONTAINER_ENV_MARKERS = ['CODESPACES', 'REMOTE_CONTAINERS', 'DEVCONTAINER', 'CI'];
+
+/** Files the container runtimes drop at the filesystem root. */
+const CONTAINER_MARKER_FILES = ['/run/.containerenv', '/.dockerenv'];
+
+/**
+ * Detects a container/CI sandbox: fonts are per-host and `chsh` is meaningless
+ * there, so the install chain skips those steps. Marker files are read (not
+ * stat'd) to keep this on the same promisified-fs seam the other detectors use.
+ */
+export async function detectContainerAsync(): Promise<boolean> {
+  if (CONTAINER_ENV_MARKERS.some((name) => Boolean(process.env[name]))) return true;
+  for (const marker of CONTAINER_MARKER_FILES) {
+    try {
+      await readFileP(marker, 'utf8');
+      return true;
+    } catch {
+      // Marker absent — try the next one.
+    }
+  }
+  return false;
+}
+
 const byName = (name: string) => SHELLS.find((s) => s.binary === name || s.id === name);
 
 /**

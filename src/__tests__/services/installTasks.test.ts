@@ -55,6 +55,22 @@ describe('runInstallTasks', () => {
     expect(withSentinel.some((t) => t.id === 'font')).toBe(false);
   });
 
+  it('skips the font install inside a container', async () => {
+    const deps = fakeDeps();
+    const results = await runInstallTasks(
+      state({
+        nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' },
+        container: true,
+      }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.installNerdFont).not.toHaveBeenCalled();
+    expect(results.some((t) => t.id === 'font')).toBe(false);
+    expect(results.some((t) => t.id === 'terminal')).toBe(false);
+  });
+
   it('installs only the shells that are missing', async () => {
     const deps = fakeDeps();
     const results = await runInstallTasks(
@@ -102,6 +118,18 @@ describe('runInstallTasks', () => {
     const results = await runInstallTasks(state({ setDefaultShell: 'zsh' }), deps, vi.fn());
     expect(deps.setDefaultShell).toHaveBeenCalledWith('zsh');
     expect(results.find((t) => t.id === 'chsh')?.status).toBe('done');
+  });
+
+  it('skips chsh inside a container', async () => {
+    const deps = fakeDeps();
+    const results = await runInstallTasks(
+      state({ setDefaultShell: 'zsh', container: true }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.setDefaultShell).not.toHaveBeenCalled();
+    expect(results.some((t) => t.id === 'chsh')).toBe(false);
   });
 
   it('writes a per-shell toml for each selected shell', async () => {
@@ -667,5 +695,21 @@ describe('buildTaskList', () => {
     );
 
     expect(tasks.some((t) => t.id === 'terminal')).toBe(false);
+  });
+
+  it('omits the font, terminal and chsh tasks inside a container', () => {
+    const tasks = buildTaskList(
+      state({
+        nerdFontToInstall: { kind: 'install' as const, id: 'FiraCode' },
+        terminal: 'ghostty',
+        setDefaultShell: 'zsh',
+        container: true,
+      })
+    );
+
+    expect(tasks.some((t) => t.id === 'font')).toBe(false);
+    expect(tasks.some((t) => t.id === 'terminal')).toBe(false);
+    expect(tasks.some((t) => t.id === 'chsh')).toBe(false);
+    expect(tasks.some((t) => t.id === 'config')).toBe(true);
   });
 });

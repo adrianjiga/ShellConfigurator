@@ -112,14 +112,15 @@ export function buildTaskList(state: WizardState): InstallTask[] {
     tasks.push({ id: TASK_IDS.starship, label: 'Starship', status: 'pending' });
   }
 
-  // Nerd Font (only when a concrete font was chosen)
+  // Nerd Font (only when a concrete font was chosen; skipped in containers,
+  // where fonts belong to the host terminal, not the sandbox)
   const fontId = fontIdToInstall(state.nerdFontToInstall);
-  if (fontId) {
+  if (fontId && !state.container) {
     tasks.push({ id: TASK_IDS.font, label: `Nerd Font (${fontLabel(fontId)})`, status: 'pending' });
   }
 
   // Terminal font wiring: only meaningful once a concrete font is being installed.
-  if (fontId && state.terminal) {
+  if (fontId && state.terminal && !state.container) {
     tasks.push({
       id: TASK_IDS.terminal,
       label: `Set ${terminalLabel(state.terminal)} font`,
@@ -140,8 +141,8 @@ export function buildTaskList(state: WizardState): InstallTask[] {
     }
   }
 
-  // Set default shell
-  if (state.setDefaultShell) {
+  // Set default shell (meaningless inside a container)
+  if (state.setDefaultShell && !state.container) {
     tasks.push({
       id: TASK_IDS.chsh,
       label: `Set ${state.setDefaultShell} as default shell`,
@@ -240,10 +241,10 @@ export async function runInstallTasks(
     });
   }
 
-  // --- Nerd Font (only when a concrete font was chosen) ---
+  // --- Nerd Font (only when a concrete font was chosen; skipped in containers) ---
   const fontId = fontIdToInstall(state.nerdFontToInstall);
   let fontInstallFailed = false;
-  if (fontId) {
+  if (fontId && !state.container) {
     fontInstallFailed =
       (await runTask(TASK_IDS.font, async () => {
         // A cache note (e.g. "installed from cache") is shown as task detail.
@@ -254,7 +255,7 @@ export async function runInstallTasks(
 
   // --- Terminal font wiring (only when a concrete font was chosen) ---
   const terminalId = state.terminal;
-  if (fontId && terminalId) {
+  if (fontId && terminalId && !state.container) {
     await runTask(TASK_IDS.terminal, async () => {
       // The config was generated glyph-free when the font install failed, so
       // wiring the terminal at a font that is not there would be a lie.
@@ -281,9 +282,9 @@ export async function runInstallTasks(
     });
   }
 
-  // --- chsh ---
+  // --- chsh (skipped in containers, where the login shell is the image's) ---
   const defaultShell = state.setDefaultShell;
-  if (defaultShell) {
+  if (defaultShell && !state.container) {
     await runTask(TASK_IDS.chsh, async () => {
       await deps.setDefaultShell(defaultShell);
     });

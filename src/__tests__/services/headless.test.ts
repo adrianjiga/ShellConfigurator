@@ -6,11 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockDetectInstalledShells,
   mockDetectPackageManager,
+  mockDetectContainer,
   mockRunInstallTasks,
   mockAppendHistory,
 } = vi.hoisted(() => ({
   mockDetectInstalledShells: vi.fn(),
   mockDetectPackageManager: vi.fn(),
+  mockDetectContainer: vi.fn(),
   mockRunInstallTasks: vi.fn(),
   mockAppendHistory: vi.fn(),
 }));
@@ -23,6 +25,7 @@ vi.mock('../../services/detector.ts', async () => {
     ...actual,
     detectInstalledShellsAsync: mockDetectInstalledShells,
     detectPackageManagerAsync: mockDetectPackageManager,
+    detectContainerAsync: mockDetectContainer,
   };
 });
 
@@ -375,6 +378,7 @@ describe('runApply', () => {
     stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
     mockDetectInstalledShells.mockResolvedValue(['zsh']);
     mockDetectPackageManager.mockResolvedValue('apt');
+    mockDetectContainer.mockResolvedValue(false);
     mockAppendHistory.mockReturnValue(undefined);
     process.exitCode = undefined;
   });
@@ -511,6 +515,20 @@ describe('runApply', () => {
         keepExistingConfig: true,
         sharedConfigToml: '[character]\nsuccess_symbol = "…"\n',
       }),
+      DEFAULT_INSTALL_TASK_DEPS,
+      expect.any(Function)
+    );
+  });
+
+  it('marks the run as running in a container when detected', async () => {
+    const fakeTask = { id: 'config', label: 'Write config files', status: 'done' };
+    mockRunInstallTasks.mockResolvedValue([fakeTask] as never);
+    mockDetectContainer.mockResolvedValue(true);
+
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }));
+
+    expect(mockRunInstallTasks).toHaveBeenCalledWith(
+      expect.objectContaining({ container: true }),
       DEFAULT_INSTALL_TASK_DEPS,
       expect.any(Function)
     );

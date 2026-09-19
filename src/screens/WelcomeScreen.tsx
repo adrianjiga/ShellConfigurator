@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import {
+  detectContainerAsync,
   detectPackageManagerAsync,
   detectTerminalAsync,
   isStarshipInstalledAsync,
@@ -20,6 +21,7 @@ interface Detection {
   starship: { installed: boolean; version?: string };
   pm: PackageManager;
   terminal: TerminalId | null;
+  container: boolean;
 }
 
 type InstallChoice = 'auto' | 'manual';
@@ -40,12 +42,13 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
   const [showManualHelp, setShowManualHelp] = useState(false);
 
   const runDetection = useCallback(async (shouldDrop: () => boolean = () => false) => {
-    const [pm, starship, terminal] = await Promise.all([
+    const [pm, starship, terminal, container] = await Promise.all([
       detectPackageManagerAsync(),
       isStarshipInstalledAsync(),
       detectTerminalAsync(),
+      detectContainerAsync(),
     ]);
-    if (!shouldDrop()) setDetection({ pm, starship, terminal });
+    if (!shouldDrop()) setDetection({ pm, starship, terminal, container });
   }, []);
 
   useEffect(() => {
@@ -61,6 +64,7 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
       onNext({
         packageManager: detection.pm,
         terminal: detection.terminal,
+        container: detection.container,
       });
     }
   });
@@ -79,7 +83,11 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
     if (!detection) return;
     switch (item.value) {
       case 'auto':
-        onNext({ packageManager: detection.pm, terminal: detection.terminal });
+        onNext({
+          packageManager: detection.pm,
+          terminal: detection.terminal,
+          container: detection.container,
+        });
         break;
       case 'manual':
         setShowManualHelp(true);
@@ -99,6 +107,7 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
         onNext({
           packageManager: detection.pm,
           terminal: detection.terminal,
+          container: detection.container,
           skipStarshipInstall: true,
         });
         break;
@@ -134,6 +143,14 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
                 <Box flexDirection="row" gap={1}>
                   <Text color="gray">Terminal:</Text>
                   <Text color="cyan">{TERMINAL_LABELS[detection.terminal]}</Text>
+                </Box>
+              )}
+
+              {detection.container && (
+                <Box flexDirection="row" gap={1}>
+                  <Text color="gray">
+                    Container detected — font and default-shell steps will be skipped
+                  </Text>
                 </Box>
               )}
 

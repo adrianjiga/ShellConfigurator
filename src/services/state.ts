@@ -54,6 +54,7 @@ function runtimeDefaults(): Pick<
   | 'packageManager'
   | 'installedShells'
   | 'terminal'
+  | 'container'
   | 'dryRun'
   | 'installResults'
   | 'sharedConfigToml'
@@ -64,6 +65,7 @@ function runtimeDefaults(): Pick<
     packageManager: 'script',
     installedShells: [],
     terminal: null,
+    container: false,
     dryRun: false,
     installResults: [],
     sharedConfigToml: null,

@@ -111,6 +111,9 @@ export interface WizardState {
   /** The detected terminal emulator, so the chosen Nerd Font can be selected in
    *  it. Runtime field: machine-specific, so it is never serialized. */
   terminal: TerminalId | null;
+  /** True inside a container/CI sandbox: fonts are per-host and chsh is not
+   *  meaningful, so those install steps are skipped. Runtime field. */
+  container: boolean;
   nerdFontToInstall: NerdFontChoice;
   setDefaultShell: ShellId | null;
   skipStarshipInstall: boolean;
@@ -134,6 +137,7 @@ export const DEFAULT_STATE: WizardState = {
   packageManager: 'script',
   installedShells: [],
   terminal: null,
+  container: false,
   nerdFontToInstall: NO_NERD_FONT,
   setDefaultShell: null,
   skipStarshipInstall: false,

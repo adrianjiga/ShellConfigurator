@@ -27,6 +27,7 @@ vi.mock('fs', () => ({
 }));
 
 import {
+  detectContainerAsync,
   detectCurrentShellAsync,
   detectInstalledShellsAsync,
   detectPackageManagerAsync,
@@ -268,5 +269,45 @@ describe('detectTerminalAsync', () => {
   it('returns null for an unrecognised terminal', async () => {
     vi.stubEnv('TERM', 'xterm-256color');
     expect(await detectTerminalAsync()).toBeNull();
+  });
+});
+
+describe('detectContainerAsync', () => {
+  const CONTAINER_ENV = ['CODESPACES', 'REMOTE_CONTAINERS', 'DEVCONTAINER', 'CI'];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const name of CONTAINER_ENV) vi.stubEnv(name, '');
+    readFileAsyncFails();
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each(CONTAINER_ENV)('returns true when %s is set', async (name) => {
+    vi.stubEnv(name, '1');
+    expect(await detectContainerAsync()).toBe(true);
+  });
+
+  it('returns true for /run/.containerenv', async () => {
+    mockReadFile.mockImplementation((filePath: string, ...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
+      if (filePath === '/run/.containerenv') cb(null, '');
+      else cb(new Error('ENOENT'));
+    });
+    expect(await detectContainerAsync()).toBe(true);
+  });
+
+  it('returns true for the Docker marker file', async () => {
+    mockReadFile.mockImplementation((filePath: string, ...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
+      if (filePath === '/.dockerenv') cb(null, '');
+      else cb(new Error('ENOENT'));
+    });
+    expect(await detectContainerAsync()).toBe(true);
+  });
+
+  it('returns false when no marker is present', async () => {
+    readFileAsyncFails();
+    expect(await detectContainerAsync()).toBe(false);
   });
 });
