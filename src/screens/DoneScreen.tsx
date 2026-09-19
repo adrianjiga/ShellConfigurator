@@ -273,6 +273,9 @@ export function DoneScreen({ state }: DoneScreenProps) {
               <Text color="gray">
                 Run <Text color="cyan">starship print-config</Text> to view the generated config.
               </Text>
+              <Text color="gray">
+                Run <Text color="cyan">shell-configurator doctor</Text> to check the setup.
+              </Text>
             </>
           )}
         </Box>
