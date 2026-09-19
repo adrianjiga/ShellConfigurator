@@ -12,6 +12,7 @@ export type InstallTaskId =
   | 'font'
   | 'config'
   | 'chsh'
+  | 'verify'
   | `shell_${ShellId}`
   | `rc_${ShellId}`;
 

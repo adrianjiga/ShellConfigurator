@@ -225,6 +225,97 @@ describe('runInstallTasks', () => {
     expect(results.find((t) => t.id === 'config')?.note).toContain('starship.toml.bak-2026');
   });
 
+  it('verifies each written config through the real starship binary', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: true, version: 'starship 1.20' }),
+    });
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh', 'bash'], installedShells: ['zsh', 'bash'] }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.verifyConfig).toHaveBeenCalledTimes(2);
+    expect(deps.verifyConfig).toHaveBeenCalledWith(expect.stringContaining('zsh.toml'));
+    expect(deps.verifyConfig).toHaveBeenCalledWith(expect.stringContaining('bash.toml'));
+    expect(results.find((t) => t.id === 'verify')?.status).toBe('done');
+  });
+
+  it('verifies the imported shared config in adopt mode', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: true, version: 'starship 1.20' }),
+    });
+    const results = await runInstallTasks(
+      state({
+        keepExistingConfig: true,
+        sharedConfigToml: '[character]\nsuccess_symbol = "…"',
+        selectedShells: ['zsh'],
+        installedShells: ['zsh'],
+      }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.verifyConfig).toHaveBeenCalledTimes(1);
+    expect(deps.verifyConfig).toHaveBeenCalledWith(expect.stringContaining('starship.toml'));
+    expect(results.find((t) => t.id === 'verify')?.status).toBe('done');
+  });
+
+  it('skips verification when keeping an untouched existing config', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: true, version: 'starship 1.20' }),
+    });
+    const results = await runInstallTasks(
+      state({ keepExistingConfig: true, selectedShells: ['zsh'], installedShells: ['zsh'] }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.verifyConfig).not.toHaveBeenCalled();
+    const verify = results.find((t) => t.id === 'verify');
+    expect(verify?.status).toBe('skipped');
+    expect(verify?.note).toBe('nothing written to verify');
+  });
+
+  it('skips verification when starship is not on PATH', async () => {
+    const deps = fakeDeps();
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh'], installedShells: ['zsh'] }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.verifyConfig).not.toHaveBeenCalled();
+    expect(results.find((t) => t.id === 'verify')?.note).toBe('starship not on PATH');
+  });
+
+  it('skips verification when the config write already failed', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: true, version: 'starship 1.20' }),
+      writeShellConfig: vi.fn(() => {
+        throw new Error('permission denied');
+      }),
+    });
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    expect(deps.verifyConfig).not.toHaveBeenCalled();
+    const verify = results.find((t) => t.id === 'verify');
+    expect(verify?.status).toBe('skipped');
+    expect(verify?.note).toBe('no config was written');
+  });
+
+  it('fails the verify task when starship rejects a written config', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: true, version: 'starship 1.20' }),
+      verifyConfig: vi.fn().mockRejectedValue(new Error('TOML parse error at line 3')),
+    });
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    const verify = results.find((t) => t.id === 'verify');
+    expect(verify?.status).toBe('failed');
+    expect(verify?.error).toContain('TOML parse error');
+  });
+
   it('regenerates the config without nerd font glyphs when the font install fails', async () => {
     const deps = fakeDeps({
       installNerdFont: vi.fn().mockRejectedValue(new Error('no network')),
@@ -486,5 +577,17 @@ describe('buildTaskList', () => {
 
     expect(tasks.find((t) => t.id === 'shell_zsh')?.label).toBe('Install zsh (manual)');
     expect(tasks.find((t) => t.id === 'shell_bash')?.label).toBe('Install bash (manual)');
+  });
+
+  it('appends a verify task when starship will be installed', () => {
+    const tasks = buildTaskList(state({ selectedShells: ['zsh'], installedShells: ['zsh'] }));
+
+    expect(tasks.find((t) => t.id === 'verify')?.label).toBe('Verify config');
+  });
+
+  it('omits the verify task when starship install is skipped', () => {
+    const tasks = buildTaskList(state({ skipStarshipInstall: true }));
+
+    expect(tasks.some((t) => t.id === 'verify')).toBe(false);
   });
 });

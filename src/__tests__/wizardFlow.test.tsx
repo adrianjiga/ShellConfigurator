@@ -22,6 +22,11 @@ vi.mock('../services/detector.ts', () => ({
   detectCurrentShellAsync: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock('../services/exec.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/exec.ts')>();
+  return { ...actual, runCapture: vi.fn().mockResolvedValue('') };
+});
+
 const { mockWriteConfig, mockApplyShellConfig, mockResetSharedConfig } = vi.hoisted(() => ({
   mockWriteConfig: vi.fn((_toml: string, _shellId: string) => ({
     path: '/tmp/starship.toml',

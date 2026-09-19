@@ -17,6 +17,7 @@ export function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskD
     resetSharedShellConfig: vi.fn(() => ({ applied: false })),
     getShellsUsingStarship: vi.fn().mockResolvedValue([]),
     getMissingStarshipPathDir: vi.fn(() => null),
+    verifyConfig: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }

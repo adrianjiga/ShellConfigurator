@@ -2,6 +2,8 @@ import {
   type ApplyShellConfigOptions,
   applyShellConfig,
   backupSharedConfig,
+  getSharedConfigPath,
+  getShellConfigPath,
   resetSharedShellConfig,
   type WriteConfigResult,
   writeSharedConfig,
@@ -19,6 +21,7 @@ import {
 } from '../types.ts';
 import { detectInstalledShellsAsync, isStarshipInstalledAsync } from './detector.ts';
 import { errorMessage } from './errors.ts';
+import { runCapture } from './exec.ts';
 import {
   fontLabel,
   getMissingStarshipPathDir,
@@ -50,6 +53,8 @@ export interface InstallTaskDeps {
   /** Shells that run Starship and could inherit a leaked STARSHIP_CONFIG. */
   getShellsUsingStarship: () => Promise<ShellId[]>;
   getMissingStarshipPathDir: () => string | null;
+  /** Rejects when starship cannot load the config at `configPath`. */
+  verifyConfig: (configPath: string) => Promise<void>;
 }
 
 export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
@@ -66,6 +71,11 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   resetSharedShellConfig,
   getShellsUsingStarship: detectInstalledShellsAsync,
   getMissingStarshipPathDir,
+  verifyConfig: async (configPath) => {
+    await runCapture('starship', ['print-config'], {
+      env: { ...process.env, STARSHIP_CONFIG: configPath },
+    });
+  },
 };
 
 /** The single-task ids shared by the screens, so no magic strings leak. */
@@ -74,6 +84,7 @@ export const TASK_IDS = {
   font: 'font',
   config: 'config',
   chsh: 'chsh',
+  verify: 'verify',
 } as const satisfies Record<string, InstallTaskId>;
 
 /** Task id for the rc-file step of a given shell. */
@@ -133,6 +144,11 @@ export function buildTaskList(state: WizardState): InstallTask[] {
   // RC files — one task per shell so a failure in one does not taint the others
   for (const shellId of state.selectedShells) {
     tasks.push({ id: rcTaskId(shellId), label: `Configure ${shellId}`, status: 'pending' });
+  }
+
+  // Post-install verification, skipped when starship was never installed.
+  if (!state.skipStarshipInstall) {
+    tasks.push({ id: TASK_IDS.verify, label: 'Verify config', status: 'pending' });
   }
 
   return tasks;
@@ -297,6 +313,29 @@ export async function runInstallTasks(
       patch: { note: notes.length > 0 ? notes.join('; ') : undefined },
     };
   });
+
+  // --- Verify the config(s) this run wrote load under the real starship binary ---
+  if (!state.skipStarshipInstall) {
+    await runTask(TASK_IDS.verify, async () => {
+      if (configStatus === 'failed') {
+        return { status: 'skipped', patch: { note: 'no config was written' } };
+      }
+      if (!(await deps.isStarshipInstalled()).installed) {
+        return { status: 'skipped', patch: { note: 'starship not on PATH' } };
+      }
+      let configPaths: string[];
+      if (state.keepExistingConfig) {
+        configPaths = state.sharedConfigToml != null ? [getSharedConfigPath()] : [];
+      } else {
+        configPaths = state.selectedShells.map((shellId) => getShellConfigPath(shellId));
+      }
+      if (configPaths.length === 0) {
+        return { status: 'skipped', patch: { note: 'nothing written to verify' } };
+      }
+      for (const configPath of configPaths) await deps.verifyConfig(configPath);
+      return { status: 'done', patch: { note: `verified ${configPaths.length} config(s)` } };
+    });
+  }
 
   // --- Apply shell RC files (skipped until Starship is installed) ---
   // Checked once, after the install, so the rc lines can fix up PATH if the
