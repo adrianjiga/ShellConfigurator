@@ -53,6 +53,7 @@ function runtimeDefaults(): Pick<
   | 'hasNerdFont'
   | 'packageManager'
   | 'installedShells'
+  | 'terminal'
   | 'dryRun'
   | 'installResults'
   | 'sharedConfigToml'
@@ -62,6 +63,7 @@ function runtimeDefaults(): Pick<
     hasNerdFont: false,
     packageManager: 'script',
     installedShells: [],
+    terminal: null,
     dryRun: false,
     installResults: [],
     sharedConfigToml: null,

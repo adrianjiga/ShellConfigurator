@@ -30,6 +30,7 @@ vi.mock('../services/detector.ts', async () => {
     ...actual,
     detectInstalledShellsAsync: vi.fn().mockResolvedValue(['zsh']),
     detectPackageManagerAsync: vi.fn().mockResolvedValue('apt'),
+    detectTerminalAsync: vi.fn().mockResolvedValue(null),
   };
 });
 

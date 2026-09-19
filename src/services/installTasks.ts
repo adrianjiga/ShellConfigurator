@@ -17,6 +17,7 @@ import {
   type InstallTaskId,
   type PackageManager,
   type ShellId,
+  type TerminalId,
   type WizardState,
 } from '../types.ts';
 import { detectInstalledShellsAsync, isStarshipInstalledAsync } from './detector.ts';
@@ -24,6 +25,7 @@ import { errorMessage } from './errors.ts';
 import { runCapture } from './exec.ts';
 import {
   fontLabel,
+  getFontFamily,
   getMissingStarshipPathDir,
   installNerdFont,
   installShell,
@@ -31,6 +33,7 @@ import {
   setDefaultShell,
   shellInstallSupported,
 } from './installer.ts';
+import { type TerminalFontResult, terminalLabel, wireTerminalFont } from './terminalFont.ts';
 
 export interface InstallTaskDeps {
   isStarshipInstalled: () => Promise<{ installed: boolean; version?: string }>;
@@ -55,6 +58,8 @@ export interface InstallTaskDeps {
   getMissingStarshipPathDir: () => string | null;
   /** Rejects when starship cannot load the config at `configPath`. */
   verifyConfig: (configPath: string) => Promise<void>;
+  /** Points the detected terminal at the installed Nerd Font family. */
+  wireTerminalFont: (terminalId: TerminalId, family: string) => TerminalFontResult;
 }
 
 export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
@@ -76,6 +81,7 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
       env: { ...process.env, STARSHIP_CONFIG: configPath },
     });
   },
+  wireTerminalFont,
 };
 
 /** The single-task ids shared by the screens, so no magic strings leak. */
@@ -85,6 +91,7 @@ export const TASK_IDS = {
   config: 'config',
   chsh: 'chsh',
   verify: 'verify',
+  terminal: 'terminal',
 } as const satisfies Record<string, InstallTaskId>;
 
 /** Task id for the rc-file step of a given shell. */
@@ -109,6 +116,15 @@ export function buildTaskList(state: WizardState): InstallTask[] {
   const fontId = fontIdToInstall(state.nerdFontToInstall);
   if (fontId) {
     tasks.push({ id: TASK_IDS.font, label: `Nerd Font (${fontLabel(fontId)})`, status: 'pending' });
+  }
+
+  // Terminal font wiring: only meaningful once a concrete font is being installed.
+  if (fontId && state.terminal) {
+    tasks.push({
+      id: TASK_IDS.terminal,
+      label: `Set ${terminalLabel(state.terminal)} font`,
+      status: 'pending',
+    });
   }
 
   // Shells that need installing. A shell the detected package manager has no
@@ -234,6 +250,27 @@ export async function runInstallTasks(
         const note = await deps.installNerdFont(fontId);
         return note ? { status: 'done', patch: { note } } : undefined;
       })) === 'failed';
+  }
+
+  // --- Terminal font wiring (only when a concrete font was chosen) ---
+  const terminalId = state.terminal;
+  if (fontId && terminalId) {
+    await runTask(TASK_IDS.terminal, async () => {
+      // The config was generated glyph-free when the font install failed, so
+      // wiring the terminal at a font that is not there would be a lie.
+      if (fontInstallFailed) {
+        return { status: 'skipped', patch: { note: 'font install failed' } };
+      }
+      const family = getFontFamily(fontId) ?? fontId;
+      const result = deps.wireTerminalFont(terminalId, family);
+      if (result.applied) {
+        return {
+          status: 'done',
+          patch: { note: result.note ?? `set font in ${result.path}` },
+        };
+      }
+      return { status: 'skipped', patch: { note: result.note ?? 'nothing to change' } };
+    });
   }
 
   // --- Missing shells ---

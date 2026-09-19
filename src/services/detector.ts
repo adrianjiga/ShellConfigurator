@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import { promisify } from 'node:util';
 import { SHELLS } from '../config/shells.ts';
-import type { PackageManager, ShellId } from '../types.ts';
+import type { PackageManager, ShellId, TerminalId } from '../types.ts';
 import { commandExistsAsync, runCapture } from './exec.ts';
 
 const readFileP = promisify(fs.readFile);
@@ -68,6 +68,25 @@ export async function detectInstalledShellsAsync(): Promise<ShellId[]> {
     SHELLS.map(async ({ id, binary }) => ({ id, exists: await commandExistsAsync(binary) }))
   );
   return results.filter(({ exists }) => exists).map(({ id }) => id);
+}
+
+/**
+ * Detects the terminal emulator from the environment markers each one sets.
+ * Returns null for a plain TTY or an emulator we do not wire fonts for.
+ */
+export async function detectTerminalAsync(): Promise<TerminalId | null> {
+  const env = process.env;
+  const term = env.TERM ?? '';
+  if (env.KITTY_WINDOW_ID || term === 'xterm-kitty' || env.TERM_PROGRAM === 'kitty') {
+    return 'kitty';
+  }
+  if (env.GHOSTTY_RESOURCES_DIR || env.TERM_PROGRAM === 'ghostty') return 'ghostty';
+  if (env.WEZTERM_PANE || env.TERM_PROGRAM === 'WezTerm') return 'wezterm';
+  if (env.ALACRITTY_WINDOW_ID || env.ALACRITTY_SOCKET || env.TERM_PROGRAM === 'Alacritty') {
+    return 'alacritty';
+  }
+  if (term === 'foot' || term.startsWith('foot-')) return 'foot';
+  return null;
 }
 
 const byName = (name: string) => SHELLS.find((s) => s.binary === name || s.id === name);

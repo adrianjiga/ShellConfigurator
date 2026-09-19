@@ -316,6 +316,65 @@ describe('runInstallTasks', () => {
     expect(verify?.error).toContain('TOML parse error');
   });
 
+  it('wires the detected terminal to the installed nerd font', async () => {
+    const deps = fakeDeps();
+    const results = await runInstallTasks(
+      state({
+        selectedShells: ['zsh'],
+        nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' },
+        terminal: 'kitty',
+      }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.wireTerminalFont).toHaveBeenCalledWith('kitty', 'JetBrainsMono Nerd Font');
+    expect(results.find((t) => t.id === 'terminal')?.status).toBe('done');
+  });
+
+  it('skips terminal wiring when the font install failed', async () => {
+    const deps = fakeDeps({
+      installNerdFont: vi.fn().mockRejectedValue(new Error('no network')),
+    });
+    const results = await runInstallTasks(
+      state({
+        selectedShells: ['zsh'],
+        nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' },
+        terminal: 'kitty',
+      }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.wireTerminalFont).not.toHaveBeenCalled();
+    const terminal = results.find((t) => t.id === 'terminal');
+    expect(terminal?.status).toBe('skipped');
+    expect(terminal?.note).toBe('font install failed');
+  });
+
+  it('reports a manual terminal (wezterm) as skipped with its snippet', async () => {
+    const deps = fakeDeps({
+      wireTerminalFont: vi.fn(() => ({
+        applied: false,
+        note: 'add config.font = wezterm.font(...)',
+      })),
+    });
+    const results = await runInstallTasks(
+      state({
+        selectedShells: ['zsh'],
+        nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' },
+        terminal: 'wezterm',
+      }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.wireTerminalFont).toHaveBeenCalledWith('wezterm', 'JetBrainsMono Nerd Font');
+    const terminal = results.find((t) => t.id === 'terminal');
+    expect(terminal?.status).toBe('skipped');
+    expect(terminal?.note).toContain('wezterm.font');
+  });
+
   it('regenerates the config without nerd font glyphs when the font install fails', async () => {
     const deps = fakeDeps({
       installNerdFont: vi.fn().mockRejectedValue(new Error('no network')),
@@ -589,5 +648,24 @@ describe('buildTaskList', () => {
     const tasks = buildTaskList(state({ skipStarshipInstall: true }));
 
     expect(tasks.some((t) => t.id === 'verify')).toBe(false);
+  });
+
+  it('adds a terminal font task when a font and terminal are known', () => {
+    const tasks = buildTaskList(
+      state({
+        nerdFontToInstall: { kind: 'install' as const, id: 'FiraCode' },
+        terminal: 'ghostty',
+      })
+    );
+
+    expect(tasks.find((t) => t.id === 'terminal')?.label).toBe('Set Ghostty font');
+  });
+
+  it('omits the terminal task without a detected terminal', () => {
+    const tasks = buildTaskList(
+      state({ nerdFontToInstall: { kind: 'install' as const, id: 'FiraCode' } })
+    );
+
+    expect(tasks.some((t) => t.id === 'terminal')).toBe(false);
   });
 });

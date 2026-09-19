@@ -1,13 +1,18 @@
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WelcomeScreen } from '../../screens/WelcomeScreen.tsx';
-import { detectPackageManagerAsync, isStarshipInstalledAsync } from '../../services/detector.ts';
+import {
+  detectPackageManagerAsync,
+  detectTerminalAsync,
+  isStarshipInstalledAsync,
+} from '../../services/detector.ts';
 import { DEFAULT_STATE } from '../../types.ts';
 import { flush } from '../helpers/wait.ts';
 
 vi.mock('../../services/detector.ts', () => ({
   detectPackageManagerAsync: vi.fn(),
   isStarshipInstalledAsync: vi.fn(),
+  detectTerminalAsync: vi.fn(),
 }));
 
 afterEach(() => {
@@ -17,6 +22,7 @@ afterEach(() => {
 beforeEach(() => {
   vi.mocked(detectPackageManagerAsync).mockResolvedValue('apt');
   vi.mocked(isStarshipInstalledAsync).mockResolvedValue({ installed: false });
+  vi.mocked(detectTerminalAsync).mockResolvedValue(null);
 });
 
 function setup() {
@@ -49,7 +55,7 @@ describe('WelcomeScreen', () => {
     instance.stdin.write(ENTER);
     await flush();
 
-    expect(onNext).toHaveBeenCalledWith({ packageManager: 'apt' });
+    expect(onNext).toHaveBeenCalledWith({ packageManager: 'apt', terminal: null });
   });
 
   it('installs automatically when Starship is missing', async () => {
@@ -61,7 +67,7 @@ describe('WelcomeScreen', () => {
     instance.stdin.write(ENTER);
     await flush();
 
-    expect(onNext).toHaveBeenCalledWith({ packageManager: 'apt' });
+    expect(onNext).toHaveBeenCalledWith({ packageManager: 'apt', terminal: null });
   });
 
   it('offers a manual install, then continue without installing', async () => {
@@ -84,6 +90,7 @@ describe('WelcomeScreen', () => {
 
     expect(onNext).toHaveBeenCalledWith({
       packageManager: 'script',
+      terminal: null,
       skipStarshipInstall: true,
     });
   });
@@ -110,6 +117,21 @@ describe('WelcomeScreen', () => {
     instance.stdin.write(ENTER);
     await flush();
 
-    expect(onNext).toHaveBeenCalledWith({ packageManager: 'apt' });
+    expect(onNext).toHaveBeenCalledWith({ packageManager: 'apt', terminal: null });
+  });
+
+  it('detects the terminal, shows it, and passes it through', async () => {
+    vi.mocked(detectTerminalAsync).mockResolvedValue('kitty');
+    const { instance, onNext } = setup();
+    await flush();
+    await flush();
+
+    expect(instance.lastFrame()).toContain('Terminal:');
+    expect(instance.lastFrame()).toContain('kitty');
+
+    instance.stdin.write(ENTER);
+    await flush();
+
+    expect(onNext).toHaveBeenCalledWith({ packageManager: 'apt', terminal: 'kitty' });
   });
 });

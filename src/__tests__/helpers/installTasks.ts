@@ -18,6 +18,7 @@ export function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskD
     getShellsUsingStarship: vi.fn().mockResolvedValue([]),
     getMissingStarshipPathDir: vi.fn(() => null),
     verifyConfig: vi.fn().mockResolvedValue(undefined),
+    wireTerminalFont: vi.fn(() => ({ applied: true })),
     ...overrides,
   };
 }

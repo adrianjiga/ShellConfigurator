@@ -30,6 +30,7 @@ import {
   detectCurrentShellAsync,
   detectInstalledShellsAsync,
   detectPackageManagerAsync,
+  detectTerminalAsync,
   isStarshipInstalledAsync,
 } from '../../services/detector.ts';
 
@@ -214,5 +215,58 @@ describe('detectCurrentShellAsync', () => {
     delete process.env.SHELL;
     execFileFails();
     expect(await detectCurrentShellAsync()).toBeNull();
+  });
+});
+
+describe('detectTerminalAsync', () => {
+  const TERMINAL_ENV = [
+    'KITTY_WINDOW_ID',
+    'TERM',
+    'TERM_PROGRAM',
+    'GHOSTTY_RESOURCES_DIR',
+    'WEZTERM_PANE',
+    'ALACRITTY_WINDOW_ID',
+    'ALACRITTY_SOCKET',
+  ];
+
+  beforeEach(() => {
+    for (const name of TERMINAL_ENV) vi.stubEnv(name, '');
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('detects kitty from its window id', async () => {
+    vi.stubEnv('KITTY_WINDOW_ID', '1');
+    expect(await detectTerminalAsync()).toBe('kitty');
+  });
+
+  it('detects kitty from TERM', async () => {
+    vi.stubEnv('TERM', 'xterm-kitty');
+    expect(await detectTerminalAsync()).toBe('kitty');
+  });
+
+  it('detects ghostty from its resources dir', async () => {
+    vi.stubEnv('GHOSTTY_RESOURCES_DIR', '/usr/share/ghostty');
+    expect(await detectTerminalAsync()).toBe('ghostty');
+  });
+
+  it('detects wezterm from its pane id', async () => {
+    vi.stubEnv('WEZTERM_PANE', '0');
+    expect(await detectTerminalAsync()).toBe('wezterm');
+  });
+
+  it('detects alacritty from its window id', async () => {
+    vi.stubEnv('ALACRITTY_WINDOW_ID', '123');
+    expect(await detectTerminalAsync()).toBe('alacritty');
+  });
+
+  it('detects foot from TERM', async () => {
+    vi.stubEnv('TERM', 'foot');
+    expect(await detectTerminalAsync()).toBe('foot');
+  });
+
+  it('returns null for an unrecognised terminal', async () => {
+    vi.stubEnv('TERM', 'xterm-256color');
+    expect(await detectTerminalAsync()).toBeNull();
   });
 });
