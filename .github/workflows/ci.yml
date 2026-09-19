@@ -39,6 +39,23 @@ jobs:
     steps:
       - run: echo "All quality checks passed."
 
+  # macOS cannot run the Linux Docker matrix, so it gets a native sibling job in
+  # the same smoke group: same build + scratch-HOME smoke entrypoint, including a
+  # real headless apply (brew installs Starship; rc/config writes stay in /tmp).
+  macos-smoke:
+    name: Distro smoke (macos)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - name: macOS headless smoke
+        run: HOME=/tmp/macos-smoke-home node scripts/ci/macosSmoke.mjs
+
   distro-smoke:
     name: Distro smoke (${{ matrix.package-manager }}, ${{ matrix.image }})
     runs-on: ubuntu-latest
