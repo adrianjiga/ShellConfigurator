@@ -485,6 +485,27 @@ shell-configurator apply --state <file> [--dry-run] [--adopt] [--import-url <url
                 usage error)
 ```
 
+### doctor / repair (day-2 health)
+
+```
+shell-configurator doctor [--state <file>] [--json] [--fix]
+shell-configurator repair [--state <file>] [--json]
+```
+
+`doctor` is read-only and never installs. It checks Starship on `PATH`, a
+UTF-8 locale, the `starship init` line and `STARSHIP_CONFIG` export in each
+shell rc (or the shared config in adopt mode), that the configs load under the
+real `starship print-config`, that a Nerd Font is installed, and that it is
+selected in the detected terminal (`src/services/doctor.ts`). Each finding is
+`pass`/`warn`/`fail`; any `fail` sets exit code `1`. `--json` prints the report
+object.
+
+`repair` (or `doctor --fix`) applies the fix each failing finding carries —
+re-add the init line, reinstall Starship via the detected package manager,
+reinstall the font from cache, rewire the terminal font — then re-runs the
+doctor and reports the *result*. A check that still fails keeps the exit code
+non-zero.
+
 Flags may appear before or after the subcommand; when a flag is repeated, the
 last one wins. Unknown or malformed flags (a bogus `--name`, a value on a
 boolean flag, a missing value) are collected as `warnings` on `CliFlags`,
@@ -495,7 +516,7 @@ printed to stderr, and ignored — they never abort the run.
 | Code | Meaning                                                                 |
 | ---- | ----------------------------------------------------------------------- |
 | `0`  | Success.                                                               |
-| `1`  | A wizard install finished with at least one failed task, or a headless run failed (also any fatal crash). |
+| `1`  | A wizard install finished with at least one failed task, a headless run failed, or a `doctor`/`repair` check still fails (also any fatal crash). |
 | `2`  | `CliUsageError` — an invalid flag value, `--adopt`/`--import-url` outside `apply`, or an unreadable state card; reads clean with no stack trace. |
 
 ### Persisted Run Data
