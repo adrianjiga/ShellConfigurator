@@ -54,14 +54,23 @@ vi.mock('../services/history.ts', async () => {
   };
 });
 
-const { mockRunDoctor, mockFormatDoctorReport } = vi.hoisted(() => ({
-  mockRunDoctor: vi.fn(),
-  mockFormatDoctorReport: vi.fn(),
-}));
+const { mockRunDoctor, mockFormatDoctorReport, mockRunRepair, mockFormatRepairReport } = vi.hoisted(
+  () => ({
+    mockRunDoctor: vi.fn(),
+    mockFormatDoctorReport: vi.fn(),
+    mockRunRepair: vi.fn(),
+    mockFormatRepairReport: vi.fn(),
+  })
+);
 
 vi.mock('../services/doctor.ts', () => ({
   runDoctor: mockRunDoctor,
   formatDoctorReport: mockFormatDoctorReport,
+}));
+
+vi.mock('../services/repair.ts', () => ({
+  runRepair: mockRunRepair,
+  formatRepairReport: mockFormatRepairReport,
 }));
 
 import { render } from 'ink';
@@ -452,6 +461,39 @@ describe('index headless routing', () => {
     mockFormatDoctorReport.mockReturnValue('FAILED\n');
 
     await route(['doctor']);
+
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('runs repair and prints the repair report', async () => {
+    mockRunRepair.mockResolvedValue({ ok: true, actions: [] });
+    mockFormatRepairReport.mockReturnValue('REPAIRED\n');
+
+    const routed = await route(['repair']);
+
+    expect(routed).toBe(true);
+    expect(mockRunRepair).toHaveBeenCalledWith(null);
+    expect(stdoutWrite).toHaveBeenCalledWith('REPAIRED\n');
+    expect(mockRunDoctor).not.toHaveBeenCalled();
+  });
+
+  it('upgrades doctor --fix into a repair', async () => {
+    mockRunRepair.mockResolvedValue({ ok: true, actions: [] });
+    mockFormatRepairReport.mockReturnValue('REPAIRED\n');
+
+    const routed = await route(['doctor', '--fix']);
+
+    expect(routed).toBe(true);
+    expect(mockRunRepair).toHaveBeenCalledWith(null);
+    expect(mockRunDoctor).not.toHaveBeenCalled();
+  });
+
+  it('sets a non-zero exit code when a repair still fails a check', async () => {
+    process.exitCode = 0;
+    mockRunRepair.mockResolvedValue({ ok: false, actions: [] });
+    mockFormatRepairReport.mockReturnValue('STILL BROKEN\n');
+
+    await route(['repair']);
 
     expect(process.exitCode).toBe(1);
   });

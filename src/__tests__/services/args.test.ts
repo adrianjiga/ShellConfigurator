@@ -25,6 +25,10 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['doctor']).subcommand).toBe('doctor');
     });
 
+    it('recognises repair', () => {
+      expect(parseCliArgs(['repair']).subcommand).toBe('repair');
+    });
+
     it('ignores unknown positional tokens', () => {
       expect(parseCliArgs(['deploy']).subcommand).toBeNull();
     });
@@ -48,6 +52,7 @@ describe('parseCliArgs', () => {
       ['--skip-starship', 'skipStarship', true],
       ['--adopt', 'adopt', true],
       ['--json', 'json', true],
+      ['--fix', 'fix', true],
     ];
 
     it.each(cases)('%s sets %s to %s', (arg, key, expected) => {

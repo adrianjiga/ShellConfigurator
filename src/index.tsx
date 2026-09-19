@@ -10,6 +10,7 @@ import { formatDoctorReport, runDoctor } from './services/doctor.ts';
 import { CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags } from './services/headless.ts';
 import { appendHistory, writeSnapshot } from './services/history.ts';
+import { formatRepairReport, runRepair } from './services/repair.ts';
 import { restoreTty } from './services/tty.ts';
 import type { InstallTask, WizardState } from './types.ts';
 
@@ -85,6 +86,7 @@ Usage:
   shell-configurator generate     render a starship.toml from flags
   shell-configurator apply        run a full install headlessly
   shell-configurator doctor       check an existing setup and report problems
+  shell-configurator repair       fix the problems doctor finds
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
@@ -125,6 +127,7 @@ apply options (a headless install from a state card):
 doctor options (read-only; exits non-zero when a check fails):
   --state <file>       Check the setup described by a saved state card
   --json               Print the report as JSON instead of the text summary
+  --fix                Apply the available repairs, then re-check (like 'repair')
 `);
 }
 
@@ -170,15 +173,32 @@ export function emitFlagWarnings(flags: CliFlags): void {
 /**
  * Runs the read-only health check. A failing check sets the process exit code
  * (so CI and scripts can gate on it) but never throws — the report is the
- * output. `--json` swaps the human summary for the report object.
+ * output. `--json` swaps the human summary for the report object, and `--fix`
+ * upgrades the run into a repair.
  */
 export async function runDoctorCommand(flags: CliFlags): Promise<void> {
+  if (flags.fix) {
+    await runRepairCommand(flags);
+    return;
+  }
   const state = flags.stateFile ? stateFromFlags(flags) : null;
   const report = await runDoctor(state);
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {
     process.stdout.write(formatDoctorReport(report));
+  }
+  if (!report.ok) process.exitCode = 1;
+}
+
+/** Runs the doctor's fixes, then re-checks; a still-failing check exits non-zero. */
+export async function runRepairCommand(flags: CliFlags): Promise<void> {
+  const state = flags.stateFile ? stateFromFlags(flags) : null;
+  const report = await runRepair(state);
+  if (flags.json) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  } else {
+    process.stdout.write(formatRepairReport(report));
   }
   if (!report.ok) process.exitCode = 1;
 }
@@ -201,6 +221,10 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   }
   if (flags.subcommand === 'doctor') {
     await runDoctorCommand(flags);
+    return true;
+  }
+  if (flags.subcommand === 'repair') {
+    await runRepairCommand(flags);
     return true;
   }
   // No subcommand: the interactive wizard runs next — adopt/import are headless
