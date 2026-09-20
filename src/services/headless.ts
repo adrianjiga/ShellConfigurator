@@ -17,6 +17,7 @@ import {
   detectContainerAsync,
   detectInstalledShellsAsync,
   detectPackageManagerAsync,
+  detectTerminalAsync,
 } from './detector.ts';
 import { CliUsageError, errorMessage } from './errors.ts';
 import { appendHistory } from './history.ts';
@@ -316,12 +317,13 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
       sharedConfigToml: await fetchImportedConfig(flags.importUrl),
     };
   }
-  const [installedShells, packageManager, container] = await Promise.all([
+  const [installedShells, packageManager, container, terminal] = await Promise.all([
     detectInstalledShellsAsync(),
     detectPackageManagerAsync(),
     detectContainerAsync(),
+    detectTerminalAsync(),
   ]);
-  return { ...state, installedShells, packageManager, container };
+  return { ...state, installedShells, packageManager, container, terminal };
 }
 
 /**
