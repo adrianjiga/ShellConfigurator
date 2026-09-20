@@ -41,7 +41,7 @@ export const NERD_FONTS: Array<{ id: string; label: string; zipName: string; fam
     id: 'CascadiaCode',
     label: 'Cascadia Code',
     zipName: 'CascadiaCode.zip',
-    family: 'CascadiaCode Nerd Font',
+    family: 'CaskaydiaCove Nerd Font',
   },
   { id: 'Meslo', label: 'Meslo LG', zipName: 'Meslo.zip', family: 'MesloLGL Nerd Font' },
   {
