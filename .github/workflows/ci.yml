@@ -98,7 +98,7 @@ jobs:
             package-manager: script
             setup: true
             finalize: sed -i s/^ID=debian/ID=smoke/ /etc/os-release && mv /usr/bin/apt-get /usr/bin/apt-get.disabled
-            wizard-check: HOME=/tmp/smoke-home node scripts/ci/wizardSmoke.mjs && HOME=/tmp/smoke-home node scripts/ci/headlessApplySmoke.mjs
+            wizard-check: HOME=/tmp/smoke-home node scripts/ci/wizardSmoke.mjs && HOME=/tmp/smoke-home node scripts/ci/headlessGenerateSmoke.mjs && HOME=/tmp/smoke-home node scripts/ci/headlessApplySmoke.mjs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
