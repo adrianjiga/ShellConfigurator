@@ -30,6 +30,8 @@ vi.mock('../services/detector.ts', async () => {
     ...actual,
     detectInstalledShellsAsync: vi.fn().mockResolvedValue(['zsh']),
     detectPackageManagerAsync: vi.fn().mockResolvedValue('apt'),
+    detectTerminalAsync: vi.fn().mockResolvedValue(null),
+    detectContainerAsync: vi.fn().mockResolvedValue(false),
   };
 });
 
@@ -52,6 +54,25 @@ vi.mock('../services/history.ts', async () => {
     writeSnapshot: mockWriteSnapshot,
   };
 });
+
+const { mockRunDoctor, mockFormatDoctorReport, mockRunRepair, mockFormatRepairReport } = vi.hoisted(
+  () => ({
+    mockRunDoctor: vi.fn(),
+    mockFormatDoctorReport: vi.fn(),
+    mockRunRepair: vi.fn(),
+    mockFormatRepairReport: vi.fn(),
+  })
+);
+
+vi.mock('../services/doctor.ts', () => ({
+  runDoctor: mockRunDoctor,
+  formatDoctorReport: mockFormatDoctorReport,
+}));
+
+vi.mock('../services/repair.ts', () => ({
+  runRepair: mockRunRepair,
+  formatRepairReport: mockFormatRepairReport,
+}));
 
 import { render } from 'ink';
 import {
@@ -411,6 +432,71 @@ describe('index headless routing', () => {
 
     expect(routed).toBe(true);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('format'));
+  });
+
+  it('runs doctor and prints the human report', async () => {
+    mockRunDoctor.mockResolvedValue({ ok: true, findings: [] });
+    mockFormatDoctorReport.mockReturnValue('HEALTHY\n');
+
+    const routed = await route(['doctor']);
+
+    expect(routed).toBe(true);
+    expect(mockRunDoctor).toHaveBeenCalledWith(null);
+    expect(stdoutWrite).toHaveBeenCalledWith('HEALTHY\n');
+    expect(process.exitCode).not.toBe(1);
+  });
+
+  it('prints the doctor report as JSON with --json', async () => {
+    const report = { ok: true, findings: [{ id: 'starship', title: 'Starship', status: 'pass' }] };
+    mockRunDoctor.mockResolvedValue(report);
+
+    await route(['doctor', '--json']);
+
+    expect(stdoutWrite).toHaveBeenCalledWith(`${JSON.stringify(report, null, 2)}\n`);
+    expect(mockFormatDoctorReport).not.toHaveBeenCalled();
+  });
+
+  it('sets a non-zero exit code when a doctor check fails', async () => {
+    process.exitCode = 0;
+    mockRunDoctor.mockResolvedValue({ ok: false, findings: [] });
+    mockFormatDoctorReport.mockReturnValue('FAILED\n');
+
+    await route(['doctor']);
+
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('runs repair and prints the repair report', async () => {
+    mockRunRepair.mockResolvedValue({ ok: true, actions: [] });
+    mockFormatRepairReport.mockReturnValue('REPAIRED\n');
+
+    const routed = await route(['repair']);
+
+    expect(routed).toBe(true);
+    expect(mockRunRepair).toHaveBeenCalledWith(null);
+    expect(stdoutWrite).toHaveBeenCalledWith('REPAIRED\n');
+    expect(mockRunDoctor).not.toHaveBeenCalled();
+  });
+
+  it('upgrades doctor --fix into a repair', async () => {
+    mockRunRepair.mockResolvedValue({ ok: true, actions: [] });
+    mockFormatRepairReport.mockReturnValue('REPAIRED\n');
+
+    const routed = await route(['doctor', '--fix']);
+
+    expect(routed).toBe(true);
+    expect(mockRunRepair).toHaveBeenCalledWith(null);
+    expect(mockRunDoctor).not.toHaveBeenCalled();
+  });
+
+  it('sets a non-zero exit code when a repair still fails a check', async () => {
+    process.exitCode = 0;
+    mockRunRepair.mockResolvedValue({ ok: false, actions: [] });
+    mockFormatRepairReport.mockReturnValue('STILL BROKEN\n');
+
+    await route(['repair']);
+
+    expect(process.exitCode).toBe(1);
   });
 });
 

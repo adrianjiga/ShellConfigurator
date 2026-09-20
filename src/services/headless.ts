@@ -13,7 +13,12 @@ import {
   type WizardState,
 } from '../types.ts';
 import type { CliFlags } from './args.ts';
-import { detectInstalledShellsAsync, detectPackageManagerAsync } from './detector.ts';
+import {
+  detectContainerAsync,
+  detectInstalledShellsAsync,
+  detectPackageManagerAsync,
+  detectTerminalAsync,
+} from './detector.ts';
 import { CliUsageError, errorMessage } from './errors.ts';
 import { appendHistory } from './history.ts';
 import { NERD_FONTS } from './installer.ts';
@@ -312,11 +317,13 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
       sharedConfigToml: await fetchImportedConfig(flags.importUrl),
     };
   }
-  const [installedShells, packageManager] = await Promise.all([
+  const [installedShells, packageManager, container, terminal] = await Promise.all([
     detectInstalledShellsAsync(),
     detectPackageManagerAsync(),
+    detectContainerAsync(),
+    detectTerminalAsync(),
   ]);
-  return { ...state, installedShells, packageManager };
+  return { ...state, installedShells, packageManager, container, terminal };
 }
 
 /**

@@ -2,6 +2,7 @@ import { CORE_MODULES, type ModuleId } from './config/modules.ts';
 import type { PaletteId } from './config/palettes.ts';
 
 export type ShellId = 'zsh' | 'bash' | 'fish' | 'nushell' | 'powershell';
+export type TerminalId = 'alacritty' | 'kitty' | 'wezterm' | 'ghostty' | 'foot';
 export type CharacterSymbol = 'arrow' | 'lambda' | 'dollar';
 export type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'apk' | 'script';
 export type InstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
@@ -12,6 +13,8 @@ export type InstallTaskId =
   | 'font'
   | 'config'
   | 'chsh'
+  | 'verify'
+  | 'terminal'
   | `shell_${ShellId}`
   | `rc_${ShellId}`;
 
@@ -105,6 +108,12 @@ export interface WizardState {
   selectedShells: ShellId[];
   packageManager: PackageManager;
   installedShells: ShellId[];
+  /** The detected terminal emulator, so the chosen Nerd Font can be selected in
+   *  it. Runtime field: machine-specific, so it is never serialized. */
+  terminal: TerminalId | null;
+  /** True inside a container/CI sandbox: fonts are per-host and chsh is not
+   *  meaningful, so those install steps are skipped. Runtime field. */
+  container: boolean;
   nerdFontToInstall: NerdFontChoice;
   setDefaultShell: ShellId | null;
   skipStarshipInstall: boolean;
@@ -127,6 +136,8 @@ export const DEFAULT_STATE: WizardState = {
   selectedShells: [],
   packageManager: 'script',
   installedShells: [],
+  terminal: null,
+  container: false,
   nerdFontToInstall: NO_NERD_FONT,
   setDefaultShell: null,
   skipStarshipInstall: false,

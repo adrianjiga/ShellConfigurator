@@ -57,6 +57,7 @@ import {
   installNerdFont,
   installShell,
   installStarship,
+  NERD_FONTS,
   SCRIPT_INSTALL_BIN_DIR,
   setDefaultShell,
   shellInstallSupported,
@@ -170,6 +171,19 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe('NERD_FONTS', () => {
+  it('uses the patched family names upstream actually installs', () => {
+    const families = Object.fromEntries(NERD_FONTS.map((font) => [font.id, font.family]));
+
+    expect(families.CascadiaCode).toBe('CaskaydiaCove Nerd Font');
+    expect(families.JetBrainsMono).toBe('JetBrainsMono Nerd Font');
+    expect(families.FiraCode).toBe('FiraCode Nerd Font');
+    expect(families.Hack).toBe('Hack Nerd Font');
+    expect(families.Meslo).toBe('MesloLGL Nerd Font');
+    expect(families.SourceCodePro).toBe('SauceCodePro Nerd Font');
+  });
 });
 
 describe('installStarship', () => {

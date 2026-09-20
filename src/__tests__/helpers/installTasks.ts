@@ -6,6 +6,7 @@ export function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskD
   return {
     isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
     installStarship: vi.fn().mockResolvedValue(undefined),
+    recordStarshipVersion: vi.fn(),
     installNerdFont: vi.fn().mockResolvedValue(undefined),
     installShell: vi.fn().mockResolvedValue(undefined),
     setDefaultShell: vi.fn().mockResolvedValue(undefined),
@@ -17,6 +18,8 @@ export function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskD
     resetSharedShellConfig: vi.fn(() => ({ applied: false })),
     getShellsUsingStarship: vi.fn().mockResolvedValue([]),
     getMissingStarshipPathDir: vi.fn(() => null),
+    verifyConfig: vi.fn().mockResolvedValue(undefined),
+    wireTerminalFont: vi.fn(() => ({ applied: true })),
     ...overrides,
   };
 }

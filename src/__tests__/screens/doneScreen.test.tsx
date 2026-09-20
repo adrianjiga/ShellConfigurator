@@ -4,6 +4,7 @@ import { DoneScreen } from '../../screens/DoneScreen.tsx';
 import { type InstallTaskDeps, runInstallTasks } from '../../services/installTasks.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 import { pressEsc } from '../helpers/ink.ts';
+import { fakeDeps as baseFakeDeps } from '../helpers/installTasks.ts';
 import { flush } from '../helpers/wait.ts';
 
 const mocks = vi.hoisted(() => ({
@@ -27,22 +28,10 @@ afterEach(() => {
 });
 
 function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
-  return {
+  return baseFakeDeps({
     isStarshipInstalled: vi.fn().mockResolvedValue({ installed: true, version: 'starship 1.20' }),
-    installStarship: vi.fn().mockResolvedValue(undefined),
-    installNerdFont: vi.fn().mockResolvedValue(undefined),
-    installShell: vi.fn().mockResolvedValue(undefined),
-    setDefaultShell: vi.fn().mockResolvedValue(undefined),
-    generateToml: vi.fn(() => 'format = "$character"'),
-    writeShellConfig: vi.fn(() => ({ path: '/home/u/.config/starship/zsh.toml' })),
-    writeSharedConfig: vi.fn(() => ({ path: '/home/u/.config/starship.toml' })),
-    backupSharedConfig: vi.fn(() => null),
-    applyShellConfig: vi.fn(() => ({ applied: true })),
-    resetSharedShellConfig: vi.fn(() => ({ applied: false })),
-    getShellsUsingStarship: vi.fn().mockResolvedValue([]),
-    getMissingStarshipPathDir: vi.fn(() => null),
     ...overrides,
-  };
+  });
 }
 
 /** Runs the real orchestrator, then renders the real Done screen over its results. */

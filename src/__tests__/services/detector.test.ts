@@ -27,9 +27,11 @@ vi.mock('fs', () => ({
 }));
 
 import {
+  detectContainerAsync,
   detectCurrentShellAsync,
   detectInstalledShellsAsync,
   detectPackageManagerAsync,
+  detectTerminalAsync,
   isStarshipInstalledAsync,
 } from '../../services/detector.ts';
 
@@ -214,5 +216,98 @@ describe('detectCurrentShellAsync', () => {
     delete process.env.SHELL;
     execFileFails();
     expect(await detectCurrentShellAsync()).toBeNull();
+  });
+});
+
+describe('detectTerminalAsync', () => {
+  const TERMINAL_ENV = [
+    'KITTY_WINDOW_ID',
+    'TERM',
+    'TERM_PROGRAM',
+    'GHOSTTY_RESOURCES_DIR',
+    'WEZTERM_PANE',
+    'ALACRITTY_WINDOW_ID',
+    'ALACRITTY_SOCKET',
+  ];
+
+  beforeEach(() => {
+    for (const name of TERMINAL_ENV) vi.stubEnv(name, '');
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('detects kitty from its window id', async () => {
+    vi.stubEnv('KITTY_WINDOW_ID', '1');
+    expect(await detectTerminalAsync()).toBe('kitty');
+  });
+
+  it('detects kitty from TERM', async () => {
+    vi.stubEnv('TERM', 'xterm-kitty');
+    expect(await detectTerminalAsync()).toBe('kitty');
+  });
+
+  it('detects ghostty from its resources dir', async () => {
+    vi.stubEnv('GHOSTTY_RESOURCES_DIR', '/usr/share/ghostty');
+    expect(await detectTerminalAsync()).toBe('ghostty');
+  });
+
+  it('detects wezterm from its pane id', async () => {
+    vi.stubEnv('WEZTERM_PANE', '0');
+    expect(await detectTerminalAsync()).toBe('wezterm');
+  });
+
+  it('detects alacritty from its window id', async () => {
+    vi.stubEnv('ALACRITTY_WINDOW_ID', '123');
+    expect(await detectTerminalAsync()).toBe('alacritty');
+  });
+
+  it('detects foot from TERM', async () => {
+    vi.stubEnv('TERM', 'foot');
+    expect(await detectTerminalAsync()).toBe('foot');
+  });
+
+  it('returns null for an unrecognised terminal', async () => {
+    vi.stubEnv('TERM', 'xterm-256color');
+    expect(await detectTerminalAsync()).toBeNull();
+  });
+});
+
+describe('detectContainerAsync', () => {
+  const CONTAINER_ENV = ['CODESPACES', 'REMOTE_CONTAINERS', 'DEVCONTAINER', 'CI'];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const name of CONTAINER_ENV) vi.stubEnv(name, '');
+    readFileAsyncFails();
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each(CONTAINER_ENV)('returns true when %s is set', async (name) => {
+    vi.stubEnv(name, '1');
+    expect(await detectContainerAsync()).toBe(true);
+  });
+
+  it('returns true for /run/.containerenv', async () => {
+    mockReadFile.mockImplementation((filePath: string, ...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
+      if (filePath === '/run/.containerenv') cb(null, '');
+      else cb(new Error('ENOENT'));
+    });
+    expect(await detectContainerAsync()).toBe(true);
+  });
+
+  it('returns true for the Docker marker file', async () => {
+    mockReadFile.mockImplementation((filePath: string, ...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
+      if (filePath === '/.dockerenv') cb(null, '');
+      else cb(new Error('ENOENT'));
+    });
+    expect(await detectContainerAsync()).toBe(true);
+  });
+
+  it('returns false when no marker is present', async () => {
+    readFileAsyncFails();
+    expect(await detectContainerAsync()).toBe(false);
   });
 });

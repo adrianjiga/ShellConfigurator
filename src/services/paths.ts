@@ -11,6 +11,11 @@ function xdgBaseDir(envName: string, fallback: string): string {
   return value ? value : fallback;
 }
 
+/** `$XDG_CONFIG_HOME` (default `~/.config`), where shell and terminal configs live. */
+export function configHome(): string {
+  return xdgBaseDir('XDG_CONFIG_HOME', path.join(os.homedir(), '.config'));
+}
+
 /**
  * `$XDG_STATE_HOME` (default `~/.local/state`) plus the app directory. Lives
  * for durable local state like the run history (`history.jsonl`).

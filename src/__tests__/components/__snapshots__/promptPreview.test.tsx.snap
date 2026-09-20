@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`PromptPreview > matches the snapshot of the static fallback frame 1`] = `
+"Preview
+
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│ $ some-command                                                                                   │
+│ output line...                                                                                   │
+│                                                                                                  │
+│ ~/projects/myapp on main                                                                         │
+│ ❯                                                                                                │
+│                                                                                                  │
+│ right: 2s                                                                                        │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+2 left segments, 1 right"
+`;

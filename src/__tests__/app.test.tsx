@@ -11,6 +11,8 @@ vi.mock('../services/detector.ts', () => ({
     .fn()
     .mockResolvedValue({ installed: true, version: 'starship 1.20' }),
   detectInstalledShellsAsync: vi.fn().mockResolvedValue(['zsh', 'bash']),
+  detectTerminalAsync: vi.fn().mockResolvedValue(null),
+  detectContainerAsync: vi.fn().mockResolvedValue(false),
 }));
 
 import { App } from '../app.tsx';

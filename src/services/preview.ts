@@ -55,7 +55,11 @@ const SAMPLE_PROJECT_NAME = 'myapp';
 
 export const DEFAULT_PREVIEW_DEPS: PreviewDeps = {
   isStarshipInstalled: async () => (await isStarshipInstalledAsync()).installed,
-  createScratch: async () => mkdtemp(nodePath.join(cacheDir(), 'preview-')),
+  createScratch: async () => {
+    // mkdtemp does not create parents; on a first run the app cache dir is absent.
+    await mkdir(cacheDir(), { recursive: true });
+    return mkdtemp(nodePath.join(cacheDir(), 'preview-'));
+  },
   writeConfig: async (scratch, toml) =>
     writeFile(nodePath.join(scratch, STARSHIP_CONFIG_FILE), toml, 'utf8'),
   scaffoldProject: async (scratch) => {

@@ -1,0 +1,15 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderPromptAsync > pins both static fallbacks as snapshots (P2 gate) 1`] = `
+{
+  "mode": "static",
+  "reason": "starship-missing",
+}
+`;
+
+exports[`renderPromptAsync > pins both static fallbacks as snapshots (P2 gate) 2`] = `
+{
+  "mode": "static",
+  "reason": "render-failed",
+}
+`;

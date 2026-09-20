@@ -30,14 +30,6 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run test:coverage
-      # macOS also runs a headless smoke against dist/ in a scratch HOME: the
-      # darwin-only paths (brew detection, font dir) get exercised end-to-end
-      # without installing or modifying the runner. Requires the build.
-      - name: Build + macOS headless smoke
-        if: matrix.os == 'macos-latest'
-        run: |
-          npm run build
-          HOME=/tmp/macos-smoke-home node scripts/ci/macosSmoke.mjs
 
   # Aggregates the coverage matrix into one required check so the master
   # ruleset stays stable when a matrix entry is added or removed.

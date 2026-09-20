@@ -6,11 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockDetectInstalledShells,
   mockDetectPackageManager,
+  mockDetectContainer,
+  mockDetectTerminal,
   mockRunInstallTasks,
   mockAppendHistory,
 } = vi.hoisted(() => ({
   mockDetectInstalledShells: vi.fn(),
   mockDetectPackageManager: vi.fn(),
+  mockDetectContainer: vi.fn(),
+  mockDetectTerminal: vi.fn(),
   mockRunInstallTasks: vi.fn(),
   mockAppendHistory: vi.fn(),
 }));
@@ -23,6 +27,8 @@ vi.mock('../../services/detector.ts', async () => {
     ...actual,
     detectInstalledShellsAsync: mockDetectInstalledShells,
     detectPackageManagerAsync: mockDetectPackageManager,
+    detectContainerAsync: mockDetectContainer,
+    detectTerminalAsync: mockDetectTerminal,
   };
 });
 
@@ -375,6 +381,8 @@ describe('runApply', () => {
     stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
     mockDetectInstalledShells.mockResolvedValue(['zsh']);
     mockDetectPackageManager.mockResolvedValue('apt');
+    mockDetectContainer.mockResolvedValue(false);
+    mockDetectTerminal.mockResolvedValue(null);
     mockAppendHistory.mockReturnValue(undefined);
     process.exitCode = undefined;
   });
@@ -511,6 +519,48 @@ describe('runApply', () => {
         keepExistingConfig: true,
         sharedConfigToml: '[character]\nsuccess_symbol = "…"\n',
       }),
+      DEFAULT_INSTALL_TASK_DEPS,
+      expect.any(Function)
+    );
+  });
+
+  it('marks the run as running in a container when detected', async () => {
+    const fakeTask = { id: 'config', label: 'Write config files', status: 'done' };
+    mockRunInstallTasks.mockResolvedValue([fakeTask] as never);
+    mockDetectContainer.mockResolvedValue(true);
+
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }));
+
+    expect(mockRunInstallTasks).toHaveBeenCalledWith(
+      expect.objectContaining({ container: true }),
+      DEFAULT_INSTALL_TASK_DEPS,
+      expect.any(Function)
+    );
+  });
+
+  it('detects the terminal so a headless apply wires the font', async () => {
+    const fakeTask = { id: 'terminal', label: 'Set kitty font', status: 'done' };
+    mockRunInstallTasks.mockResolvedValue([fakeTask] as never);
+    mockDetectTerminal.mockResolvedValue('kitty');
+
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'], font: 'JetBrainsMono' }));
+
+    expect(mockDetectTerminal).toHaveBeenCalled();
+    expect(mockRunInstallTasks).toHaveBeenCalledWith(
+      expect.objectContaining({ terminal: 'kitty' }),
+      DEFAULT_INSTALL_TASK_DEPS,
+      expect.any(Function)
+    );
+  });
+
+  it('passes a null terminal through when none is detected', async () => {
+    const fakeTask = { id: 'config', label: 'Write config files', status: 'done' };
+    mockRunInstallTasks.mockResolvedValue([fakeTask] as never);
+
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }));
+
+    expect(mockRunInstallTasks).toHaveBeenCalledWith(
+      expect.objectContaining({ terminal: null }),
       DEFAULT_INSTALL_TASK_DEPS,
       expect.any(Function)
     );

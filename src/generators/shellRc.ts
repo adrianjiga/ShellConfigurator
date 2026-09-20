@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { getShell, isShellId, type ShellDef } from '../config/shells.ts';
+import { configHome } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 
 export interface WriteConfigResult {
@@ -12,20 +12,11 @@ export interface WriteConfigResult {
 }
 
 /**
- * Base directory for per-shell Starship configs: $XDG_CONFIG_HOME, else
- * ~/.config. Resolved per call so the env is read live.
- */
-function getConfigBaseDir(): string {
-  const xdg = process.env.XDG_CONFIG_HOME?.trim();
-  return xdg ? xdg : path.join(os.homedir(), '.config');
-}
-
-/**
  * Path to one shell's own config, e.g. ~/.config/starship/zsh.toml, which the
  * shell's rc file points at via STARSHIP_CONFIG.
  */
 export function getShellConfigPath(shellId: ShellId): string {
-  return path.join(getConfigBaseDir(), 'starship', `${shellId}.toml`);
+  return path.join(configHome(), 'starship', `${shellId}.toml`);
 }
 
 /**
@@ -34,10 +25,10 @@ export function getShellConfigPath(shellId: ShellId): string {
  * (see backupSharedConfig / restoreConfigBackups).
  */
 export function getSharedConfigPath(): string {
-  return path.join(getConfigBaseDir(), 'starship.toml');
+  return path.join(configHome(), 'starship.toml');
 }
 
-function stamp(): string {
+export function backupStamp(): string {
   return new Date().toISOString().replace(/[:.]/g, '-');
 }
 
@@ -71,7 +62,7 @@ function writeFileAtomic(filePath: string, content: string): void {
 export function backupSharedConfig(): string | null {
   const shared = getSharedConfigPath();
   if (!fs.existsSync(shared)) return null;
-  const backup = `${shared}.bak-${stamp()}`;
+  const backup = `${shared}.bak-${backupStamp()}`;
   try {
     fs.copyFileSync(shared, backup);
   } catch {
@@ -111,7 +102,7 @@ function restoreOne(what: 'shared' | ShellId, target: string, backup: string): R
  * Returns every restored config; an empty array means nothing to restore.
  */
 export function restoreConfigBackups(): RestoredConfig[] {
-  const base = getConfigBaseDir();
+  const base = configHome();
   const restored: RestoredConfig[] = [];
 
   const newestShared = newestBackup(base, 'starship.toml');
@@ -169,7 +160,7 @@ export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigRes
 
   let backedUpTo: string | undefined;
   if (fs.existsSync(configPath)) {
-    backedUpTo = `${configPath}.bak-${stamp()}`;
+    backedUpTo = `${configPath}.bak-${backupStamp()}`;
     fs.copyFileSync(configPath, backedUpTo);
   }
 
@@ -188,7 +179,7 @@ export function writeSharedConfig(toml: string): WriteConfigResult {
 
   let backedUpTo: string | undefined;
   if (fs.existsSync(configPath)) {
-    backedUpTo = `${configPath}.bak-${stamp()}`;
+    backedUpTo = `${configPath}.bak-${backupStamp()}`;
     fs.copyFileSync(configPath, backedUpTo);
   }
 

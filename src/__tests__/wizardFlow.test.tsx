@@ -20,7 +20,14 @@ vi.mock('../services/detector.ts', () => ({
     .mockResolvedValue({ installed: true, version: 'starship 1.20' }),
   detectInstalledShellsAsync: mockDetectInstalledShells,
   detectCurrentShellAsync: vi.fn().mockResolvedValue(null),
+  detectTerminalAsync: vi.fn().mockResolvedValue(null),
+  detectContainerAsync: vi.fn().mockResolvedValue(false),
 }));
+
+vi.mock('../services/exec.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/exec.ts')>();
+  return { ...actual, runCapture: vi.fn().mockResolvedValue('') };
+});
 
 const { mockWriteConfig, mockApplyShellConfig, mockResetSharedConfig } = vi.hoisted(() => ({
   mockWriteConfig: vi.fn((_toml: string, _shellId: string) => ({

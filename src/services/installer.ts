@@ -26,19 +26,40 @@ const INSTALL_CMDS: Record<Exclude<PackageManager, 'script'>, (pkg: string) => s
   apk: (pkg) => ['sudo', 'apk', 'add', '--no-cache', pkg],
 };
 
-// Nerd Font definitions: id → GitHub release zip name
-export const NERD_FONTS: Array<{ id: string; label: string; zipName: string }> = [
-  { id: 'JetBrainsMono', label: 'JetBrains Mono', zipName: 'JetBrainsMono.zip' },
-  { id: 'FiraCode', label: 'Fira Code', zipName: 'FiraCode.zip' },
-  { id: 'Hack', label: 'Hack', zipName: 'Hack.zip' },
-  { id: 'CascadiaCode', label: 'Cascadia Code', zipName: 'CascadiaCode.zip' },
-  { id: 'Meslo', label: 'Meslo LG', zipName: 'Meslo.zip' },
-  { id: 'SourceCodePro', label: 'Source Code Pro', zipName: 'SourceCodePro.zip' },
+// Nerd Font definitions: id → GitHub release zip name. `family` is the font
+// family name the archive installs (nerd-fonts appends " Nerd Font").
+export const NERD_FONTS: Array<{ id: string; label: string; zipName: string; family: string }> = [
+  {
+    id: 'JetBrainsMono',
+    label: 'JetBrains Mono',
+    zipName: 'JetBrainsMono.zip',
+    family: 'JetBrainsMono Nerd Font',
+  },
+  { id: 'FiraCode', label: 'Fira Code', zipName: 'FiraCode.zip', family: 'FiraCode Nerd Font' },
+  { id: 'Hack', label: 'Hack', zipName: 'Hack.zip', family: 'Hack Nerd Font' },
+  {
+    id: 'CascadiaCode',
+    label: 'Cascadia Code',
+    zipName: 'CascadiaCode.zip',
+    family: 'CaskaydiaCove Nerd Font',
+  },
+  { id: 'Meslo', label: 'Meslo LG', zipName: 'Meslo.zip', family: 'MesloLGL Nerd Font' },
+  {
+    id: 'SourceCodePro',
+    label: 'Source Code Pro',
+    zipName: 'SourceCodePro.zip',
+    family: 'SauceCodePro Nerd Font',
+  },
 ];
 
 /** The human-readable name for a font id, falling back to the raw id itself. */
 export function fontLabel(fontId: string): string {
   return NERD_FONTS.find((f) => f.id === fontId)?.label ?? fontId;
+}
+
+/** The installed font family name a terminal should select for a font id. */
+export function getFontFamily(fontId: string): string | null {
+  return NERD_FONTS.find((f) => f.id === fontId)?.family ?? null;
 }
 
 const NERD_FONTS_BASE_URL = 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download';

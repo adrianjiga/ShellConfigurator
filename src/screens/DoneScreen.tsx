@@ -52,6 +52,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
 
   const configTask = task(state, TASK_IDS.config);
   const fontTask = task(state, TASK_IDS.font);
+  const terminalTask = task(state, TASK_IDS.terminal);
   const chshTask = task(state, TASK_IDS.chsh);
   const chshOk = chshTask?.status === 'done';
 
@@ -264,7 +265,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
                   re-run the wizard to configure your shells.
                 </Text>
               )}
-              {fontId && fontTask?.status === 'done' && (
+              {fontId && fontTask?.status === 'done' && terminalTask?.status !== 'done' && (
                 <Text color="yellow">
                   Remember to set <Text color="cyan">{fontName} Nerd Font</Text> in your terminal
                   emulator settings.
@@ -272,6 +273,9 @@ export function DoneScreen({ state }: DoneScreenProps) {
               )}
               <Text color="gray">
                 Run <Text color="cyan">starship print-config</Text> to view the generated config.
+              </Text>
+              <Text color="gray">
+                Run <Text color="cyan">shell-configurator doctor</Text> to check the setup.
               </Text>
             </>
           )}

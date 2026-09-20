@@ -1,13 +1,20 @@
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WelcomeScreen } from '../../screens/WelcomeScreen.tsx';
-import { detectPackageManagerAsync, isStarshipInstalledAsync } from '../../services/detector.ts';
+import {
+  detectContainerAsync,
+  detectPackageManagerAsync,
+  detectTerminalAsync,
+  isStarshipInstalledAsync,
+} from '../../services/detector.ts';
 import { DEFAULT_STATE } from '../../types.ts';
 import { flush } from '../helpers/wait.ts';
 
 vi.mock('../../services/detector.ts', () => ({
   detectPackageManagerAsync: vi.fn(),
   isStarshipInstalledAsync: vi.fn(),
+  detectTerminalAsync: vi.fn(),
+  detectContainerAsync: vi.fn(),
 }));
 
 afterEach(() => {
@@ -17,6 +24,8 @@ afterEach(() => {
 beforeEach(() => {
   vi.mocked(detectPackageManagerAsync).mockResolvedValue('apt');
   vi.mocked(isStarshipInstalledAsync).mockResolvedValue({ installed: false });
+  vi.mocked(detectTerminalAsync).mockResolvedValue(null);
+  vi.mocked(detectContainerAsync).mockResolvedValue(false);
 });
 
 function setup() {
@@ -49,7 +58,11 @@ describe('WelcomeScreen', () => {
     instance.stdin.write(ENTER);
     await flush();
 
-    expect(onNext).toHaveBeenCalledWith({ packageManager: 'apt' });
+    expect(onNext).toHaveBeenCalledWith({
+      packageManager: 'apt',
+      terminal: null,
+      container: false,
+    });
   });
 
   it('installs automatically when Starship is missing', async () => {
@@ -61,7 +74,11 @@ describe('WelcomeScreen', () => {
     instance.stdin.write(ENTER);
     await flush();
 
-    expect(onNext).toHaveBeenCalledWith({ packageManager: 'apt' });
+    expect(onNext).toHaveBeenCalledWith({
+      packageManager: 'apt',
+      terminal: null,
+      container: false,
+    });
   });
 
   it('offers a manual install, then continue without installing', async () => {
@@ -84,6 +101,8 @@ describe('WelcomeScreen', () => {
 
     expect(onNext).toHaveBeenCalledWith({
       packageManager: 'script',
+      terminal: null,
+      container: false,
       skipStarshipInstall: true,
     });
   });
@@ -110,6 +129,47 @@ describe('WelcomeScreen', () => {
     instance.stdin.write(ENTER);
     await flush();
 
-    expect(onNext).toHaveBeenCalledWith({ packageManager: 'apt' });
+    expect(onNext).toHaveBeenCalledWith({
+      packageManager: 'apt',
+      terminal: null,
+      container: false,
+    });
+  });
+
+  it('detects the terminal, shows it, and passes it through', async () => {
+    vi.mocked(detectTerminalAsync).mockResolvedValue('kitty');
+    const { instance, onNext } = setup();
+    await flush();
+    await flush();
+
+    expect(instance.lastFrame()).toContain('Terminal:');
+    expect(instance.lastFrame()).toContain('kitty');
+
+    instance.stdin.write(ENTER);
+    await flush();
+
+    expect(onNext).toHaveBeenCalledWith({
+      packageManager: 'apt',
+      terminal: 'kitty',
+      container: false,
+    });
+  });
+
+  it('flags a container and passes it through', async () => {
+    vi.mocked(detectContainerAsync).mockResolvedValue(true);
+    const { instance, onNext } = setup();
+    await flush();
+    await flush();
+
+    expect(instance.lastFrame()).toContain('Container detected');
+
+    instance.stdin.write(ENTER);
+    await flush();
+
+    expect(onNext).toHaveBeenCalledWith({
+      packageManager: 'apt',
+      terminal: null,
+      container: true,
+    });
   });
 });

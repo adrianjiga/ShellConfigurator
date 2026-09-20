@@ -3,8 +3,14 @@ import SelectInput from 'ink-select-input';
 import { useCallback, useEffect, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
-import { detectPackageManagerAsync, isStarshipInstalledAsync } from '../services/detector.ts';
-import type { PackageManager, WizardState } from '../types.ts';
+import {
+  detectContainerAsync,
+  detectPackageManagerAsync,
+  detectTerminalAsync,
+  isStarshipInstalledAsync,
+} from '../services/detector.ts';
+import { TERMINAL_LABELS } from '../services/terminalFont.ts';
+import type { PackageManager, TerminalId, WizardState } from '../types.ts';
 
 interface WelcomeScreenProps {
   state: WizardState;
@@ -14,6 +20,8 @@ interface WelcomeScreenProps {
 interface Detection {
   starship: { installed: boolean; version?: string };
   pm: PackageManager;
+  terminal: TerminalId | null;
+  container: boolean;
 }
 
 type InstallChoice = 'auto' | 'manual';
@@ -34,11 +42,13 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
   const [showManualHelp, setShowManualHelp] = useState(false);
 
   const runDetection = useCallback(async (shouldDrop: () => boolean = () => false) => {
-    const [pm, starship] = await Promise.all([
+    const [pm, starship, terminal, container] = await Promise.all([
       detectPackageManagerAsync(),
       isStarshipInstalledAsync(),
+      detectTerminalAsync(),
+      detectContainerAsync(),
     ]);
-    if (!shouldDrop()) setDetection({ pm, starship });
+    if (!shouldDrop()) setDetection({ pm, starship, terminal, container });
   }, []);
 
   useEffect(() => {
@@ -53,6 +63,8 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
     if (key.return && detection?.starship.installed) {
       onNext({
         packageManager: detection.pm,
+        terminal: detection.terminal,
+        container: detection.container,
       });
     }
   });
@@ -71,7 +83,11 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
     if (!detection) return;
     switch (item.value) {
       case 'auto':
-        onNext({ packageManager: detection.pm });
+        onNext({
+          packageManager: detection.pm,
+          terminal: detection.terminal,
+          container: detection.container,
+        });
         break;
       case 'manual':
         setShowManualHelp(true);
@@ -90,6 +106,8 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
       case 'continue':
         onNext({
           packageManager: detection.pm,
+          terminal: detection.terminal,
+          container: detection.container,
           skipStarshipInstall: true,
         });
         break;
@@ -120,6 +138,21 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
                 <Text color="gray">Package manager:</Text>
                 <Text color="cyan">{PM_LABELS[detection.pm]}</Text>
               </Box>
+
+              {detection.terminal && (
+                <Box flexDirection="row" gap={1}>
+                  <Text color="gray">Terminal:</Text>
+                  <Text color="cyan">{TERMINAL_LABELS[detection.terminal]}</Text>
+                </Box>
+              )}
+
+              {detection.container && (
+                <Box flexDirection="row" gap={1}>
+                  <Text color="gray">
+                    Container detected — font and default-shell steps will be skipped
+                  </Text>
+                </Box>
+              )}
 
               {detection.starship.installed ? (
                 <Box flexDirection="column">

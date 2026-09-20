@@ -48,6 +48,25 @@ try {
   );
   assert.ok(!plan.includes('installed'), 'dry run claims an install happened');
 
+  // Real headless apply: installs Starship (brew), writes the zsh config and rc
+  // under the scratch HOME, and must run the post-install Verify config task.
+  const applied = run(['apply', '--shells', 'zsh', '--no-nerd-font']);
+  assert.ok(applied.includes('Verify config'), `apply plan missing the verify task:\n${applied}`);
+  assert.ok(applied.includes('verified'), `apply did not verify the config:\n${applied}`);
+  assert.ok(!applied.includes('FAIL'), `apply reported a failed task:\n${applied}`);
+
+  const zshrc = readFileSync(nodePath.join(homeDir, '.zshrc'), 'utf8');
+  assert.ok(zshrc.includes('# Added by ShellConfigurator'), '.zshrc missing the banner');
+  assert.ok(zshrc.includes('export STARSHIP_CONFIG='), '.zshrc missing STARSHIP_CONFIG');
+  assert.ok(zshrc.includes('eval "$(starship init zsh)"'), '.zshrc missing the init line');
+  const zshConfig = nodePath.join(homeDir, '.config', 'starship', 'zsh.toml');
+  assert.ok(existsSync(zshConfig), 'apply did not write the zsh config');
+  assert.equal(
+    typeof parse(readFileSync(zshConfig, 'utf8')).format,
+    'string',
+    'zsh config unparseable'
+  );
+
   console.log('\nmacOS headless smoke passed.');
 } catch (err) {
   console.error(`FAIL macOS headless smoke: ${err instanceof Error ? err.message : String(err)}`);

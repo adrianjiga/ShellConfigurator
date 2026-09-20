@@ -2,6 +2,8 @@ import {
   type ApplyShellConfigOptions,
   applyShellConfig,
   backupSharedConfig,
+  getSharedConfigPath,
+  getShellConfigPath,
   resetSharedShellConfig,
   type WriteConfigResult,
   writeSharedConfig,
@@ -15,12 +17,16 @@ import {
   type InstallTaskId,
   type PackageManager,
   type ShellId,
+  type TerminalId,
   type WizardState,
 } from '../types.ts';
+import { recordStarshipVersion } from './cache.ts';
 import { detectInstalledShellsAsync, isStarshipInstalledAsync } from './detector.ts';
 import { errorMessage } from './errors.ts';
+import { runCapture } from './exec.ts';
 import {
   fontLabel,
+  getFontFamily,
   getMissingStarshipPathDir,
   installNerdFont,
   installShell,
@@ -28,10 +34,13 @@ import {
   setDefaultShell,
   shellInstallSupported,
 } from './installer.ts';
+import { type TerminalFontResult, terminalLabel, wireTerminalFont } from './terminalFont.ts';
 
 export interface InstallTaskDeps {
   isStarshipInstalled: () => Promise<{ installed: boolean; version?: string }>;
   installStarship: (pm: PackageManager) => Promise<void>;
+  /** Records the starship version a fresh install produced, for drift. */
+  recordStarshipVersion: (version: string) => void;
   installShell: (shellId: ShellId, pm: PackageManager) => Promise<void>;
   setDefaultShell: (shellId: ShellId) => Promise<void>;
   /** Installs a Nerd Font; resolves with a note when it came from the cache. */
@@ -50,11 +59,16 @@ export interface InstallTaskDeps {
   /** Shells that run Starship and could inherit a leaked STARSHIP_CONFIG. */
   getShellsUsingStarship: () => Promise<ShellId[]>;
   getMissingStarshipPathDir: () => string | null;
+  /** Rejects when starship cannot load the config at `configPath`. */
+  verifyConfig: (configPath: string, pathDir?: string | null) => Promise<void>;
+  /** Points the detected terminal at the installed Nerd Font family. */
+  wireTerminalFont: (terminalId: TerminalId, family: string) => TerminalFontResult;
 }
 
 export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   isStarshipInstalled: isStarshipInstalledAsync,
   installStarship,
+  recordStarshipVersion,
   installNerdFont,
   installShell,
   setDefaultShell,
@@ -66,6 +80,14 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   resetSharedShellConfig,
   getShellsUsingStarship: detectInstalledShellsAsync,
   getMissingStarshipPathDir,
+  verifyConfig: async (configPath, pathDir) => {
+    const env: Record<string, string | undefined> = { ...process.env, STARSHIP_CONFIG: configPath };
+    // A `script` install drops the binary in a dir the current process PATH may
+    // not include yet; prepend it so verification resolves Starship regardless.
+    if (pathDir) env.PATH = `${pathDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`;
+    await runCapture('starship', ['print-config'], { env });
+  },
+  wireTerminalFont,
 };
 
 /** The single-task ids shared by the screens, so no magic strings leak. */
@@ -74,6 +96,8 @@ export const TASK_IDS = {
   font: 'font',
   config: 'config',
   chsh: 'chsh',
+  verify: 'verify',
+  terminal: 'terminal',
 } as const satisfies Record<string, InstallTaskId>;
 
 /** Task id for the rc-file step of a given shell. */
@@ -94,10 +118,20 @@ export function buildTaskList(state: WizardState): InstallTask[] {
     tasks.push({ id: TASK_IDS.starship, label: 'Starship', status: 'pending' });
   }
 
-  // Nerd Font (only when a concrete font was chosen)
+  // Nerd Font (only when a concrete font was chosen; skipped in containers,
+  // where fonts belong to the host terminal, not the sandbox)
   const fontId = fontIdToInstall(state.nerdFontToInstall);
-  if (fontId) {
+  if (fontId && !state.container) {
     tasks.push({ id: TASK_IDS.font, label: `Nerd Font (${fontLabel(fontId)})`, status: 'pending' });
+  }
+
+  // Terminal font wiring: only meaningful once a concrete font is being installed.
+  if (fontId && state.terminal && !state.container) {
+    tasks.push({
+      id: TASK_IDS.terminal,
+      label: `Set ${terminalLabel(state.terminal)} font`,
+      status: 'pending',
+    });
   }
 
   // Shells that need installing. A shell the detected package manager has no
@@ -113,8 +147,8 @@ export function buildTaskList(state: WizardState): InstallTask[] {
     }
   }
 
-  // Set default shell
-  if (state.setDefaultShell) {
+  // Set default shell (meaningless inside a container)
+  if (state.setDefaultShell && !state.container) {
     tasks.push({
       id: TASK_IDS.chsh,
       label: `Set ${state.setDefaultShell} as default shell`,
@@ -133,6 +167,11 @@ export function buildTaskList(state: WizardState): InstallTask[] {
   // RC files — one task per shell so a failure in one does not taint the others
   for (const shellId of state.selectedShells) {
     tasks.push({ id: rcTaskId(shellId), label: `Configure ${shellId}`, status: 'pending' });
+  }
+
+  // Post-install verification, skipped when starship was never installed.
+  if (!state.skipStarshipInstall) {
+    tasks.push({ id: TASK_IDS.verify, label: 'Verify config', status: 'pending' });
   }
 
   return tasks;
@@ -205,19 +244,44 @@ export async function runInstallTasks(
         };
       }
       await deps.installStarship(state.packageManager);
+      // Record what the fresh install produced, so the doctor can flag drift
+      // when a later package-manager update moves starship under its nose.
+      const after = await deps.isStarshipInstalled();
+      if (after.version) deps.recordStarshipVersion(after.version);
     });
   }
 
-  // --- Nerd Font (only when a concrete font was chosen) ---
+  // --- Nerd Font (only when a concrete font was chosen; skipped in containers) ---
   const fontId = fontIdToInstall(state.nerdFontToInstall);
   let fontInstallFailed = false;
-  if (fontId) {
+  if (fontId && !state.container) {
     fontInstallFailed =
       (await runTask(TASK_IDS.font, async () => {
         // A cache note (e.g. "installed from cache") is shown as task detail.
         const note = await deps.installNerdFont(fontId);
         return note ? { status: 'done', patch: { note } } : undefined;
       })) === 'failed';
+  }
+
+  // --- Terminal font wiring (only when a concrete font was chosen) ---
+  const terminalId = state.terminal;
+  if (fontId && terminalId && !state.container) {
+    await runTask(TASK_IDS.terminal, async () => {
+      // The config was generated glyph-free when the font install failed, so
+      // wiring the terminal at a font that is not there would be a lie.
+      if (fontInstallFailed) {
+        return { status: 'skipped', patch: { note: 'font install failed' } };
+      }
+      const family = getFontFamily(fontId) ?? fontId;
+      const result = deps.wireTerminalFont(terminalId, family);
+      if (result.applied) {
+        return {
+          status: 'done',
+          patch: { note: result.note ?? `set font in ${result.path}` },
+        };
+      }
+      return { status: 'skipped', patch: { note: result.note ?? 'nothing to change' } };
+    });
   }
 
   // --- Missing shells ---
@@ -228,9 +292,9 @@ export async function runInstallTasks(
     });
   }
 
-  // --- chsh ---
+  // --- chsh (skipped in containers, where the login shell is the image's) ---
   const defaultShell = state.setDefaultShell;
-  if (defaultShell) {
+  if (defaultShell && !state.container) {
     await runTask(TASK_IDS.chsh, async () => {
       await deps.setDefaultShell(defaultShell);
     });
@@ -340,6 +404,43 @@ export async function runInstallTasks(
         return { status: 'skipped', patch: { note: result.note } };
       }
       throw new Error(`Unknown shell: ${shellId}`);
+    });
+  }
+
+  // --- Verify the config(s) this run wrote load under the real starship binary ---
+  // Runs after the rc steps so it matches the plan order: "post-install
+  // verification" is the last thing that happens to the configs.
+  if (!state.skipStarshipInstall) {
+    await runTask(TASK_IDS.verify, async () => {
+      if (configStatus === 'failed') {
+        return { status: 'skipped', patch: { note: 'no config was written' } };
+      }
+      const onPath = await deps.isStarshipInstalled();
+      // A `script` install lands in a dir the current process PATH may not
+      // include; resolve that dir so verification still runs instead of being
+      // silently skipped the moment PATH is stale.
+      const scriptDir = onPath.installed ? null : deps.getMissingStarshipPathDir();
+      if (!onPath.installed && !scriptDir) {
+        return { status: 'skipped', patch: { note: 'starship not on PATH' } };
+      }
+      let configPaths: string[];
+      if (state.keepExistingConfig) {
+        configPaths = state.sharedConfigToml != null ? [getSharedConfigPath()] : [];
+      } else {
+        configPaths = state.selectedShells.map((shellId) => getShellConfigPath(shellId));
+      }
+      if (configPaths.length === 0) {
+        return { status: 'skipped', patch: { note: 'nothing written to verify' } };
+      }
+      for (const configPath of configPaths) {
+        if (scriptDir) await deps.verifyConfig(configPath, scriptDir);
+        else await deps.verifyConfig(configPath);
+      }
+      const suffix = scriptDir ? ` (via ${scriptDir})` : '';
+      return {
+        status: 'done',
+        patch: { note: `verified ${configPaths.length} config(s)${suffix}` },
+      };
     });
   }
 
