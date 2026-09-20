@@ -6,6 +6,7 @@ export function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskD
   return {
     isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
     installStarship: vi.fn().mockResolvedValue(undefined),
+    recordStarshipVersion: vi.fn(),
     installNerdFont: vi.fn().mockResolvedValue(undefined),
     installShell: vi.fn().mockResolvedValue(undefined),
     setDefaultShell: vi.fn().mockResolvedValue(undefined),

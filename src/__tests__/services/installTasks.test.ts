@@ -36,6 +36,27 @@ describe('runInstallTasks', () => {
     expect(results.some((t) => t.id === 'starship')).toBe(false);
   });
 
+  it('records the version a fresh install produced, for the doctor drift check', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi
+        .fn()
+        .mockResolvedValueOnce({ installed: false })
+        .mockResolvedValue({ installed: true, version: 'starship 1.21.0' }),
+    });
+    await runInstallTasks(state(), deps, vi.fn());
+
+    expect(deps.recordStarshipVersion).toHaveBeenCalledWith('starship 1.21.0');
+  });
+
+  it('does not record a version when the fresh install cannot report one', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
+    });
+    await runInstallTasks(state(), deps, vi.fn());
+
+    expect(deps.recordStarshipVersion).not.toHaveBeenCalled();
+  });
+
   it('installs a concrete nerd font but ignores the sentinel', async () => {
     const deps = fakeDeps();
     const withFont = await runInstallTasks(

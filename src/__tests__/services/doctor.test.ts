@@ -25,6 +25,8 @@ function makeDeps(
 ): DoctorDeps {
   return {
     isStarshipInstalled: vi.fn().mockResolvedValue({ installed: true, version: 'starship 1.20.0' }),
+    detectCurrentShell: vi.fn().mockResolvedValue('zsh'),
+    readCachedStarshipVersion: vi.fn().mockReturnValue(null),
     detectInstalledShells: vi.fn().mockResolvedValue(['zsh']),
     detectTerminal: vi.fn().mockResolvedValue('kitty'),
     readFontFamily: vi.fn().mockReturnValue('JetBrainsMono Nerd Font'),
@@ -188,6 +190,81 @@ describe('runDoctor', () => {
     });
     const report = await runDoctor(null, deps);
     expect(report.findings.some((f) => f.id === 'shell:bash')).toBe(true);
+  });
+
+  it('passes version drift when nothing was recorded yet', async () => {
+    const deps = makeDeps(wired(new Map()));
+    const report = await runDoctor(baseState(), deps);
+    expect(find(report, 'version-drift').status).toBe('pass');
+    expect(find(report, 'version-drift').detail).toMatch(/no prior install recorded/);
+  });
+
+  it('passes version drift when the installed version still matches the record', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      readCachedStarshipVersion: vi.fn().mockReturnValue('starship 1.20.0'),
+    });
+    const report = await runDoctor(baseState(), deps);
+    expect(find(report, 'version-drift').status).toBe('pass');
+    expect(find(report, 'version-drift').detail).toContain('starship 1.20.0');
+  });
+
+  it('warns on version drift when starship changed out from under the record', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      readCachedStarshipVersion: vi.fn().mockReturnValue('starship 1.19.0'),
+    });
+    const report = await runDoctor(baseState(), deps);
+    expect(find(report, 'version-drift')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('1.20.0'),
+    });
+    expect(find(report, 'version-drift').detail).toContain('starship 1.19.0');
+  });
+
+  it('warns on version drift when the record exists but starship is gone', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      readCachedStarshipVersion: vi.fn().mockReturnValue('starship 1.20.0'),
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
+    });
+    const report = await runDoctor(baseState(), deps);
+    expect(find(report, 'version-drift')).toMatchObject({ status: 'warn' });
+  });
+
+  it('passes the running-shell check when it is configured and wired', async () => {
+    const report = await runDoctor(baseState(), makeDeps(wired(new Map())));
+    expect(find(report, 'current-shell')).toMatchObject({ status: 'pass' });
+  });
+
+  it('warns when the running shell is not one of the configured shells', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      detectCurrentShell: vi.fn().mockResolvedValue('bash'),
+    });
+    const report = await runDoctor(baseState(), deps);
+    expect(find(report, 'current-shell')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('not configured'),
+    });
+  });
+
+  it('warns when the running shell rc has no starship init line', async () => {
+    const files = wired(new Map());
+    files.set(getShell('bash')!.rcFile!, `# already has content\n`);
+    const deps = makeDeps(files, {
+      detectCurrentShell: vi.fn().mockResolvedValue('bash'),
+      detectInstalledShells: vi.fn().mockResolvedValue(['bash']),
+    });
+    const report = await runDoctor(baseState({ selectedShells: ['bash'] }), deps);
+    expect(find(report, 'current-shell')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('does not init Starship'),
+    });
+  });
+
+  it('warns when the running shell cannot be identified', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      detectCurrentShell: vi.fn().mockResolvedValue(null),
+    });
+    const report = await runDoctor(baseState(), deps);
+    expect(find(report, 'current-shell')).toMatchObject({ status: 'warn' });
   });
 });
 

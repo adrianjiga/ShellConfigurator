@@ -94,3 +94,28 @@ export function cachedFont(fontId: string): CachedFont | null {
 
   return { id: fontId, path: file, digest, bytes: buffer.byteLength };
 }
+
+/** <cacheDir>/starship.version — the version the last apply produced. */
+function starshipVersionFilePath(): string {
+  return path.join(cacheDir(), 'starship.version');
+}
+
+/**
+ * The starship version the last apply recorded, or null when none was recorded.
+ * Doctor compares this against what `starship --version` reports to flag drift
+ * (a newer PM install, or a downgrade) that the rc stamp cannot see.
+ */
+export function cachedStarshipVersion(): string | null {
+  try {
+    return fs.readFileSync(starshipVersionFilePath(), 'utf8').trim() || null;
+  } catch (err) {
+    if (isMissingFile(err)) return null;
+    throw err;
+  }
+}
+
+/** Records the starship version an install run produced. */
+export function recordStarshipVersion(version: string): void {
+  fs.mkdirSync(cacheDir(), { recursive: true });
+  fs.writeFileSync(starshipVersionFilePath(), `${version}\n`, 'utf8');
+}

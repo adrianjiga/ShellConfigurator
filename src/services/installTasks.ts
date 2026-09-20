@@ -20,6 +20,7 @@ import {
   type TerminalId,
   type WizardState,
 } from '../types.ts';
+import { recordStarshipVersion } from './cache.ts';
 import { detectInstalledShellsAsync, isStarshipInstalledAsync } from './detector.ts';
 import { errorMessage } from './errors.ts';
 import { runCapture } from './exec.ts';
@@ -38,6 +39,8 @@ import { type TerminalFontResult, terminalLabel, wireTerminalFont } from './term
 export interface InstallTaskDeps {
   isStarshipInstalled: () => Promise<{ installed: boolean; version?: string }>;
   installStarship: (pm: PackageManager) => Promise<void>;
+  /** Records the starship version a fresh install produced, for drift. */
+  recordStarshipVersion: (version: string) => void;
   installShell: (shellId: ShellId, pm: PackageManager) => Promise<void>;
   setDefaultShell: (shellId: ShellId) => Promise<void>;
   /** Installs a Nerd Font; resolves with a note when it came from the cache. */
@@ -65,6 +68,7 @@ export interface InstallTaskDeps {
 export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   isStarshipInstalled: isStarshipInstalledAsync,
   installStarship,
+  recordStarshipVersion,
   installNerdFont,
   installShell,
   setDefaultShell,
@@ -240,6 +244,10 @@ export async function runInstallTasks(
         };
       }
       await deps.installStarship(state.packageManager);
+      // Record what the fresh install produced, so the doctor can flag drift
+      // when a later package-manager update moves starship under its nose.
+      const after = await deps.isStarshipInstalled();
+      if (after.version) deps.recordStarshipVersion(after.version);
     });
   }
 
@@ -382,7 +390,10 @@ export async function runInstallTasks(
         else await deps.verifyConfig(configPath);
       }
       const suffix = scriptDir ? ` (via ${scriptDir})` : '';
-      return { status: 'done', patch: { note: `verified ${configPaths.length} config(s)${suffix}` } };
+      return {
+        status: 'done',
+        patch: { note: `verified ${configPaths.length} config(s)${suffix}` },
+      };
     });
   }
 

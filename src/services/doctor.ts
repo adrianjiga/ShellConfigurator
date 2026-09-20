@@ -6,7 +6,9 @@ import {
   starshipConfigLine,
 } from '../generators/shellRc.ts';
 import { fontIdToInstall, type ShellId, type TerminalId, type WizardState } from '../types.ts';
+import { cachedStarshipVersion } from './cache.ts';
 import {
+  detectCurrentShellAsync,
   detectInstalledShellsAsync,
   detectTerminalAsync,
   isStarshipInstalledAsync,
@@ -40,6 +42,9 @@ export interface DoctorReport {
 
 export interface DoctorDeps {
   isStarshipInstalled: typeof isStarshipInstalledAsync;
+  detectCurrentShell: typeof detectCurrentShellAsync;
+  /** The starship version the last install/apply recorded, or null. */
+  readCachedStarshipVersion: () => string | null;
   detectInstalledShells: typeof detectInstalledShellsAsync;
   detectTerminal: typeof detectTerminalAsync;
   readFontFamily: typeof readTerminalFontFamily;
@@ -52,6 +57,8 @@ export interface DoctorDeps {
 
 export const DEFAULT_DOCTOR_DEPS: DoctorDeps = {
   isStarshipInstalled: isStarshipInstalledAsync,
+  detectCurrentShell: detectCurrentShellAsync,
+  readCachedStarshipVersion: () => cachedStarshipVersion(),
   detectInstalledShells: detectInstalledShellsAsync,
   detectTerminal: detectTerminalAsync,
   readFontFamily: readTerminalFontFamily,
@@ -82,6 +89,84 @@ async function checkStarship(deps: DoctorDeps): Promise<DoctorFinding> {
         detail: 'starship is not on PATH',
         fix: { kind: 'reinstall-starship' },
       };
+}
+
+/**
+ * The version-drift check: does the installed starship match the version the
+ * last install/apply recorded? A mismatch means a package-manager upgrade or
+ * downgrade happened outside the tool — something the rc stamp cannot see.
+ */
+async function checkVersionDrift(deps: DoctorDeps): Promise<DoctorFinding> {
+  const cached = deps.readCachedStarshipVersion();
+  if (!cached) {
+    return {
+      id: 'version-drift',
+      title: 'Starship version',
+      status: 'pass',
+      detail: 'no prior install recorded to compare against',
+    };
+  }
+  const { installed, version } = await deps.isStarshipInstalled();
+  if (!installed || !version) {
+    return {
+      id: 'version-drift',
+      title: 'Starship version',
+      status: 'warn',
+      detail: `last run recorded ${cached}, but starship is not reachable now`,
+    };
+  }
+  return version === cached
+    ? { id: 'version-drift', title: 'Starship version', status: 'pass', detail: cached }
+    : {
+        id: 'version-drift',
+        title: 'Starship version',
+        status: 'warn',
+        detail: `installed ${version}; the last install recorded ${cached}`,
+      };
+}
+
+/**
+ * The "chair in the wheel" check: does the shell this terminal is *running*
+ * actually load the modified rc? Configuring bash while running zsh is a healthy
+ * install that still shows the user nothing.
+ */
+async function checkRunningShell(shellIds: ShellId[], deps: DoctorDeps): Promise<DoctorFinding> {
+  const current = await deps.detectCurrentShell();
+  const shell = current ? getShell(current) : undefined;
+  if (!current || !shell) {
+    return {
+      id: 'current-shell',
+      title: 'Current shell',
+      status: 'warn',
+      detail: 'cannot identify the shell this terminal is running',
+    };
+  }
+  if (!shellIds.includes(current)) {
+    return {
+      id: 'current-shell',
+      title: 'Current shell',
+      status: 'warn',
+      detail:
+        `${shell.label} is the running shell but is not configured — ` +
+        `start ${shellIds.join(' or ') || 'a configured shell'} to see the new prompt`,
+    };
+  }
+  const rcFile = shell.rcFile;
+  const content = rcFile && deps.exists(rcFile) ? deps.readFile(rcFile) : '';
+  if (!rcFile || !content.includes(shell.initLine)) {
+    return {
+      id: 'current-shell',
+      title: 'Current shell',
+      status: 'warn',
+      detail: `${shell.label} is configured, but its rc does not init Starship yet`,
+    };
+  }
+  return {
+    id: 'current-shell',
+    title: 'Current shell',
+    status: 'pass',
+    detail: `${shell.label} will load Starship on the next prompt (restart it to apply now)`,
+  };
 }
 
 function checkLocale(deps: DoctorDeps): DoctorFinding {
@@ -325,6 +410,8 @@ export async function runDoctor(
     await checkConfigs(shellIds, pointAtShared, deps),
     checkFontInstalled(state, deps),
     await checkFontSelected(state, deps),
+    await checkVersionDrift(deps),
+    await checkRunningShell(shellIds, deps),
   ];
 
   return { ok: findings.every((f) => f.status !== 'fail'), findings };
