@@ -75,19 +75,44 @@ describe('wireTerminalFont', () => {
   it('creates an alacritty toml font table', () => {
     wireTerminalFont('alacritty', 'JetBrainsMono Nerd Font');
 
-    expect(read('alacritty/alacritty.toml')).toBe('[font]\nfamily = "JetBrainsMono Nerd Font"\n');
+    expect(read('alacritty/alacritty.toml')).toBe(
+      '[font.normal]\nfamily = "JetBrainsMono Nerd Font"\n'
+    );
   });
 
-  it('updates only the family inside an existing alacritty [font] table', () => {
+  it('updates only the family inside an existing alacritty [font.normal] table', () => {
     write(
       'alacritty/alacritty.toml',
-      '[window]\nopacity = 0.9\n\n[font]\nfamily = "Old"\nsize = 12\n'
+      '[window]\nopacity = 0.9\n\n[font]\nsize = 12\n\n[font.normal]\nfamily = "Old"\nstyle = "Regular"\n'
     );
 
     wireTerminalFont('alacritty', 'FiraCode Nerd Font');
 
     expect(read('alacritty/alacritty.toml')).toBe(
-      '[window]\nopacity = 0.9\n\n[font]\nfamily = "FiraCode Nerd Font"\nsize = 12\n'
+      '[window]\nopacity = 0.9\n\n[font]\nsize = 12\n\n[font.normal]\nfamily = "FiraCode Nerd Font"\nstyle = "Regular"\n'
+    );
+  });
+
+  it('updates an inline alacritty font table without adding a duplicate table', () => {
+    write('alacritty/alacritty.toml', '[font]\nnormal = { family = "Old", style = "Regular" }\n');
+
+    wireTerminalFont('alacritty', 'Hack Nerd Font');
+
+    expect(read('alacritty/alacritty.toml')).toBe(
+      '[font]\nnormal = { family = "Hack Nerd Font", style = "Regular" }\n'
+    );
+
+    const again = wireTerminalFont('alacritty', 'Hack Nerd Font');
+    expect(again.applied).toBe(false);
+  });
+
+  it('adds a [font.normal] table when only [font] exists', () => {
+    write('alacritty/alacritty.toml', '[font]\nsize = 12\n');
+
+    wireTerminalFont('alacritty', 'Hack Nerd Font');
+
+    expect(read('alacritty/alacritty.toml')).toBe(
+      '[font]\nsize = 12\n\n[font.normal]\nfamily = "Hack Nerd Font"\n'
     );
   });
 

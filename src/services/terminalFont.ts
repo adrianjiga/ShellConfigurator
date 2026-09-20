@@ -35,12 +35,30 @@ function setLine(content: string, pattern: RegExp, line: string): string {
   return `${base}${line}\n`;
 }
 
-/** Sets `family` inside the `[font]` table, creating the table when absent. */
+/**
+ * Sets `family` in Alacritty's `[font.normal]` table. Alacritty accepts either a
+ * nested table or an inline `normal = { … }`, and rejects an unknown `family`
+ * key directly under `[font]`; each shape is updated in place, and a missing
+ * table is appended.
+ */
 function setTomlFont(content: string, family: string): string {
   const line = `family = "${family}"`;
-  const headerMatch = /^\[font\]\s*$/m.exec(content);
+
+  const inlineRe = /^([ \t]*)normal\s*=\s*\{([^}]*)\}[ \t]*$/m;
+  const inlineMatch = inlineRe.exec(content);
+  if (inlineMatch) {
+    const [, indent, inner] = inlineMatch;
+    const body = /family\s*=/.test(inner)
+      ? inner.replace(/family\s*=\s*"[^"]*"/, line)
+      : inner.trim() === ''
+        ? ` ${line} `
+        : ` ${line},${inner}`;
+    return content.replace(inlineRe, () => `${indent}normal = {${body}}`);
+  }
+
+  const headerMatch = /^\[font\.normal\]\s*$/m.exec(content);
   if (!headerMatch || headerMatch.index === undefined) {
-    return appendBlock(content, `[font]\n${line}`);
+    return appendBlock(content, `[font.normal]\n${line}`);
   }
 
   const headerEnd = content.indexOf('\n', headerMatch.index);
