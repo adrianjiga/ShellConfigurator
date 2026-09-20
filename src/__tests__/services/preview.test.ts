@@ -191,4 +191,18 @@ describe('renderPromptAsync', () => {
 
     expect(result).toEqual({ mode: 'real', text: '~/projects/myapp on  main \n❯' });
   });
+
+  it('pins both static fallbacks as snapshots (P2 gate)', async () => {
+    const missing = await renderPromptAsync(
+      state,
+      fakeDeps({ isStarshipInstalled: vi.fn(async () => false) })
+    );
+    expect(missing).toMatchSnapshot();
+
+    const failed = await renderPromptAsync(
+      state,
+      fakeDeps({ runStarshipPrompt: vi.fn(async () => Promise.reject(new Error('nope'))) })
+    );
+    expect(failed).toMatchSnapshot();
+  });
 });

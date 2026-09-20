@@ -83,6 +83,14 @@ describe('PromptPreview', () => {
     ui.unmount();
   });
 
+  it('matches the snapshot of the static fallback frame', () => {
+    const out = frame({
+      leftModules: ['directory', 'git_branch', 'character'],
+      rightModules: ['cmd_duration'],
+    });
+    expect(out).toMatchSnapshot();
+  });
+
   it('swaps in the real starship output when the renderer succeeds', async () => {
     vi.useFakeTimers();
     const ui = render(
