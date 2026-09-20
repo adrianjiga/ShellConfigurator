@@ -362,41 +362,6 @@ export async function runInstallTasks(
     };
   });
 
-  // --- Verify the config(s) this run wrote load under the real starship binary ---
-  if (!state.skipStarshipInstall) {
-    await runTask(TASK_IDS.verify, async () => {
-      if (configStatus === 'failed') {
-        return { status: 'skipped', patch: { note: 'no config was written' } };
-      }
-      const onPath = await deps.isStarshipInstalled();
-      // A `script` install lands in a dir the current process PATH may not
-      // include; resolve that dir so verification still runs instead of being
-      // silently skipped the moment PATH is stale.
-      const scriptDir = onPath.installed ? null : deps.getMissingStarshipPathDir();
-      if (!onPath.installed && !scriptDir) {
-        return { status: 'skipped', patch: { note: 'starship not on PATH' } };
-      }
-      let configPaths: string[];
-      if (state.keepExistingConfig) {
-        configPaths = state.sharedConfigToml != null ? [getSharedConfigPath()] : [];
-      } else {
-        configPaths = state.selectedShells.map((shellId) => getShellConfigPath(shellId));
-      }
-      if (configPaths.length === 0) {
-        return { status: 'skipped', patch: { note: 'nothing written to verify' } };
-      }
-      for (const configPath of configPaths) {
-        if (scriptDir) await deps.verifyConfig(configPath, scriptDir);
-        else await deps.verifyConfig(configPath);
-      }
-      const suffix = scriptDir ? ` (via ${scriptDir})` : '';
-      return {
-        status: 'done',
-        patch: { note: `verified ${configPaths.length} config(s)${suffix}` },
-      };
-    });
-  }
-
   // --- Apply shell RC files (skipped until Starship is installed) ---
   // Checked once, after the install, so the rc lines can fix up PATH if the
   // script install put the binary somewhere the shell will not look.
@@ -439,6 +404,43 @@ export async function runInstallTasks(
         return { status: 'skipped', patch: { note: result.note } };
       }
       throw new Error(`Unknown shell: ${shellId}`);
+    });
+  }
+
+  // --- Verify the config(s) this run wrote load under the real starship binary ---
+  // Runs after the rc steps so it matches the plan order: "post-install
+  // verification" is the last thing that happens to the configs.
+  if (!state.skipStarshipInstall) {
+    await runTask(TASK_IDS.verify, async () => {
+      if (configStatus === 'failed') {
+        return { status: 'skipped', patch: { note: 'no config was written' } };
+      }
+      const onPath = await deps.isStarshipInstalled();
+      // A `script` install lands in a dir the current process PATH may not
+      // include; resolve that dir so verification still runs instead of being
+      // silently skipped the moment PATH is stale.
+      const scriptDir = onPath.installed ? null : deps.getMissingStarshipPathDir();
+      if (!onPath.installed && !scriptDir) {
+        return { status: 'skipped', patch: { note: 'starship not on PATH' } };
+      }
+      let configPaths: string[];
+      if (state.keepExistingConfig) {
+        configPaths = state.sharedConfigToml != null ? [getSharedConfigPath()] : [];
+      } else {
+        configPaths = state.selectedShells.map((shellId) => getShellConfigPath(shellId));
+      }
+      if (configPaths.length === 0) {
+        return { status: 'skipped', patch: { note: 'nothing written to verify' } };
+      }
+      for (const configPath of configPaths) {
+        if (scriptDir) await deps.verifyConfig(configPath, scriptDir);
+        else await deps.verifyConfig(configPath);
+      }
+      const suffix = scriptDir ? ` (via ${scriptDir})` : '';
+      return {
+        status: 'done',
+        patch: { note: `verified ${configPaths.length} config(s)${suffix}` },
+      };
     });
   }
 

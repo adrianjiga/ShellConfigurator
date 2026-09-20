@@ -365,6 +365,34 @@ describe('runInstallTasks', () => {
     expect(verify?.error).toContain('TOML parse error');
   });
 
+  it('runs verification after the rc steps, matching the plan order', async () => {
+    const order: string[] = [];
+    const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: true, version: 'starship 1.20' }),
+      applyShellConfig: vi.fn(() => {
+        order.push('rc');
+        return { applied: true };
+      }),
+      verifyConfig: vi.fn(() => {
+        order.push('verify');
+        return Promise.resolve();
+      }),
+    });
+    const onUpdate = vi.fn();
+    await runInstallTasks(
+      state({ selectedShells: ['zsh'], installedShells: ['zsh'] }),
+      deps,
+      onUpdate
+    );
+
+    expect(order).toEqual(['rc', 'verify']);
+    // And the task status transitions confirm verify did not run before rc.
+    const running = onUpdate.mock.calls.filter(([, p]) => p.status === 'running');
+    expect(running.map(([id]) => id)).toEqual(
+      expect.arrayContaining([expect.stringContaining('rc_'), 'verify'])
+    );
+  });
+
   it('wires the detected terminal to the installed nerd font', async () => {
     const deps = fakeDeps();
     const results = await runInstallTasks(
