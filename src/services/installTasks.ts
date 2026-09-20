@@ -57,7 +57,7 @@ export interface InstallTaskDeps {
   getShellsUsingStarship: () => Promise<ShellId[]>;
   getMissingStarshipPathDir: () => string | null;
   /** Rejects when starship cannot load the config at `configPath`. */
-  verifyConfig: (configPath: string) => Promise<void>;
+  verifyConfig: (configPath: string, pathDir?: string | null) => Promise<void>;
   /** Points the detected terminal at the installed Nerd Font family. */
   wireTerminalFont: (terminalId: TerminalId, family: string) => TerminalFontResult;
 }
@@ -76,10 +76,12 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   resetSharedShellConfig,
   getShellsUsingStarship: detectInstalledShellsAsync,
   getMissingStarshipPathDir,
-  verifyConfig: async (configPath) => {
-    await runCapture('starship', ['print-config'], {
-      env: { ...process.env, STARSHIP_CONFIG: configPath },
-    });
+  verifyConfig: async (configPath, pathDir) => {
+    const env: Record<string, string | undefined> = { ...process.env, STARSHIP_CONFIG: configPath };
+    // A `script` install drops the binary in a dir the current process PATH may
+    // not include yet; prepend it so verification resolves Starship regardless.
+    if (pathDir) env.PATH = `${pathDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`;
+    await runCapture('starship', ['print-config'], { env });
   },
   wireTerminalFont,
 };
@@ -358,7 +360,12 @@ export async function runInstallTasks(
       if (configStatus === 'failed') {
         return { status: 'skipped', patch: { note: 'no config was written' } };
       }
-      if (!(await deps.isStarshipInstalled()).installed) {
+      const onPath = await deps.isStarshipInstalled();
+      // A `script` install lands in a dir the current process PATH may not
+      // include; resolve that dir so verification still runs instead of being
+      // silently skipped the moment PATH is stale.
+      const scriptDir = onPath.installed ? null : deps.getMissingStarshipPathDir();
+      if (!onPath.installed && !scriptDir) {
         return { status: 'skipped', patch: { note: 'starship not on PATH' } };
       }
       let configPaths: string[];
@@ -370,8 +377,12 @@ export async function runInstallTasks(
       if (configPaths.length === 0) {
         return { status: 'skipped', patch: { note: 'nothing written to verify' } };
       }
-      for (const configPath of configPaths) await deps.verifyConfig(configPath);
-      return { status: 'done', patch: { note: `verified ${configPaths.length} config(s)` } };
+      for (const configPath of configPaths) {
+        if (scriptDir) await deps.verifyConfig(configPath, scriptDir);
+        else await deps.verifyConfig(configPath);
+      }
+      const suffix = scriptDir ? ` (via ${scriptDir})` : '';
+      return { status: 'done', patch: { note: `verified ${configPaths.length} config(s)${suffix}` } };
     });
   }
 
