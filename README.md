@@ -19,6 +19,9 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/),
 - **Style tuning**: palette, segment style, and character symbol selection
 - **Headless mode**: the same logic is driven from a state card or flags via the `generate` and `apply` subcommands, for scripting and CI
 - **Adopt-existing-config**: keep your current `~/.config/starship.toml` (or import one from a URL) and only install fonts, Starship, missing shells, and the shell wiring
+- **Terminal font wiring**: detect your terminal (Alacritty, kitty, WezTerm, Ghostty, foot) and select the installed Nerd Font in its config automatically
+- **Post-install verification**: after everything is applied, the written configs are loaded through the real `starship print-config` to catch a broken prompt before you restart
+- **`doctor` / `repair`**: a read-only day-2 health check (Starship, locale, shell wiring, config validity, font installed + selected, version drift) and a mode that applies fixes and re-checks
 
 ## Requirements
 
@@ -43,15 +46,17 @@ shell-configurator
 ### Command line options
 
 ```text
-shell-configurator                start the wizard
-shell-configurator generate       render a starship.toml from flags
-shell-configurator apply          run a full install headlessly from a state card
-shell-configurator apply --adopt  keep the existing shared config and wire shells to it
+shell-configurator                            start the wizard
+shell-configurator generate                   render a starship.toml from flags
+shell-configurator apply                      run a full install headlessly from a state card
+shell-configurator apply --adopt              keep the existing shared config and wire shells to it
 shell-configurator apply --import-url <url>   fetch a shared config (gist/URL) and adopt it (implies --adopt; bounded: 10s timeout, 1 MB max)
-shell-configurator --help         show usage and exit
-shell-configurator --version      print the version and exit
-shell-configurator --dry-run      preview the config without installing (also -d, --no-install)
-shell-configurator --restore      restore the shared and per-shell configs from their newest backup
+shell-configurator doctor [--state <file>]    run the read-only day-2 health check (--json for machine-readable)
+shell-configurator doctor --fix / repair      apply the fixes for failing checks, then re-run the checks
+shell-configurator --help                     show usage and exit
+shell-configurator --version                  print the version and exit
+shell-configurator --dry-run                  preview the config without installing (also -d, --no-install)
+shell-configurator --restore                  restore the shared and per-shell configs from their newest backup
 ```
 
 Flags may appear before or after the subcommand (e.g. `--dry-run apply --state card.json`);
@@ -151,11 +156,13 @@ All releases, including changelogs and install tarballs, are published on
 
 - **Starship**: via your package manager, or `curl` if none is detected
 - **Nerd Font**: downloaded from the official nerd-fonts GitHub release, its SHA-256 checked against the digest published for that release, and extracted in an isolated worker before being installed to `~/Library/Fonts/` (macOS) or `~/.local/share/fonts/` (Linux)
+- **Terminal font**: when a supported terminal is detected (Alacritty, kitty, WezTerm, Ghostty, foot), its config is edited to select the installed Nerd Font (WezTerm prints the exact line instead — its config is Lua)
 - **Shells**: installed via your package manager if not already present
 - **Per-shell Starship configs**: `~/.config/starship/<shell>.toml` for every selected shell, so each shell keeps its own prompt; the shared `~/.config/starship.toml` is never overwritten
 - **Adopt mode**: `apply --adopt` (or `--import-url`) keeps the shared `~/.config/starship.toml` as the one prompt every shell reads; no per-shell files are written, and the rc blocks carry no `STARSHIP_CONFIG` export
 - **Shell RC files**: each selected shell gets a `STARSHIP_CONFIG` export pointing at its own config plus the `starship init` line (appended idempotently); shells left unselected get an `unset` guard so a configured parent's prompt doesn't leak in
 - **Nushell**: `nu` has no rc file, so its setup command pins `STARSHIP_CONFIG` at startup via a `vendor/autoload` `export-env` file instead
+- **Verification**: after the rc steps, every config written this run is loaded through the real `starship print-config`, so a broken prompt is caught before you restart. Font and `chsh` tasks are skipped in a container.
 
 ## Supported Nerd Fonts
 
@@ -178,7 +185,7 @@ src/
   config/        # Module, preset, and shell definitions
   generators/    # TOML config builder and shell RC updater
   screens/       # One file per wizard step
-  services/      # Detection (detector.ts), installation (installer.ts, fontExtractor.ts), task orchestration (installTasks.ts)
+  services/      # Detection (detector.ts), installation (installer.ts, fontExtractor.ts, terminalFont.ts), orchestration (installTasks.ts), health (doctor.ts, repair.ts)
   components/    # WizardLayout, PromptPreview, NavHints
   stepMachine.ts # Pure step navigation (getNextStep / getPrevStep)
   types.ts       # Shared types, STEP_ORDER, default state
@@ -189,15 +196,15 @@ src/
 ## Development
 
 ```bash
-npm run dev       # Run with tsx (no build step)
-npm run build     # Compile to dist/
-npm start         # Run compiled output
-npm run typecheck   # Type-check including tests
-npm test          # Run unit tests (vitest)
-npm run test:coverage  # Unit tests + coverage report (v8)
-npm run lint      # Biome (lint)
-npm run format:check   # Biome format check
-npm run format    # Biome format write
+npm run dev           # Run with tsx (no build step)
+npm run build         # Compile to dist/
+npm start             # Run compiled output
+npm run typecheck     # Type-check including tests
+npm test              # Run unit tests (vitest)
+npm run test:coverage # Unit tests + coverage report (v8)
+npm run lint          # Biome (lint)
+npm run format:check  # Biome format check
+npm run format        # Biome format write
 ```
 
 ## Troubleshooting

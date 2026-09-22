@@ -225,16 +225,25 @@ In `--dry-run` mode the same screen appears but states that nothing will be appl
 
   [✓] Starship
   [✓] Nerd Font (JetBrains Mono)
-  [~] Install fish
+  [✓] Set Alacritty font
+  [✓] Install fish
   [ ] Write starship.toml
   [ ] Apply shell configs
+  [~] Verify config
 
   All done — continuing...
 ```
 
 Error details appear indented below failed tasks in red italic.
 
-If the user chose "Continue without Starship", the Starship task is omitted entirely and "Apply shell configs" is skipped with an "install Starship first" note — no init lines are written without Starship present.
+Two tasks are conditional: **Set <terminal> font** (wires the installed Nerd
+Font into the detected terminal's config) appears only when a concrete font was
+chosen and a terminal was detected; **Verify config** always follows the rc
+steps and loads the written configs through the real `starship print-config`. In
+a container both the font and the default-shell (`chsh`) tasks are dropped — fonts
+belong to the host terminal there.
+
+If the user chose "Continue without Starship", the Starship task is omitted entirely, "Apply shell configs" is skipped with an "install Starship first" note, and Verify config does not run — no init lines are written without Starship present.
 
 **Input**: Minimal. `c` cancels the run — the task chain aborts at the next phase boundary, the command in flight is killed, and tasks that never ran are marked failed ("cancelled"), never done. Otherwise auto-advances to Done after a 1200ms pause.
 
@@ -254,7 +263,7 @@ If the user chose "Continue without Starship", the Starship task is omitted enti
 - Per-shell status (installed + configured, or failure details)
 - Default shell status (if set via chsh)
 - Post-install instructions (restart terminal, set font in terminal settings)
-- Yellow reminder about Nerd Font terminal setup
+- Yellow reminder about Nerd Font terminal setup — shown only when the terminal-font wiring task did **not** complete (no terminal detected, terminal config needs a manual step like WezTerm, or the font install failed), since otherwise the font is already selected
 
 **Keys**: `Enter` / `Esc` / `Q` to exit; `r` runs a one-key undo — it copies the
 newest `.bak-*` backups back over the shared and per-shell configs (the same

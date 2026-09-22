@@ -50,6 +50,8 @@ interface WizardState {
   sharedConfigToml: string | null; // Imported shared config (--import-url); runtime-only, never serialized
   dryRun: boolean; // No install or config-write happens — the wizard only previews
   installResults: InstallTask[]; // Final task statuses from InstallingScreen
+  terminal: TerminalId | null; // Detected terminal emulator; lets the wizard select the font in it
+  container: boolean; // True inside a container/CI sandbox — fonts are per-host and chsh is skipped
 }
 ```
 
@@ -329,10 +331,18 @@ function isStarshipInstalledAsync(): Promise<{ installed: boolean; version?: str
 function detectInstalledShellsAsync(): Promise<ShellId[]>;
 // Returns shells found on PATH, one binary check per SHELLS entry
 
+function detectTerminalAsync(): Promise<TerminalId | null>;
+// Detects the terminal emulator the wizard runs in (alacritty | kitty | wezterm
+// | ghostty | foot) from $TERM_PROGRAM / config paths. null when unknown.
+
 function detectCurrentShellAsync(): Promise<ShellId | null>;
 // Best-effort detection of the shell the wizard runs in (for pre-selecting it
 // on ShellScreen): $SHELL first, then the process command name. null when it
 // cannot be mapped to a known shell.
+
+function detectContainerAsync(): Promise<boolean>;
+// True inside a container/CI sandbox (marker files like .dockerenv present).
+// Fonts are per-host there and chsh is meaningless, so both tasks are skipped.
 ```
 
 ### installer.ts
@@ -388,11 +398,35 @@ cancel in flight, and rejection on spawn error, signal kill, or non-zero exit.
 The Ink render loop is never blocked — commands run through `runInstallTasks`,
 not `spawnSync`.
 
+### terminalFont.ts
+
+Points the detected terminal at a Nerd Font family, editing its config file
+idempotently. Backs up the existing file first; WezTerm's Lua config is never
+edited, the exact line is returned as a note instead.
+
+```typescript
+type TerminalId = 'alacritty' | 'kitty' | 'wezterm' | 'ghostty' | 'foot';
+
+function terminalLabel(id: TerminalId): string;
+// Human-readable name, for task labels and doctor output.
+
+function wireTerminalFont(id: TerminalId, family: string): TerminalFontResult;
+// Sets `family` in the terminal's config (alacritty [font.normal] — TOML or the
+// legacy YAML path, kitty font_family, ghostty font-family, foot font= under
+// [main]), backing up any existing file. Returns { applied, path, backedUpTo, note }.
+// Applied=false signals "changed nothing" — the font was already set, the config
+// was missing but a note explains the manual step (wezterm, alacritty.yml).
+
+function readTerminalFontFamily(id: TerminalId): string | null;
+// The family the terminal is configured to use, or null when unset/unknown.
+```
+
 ### installTasks.ts
 
 ```typescript
 function buildTaskList(state: WizardState): InstallTask[];
-// Pure — builds the task queue (starship, font, shells, chsh, config, rc)
+// Pure — builds the task queue (starship, font, terminal font, shells, chsh,
+// config, rc, verify)
 
 interface InstallTaskDeps {
   isStarshipInstalled: () => Promise<{ installed: boolean; version?: string }>;
@@ -418,6 +452,15 @@ interface InstallTaskDeps {
   getShellsUsingStarship: () => Promise<ShellId[]>;
   // Shells that run Starship and could inherit a leaked STARSHIP_CONFIG.
   getMissingStarshipPathDir: () => string | null;
+  recordStarshipVersion: (version: string) => void;
+  // Persists the freshly installed starship version to the cache dir, so the
+  // doctor can flag drift when a later package-manager update moves it.
+  verifyConfig: (configPath: string, pathDir?: string | null) => Promise<void>;
+  // Runs `starship print-config` against the written config; pathDir lets a
+  // script install add its own bin dir to PATH before the binary resolves.
+  wireTerminalFont: (terminalId: TerminalId, family: string) => TerminalFontResult;
+  // Points the detected terminal's config at the installed Nerd Font. WezTerm's
+  // Lua config is never edited — the exact line is returned as a note instead.
 }
 
 const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps;
@@ -496,9 +539,14 @@ shell-configurator repair [--state <file>] [--json]
 UTF-8 locale, the `starship init` line and `STARSHIP_CONFIG` export in each
 shell rc (or the shared config in adopt mode), that the configs load under the
 real `starship print-config`, that a Nerd Font is installed, and that it is
-selected in the detected terminal (`src/services/doctor.ts`). Each finding is
-`pass`/`warn`/`fail`; any `fail` sets exit code `1`. `--json` prints the report
-object.
+selected in the detected terminal (`src/services/doctor.ts`). Two further
+checks are `warn`-only and read the runtime: **version drift** — the installed
+starship binary no longer matches the version the last install/apply recorded,
+which means a package-manager upgrade happened outside the tool — and the
+**current shell** — the shell this terminal is *running* is not one of the
+configured ones, so the new prompt won't show until the user starts it. Each
+finding is `pass`/`warn`/`fail`; any `fail` sets exit code `1`. `--json` prints
+the report object.
 
 `repair` (or `doctor --fix`) applies the fix each failing finding carries —
 re-add the init line, reinstall Starship via the detected package manager,
@@ -529,6 +577,7 @@ tarball stays self-contained and nothing is written next to the binary:
 | `$XDG_STATE_HOME` or `~/.local/state`/`shell-configurator/history.jsonl` | Append-only ledger; one JSON `HistoryRecord` per run (`install`/`apply`/…), in file order = chronological order. |
 | `…/snapshots/<iso-timestamp>.json`            | The versioned state card each run applied. The `snapshotId` field in the ledger is the rollback handle that `uninstall`/rollback resolves. |
 | `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/fonts/<id>.zip` + `<id>.sha256` | Font cache: the verified archive plus its pinned SHA-256 pin file. A cached archive is reused offline only while its bytes still match the pin. |
+| `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/starship.version` | The starship version the last install/apply recorded (`recordStarshipVersion`). Feeds the doctor's `version-drift` check. |
 
 ### State Card (`serializeState` / `parseState` in `src/services/state.ts`)
 
