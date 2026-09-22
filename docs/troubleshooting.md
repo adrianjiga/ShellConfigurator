@@ -4,11 +4,41 @@ Common issues and how to fix them.
 
 ---
 
+## Run the doctor first
+
+Before guessing, run the read-only health check. It inspects the actual
+machine — Starship on `PATH`, a UTF-8 locale, the `starship init` line and
+`STARSHIP_CONFIG` export in each shell rc, that the configs load under the real
+`starship print-config`, that a Nerd Font is installed and selected in your
+detected terminal, whether the installed starship drifted from what your last
+install recorded, and whether the shell you are currently running is one of the
+configured ones:
+
+```bash
+shell-configurator doctor
+```
+
+`doctor --fix` (or `repair`) applies the fix each failing check carries and
+re-runs the checks: it re-adds the init line, reinstalls Starship via the
+detected package manager, reinstalls the font from cache, or wires the terminal
+font. It never touches anything that passed. `--json` prints the full report.
+
+---
+
 ## Nerd Font characters show as boxes or question marks
 
 ShellConfigurator installs Nerd Font files to your system, but **your terminal
 also needs to be configured to use the font**. The font files alone don't change
 anything — the terminal must select them.
+
+When the wizard (or `apply`) detects a supported terminal — Alacritty, kitty,
+WezTerm, Ghostty, or foot — it edits the terminal's config to select the
+installed font automatically (`Set <terminal> font` task). WezTerm's Lua config
+is never edited; the exact `config.font = wezterm.font(...)` line is printed for
+you instead. This only runs on a real machine, not inside a container.
+
+Run `shell-configurator doctor --fix` to (re)wire the terminal font at any time
+if the boxes persist.
 
 **macOS (iTerm2, Alacritty, Kitty, Ghostty, WezTerm, Terminal.app):**
 

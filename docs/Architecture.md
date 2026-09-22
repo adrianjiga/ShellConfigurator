@@ -4,10 +4,10 @@
 
 `src/index.tsx` first parses the argv (`parseCliArgs` in `src/services/args.ts`).
 Global flags (`--help`/`--version`/`--restore`) and the headless subcommands
-(`generate`/`apply`, routed via `runHeadlessCommand`) exit before Ink ever
-renders; parser warnings (unknown/malformed flags) go to stderr. Only when no
-subcommand consumed the args does the app render the root `App` component using
-Ink's renderer. Ink is a React-based framework for building interactive CLI
+(`generate`/`apply`/`doctor`/`repair`, routed via `runHeadlessCommand`) exit
+before Ink ever renders; parser warnings (unknown/malformed flags) go to stderr.
+Only when no subcommand consumed the args does the app render the root `App`
+component using Ink's renderer. Ink is a React-based framework for building interactive CLI
 applications — it translates a React component tree into terminal output.
 
 ## Component Tree
@@ -147,6 +147,8 @@ interface WizardState {
   sharedConfigToml: string | null; // Shared config fetched via --import-url (runtime-only, never serialized)
   dryRun: boolean; // When true no install or config-write happens — the wizard only previews
   installResults: InstallTask[]; // Final task statuses from InstallingScreen
+  terminal: TerminalId | null; // Detected terminal, used to wire the Nerd Font into its config
+  container: boolean; // True inside a container/CI sandbox — fonts are per-host, chsh skipped
 }
 ```
 
@@ -255,16 +257,19 @@ src/
 │   └── toml.ts                TOML escaping helpers
 └── services/
     ├── args.ts                Hand-rolled, dependency-free CLI flag parser
-    ├── headless.ts            generate/apply subcommands + bounded --import-url fetch
+    ├── headless.ts            generate/apply/doctor/repair subcommand routing + bounded --import-url fetch
     ├── preview.ts             Live preview: scratch-dir `starship prompt` + static fallback
-    ├── detector.ts            Async system detection (PM, shells, Starship)
+    ├── detector.ts            Async system detection (PM, shells, Starship, terminal, container)
     ├── installer.ts           Install commands (Starship, fonts, shells, chsh)
     ├── installTasks.ts        Install task orchestration (buildTaskList, runInstallTasks)
     ├── fontExtractor.ts       Sandboxed worker that decompresses font archives
+    ├── terminalFont.ts        Wires a detected terminal's config to a Nerd Font family
+    ├── doctor.ts              Day-2 health check (read-only) with pass/warn/fail findings
+    ├── repair.ts              Applies doctor fixes, then re-runs the doctor
     ├── state.ts               State card serialization (serializeState / parseState)
     ├── history.ts             history.jsonl ledger + snapshot writes
-    ├── cache.ts               Verified font archive cache (pin + sha256)
-    ├── exec.ts                Async spawn wrapper (runCommand) + binary checks
+    ├── cache.ts               Font archive cache (pin + sha256) + recorded starship version
+    ├── exec.ts                Async spawn wrapper (runCommand, runCapture) + binary checks
     ├── errors.ts              Error classes (CliUsageError)
     ├── paths.ts               XDG dir resolution
     └── tty.ts                 Terminal handover while child commands run
