@@ -69,7 +69,23 @@ export type ConfigurableModuleId =
   | 'time'
   | 'battery'
   | 'cmd_duration'
-  | 'jobs';
+  | 'jobs'
+  | 'status'
+  | 'os'
+  | 'shlvl'
+  | 'sudo'
+  | 'git_commit'
+  | 'golang'
+  | 'java'
+  | 'dotnet'
+  | 'ruby'
+  | 'php'
+  | 'c'
+  | 'cpp'
+  | 'zig'
+  | 'lua'
+  | 'swift'
+  | 'elixir';
 
 /** The prompt character is always appended last and is configured on the Style
  *  screen, so it is not a placeable module and has no MODULE_DEFS entry. */
@@ -293,6 +309,213 @@ style     = "${tomlBasic(styleFor('battery'))}"
       `
 symbol    = "✦"
 threshold = 1
+`.trim(),
+  },
+  status: {
+    label: 'Exit Status',
+    description: 'Exit code of the previous command (shown on failure)',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => '❌ 127',
+    content: '$symbol$status',
+    settings: () => `disabled = false`,
+  },
+  os: {
+    label: 'Operating System',
+    description: 'Icon for the current operating system',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => '🐧',
+    content: '$symbol',
+    settings: () => `disabled = false`,
+  },
+  shlvl: {
+    label: 'Shell Level',
+    description: 'Nested shell depth',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => '↕️ 2',
+    content: '$symbol$shlvl',
+    settings: () =>
+      `
+disabled  = false
+threshold = 2
+`.trim(),
+  },
+  sudo: {
+    label: 'Sudo',
+    description: 'Shown while sudo credentials are cached',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => '🧙',
+    content: '$symbol',
+    settings: () => `disabled = false`,
+  },
+  git_commit: {
+    label: 'Git Commit',
+    description: 'Current commit hash (shown when HEAD is detached)',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => '(a1b2c3d)',
+    content: '$hash',
+  },
+  golang: {
+    label: 'Go',
+    description: 'Go version (shown in Go projects)',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => '🐹 v1.22',
+    content: '$symbol$version',
+    settings: () =>
+      `
+symbol   = "🐹 "
+disabled = false
+`.trim(),
+  },
+  java: {
+    label: 'Java',
+    description: 'Java version (shown in Java projects)',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => '☕ v21',
+    content: '$symbol$version',
+    settings: () =>
+      `
+symbol   = "☕ "
+disabled = false
+`.trim(),
+  },
+  dotnet: {
+    label: '.NET',
+    description: '.NET SDK version (shown in .NET projects)',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => '.NET 8.0',
+    content: '$symbol$version',
+    settings: () =>
+      `
+symbol   = ".NET "
+disabled = false
+`.trim(),
+  },
+  ruby: {
+    label: 'Ruby',
+    description: 'Ruby version (shown in Ruby projects)',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => '💎 3.3',
+    content: '$symbol$version',
+    settings: () =>
+      `
+symbol   = "💎 "
+disabled = false
+`.trim(),
+  },
+  php: {
+    label: 'PHP',
+    description: 'PHP version (shown in PHP projects)',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => '🐘 8.3',
+    content: '$symbol$version',
+    settings: () =>
+      `
+symbol   = "🐘 "
+disabled = false
+`.trim(),
+  },
+  c: {
+    label: 'C',
+    description: 'C compiler version (shown in C projects)',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => 'C 13.2',
+    content: '$symbol$version',
+    settings: () =>
+      `
+symbol   = "C "
+disabled = false
+`.trim(),
+  },
+  cpp: {
+    label: 'C++',
+    description: 'C++ compiler version (shown in C++ projects)',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => 'C++ 13.2',
+    content: '$symbol$version',
+    settings: () =>
+      `
+symbol   = "C++ "
+disabled = false
+`.trim(),
+  },
+  zig: {
+    label: 'Zig',
+    description: 'Zig version (shown in Zig projects)',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => '↯ 0.13',
+    content: '$symbol$version',
+    settings: () =>
+      `
+symbol   = "↯ "
+disabled = false
+`.trim(),
+  },
+  lua: {
+    label: 'Lua',
+    description: 'Lua version (shown in Lua projects)',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => '🌙 5.4',
+    content: '$symbol$version',
+    settings: () =>
+      `
+symbol   = "🌙 "
+disabled = false
+`.trim(),
+  },
+  swift: {
+    label: 'Swift',
+    description: 'Swift version (shown in Swift projects)',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => '🐦 5.10',
+    content: '$symbol$version',
+    settings: () =>
+      `
+symbol   = "🐦 "
+disabled = false
+`.trim(),
+  },
+  elixir: {
+    label: 'Elixir',
+    description: 'Elixir version (shown in Elixir projects)',
+    defaultLeft: false,
+    defaultRight: false,
+
+    previewSegment: () => '💧 1.16',
+    content: '$symbol$version',
+    settings: () =>
+      `
+symbol   = "💧 "
+disabled = false
 `.trim(),
   },
   // `satisfies` (not a type annotation) so each callback still gets contextual

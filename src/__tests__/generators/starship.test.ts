@@ -113,6 +113,32 @@ describe('generateToml', () => {
     expect(toml).toContain(`[${id}]`);
   });
 
+  it.each(MODULES.map((m) => m.id))(
+    'generates parseable TOML for the %s module in plain and powerline',
+    (id) => {
+      for (const powerline of [false, true]) {
+        const parsed = toml.parse(
+          generateToml({
+            ...base,
+            hasNerdFont: true,
+            powerline,
+            leftModules: [id],
+            rightModules: [],
+          })
+        ) as Record<string, unknown>;
+        expect(parsed[id], `${id} (powerline: ${powerline})`).toBeTruthy();
+      }
+    }
+  );
+
+  it.each(['status', 'os', 'shlvl', 'sudo', 'cpp'] as const)(
+    'explicitly enables %s, which starship disables by default',
+    (id) => {
+      const generated = generateToml({ ...base, leftModules: [id], rightModules: [] });
+      expect(generated).toMatch(/disabled\s*=\s*false/);
+    }
+  );
+
   it('generates a character module block', () => {
     const toml = generateToml({
       ...base,
