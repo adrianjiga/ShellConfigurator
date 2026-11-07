@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
+import { PickerRow } from '../components/PickerRow.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { inkColor, PALETTES, type PaletteColorName, type PaletteId } from '../config/palettes.ts';
 import type { CharacterSymbol, WizardState } from '../types.ts';
@@ -104,14 +105,13 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
             Prompt character
           </Text>
           {CHAR_OPTIONS.map((opt, i) => (
-            <Box key={opt.value} flexDirection="row" gap={1} marginLeft={1}>
-              <Text color={focus === 'char' && i === charIdx ? 'cyan' : 'gray'}>
-                {focus === 'char' && i === charIdx ? '›' : ' '}
-              </Text>
-              <Text color={i === charIdx ? 'white' : 'gray'} bold={i === charIdx}>
-                {opt.preview} {opt.label}
-              </Text>
-            </Box>
+            <PickerRow
+              key={opt.value}
+              focused={focus === 'char' && i === charIdx}
+              selected={i === charIdx}
+              indent={1}
+              label={`${opt.preview} ${opt.label}`}
+            />
           ))}
         </Box>
 
@@ -121,21 +121,20 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
             Colour palette
           </Text>
           {PALETTES.map((opt, i) => (
-            <Box key={opt.id} flexDirection="row" gap={1} marginLeft={1}>
-              <Text color={focus === 'color' && i === colorIdx ? 'cyan' : 'gray'}>
-                {focus === 'color' && i === colorIdx ? '›' : ' '}
-              </Text>
-              <Text color={i === colorIdx ? 'white' : 'gray'} bold={i === colorIdx}>
-                {opt.label}
-              </Text>
-              {/* A swatch of the palette's own colours, so the list shows what it
-                  is describing rather than only naming it. */}
-              {SWATCH_COLORS.map((name) => (
+            <PickerRow
+              key={opt.id}
+              focused={focus === 'color' && i === colorIdx}
+              selected={i === colorIdx}
+              indent={1}
+              label={opt.label}
+              // A swatch of the palette's own colours, so the list shows what it
+              // is describing rather than only naming it.
+              suffix={SWATCH_COLORS.map((name) => (
                 <Text key={name} color={inkColor(opt.colors[name])}>
                   ●
                 </Text>
               ))}
-            </Box>
+            />
           ))}
         </Box>
 
@@ -145,18 +144,18 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
             Segment style
           </Text>
           {POWERLINE_OPTIONS.map((opt, i) => (
-            <Box key={opt.label} flexDirection="row" gap={1} marginLeft={1}>
-              <Text color={focus === 'powerline' && i === powerlineIdx ? 'cyan' : 'gray'}>
-                {focus === 'powerline' && i === powerlineIdx ? '›' : ' '}
-              </Text>
-              <Text color={i === powerlineIdx ? 'white' : 'gray'} bold={i === powerlineIdx}>
-                {opt.label}
-              </Text>
-              <Text color="gray" italic>
-                {' '}
-                — {opt.description}
-              </Text>
-            </Box>
+            <PickerRow
+              key={opt.label}
+              focused={focus === 'powerline' && i === powerlineIdx}
+              selected={i === powerlineIdx}
+              indent={1}
+              label={opt.label}
+              suffix={
+                <Text color="gray" italic>
+                  — {opt.description}
+                </Text>
+              }
+            />
           ))}
           {powerline && !state.hasNerdFont && (
             <Text color="yellow">
