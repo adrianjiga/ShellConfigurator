@@ -62,6 +62,7 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 **Layout**: Shows a grid of 4 test icons that render correctly only with a Nerd Font installed. The user visually confirms whether they see icons or boxes.
 
 **Options**:
+
 | Choice                      | Effect                                    |
 | --------------------------- | ----------------------------------------- |
 | "Yes, I already have one"   | `hasNerdFont: true`, skip font picker     |
