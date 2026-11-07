@@ -21,10 +21,7 @@ guesses about the value and lets two "empty" states collide.
 `NerdFontChoice` is a discriminated union:
 
 ```ts
-type NerdFontChoice =
-  | { kind: 'none' }
-  | { kind: 'select' }
-  | { kind: 'install'; id: string };
+type NerdFontChoice = { kind: 'none' } | { kind: 'select' } | { kind: 'install'; id: string };
 ```
 
 Two tiny predicates own the interpretation — `shouldVisitFontSelect()` (does the

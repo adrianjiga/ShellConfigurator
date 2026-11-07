@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Decisions here capture *why* the codebase looks the way it does, so a future
+Decisions here capture _why_ the codebase looks the way it does, so a future
 change can weigh the original trade-off before unpicking it.
 
 - [0001-fill-over-right-format](0001-fill-over-right-format.md) — right-align the

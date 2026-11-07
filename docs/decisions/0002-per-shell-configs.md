@@ -46,7 +46,7 @@ plus `starship init` line to that shell's rc file.
 ### Context
 
 0002's "never clobber the shared file" rule is exactly what a brownfield user
-wants the *opposite* of: they already have a `~/.config/starship.toml` and want
+wants the _opposite_ of: they already have a `~/.config/starship.toml` and want
 it kept as the one prompt, with the wizard only installing fonts, Starship,
 missing shells, and the shell wiring. #7 (adopt) and #24 (`--import-url`) are a
 migration on-ramp that avoids forcing such users through a regeneration of their

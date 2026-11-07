@@ -82,11 +82,11 @@ shell doesn't have that directory on `$PATH`, Starship won't be found.
 
 **Quick fix — add to your shell's RC file:**
 
-| Shell  | RC file                        | Line to add                              |
-| ------ | ------------------------------ | ---------------------------------------- |
-| bash   | `~/.bashrc`                    | `export PATH="$HOME/.local/bin:$PATH"`   |
-| zsh    | `~/.zshrc`                     | `export PATH="$HOME/.local/bin:$PATH"`   |
-| fish   | `~/.config/fish/config.fish`   | `fish_add_path ~/.local/bin`             |
+| Shell | RC file                      | Line to add                            |
+| ----- | ---------------------------- | -------------------------------------- |
+| bash  | `~/.bashrc`                  | `export PATH="$HOME/.local/bin:$PATH"` |
+| zsh   | `~/.zshrc`                   | `export PATH="$HOME/.local/bin:$PATH"` |
+| fish  | `~/.config/fish/config.fish` | `fish_add_path ~/.local/bin`           |
 
 Open a new terminal window or run `source ~/.zshrc` (or the equivalent for
 your shell) for the change to take effect.

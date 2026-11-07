@@ -126,7 +126,7 @@ format = "([ $path$read_only ](bold fg:fg bg:directory)[\ue0b0](fg:directory bg:
 
 The `format` key is only emitted when the generated prompt is powerline. A plain
 prompt leaves starship's own default format alone. The separator inside the
-`format` is tinted with the *neighbouring* segment's background so adjacent
+`format` is tinted with the _neighbouring_ segment's background so adjacent
 blocks interlock; the outer end of a run has no neighbour and fades into the
 terminal. Blocks are wrapped in a `(…)` group that starship drops when its
 variables are all empty, so a module with nothing to show collapses instead of
@@ -135,21 +135,21 @@ leaving a stray coloured block behind.
 Most modules also emit module-specific settings. Ones that carry their colour in
 differently-named keys do not get a `style`:
 
-| Module          | Extra keys                                                                 |
-| --------------- | -------------------------------------------------------------------------- |
-| `username`      | `show_always`, `style_user`, `style_root` — no `style`                     |
-| `hostname`      | `ssh_only`                                                                 |
-| `directory`     | `truncation_length`, `truncate_to_repo`                                    |
-| `git_branch`    | `symbol` (a Nerd Font glyph or `on `)                                      |
-| `git_status`    | `ahead`, `behind`, `diverged`, `modified`, `staged`, `untracked`, `deleted` |
-| `nodejs`/`python`/`rust` | `symbol`, `disabled = false`                                       |
-| `docker_context` | `symbol`, `disabled = false`                                               |
-| `kubernetes`    | `symbol`, `disabled = false`                                               |
-| `aws`           | `symbol`, `disabled = false`                                               |
-| `time`          | `disabled`, `time_format`                                                  |
-| `battery`       | `disabled`, two `[[battery.display]]` tables — no `style`                  |
-| `cmd_duration`  | `min_time = 0`                                                             |
-| `jobs`          | `symbol`, `threshold`                                                      |
+| Module                   | Extra keys                                                                  |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `username`               | `show_always`, `style_user`, `style_root` — no `style`                      |
+| `hostname`               | `ssh_only`                                                                  |
+| `directory`              | `truncation_length`, `truncate_to_repo`                                     |
+| `git_branch`             | `symbol` (a Nerd Font glyph or `on `)                                       |
+| `git_status`             | `ahead`, `behind`, `diverged`, `modified`, `staged`, `untracked`, `deleted` |
+| `nodejs`/`python`/`rust` | `symbol`, `disabled = false`                                                |
+| `docker_context`         | `symbol`, `disabled = false`                                                |
+| `kubernetes`             | `symbol`, `disabled = false`                                                |
+| `aws`                    | `symbol`, `disabled = false`                                                |
+| `time`                   | `disabled`, `time_format`                                                   |
+| `battery`                | `disabled`, two `[[battery.display]]` tables — no `style`                   |
+| `cmd_duration`           | `min_time = 0`                                                              |
+| `jobs`                   | `symbol`, `threshold`                                                       |
 
 Module text symbols (`symbol`, `success_symbol`, …) branch on `hasNerdFont` so a
 plain prompt degrades to readable text instead of tofu: `git_branch` uses a

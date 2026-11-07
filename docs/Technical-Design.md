@@ -123,7 +123,7 @@ style  = "bold git_branch"
 ...
 ```
 
-Styled module blocks reference colours by *name* (`bold directory`) through the
+Styled module blocks reference colours by _name_ (`bold directory`) through the
 generated `[palettes.<id>]` table rather than by value, so the whole theme can be
 retuned in one place.
 
@@ -208,16 +208,16 @@ because none exist.
 
 `buildTaskList(state)` creates the task queue from wizard state:
 
-| Task           | Condition                                 | Action                                                      |
-| -------------- | ----------------------------------------- | ----------------------------------------------------------- |
-| Starship       | Not `skipStarshipInstall`                 | Install if not already present                              |
-| Nerd Font      | `nerdFontToInstall.kind === 'install'` and not `container` | Download and install font (skipped in containers — fonts belong to the host terminal) |
-| Terminal font  | `nerdFontToInstall.kind === 'install'` and a terminal was detected and not `container` | Wire the font family into the terminal's config (`terminalFont.ts`) |
-| Shell(s)       | Selected shell not in `installedShells` | Install via package manager; auto-uninstallable shells (`shellInstallSupported` = false: the `script` fallback or no package for that manager) are tagged "(manual)" in the plan so the user knows before the run |
-| Set default    | `setDefaultShell` is set (and not `container`) | Run `chsh -s <path>` (meaningless in a container, skipped) |
-| Config         | Always                                  | Write per-shell configs, or keep/adopt the shared config |
-| RC files       | Not `skipStarshipInstall`               | One task per shell: init line + `STARSHIP_CONFIG` pin    |
-| Verify config  | Not `skipStarshipInstall`               | After the rc steps: run `starship print-config` against each written config |
+| Task          | Condition                                                                              | Action                                                                                                                                                                                                            |
+| ------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Starship      | Not `skipStarshipInstall`                                                              | Install if not already present                                                                                                                                                                                    |
+| Nerd Font     | `nerdFontToInstall.kind === 'install'` and not `container`                             | Download and install font (skipped in containers — fonts belong to the host terminal)                                                                                                                             |
+| Terminal font | `nerdFontToInstall.kind === 'install'` and a terminal was detected and not `container` | Wire the font family into the terminal's config (`terminalFont.ts`)                                                                                                                                               |
+| Shell(s)      | Selected shell not in `installedShells`                                                | Install via package manager; auto-uninstallable shells (`shellInstallSupported` = false: the `script` fallback or no package for that manager) are tagged "(manual)" in the plan so the user knows before the run |
+| Set default   | `setDefaultShell` is set (and not `container`)                                         | Run `chsh -s <path>` (meaningless in a container, skipped)                                                                                                                                                        |
+| Config        | Always                                                                                 | Write per-shell configs, or keep/adopt the shared config                                                                                                                                                          |
+| RC files      | Not `skipStarshipInstall`                                                              | One task per shell: init line + `STARSHIP_CONFIG` pin                                                                                                                                                             |
+| Verify config | Not `skipStarshipInstall`                                                              | After the rc steps: run `starship print-config` against each written config                                                                                                                                       |
 
 The Config task writes _per-shell_ configs, one per selected shell, and the shared
 `~/.config/starship.toml` is only snapshotted. In adopt mode the Config task instead either keeps
@@ -305,7 +305,7 @@ All install commands go through `runCommand` in `src/services/exec.ts` — an as
 
 1. **Download guards**: the request carries an `AbortSignal.timeout` (`FONT_DOWNLOAD_TIMEOUT_MS`), so a hung connection can't wedge the install chain, and the archive is refused when the declared `content-length` or the received buffer exceeds `MAX_FONT_ARCHIVE_BYTES`.
 2. **Checksum verification**: before extraction the buffer's SHA-256 is computed (`node:crypto`) and compared with the `sha256:` digest GitHub publishes in the release asset metadata (`GET /repos/ryanoasis/nerd-fonts/releases/latest`, matched by `zipName`). The lookup also has its own `AbortSignal.timeout`. The check fails closed: a mismatched archive, a release without a digest for the asset, or a failed lookup all refuse to install with distinct errors.
-3. **Worker-isolated extraction** (`src/services/fontExtractor.ts`): `extractFontFiles()` decompresses in an `eval`-script `Worker` (CommonJS `require` of the resolved fflate path, archive and path passed through `workerData`), so malformed input can only crash the throwaway worker, never the wizard. The worker filters entries to font files and flattens them to basenames — deliberately structured-cloned back as `{ name, bytes }` while the *writes* stay on the main thread, keeping path handling and `fs.writeFileSync` in one auditable place. A ~60s timeout terminates a stuck worker.
+3. **Worker-isolated extraction** (`src/services/fontExtractor.ts`): `extractFontFiles()` decompresses in an `eval`-script `Worker` (CommonJS `require` of the resolved fflate path, archive and path passed through `workerData`), so malformed input can only crash the throwaway worker, never the wizard. The worker filters entries to font files and flattens them to basenames — deliberately structured-cloned back as `{ name, bytes }` while the _writes_ stay on the main thread, keeping path handling and `fs.writeFileSync` in one auditable place. A ~60s timeout terminates a stuck worker.
 
 ### Platform-Aware Font Installation
 
@@ -405,7 +405,7 @@ WelcomeScreen and ShellScreen await them in `useEffect` with a `cancelled` guard
 
 ### Cross-Distro Smoke Testing
 
-The `.github/workflows/ci.yml` `distro-smoke` job runs the non-destructive parts — `detectPackageManagerAsync`, `detectInstalledShellsAsync`, `isStarshipInstalledAsync`, `generateToml` (parsed as TOML for every preset), `applyShellConfig` idempotency, the nushell manual command resolving to its per-shell config, and `applyShellConfig`/`resetSharedShellConfig` staying mutually exclusive across re-runs (stale unset guards dropped, polluted rc files repaired) — all against a scratch `HOME` inside Ubuntu, Debian, Fedora, Arch, and Alpine containers (`scripts/dockerSmoke.mjs`), plus synthetic `brew` and `script`-only entries. This exercises the detection chain against real `/etc/os-release` and package-manager layouts without a VM matrix. It caught the `which`-absence issue on Fedora that led to the `command -v` change above. Every matrix job also runs a `script` cell that chains three smokes against a scratch `HOME`: `wizard-check` (`scripts/ci/wizardSmoke.mjs`), which drives the *real* `App` from `dist/` through the full install flow; `headlessGenerateSmoke.mjs`, which presses the real entrypoint through `generate` (stdout + `-o`/`--export`) and parses the result; and `headlessApplySmoke.mjs`, which runs `apply --dry-run` on a state card. Containers that ship an old Node get a pinned Node 22 tarball from `scripts/ci/distroSetup.sh` first, so every container runs the same engine floor.
+The `.github/workflows/ci.yml` `distro-smoke` job runs the non-destructive parts — `detectPackageManagerAsync`, `detectInstalledShellsAsync`, `isStarshipInstalledAsync`, `generateToml` (parsed as TOML for every preset), `applyShellConfig` idempotency, the nushell manual command resolving to its per-shell config, and `applyShellConfig`/`resetSharedShellConfig` staying mutually exclusive across re-runs (stale unset guards dropped, polluted rc files repaired) — all against a scratch `HOME` inside Ubuntu, Debian, Fedora, Arch, and Alpine containers (`scripts/dockerSmoke.mjs`), plus synthetic `brew` and `script`-only entries. This exercises the detection chain against real `/etc/os-release` and package-manager layouts without a VM matrix. It caught the `which`-absence issue on Fedora that led to the `command -v` change above. Every matrix job also runs a `script` cell that chains three smokes against a scratch `HOME`: `wizard-check` (`scripts/ci/wizardSmoke.mjs`), which drives the _real_ `App` from `dist/` through the full install flow; `headlessGenerateSmoke.mjs`, which presses the real entrypoint through `generate` (stdout + `-o`/`--export`) and parses the result; and `headlessApplySmoke.mjs`, which runs `apply --dry-run` on a state card. Containers that ship an old Node get a pinned Node 22 tarball from `scripts/ci/distroSetup.sh` first, so every container runs the same engine floor.
 
 The macOS leg of the Tests workflow (`tests.yml`) builds `dist/` and runs a headless smoke (`scripts/ci/macosSmoke.mjs`) against a scratch `HOME`: it drives the real entrypoint through `generate`/`apply --dry-run --adopt` so the darwin-only paths (brew detection, `~/Library/Fonts`) are exercised without installing or modifying the runner.
 

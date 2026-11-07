@@ -138,19 +138,19 @@ All releases, including changelogs and install tarballs, are published on
 
 ### Wizard steps
 
-| Step           | Description                                                     |
-| -------------- | --------------------------------------------------------------- |
-| Welcome        | Detects your package manager and Starship install status        |
-| Font check     | Checks whether you have a Nerd Font already                     |
-| Font pick      | Choose a Nerd Font to install (skipped if not needed)           |
-| Preset         | Pick a starting preset                                          |
-| Left segments  | Choose modules for the left side of your prompt                 |
-| Right segments | Choose modules for the right side                               |
-| Style          | Color scheme and character symbol                               |
-| Shell select   | Pick which shells to configure (shows install status per shell) |
+| Step           | Description                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| Welcome        | Detects your package manager and Starship install status                                      |
+| Font check     | Checks whether you have a Nerd Font already                                                   |
+| Font pick      | Choose a Nerd Font to install (skipped if not needed)                                         |
+| Preset         | Pick a starting preset                                                                        |
+| Left segments  | Choose modules for the left side of your prompt                                               |
+| Right segments | Choose modules for the right side                                                             |
+| Style          | Color scheme and character symbol                                                             |
+| Shell select   | Pick which shells to configure (shows install status per shell)                               |
 | Review         | Preview the config to write (or the shared config to keep in adopt mode) and the install plan |
-| Installing     | Runs all installs and writes config                             |
-| Done           | Summary of everything that was applied                          |
+| Installing     | Runs all installs and writes config                                                           |
+| Done           | Summary of everything that was applied                                                        |
 
 ## What gets installed / configured
 

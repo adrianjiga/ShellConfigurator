@@ -14,7 +14,7 @@ their own line, pinned to wherever the cursor is — so they drift vertically as
 the terminal scrolls and misalign with the left-hand prompt.
 
 Alternatively, `$fill` is a single module that consumes the space between the
-left and right module runs on the *same* line, keeping the whole prompt on one
+left and right module runs on the _same_ line, keeping the whole prompt on one
 row.
 
 ## Decision
