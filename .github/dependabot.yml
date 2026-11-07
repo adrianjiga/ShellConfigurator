@@ -13,8 +13,8 @@ updates:
     ignore:
       # Ink and react are pinned as a pair with ink-select-input peer deps;
       # bump them together deliberately, not via individual dependabot PRs.
-      - dependency-name: 'ink'
-      - dependency-name: 'react'
+      - dependency-name: "ink"
+      - dependency-name: "react"
   - package-ecosystem: github-actions
     directory: /
     schedule:

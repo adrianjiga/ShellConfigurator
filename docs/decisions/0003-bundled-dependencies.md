@@ -8,7 +8,7 @@ The curl installer (`scripts/install.sh`) downloads the release tarball from
 GitHub, which is produced by `npm pack`. The published npm package also needs to
 work, but npm packages install their dependencies at install time.
 
-A packed package from this project is meant to be *self-contained*: the user
+A packed package from this project is meant to be _self-contained_: the user
 runs `dist/index.js` straight out of the extracted tarball with no `npm install`
 step. Without self-containment, a bare `dist/` tarball crashes with
 `ERR_MODULE_NOT_FOUND` the moment it tries to load a dependency.

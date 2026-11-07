@@ -543,7 +543,7 @@ selected in the detected terminal (`src/services/doctor.ts`). Two further
 checks are `warn`-only and read the runtime: **version drift** — the installed
 starship binary no longer matches the version the last install/apply recorded,
 which means a package-manager upgrade happened outside the tool — and the
-**current shell** — the shell this terminal is *running* is not one of the
+**current shell** — the shell this terminal is _running_ is not one of the
 configured ones, so the new prompt won't show until the user starts it. Each
 finding is `pass`/`warn`/`fail`; any `fail` sets exit code `1`. `--json` prints
 the report object.
@@ -551,7 +551,7 @@ the report object.
 `repair` (or `doctor --fix`) applies the fix each failing finding carries —
 re-add the init line, reinstall Starship via the detected package manager,
 reinstall the font from cache, rewire the terminal font — then re-runs the
-doctor and reports the *result*. A check that still fails keeps the exit code
+doctor and reports the _result_. A check that still fails keeps the exit code
 non-zero.
 
 Flags may appear before or after the subcommand; when a flag is repeated, the
@@ -561,9 +561,9 @@ printed to stderr, and ignored — they never abort the run.
 
 ### Exit Codes
 
-| Code | Meaning                                                                 |
-| ---- | ----------------------------------------------------------------------- |
-| `0`  | Success.                                                               |
+| Code | Meaning                                                                                                                                          |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `0`  | Success.                                                                                                                                         |
 | `1`  | A wizard install finished with at least one failed task, a headless run failed, or a `doctor`/`repair` check still fails (also any fatal crash). |
 | `2`  | `CliUsageError` — an invalid flag value, `--adopt`/`--import-url` outside `apply`, or an unreadable state card; reads clean with no stack trace. |
 
@@ -572,12 +572,12 @@ printed to stderr, and ignored — they never abort the run.
 All of it lives under XDG dirs resolved by `src/services/paths.ts`, so the
 tarball stays self-contained and nothing is written next to the binary:
 
-| Path                                          | Contents                                                                |
-| --------------------------------------------- | ----------------------------------------------------------------------- |
-| `$XDG_STATE_HOME` or `~/.local/state`/`shell-configurator/history.jsonl` | Append-only ledger; one JSON `HistoryRecord` per run (`install`/`apply`/…), in file order = chronological order. |
-| `…/snapshots/<iso-timestamp>.json`            | The versioned state card each run applied. The `snapshotId` field in the ledger is the rollback handle that `uninstall`/rollback resolves. |
+| Path                                                                                | Contents                                                                                                                                        |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `$XDG_STATE_HOME` or `~/.local/state`/`shell-configurator/history.jsonl`            | Append-only ledger; one JSON `HistoryRecord` per run (`install`/`apply`/…), in file order = chronological order.                                |
+| `…/snapshots/<iso-timestamp>.json`                                                  | The versioned state card each run applied. The `snapshotId` field in the ledger is the rollback handle that `uninstall`/rollback resolves.      |
 | `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/fonts/<id>.zip` + `<id>.sha256` | Font cache: the verified archive plus its pinned SHA-256 pin file. A cached archive is reused offline only while its bytes still match the pin. |
-| `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/starship.version` | The starship version the last install/apply recorded (`recordStarshipVersion`). Feeds the doctor's `version-drift` check. |
+| `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/starship.version`               | The starship version the last install/apply recorded (`recordStarshipVersion`). Feeds the doctor's `version-drift` check.                       |
 
 ### State Card (`serializeState` / `parseState` in `src/services/state.ts`)
 
@@ -625,6 +625,7 @@ before an adopt run overwrites it; `restoreConfigBackups()` copies the newest
    entry to `MODULE_DEFS`. Every module needs `label`, `description`,
    `defaultLeft`/`defaultRight`, `previewSegment`, and `content` (the format the
    powerline generator wraps in separators); most also provide `settings`:
+
    ```typescript
    {
      id: 'lua',

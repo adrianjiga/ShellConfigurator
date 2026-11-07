@@ -27,7 +27,7 @@ The project is pure ESM. Relative imports name the real source file
 | ----------------------- | --------------------------------------------------- |
 | `npm test`              | Run unit tests (vitest)                             |
 | `npm run test:coverage` | Tests + v8 coverage report (CI enforces thresholds) |
-| `npm run lint`          | Biome lint (`no-explicit-any` is an error)         |
+| `npm run lint`          | Biome lint (`no-explicit-any` is an error)          |
 | `npm run format:check`  | Biome format check                                  |
 | `npm run format`        | Biome format write                                  |
 | `npm run typecheck`     | Full type-check including tests                     |

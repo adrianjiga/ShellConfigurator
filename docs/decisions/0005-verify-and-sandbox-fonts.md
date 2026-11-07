@@ -32,7 +32,7 @@ Two defensive layers, in order, inside `installNerdFont`:
    error.
 2. **Sandboxed extraction** — decompression moves to an `eval`-script `Worker`
    (`src/services/fontExtractor.ts`) that returns `{ name, bytes }` entries for
-   the *main thread* to write. A hostile archive can only crash the throwaway
+   the _main thread_ to write. A hostile archive can only crash the throwaway
    worker.
 
 ### Why these specifics
@@ -45,7 +45,7 @@ Two defensive layers, in order, inside `installNerdFont`:
   blob", a deliberately small threat model, not a peer-to-peer hash-drop.
 - **Worker, not a new process or pure sandbox**: a forked helper would need IPC
   project setup and lifecycle management; the worker keeps everything in
-  `dist/`. And there is no untrusted *code execution* worth sandboxing beyond
+  `dist/`. And there is no untrusted _code execution_ worth sandboxing beyond
   the parser — the main-thread writes keep `path.join(fontsDir, basename)` and
   `fs.writeFileSync` in one auditable place, and the worker's basename
   flattening means its output can never escape `fontsDir` even if an entry is

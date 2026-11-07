@@ -60,11 +60,11 @@ applications — it translates a React component tree into terminal output.
 
 ### Shared Components
 
-| Component       | File                               | Purpose                                                                                                |
-| --------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `WizardLayout`  | `src/components/WizardLayout.tsx`  | Wraps every screen. Renders header, progress bar, two-column layout (content + preview), and NavHints. |
+| Component       | File                               | Purpose                                                                                                                                                         |
+| --------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WizardLayout`  | `src/components/WizardLayout.tsx`  | Wraps every screen. Renders header, progress bar, two-column layout (content + preview), and NavHints.                                                          |
 | `PromptPreview` | `src/components/PromptPreview.tsx` | Live prompt panel in the right column. Renders the real prompt via the starship binary when installed (`src/services/preview.ts`), else a static approximation. |
-| `NavHints`      | `src/components/NavHints.tsx`      | Renders keyboard shortcut hints at the bottom of each screen.                                          |
+| `NavHints`      | `src/components/NavHints.tsx`      | Renders keyboard shortcut hints at the bottom of each screen.                                                                                                   |
 
 ---
 
@@ -170,7 +170,7 @@ App (owns state)
 
 | Screen                 | Fields Updated                                                            |
 | ---------------------- | ------------------------------------------------------------------------- |
-| WelcomeScreen          | `packageManager`, `skipStarshipInstall`                                 |
+| WelcomeScreen          | `packageManager`, `skipStarshipInstall`                                   |
 | FontCheckScreen        | `hasNerdFont`, `nerdFontToInstall`                                        |
 | FontSelectScreen       | `nerdFontToInstall`, `hasNerdFont`                                        |
 | PresetScreen           | `preset`, `leftModules`, `rightModules`, `palette`, `powerline`           |

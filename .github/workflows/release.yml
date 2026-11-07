@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags: ["v*"]
 
 permissions: read-all
 
@@ -21,8 +21,8 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
       # npm 12 disables install scripts (breaks esbuild postinstall); Node 22
       # ships an older npm, so upgrade here.
       - run: npm install -g npm@11
