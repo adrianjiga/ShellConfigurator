@@ -26,10 +26,10 @@ fi
 
 # Distro Node is often older than the engines floor (18 on debian/ubuntu), which
 # makes npm print EBADENGINE noise for every install. Replace it with the pinned
-# Node 22 LTS when the distro package is too old, so distros that already ship a
+# Node 24 LTS when the distro package is too old, so distros that already ship a
 # supported version are still exercised as shipped.
 node_major="$(node --version | cut -d. -f1 | tr -d v)"
-if [ "$node_major" -lt 22 ]; then
+if [ "$node_major" -lt 24 ]; then
   arch="$(uname -m)"
   case "$arch" in
     x86_64) node_arch=x64 ;;
@@ -39,7 +39,7 @@ if [ "$node_major" -lt 22 ]; then
       exit 1
       ;;
   esac
-  node_version="${NODE_VERSION:-v22.23.2}"
+  node_version="${NODE_VERSION:-v24.22.2}"
   tarball="node-${node_version}-linux-${node_arch}.tar.gz"
 
   # Download once into the cache dir when provided (GitHub caches it across

@@ -15,18 +15,18 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/),
 - **12 presets**: from minimal plain-text to Tokyo Night, Gruvbox Rainbow, and Catppuccin
 - **14 colour palettes**: one behind every preset, plus high-contrast and colour-blind-safe options; any of them usable with any preset
 - **Powerline prompts**: interlocking coloured blocks with Nerd Font separators
-- **Segment picker**: choose exactly which modules appear on the left and right of your prompt
-- **Style tuning**: palette, segment style, character symbol, wrapped-line marker, blank-line and vim-mode toggles
+- **Segment picker**: search, multi-select, and reorder 31 modules across the left and right sides of your prompt
+- **Style tuning**: palette, segment style, character symbol, wrapped-line marker, blank-line and vim-mode toggles, plus directory depth and substitutions
 - **Headless mode**: the same logic is driven from a state card or flags via the `generate` and `apply` subcommands, for scripting and CI
 - **Adopt-existing-config**: keep your current `~/.config/starship.toml` (or import one from a URL) and only install fonts, Starship, missing shells, and the shell wiring
 - **Terminal font wiring**: detect your terminal (Alacritty, kitty, WezTerm, Ghostty, foot) and select the installed Nerd Font in its config automatically
 - **Post-install verification**: after everything is applied, the written configs are loaded through the real `starship print-config` to catch a broken prompt before you restart
-- **`doctor` / `repair`**: a read-only day-2 health check (Starship, locale, shell wiring, config validity, font installed + selected, version drift) and a mode that applies fixes and re-checks
+- **Doctor / repair**: a read-only day-2 health check (Starship, locale, shell wiring, config validity, font installed + selected, version drift) and a mode that applies fixes and re-checks
 
 ## Requirements
 
-- Node.js 22+
-- A package manager: `pacman`, `apt`, `dnf`, or `brew` (falls back to the official Starship install script)
+- Node.js 24+
+- A package manager: `pacman`, `apt`, `dnf`, `apk`, or `brew` (falls back to the official Starship install script)
 
 ## Usage
 
@@ -90,7 +90,7 @@ over 1 MB is rejected rather than downloaded.
 Both flags only make sense with the `apply` subcommand, so they are rejected
 elsewhere with a usage error.
 
-### Via curl (requires Node.js 22+)
+### Via curl (requires Node.js 24+)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/adrianjiga/ShellConfigurator/master/scripts/install.sh | sh
@@ -158,7 +158,7 @@ All releases, including changelogs and install tarballs, are published on
 - **Nerd Font**: downloaded from the official nerd-fonts GitHub release, its SHA-256 checked against the digest published for that release, and extracted in an isolated worker before being installed to `~/Library/Fonts/` (macOS) or `~/.local/share/fonts/` (Linux)
 - **Terminal font**: when a supported terminal is detected (Alacritty, kitty, WezTerm, Ghostty, foot), its config is edited to select the installed Nerd Font (WezTerm prints the exact line instead — its config is Lua)
 - **Shells**: installed via your package manager if not already present
-- **Per-shell Starship configs**: `~/.config/starship/<shell>.toml` for every selected shell, so each shell keeps its own prompt; the shared `~/.config/starship.toml` is never overwritten
+- **Per-shell Starship configs**: `~/.config/starship/<shell>.toml` for every selected shell, so each shell keeps its own prompt; normal per-shell setup leaves the shared `~/.config/starship.toml` untouched
 - **Adopt mode**: `apply --adopt` (or `--import-url`) keeps the shared `~/.config/starship.toml` as the one prompt every shell reads; no per-shell files are written, and the rc blocks carry no `STARSHIP_CONFIG` export
 - **Shell RC files**: each selected shell gets a `STARSHIP_CONFIG` export pointing at its own config plus the `starship init` line (appended idempotently); shells left unselected get an `unset` guard so a configured parent's prompt doesn't leak in
 - **Nushell**: `nu` has no rc file, so its setup command pins `STARSHIP_CONFIG` at startup via a `vendor/autoload` `export-env` file instead

@@ -21,11 +21,8 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: "24"
           cache: "npm"
-      # npm 12 disables install scripts (breaks esbuild postinstall); Node 22
-      # ships an older npm, so upgrade here.
-      - run: npm install -g npm@11
       - run: npm ci
       # master is gated on lint/format/typecheck, the full suite, and the
       # distro-smoke matrix before this tag could exist, so the suite is not

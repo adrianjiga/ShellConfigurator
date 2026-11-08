@@ -51,7 +51,7 @@ async function check(name, fn) {
 
 await check('node engine floor is met', () => {
   const major = Number(process.versions.node.split('.')[0]);
-  assert.ok(major >= 22, `node ${process.version} is below the >=22 engines floor`);
+  assert.ok(major >= 24, `node ${process.version} is below the >=24 engines floor`);
 });
 
 await check('detects the configured package manager', async () => {

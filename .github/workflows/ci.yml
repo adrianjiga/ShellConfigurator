@@ -10,7 +10,7 @@ on:
 permissions: read-all
 
 env:
-  NODE_VERSION: v22.23.2
+  NODE_VERSION: v24.22.2
 
 jobs:
   # One matrix job instead of four copy-pasted check jobs: lint, format:check,
@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: "24"
           cache: "npm"
       - run: npm ci
       - run: npm run ${{ matrix.check }}
@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: "24"
           cache: "npm"
       - run: npm ci
       - run: npm run build

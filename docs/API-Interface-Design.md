@@ -246,26 +246,31 @@ interface ShellDef {
   rcFile: string | null; // Absolute path, or null for manual-only shells
   initLine: string; // Starship init command for this shell
   manualNote?: string; // Instructions shown on DoneScreen
+  initPath?: string; // Manual setup file used to detect an already-configured shell
+  additionalInitPaths?: string[]; // Other required files from manual setup
   pathLine?: (dir: string) => string; // PATH addition in this shell's syntax, used when starship needs one
 }
 ```
 
 ### Shell Init Lines
 
-| Shell      | RC File                      | Init Line                                                                                           |
-| ---------- | ---------------------------- | --------------------------------------------------------------------------------------------------- |
-| zsh        | `~/.zshrc`                   | `eval "$(starship init zsh)"`                                                                       |
-| bash       | `~/.bashrc`                  | `eval "$(starship init bash)"`                                                                      |
-| fish       | `~/.config/fish/config.fish` | `starship init fish \| source`                                                                      |
-| nushell    | `null` (manual)              | `mkdir ...; $"export-env { $env.STARSHIP_CONFIG = ... }" \| save ...; starship init nu \| save ...` |
-| powershell | `null` (manual)              | `Invoke-Expression (&starship init powershell)`                                                     |
+| Shell      | RC File                      | Init Line                                                 |
+| ---------- | ---------------------------- | --------------------------------------------------------- |
+| zsh        | `~/.zshrc`                   | `eval "$(starship init zsh)"`                             |
+| bash       | `~/.bashrc`                  | `eval "$(starship init bash)"`                            |
+| fish       | `~/.config/fish/config.fish` | `starship init fish \| source`                            |
+| nushell    | `null` (manual)              | `nu -c '<quoted Nushell setup script>'` (Bash-compatible) |
+| powershell | `null` (manual)              | `Invoke-Expression (&starship init powershell)`           |
 
-Shells with `rcFile: null` are not auto-configured. Instead, `manualNote` is displayed on DoneScreen.
+Shells with `rcFile: null` are not wired through an RC file. Instead, `manualNote`
+and the setup command are displayed on DoneScreen. Nushell's command can be run
+from Bash; it invokes `nu` to execute the setup script.
 
 For nushell the manual command writes two files into `$nu.data-dir/vendor/autoload`:
 an `export-env` block (`starship-config.nu`) that pins `$env.STARSHIP_CONFIG` to the
 shell's per-shell `starship/nushell.toml`, and the `starship init` output
-(`starship.nu`). Nushell auto-sources every file in that directory at startup, so
+(`starship.nu`). Setup is detected only when both files exist. Nushell auto-sources
+every file in that directory at startup, so
 the prompt keeps using the per-shell config with no rc file involved.
 
 ### Lookup
@@ -312,9 +317,8 @@ function applyShellConfig(
 // re-run can repair a polluted rc file.
 
 function resetSharedShellConfig(shellId: ShellId): { applied: boolean; note?: string };
-// Removes any per-shell wiring and appends an unset guard so the shell
-// falls back to the shared ~/.config/starship.toml instead of inheriting
-// a leaked STARSHIP_CONFIG. The mirror image of applyShellConfig.
+// Removes the per-shell config export and appends an unset guard, while
+// preserving the Starship init line so the shell uses the shared config.
 ```
 
 Config and rc file writes (per-shell, shared, and rc appends) go through a

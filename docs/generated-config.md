@@ -134,15 +134,15 @@ tints the text with `fg` and the segment background with the module's own colour
 ```toml
 [directory]
 style  = "bold fg:fg bg:directory"
-format = "([ $path$read_only ](bold fg:fg bg:directory)[\ue0b0](fg:git_branch bg:directory))"
+format = "([ $path$read_only ](bold fg:fg bg:directory)[\ue0b0](fg:directory bg:git_branch))"
 ```
 
 The `format` key is only emitted when the generated prompt is powerline. A plain
-prompt leaves starship's own default format alone. The separator arrow takes the
-_neighbouring_ segment's foreground colour against the current block's background.
-This keeps an inactive neighboring module from leaving a ghost-colored background;
-the outer end of a run has no neighbour and fades into the terminal. Blocks are
-wrapped in a `(…)` group that starship drops when its
+prompt leaves starship's own default format alone. The separator arrow uses the
+current segment's foreground colour against the _neighbouring_ segment's
+background, forming the conventional interlocking shape. At the outer end, where
+there is no neighbour, the arrow fades into the terminal. Blocks are wrapped in a
+`(…)` group that starship drops when its
 variables are all empty, so a module with nothing to show collapses instead of
 leaving a stray coloured block behind.
 
@@ -166,8 +166,8 @@ differently-named keys do not get a `style`:
 | `jobs`                   | `symbol`, `threshold`                                                         |
 
 Module text symbols (`symbol`, `success_symbol`, …) branch on `hasNerdFont` so a
-plain prompt degrades to readable text instead of tofu: `git_branch` uses a
-space+glyph only when a Nerd Font is present, otherwise `on main`.
+plain prompt degrades to readable text instead of tofu: `git_branch` uses the
+`` branch glyph when a Nerd Font is present, otherwise `on main`.
 
 ### Directory tuning
 

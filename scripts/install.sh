@@ -19,9 +19,9 @@ else
   node_major=0
 fi
 
-if [ "$node_major" -lt 22 ]; then
+if [ "$node_major" -lt 24 ]; then
   cat >&2 <<'EOF'
-shell-configurator requires Node.js 22 or newer, which was not found.
+shell-configurator requires Node.js 24 or newer, which was not found.
 
 Install one of these Node version managers, then re-run this installer:
   nvm:  https://github.com/nvm-sh/nvm

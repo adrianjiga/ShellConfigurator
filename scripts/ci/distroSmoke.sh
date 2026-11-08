@@ -9,7 +9,7 @@ package_manager="$2"
 distro_setup="${3:-}"
 finalize="${4:-}"
 wizard_check="${5:-}"
-node_version="${NODE_VERSION:-v22.23.2}"
+node_version="${NODE_VERSION:-v24.22.2}"
 
 mkdir -p /tmp/node-tarball-cache
 

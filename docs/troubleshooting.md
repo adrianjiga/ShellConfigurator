@@ -104,15 +104,15 @@ different shell (e.g. bash), you may see the Starship prompt in the
 unconfigured shell. This happens because the configured parent shell exports
 `STARSHIP_CONFIG` to child processes.
 
-ShellConfigurator normally adds an `unset STARSHIP_CONFIG` guard to shells
-you chose **not** to configure, so the parent's prompt doesn't leak in. If
-you skipped a shell during the wizard, re-run it and select that shell to
-apply the guard.
+ShellConfigurator normally adds an `unset STARSHIP_CONFIG` guard to detected
+Starship-running shells you chose **not** to configure, so the parent's per-shell
+config doesn't leak in. It preserves the shell's Starship init line so it can
+continue using the shared config. Re-run the wizard to apply or repair this wiring.
 
 If the problem persists after a clean run, open the shell's RC file and check
-for a `STARSHIP_CONFIG` export that shouldn't be there. Remove any
-`# Added by ShellConfigurator` block and add `unset STARSHIP_CONFIG` (or
-`set -e STARSHIP_CONFIG` for fish) manually.
+for a `STARSHIP_CONFIG` export that shouldn't be there. Remove only that export
+(or `set -gx STARSHIP_CONFIG ...` for fish), keep the `starship init` line, and
+add `unset STARSHIP_CONFIG` (or `set -e STARSHIP_CONFIG` for fish) manually.
 
 ---
 

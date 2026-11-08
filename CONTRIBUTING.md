@@ -2,7 +2,7 @@
 
 ShellConfigurator is an interactive terminal wizard that configures
 [Starship](https://starship.rs/). It is built with [Ink](https://github.com/vadimdemedes/ink)
-(React for CLIs) and targeted at Node.js 22+.
+(React for CLIs) and targeted at Node.js 24+.
 
 Thanks for your interest. This file describes how to get set up and how to get
 changes merged.
@@ -11,7 +11,7 @@ changes merged.
 
 Prerequisites:
 
-- Node.js 22+ (the package does not support older versions)
+- Node.js 24+ (the package does not support older versions)
 - npm
 
 ```bash
