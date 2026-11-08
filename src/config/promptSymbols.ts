@@ -25,6 +25,15 @@ export const CONTINUATION_PROMPTS: Record<ContinuationPrompt, string> = {
   none: '',
 };
 
+/** Nerd Font glyphs used by the font-check examples and matching module configs. */
+export const NERD_FONT_SYMBOLS = {
+  directory: ' ',
+  gitBranch: ' ',
+  nodejs: ' ',
+  python: ' ',
+  rust: ' ',
+} as const;
+
 /**
  * Powerline separators, U+E0B0 and U+E0B2. These live in the Nerd Font private use
  * area, so a powerline prompt is only ever generated when a Nerd Font is present.

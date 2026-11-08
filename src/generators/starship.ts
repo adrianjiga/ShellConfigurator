@@ -8,6 +8,7 @@ import { getPalette, type PaletteColorName } from '../config/palettes.ts';
 import {
   CHARACTER_SYMBOLS,
   CONTINUATION_PROMPTS,
+  NERD_FONT_SYMBOLS,
   SEPARATOR_LEFT,
   SEPARATOR_RIGHT,
 } from '../config/promptSymbols.ts';
@@ -112,11 +113,16 @@ disabled = false
     lines.push(`style  = "${tomlBasic(styleFor(def.id))}"`);
   }
   if (powerline) {
-    lines.push(`format = "${tomlBasic(powerlineFormat(def.content, def.id, neighbour, side))}"`);
+    const content =
+      id === 'directory' && state.hasNerdFont
+        ? `${NERD_FONT_SYMBOLS.directory}${def.content}`
+        : def.content;
+    lines.push(`format = "${tomlBasic(powerlineFormat(content, def.id, neighbour, side))}"`);
   }
 
   const settings = def.settings?.({
     hasNerdFont: state.hasNerdFont,
+    powerline,
     styleFor,
     directoryTruncationLength: state.directoryTruncationLength,
     directorySubstitutions: state.directorySubstitutions,

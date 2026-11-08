@@ -47,14 +47,41 @@ describe('generateToml', () => {
     expect(toml).not.toContain('[fill]');
   });
 
-  it('uses nerd font symbol for git_branch when hasNerdFont is true', () => {
+  it('uses a Nerd Font branch glyph when hasNerdFont is true', () => {
     const toml = generateToml({ ...base, hasNerdFont: true });
-    expect(toml).toContain('symbol = " "');
+    expect(toml).toContain('symbol = " "');
   });
 
   it('uses text fallback for git_branch when hasNerdFont is false', () => {
     const toml = generateToml({ ...base, hasNerdFont: false });
     expect(toml).toContain('symbol = "on "');
+  });
+
+  it('uses Nerd Font glyphs for the directory and runtime modules', () => {
+    const generated = generateToml({
+      ...base,
+      hasNerdFont: true,
+      leftModules: ['directory', 'nodejs', 'python', 'rust'],
+      rightModules: [],
+    });
+    expect(generated).toContain(
+      'format = "[ ]($style)[$path]($style)[$read_only]($read_only_style) "'
+    );
+    expect(generated).toContain('symbol   = " "');
+    expect(generated).toContain('symbol   = " "');
+    expect(generated).toContain('symbol   = " "');
+  });
+
+  it('keeps the directory Nerd Font glyph inside its powerline block', () => {
+    const generated = generateToml({
+      ...base,
+      hasNerdFont: true,
+      powerline: true,
+      leftModules: ['directory', 'character'],
+      rightModules: [],
+    });
+    expect(generated).toContain('[  $path$read_only ]($style)');
+    expect(generated.match(/^format =/gm)).toHaveLength(1);
   });
 
   it('styles modules by palette colour name and emits the palette table', () => {

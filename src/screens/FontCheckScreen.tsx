@@ -3,6 +3,7 @@ import { AppSelectInput } from '../components/AppSelectInput.tsx';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
+import { NERD_FONT_SYMBOLS } from '../config/promptSymbols.ts';
 import { NO_NERD_FONT, type WizardState } from '../types.ts';
 
 interface FontCheckScreenProps {
@@ -66,19 +67,19 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
           gap={1}
         >
           <Box flexDirection="row" gap={2}>
-            <Text> </Text>
+            <Text color={uiColor('white')}>{NERD_FONT_SYMBOLS.directory}</Text>
             <Text color={uiColor('gray')}>folder icon</Text>
           </Box>
           <Box flexDirection="row" gap={2}>
-            <Text> </Text>
+            <Text color={uiColor('white')}>{NERD_FONT_SYMBOLS.gitBranch}</Text>
             <Text color={uiColor('gray')}>git branch icon</Text>
           </Box>
           <Box flexDirection="row" gap={2}>
-            <Text> </Text>
+            <Text color={uiColor('white')}>{NERD_FONT_SYMBOLS.nodejs}</Text>
             <Text color={uiColor('gray')}>node.js icon</Text>
           </Box>
           <Box flexDirection="row" gap={2}>
-            <Text> </Text>
+            <Text color={uiColor('white')}>{NERD_FONT_SYMBOLS.python}</Text>
             <Text color={uiColor('gray')}>python icon</Text>
           </Box>
         </Box>

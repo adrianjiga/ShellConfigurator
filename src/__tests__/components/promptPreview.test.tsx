@@ -51,6 +51,12 @@ describe('PromptPreview', () => {
     expect(out).toContain('❯');
   });
 
+  it('shows Nerd Font symbols in the static preview when enabled', () => {
+    const out = frame({ hasNerdFont: true, leftModules: ['directory', 'git_branch', 'character'] });
+    expect(out).toContain('');
+    expect(out).toContain(' main');
+  });
+
   it('reflects directory depth and substitutions in the static preview', () => {
     expect(
       frame({ directoryTruncationLength: 1, leftModules: ['directory', 'character'] })

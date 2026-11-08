@@ -1,6 +1,7 @@
 import { tomlBasic } from '../generators/toml.ts';
 import type { DirectorySubstitution } from '../types.ts';
 import type { PaletteColorName } from './palettes.ts';
+import { NERD_FONT_SYMBOLS } from './promptSymbols.ts';
 
 /**
  * What the generator hands each module's `settings` builder.
@@ -11,6 +12,7 @@ import type { PaletteColorName } from './palettes.ts';
  */
 export interface ModuleTomlContext {
   hasNerdFont: boolean;
+  powerline: boolean;
   /** Starship `directory.truncation_length`; `0` shows the full path. */
   directoryTruncationLength: number;
   /** Starship `directory.substitutions`, in insertion order. */
@@ -135,13 +137,19 @@ style_root  = "${tomlBasic(styleFor('err'))}"
     defaultLeft: true,
     defaultRight: false,
 
-    previewSegment: () => '~/projects/myapp',
+    previewSegment: (hasNerdFont) =>
+      `${hasNerdFont ? NERD_FONT_SYMBOLS.directory : ''}~/projects/myapp`,
     content: '$path$read_only',
-    settings: ({ directoryTruncationLength, directorySubstitutions }) => {
+    settings: ({ hasNerdFont, powerline, directoryTruncationLength, directorySubstitutions }) => {
       const lines = [
         `truncation_length = ${directoryTruncationLength}`,
         `truncate_to_repo  = true`,
       ];
+      if (hasNerdFont && !powerline) {
+        lines.push(
+          `format = "[${tomlBasic(NERD_FONT_SYMBOLS.directory)}]($style)[$path]($style)[$read_only]($read_only_style) "`
+        );
+      }
       if (directorySubstitutions.length > 0) {
         lines.push('', '[directory.substitutions]');
         for (const { from, to } of directorySubstitutions) {
@@ -157,9 +165,10 @@ style_root  = "${tomlBasic(styleFor('err'))}"
     defaultLeft: true,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? ' ' : 'on '}main`,
+    previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.gitBranch : 'on '}main`,
     content: '$symbol$branch',
-    settings: ({ hasNerdFont }) => `symbol = "${hasNerdFont ? ' ' : 'on '}"`,
+    settings: ({ hasNerdFont }) =>
+      `symbol = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.gitBranch : 'on ')}"`,
   },
   git_status: {
     label: 'Git Status',
@@ -186,11 +195,11 @@ deleted   = "-\${count}"
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? ' ' : 'node '}v22.0.0`,
+    previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.nodejs : 'node '}v22.0.0`,
     content: '$symbol$version',
     settings: ({ hasNerdFont }) =>
       `
-symbol   = "${hasNerdFont ? ' ' : 'node '}"
+symbol   = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.nodejs : 'node ')}"
 disabled = false
 `.trim(),
   },
@@ -200,11 +209,11 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? ' ' : 'py '}3.12.0`,
+    previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.python : 'py '}3.12.0`,
     content: '$symbol$version',
     settings: ({ hasNerdFont }) =>
       `
-symbol   = "${hasNerdFont ? ' ' : 'py '}"
+symbol   = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.python : 'py ')}"
 disabled = false
 `.trim(),
   },
@@ -214,11 +223,11 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '🦀 1.80.0',
+    previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.rust : 'rs '}1.80.0`,
     content: '$symbol$version',
     settings: ({ hasNerdFont }) =>
       `
-symbol   = "${hasNerdFont ? ' ' : 'rs '}"
+symbol   = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.rust : 'rs ')}"
 disabled = false
 `.trim(),
   },

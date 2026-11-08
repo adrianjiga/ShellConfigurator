@@ -26,6 +26,14 @@ describe('MODULES', () => {
       expect(mod.previewSegment(false), `${mod.id} text preview empty`).toBeTruthy();
     }
   });
+
+  it('previews Nerd Font icons for the modules that provide them', () => {
+    expect(getModule('git_branch')?.previewSegment(true)).toContain('');
+    expect(getModule('nodejs')?.previewSegment(true)).toContain('');
+    expect(getModule('python')?.previewSegment(true)).toContain('');
+    expect(getModule('rust')?.previewSegment(true)).toContain('');
+    expect(getModule('git_branch')?.previewSegment(false)).toContain('on ');
+  });
 });
 
 describe('getModule', () => {

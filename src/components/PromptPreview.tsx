@@ -3,7 +3,12 @@ import { useEffect, useRef, useState } from 'react';
 import { uiColor } from '../config/colors.ts';
 import { getModule, isConfigurableModule, type ModuleId } from '../config/modules.ts';
 import { getPalette, inkColor, type PaletteColorName } from '../config/palettes.ts';
-import { CHARACTER_SYMBOLS, SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../config/promptSymbols.ts';
+import {
+  CHARACTER_SYMBOLS,
+  NERD_FONT_SYMBOLS,
+  SEPARATOR_LEFT,
+  SEPARATOR_RIGHT,
+} from '../config/promptSymbols.ts';
 import { PREVIEW_DEBOUNCE_MS, type PreviewResult, renderPromptAsync } from '../services/preview.ts';
 import type { WizardState } from '../types.ts';
 
@@ -126,8 +131,9 @@ function previewDirectory(state: WizardState): string {
     .map((part) => substitutions.get(part) ?? part)
     .filter(Boolean);
   const length = state.directoryTruncationLength;
-  if (length === 0 || path.length <= length) return path.join('/');
-  return `…/${path.slice(-length).join('/')}`;
+  const renderedPath =
+    length === 0 || path.length <= length ? path.join('/') : `…/${path.slice(-length).join('/')}`;
+  return `${state.hasNerdFont ? NERD_FONT_SYMBOLS.directory : ''}${renderedPath}`;
 }
 
 function StaticPromptFrame({ state }: { state: WizardState }) {

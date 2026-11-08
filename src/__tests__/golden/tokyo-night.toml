@@ -10,10 +10,11 @@ palette             = "tokyo-night"
 style  = "bold directory"
 truncation_length = 3
 truncate_to_repo  = true
+format = "[ ]($style)[$path]($style)[$read_only]($read_only_style) "
 
 [git_branch]
 style  = "bold git_branch"
-symbol = " "
+symbol = " "
 
 [git_status]
 style  = "bold git_status"
@@ -27,12 +28,12 @@ deleted   = "-${count}"
 
 [nodejs]
 style  = "bold nodejs"
-symbol   = " "
+symbol   = " "
 disabled = false
 
 [python]
 style  = "bold python"
-symbol   = " "
+symbol   = " "
 disabled = false
 
 [cmd_duration]

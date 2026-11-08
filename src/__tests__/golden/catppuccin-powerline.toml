@@ -14,14 +14,14 @@ style_root  = "bold fg:fg bg:err"
 
 [directory]
 style  = "bold fg:fg bg:directory"
-format = "([ $path$read_only ]($style)[](fg:directory bg:git_branch))"
+format = "([  $path$read_only ]($style)[](fg:directory bg:git_branch))"
 truncation_length = 3
 truncate_to_repo  = true
 
 [git_branch]
 style  = "bold fg:fg bg:git_branch"
 format = "([ $symbol$branch ]($style)[](fg:git_branch bg:git_status))"
-symbol = " "
+symbol = " "
 
 [git_status]
 style  = "bold fg:fg bg:git_status"
@@ -37,13 +37,13 @@ deleted   = "-${count}"
 [nodejs]
 style  = "bold fg:fg bg:nodejs"
 format = "([](fg:nodejs)[ $symbol$version ]($style))"
-symbol   = " "
+symbol   = " "
 disabled = false
 
 [python]
 style  = "bold fg:fg bg:python"
 format = "([](fg:python bg:nodejs)[ $symbol$version ]($style))"
-symbol   = " "
+symbol   = " "
 disabled = false
 
 [cmd_duration]
