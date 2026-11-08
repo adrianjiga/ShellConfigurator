@@ -43,7 +43,7 @@ export function PickerRow({
           <Text color={uiColor(disabled ? 'gray' : selected ? 'green' : 'gray')}>{marker}</Text>
         )}
         <Text
-          color={uiColor(disabled ? 'gray' : selected || focused ? 'white' : 'gray')}
+          color={uiColor(disabled ? 'gray' : 'white')}
           bold={(selected || focused) && !disabled}
           dimColor={disabled}
         >

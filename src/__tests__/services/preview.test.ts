@@ -43,6 +43,7 @@ import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
 const SCRATCH = '/tmp/scratch/preview-abc';
 const PROJECT = nodePath.join(SCRATCH, 'projects', 'myapp');
+const originalStarshipShell = process.env.STARSHIP_SHELL;
 
 function execFileSucceeds(stdout = '~/projects/myapp on  main \n❯') {
   mockExecFile.mockImplementation((...args: unknown[]) => {
@@ -82,6 +83,8 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.XDG_CACHE_HOME;
+  if (originalStarshipShell === undefined) delete process.env.STARSHIP_SHELL;
+  else process.env.STARSHIP_SHELL = originalStarshipShell;
 });
 
 describe('renderPromptAsync', () => {
@@ -141,6 +144,7 @@ describe('renderPromptAsync', () => {
 
   it('runs the real wiring: config, env, sample repo and starship invocation', async () => {
     process.env.XDG_CACHE_HOME = '/tmp/xdg-cache';
+    process.env.STARSHIP_SHELL = 'bash';
     mockMkdtemp.mockResolvedValue(SCRATCH);
     mockWriteFile.mockResolvedValue(undefined);
     mockMkdir.mockResolvedValue(undefined);
@@ -159,6 +163,8 @@ describe('renderPromptAsync', () => {
     expect(prompt?.args).toContain('--terminal-width');
     expect(prompt?.args).toContain('110');
     expect(prompt?.opts?.env?.HOME).toBe(SCRATCH);
+    expect(prompt?.opts?.env?.PWD).toBe(PROJECT);
+    expect(prompt?.opts?.env?.STARSHIP_SHELL).toBeUndefined();
     expect(prompt?.opts?.env?.STARSHIP_CONFIG).toBe(nodePath.join(SCRATCH, STARSHIP_CONFIG_FILE));
 
     const gitInit = calls.find((c) => c.cmd === 'git' && c.args.includes('init'));
