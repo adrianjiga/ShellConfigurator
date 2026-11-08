@@ -205,7 +205,7 @@ await check('resetSharedShellConfig replaces a per-shell block with the unset gu
   const content = readFileSync(rcPath, 'utf8');
   assert.ok(content.includes('unset STARSHIP_CONFIG'), 'missing unset guard');
   assert.ok(!content.includes('export STARSHIP_CONFIG'), 'per-shell export survived reset');
-  assert.ok(!content.includes('starship init bash'), 'init line survived reset');
+  assert.ok(content.includes('starship init bash'), 'Starship init line was removed');
 });
 
 await check('applyShellConfig repairs a rc left with only a stale unset guard', () => {
@@ -262,7 +262,7 @@ await check('resetSharedShellConfig switches fish back to the shared config', ()
   const content = readFileSync(fishRc, 'utf8');
   assert.ok(content.includes('set -e STARSHIP_CONFIG'), 'missing unset guard');
   assert.ok(!content.includes('set -gx STARSHIP_CONFIG'), 'per-shell wiring survived reset');
-  assert.ok(!content.includes('starship init fish | source'), 'init line survived reset');
+  assert.ok(content.includes('starship init fish | source'), 'Starship init line was removed');
 });
 
 await check('getMissingStarshipPathDir flags ~/.local/bin when starship is unreachable', () => {
