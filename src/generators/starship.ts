@@ -43,10 +43,9 @@ function buildFormatString(segments: ConfigurableModuleId[]): string {
  * Wraps a module's content in the separators for its position in the prompt.
  *
  * On the left the separator trails each segment and points right; on the right it
- * leads each segment and points left. The current block keeps its own background,
- * while the arrow takes the neighbour's foreground colour. That way a selected
- * neighbour which happens to render empty cannot leave a ghost-coloured background.
- * The outer end has no neighbour and fades into the terminal.
+ * leads each segment and points left. Its foreground matches the current block
+ * and its background matches the neighboring block, forming the conventional
+ * interlocking powerline shape. The outer end fades into the terminal.
  */
 function powerlineFormat(
   content: string,
@@ -54,7 +53,7 @@ function powerlineFormat(
   neighbour: PaletteColorName | null,
   side: 'left' | 'right'
 ): string {
-  const separatorStyle = neighbour ? `fg:${neighbour} bg:${color}` : `fg:${color}`;
+  const separatorStyle = neighbour ? `fg:${color} bg:${neighbour}` : `fg:${color}`;
   const block = `[ ${content} ]($style)`;
   const separator = `[${side === 'left' ? SEPARATOR_RIGHT : SEPARATOR_LEFT}](${separatorStyle})`;
   // Wrapped in a conditional group: starship drops a `(…)` group whose variables

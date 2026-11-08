@@ -365,9 +365,9 @@ describe('powerline segments', () => {
     expect(generated).toContain('style  = "bold fg:fg bg:directory"');
   });
 
-  it('uses the next segment colour on the arrow, not as a ghost background', () => {
+  it('interlocks left separators using the next segment background', () => {
     const generated = generateToml(powerlineState);
-    expect(generated).toContain(`[${SEPARATOR_RIGHT}](fg:git_branch bg:directory)`);
+    expect(generated).toContain(`[${SEPARATOR_RIGHT}](fg:directory bg:git_branch)`);
   });
 
   it('leaves the outermost separator without a background', () => {
@@ -378,7 +378,7 @@ describe('powerline segments', () => {
   it('points right-hand separators back at the previous segment', () => {
     const generated = generateToml(powerlineState);
     expect(generated).toContain(`[${SEPARATOR_LEFT}](fg:nodejs)`);
-    expect(generated).toContain(`[${SEPARATOR_LEFT}](fg:nodejs bg:cmd_duration)`);
+    expect(generated).toContain(`[${SEPARATOR_LEFT}](fg:cmd_duration bg:nodejs)`);
   });
 
   it('collapses an empty module instead of leaving a blank block', () => {

@@ -123,14 +123,15 @@ inject into. After the wizard completes, ShellConfigurator prints the exact
 commands you need to run in those shells. Follow the instructions on the
 **Done** screen.
 
-For Nushell, the wizard writes nothing for you — it prints a command you run
-once inside Nushell that creates the two files Nushell auto-sources at startup
+For Nushell, the wizard prints a Bash-compatible command that invokes `nu` and
+creates the two files Nushell auto-sources at startup
 (`starship-config.nu` pinning `$env.STARSHIP_CONFIG`, and `starship.nu` with the
 `starship init` output) in `$nu.data-dir/vendor/autoload` — by default
-`~/.local/share/nu/vendor/autoload/`. Verify they exist:
+`~/.local/share/nushell/vendor/autoload/`. Run it from Bash as shown, then verify
+the files exist:
 
-```nu
-ls ~/.local/share/nu/vendor/autoload/
+```bash
+ls ~/.local/share/nushell/vendor/autoload/
 ```
 
 ---

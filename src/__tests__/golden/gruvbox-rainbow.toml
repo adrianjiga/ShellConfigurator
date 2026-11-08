@@ -7,25 +7,25 @@ add_newline         = true
 palette             = "gruvbox"
 
 [username]
-format = "([ $user ]($style)[](fg:hostname bg:username))"
+format = "([ $user ]($style)[](fg:username bg:hostname))"
 show_always = false
 style_user  = "bold fg:fg bg:username"
 style_root  = "bold fg:fg bg:err"
 
 [hostname]
 style  = "bold fg:fg bg:hostname"
-format = "([ $ssh_symbol$hostname ]($style)[](fg:directory bg:hostname))"
+format = "([ $ssh_symbol$hostname ]($style)[](fg:hostname bg:directory))"
 ssh_only = true
 
 [directory]
 style  = "bold fg:fg bg:directory"
-format = "([  $path$read_only ]($style)[](fg:git_branch bg:directory))"
+format = "([  $path$read_only ]($style)[](fg:directory bg:git_branch))"
 truncation_length = 3
 truncate_to_repo  = true
 
 [git_branch]
 style  = "bold fg:fg bg:git_branch"
-format = "([ $symbol$branch ]($style)[](fg:git_status bg:git_branch))"
+format = "([ $symbol$branch ]($style)[](fg:git_branch bg:git_status))"
 symbol = " "
 
 [git_status]
@@ -47,13 +47,13 @@ disabled = false
 
 [rust]
 style  = "bold fg:fg bg:rust"
-format = "([](fg:nodejs bg:rust)[ $symbol$version ]($style))"
+format = "([](fg:rust bg:nodejs)[ $symbol$version ]($style))"
 symbol   = " "
 disabled = false
 
 [cmd_duration]
 style  = "bold fg:fg bg:cmd_duration"
-format = "([](fg:rust bg:cmd_duration)[ $duration ]($style))"
+format = "([](fg:cmd_duration bg:rust)[ $duration ]($style))"
 min_time = 0
 
 [character]
