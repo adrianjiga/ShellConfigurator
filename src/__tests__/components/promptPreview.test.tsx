@@ -51,6 +51,19 @@ describe('PromptPreview', () => {
     expect(out).toContain('❯');
   });
 
+  it('reflects directory depth and substitutions in the static preview', () => {
+    expect(
+      frame({ directoryTruncationLength: 1, leftModules: ['directory', 'character'] })
+    ).toContain('…/myapp');
+    expect(
+      frame({
+        directoryTruncationLength: 0,
+        directorySubstitutions: [{ from: 'projects', to: 'code' }],
+        leftModules: ['directory', 'character'],
+      })
+    ).toContain('~/code/myapp');
+  });
+
   it('renders right modules under a right: label', () => {
     const out = frame({ leftModules: ['character'], rightModules: ['cmd_duration'] });
     expect(out).toContain('right:');

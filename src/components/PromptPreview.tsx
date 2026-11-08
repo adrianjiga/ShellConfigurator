@@ -117,6 +117,19 @@ function RealPromptFrame({ text }: { text: string }) {
   );
 }
 
+/** A small local approximation of the sample path used by the static preview. */
+function previewDirectory(state: WizardState): string {
+  const substitutions = new Map(
+    state.directorySubstitutions.map(({ from, to }) => [from, to] as const)
+  );
+  const path = ['~', 'projects', 'myapp']
+    .map((part) => substitutions.get(part) ?? part)
+    .filter(Boolean);
+  const length = state.directoryTruncationLength;
+  if (length === 0 || path.length <= length) return path.join('/');
+  return `…/${path.slice(-length).join('/')}`;
+}
+
 function StaticPromptFrame({ state }: { state: WizardState }) {
   const { leftModules, rightModules, hasNerdFont, characterSymbol } = state;
   const palette = getPalette(state.palette);
@@ -150,7 +163,7 @@ function StaticPromptFrame({ state }: { state: WizardState }) {
       if (!powerline) {
         return [
           <Text key={id} color={uiColor(color(def.id))}>
-            {text}{' '}
+            {id === 'directory' ? previewDirectory(state) : text}{' '}
           </Text>,
         ];
       }
@@ -165,7 +178,7 @@ function StaticPromptFrame({ state }: { state: WizardState }) {
           bold
         >
           {' '}
-          {text}{' '}
+          {id === 'directory' ? previewDirectory(state) : text}{' '}
         </Text>
       );
       const separator = (
