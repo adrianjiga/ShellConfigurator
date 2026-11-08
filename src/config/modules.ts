@@ -1,4 +1,5 @@
 import { tomlBasic } from '../generators/toml.ts';
+import type { DirectorySubstitution } from '../types.ts';
 import type { PaletteColorName } from './palettes.ts';
 
 /**
@@ -10,6 +11,10 @@ import type { PaletteColorName } from './palettes.ts';
  */
 export interface ModuleTomlContext {
   hasNerdFont: boolean;
+  /** Starship `directory.truncation_length`; `0` shows the full path. */
+  directoryTruncationLength: number;
+  /** Starship `directory.substitutions`, in insertion order. */
+  directorySubstitutions: readonly DirectorySubstitution[];
   /**
    * Builds the style expression for a palette colour — the colour on its own in a
    * normal prompt, or an `fg:fg bg:<colour>` pair under powerline. Keeping this a
@@ -132,11 +137,19 @@ style_root  = "${tomlBasic(styleFor('err'))}"
 
     previewSegment: () => '~/projects/myapp',
     content: '$path$read_only',
-    settings: () =>
-      `
-truncation_length = 3
-truncate_to_repo  = true
-`.trim(),
+    settings: ({ directoryTruncationLength, directorySubstitutions }) => {
+      const lines = [
+        `truncation_length = ${directoryTruncationLength}`,
+        `truncate_to_repo  = true`,
+      ];
+      if (directorySubstitutions.length > 0) {
+        lines.push('', '[directory.substitutions]');
+        for (const { from, to } of directorySubstitutions) {
+          lines.push(`"${tomlBasic(from)}" = "${tomlBasic(to)}"`);
+        }
+      }
+      return lines.join('\n');
+    },
   },
   git_branch: {
     label: 'Git Branch',

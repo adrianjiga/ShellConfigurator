@@ -115,7 +115,12 @@ disabled = false
     lines.push(`format = "${tomlBasic(powerlineFormat(def.content, def.id, neighbour, side))}"`);
   }
 
-  const settings = def.settings?.({ hasNerdFont: state.hasNerdFont, styleFor });
+  const settings = def.settings?.({
+    hasNerdFont: state.hasNerdFont,
+    styleFor,
+    directoryTruncationLength: state.directoryTruncationLength,
+    directorySubstitutions: state.directorySubstitutions,
+  });
   if (settings) lines.push(settings);
 
   return lines.join('\n');

@@ -148,25 +148,48 @@ leaving a stray coloured block behind.
 Most modules also emit module-specific settings. Ones that carry their colour in
 differently-named keys do not get a `style`:
 
-| Module                   | Extra keys                                                                  |
-| ------------------------ | --------------------------------------------------------------------------- |
-| `username`               | `show_always`, `style_user`, `style_root` — no `style`                      |
-| `hostname`               | `ssh_only`                                                                  |
-| `directory`              | `truncation_length`, `truncate_to_repo`                                     |
-| `git_branch`             | `symbol` (a Nerd Font glyph or `on `)                                       |
-| `git_status`             | `ahead`, `behind`, `diverged`, `modified`, `staged`, `untracked`, `deleted` |
-| `nodejs`/`python`/`rust` | `symbol`, `disabled = false`                                                |
-| `docker_context`         | `symbol`, `disabled = false`                                                |
-| `kubernetes`             | `symbol`, `disabled = false`                                                |
-| `aws`                    | `symbol`, `disabled = false`                                                |
-| `time`                   | `disabled`, `time_format`                                                   |
-| `battery`                | `disabled`, two `[[battery.display]]` tables — no `style`                   |
-| `cmd_duration`           | `min_time = 0`                                                              |
-| `jobs`                   | `symbol`, `threshold`                                                       |
+| Module                   | Extra keys                                                                    |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| `username`               | `show_always`, `style_user`, `style_root` — no `style`                        |
+| `hostname`               | `ssh_only`                                                                    |
+| `directory`              | `truncation_length`, `truncate_to_repo`, optional `[directory.substitutions]` |
+| `git_branch`             | `symbol` (a Nerd Font glyph or `on `)                                         |
+| `git_status`             | `ahead`, `behind`, `diverged`, `modified`, `staged`, `untracked`, `deleted`   |
+| `nodejs`/`python`/`rust` | `symbol`, `disabled = false`                                                  |
+| `docker_context`         | `symbol`, `disabled = false`                                                  |
+| `kubernetes`             | `symbol`, `disabled = false`                                                  |
+| `aws`                    | `symbol`, `disabled = false`                                                  |
+| `time`                   | `disabled`, `time_format`                                                     |
+| `battery`                | `disabled`, two `[[battery.display]]` tables — no `style`                     |
+| `cmd_duration`           | `min_time = 0`                                                                |
+| `jobs`                   | `symbol`, `threshold`                                                         |
 
 Module text symbols (`symbol`, `success_symbol`, …) branch on `hasNerdFont` so a
 plain prompt degrades to readable text instead of tofu: `git_branch` uses a
 space+glyph only when a Nerd Font is present, otherwise `on main`.
+
+### Directory tuning
+
+`truncation_length` is the number of parent folders the directory module shows;
+`0` disables truncation and prints the full path. The Style screen's depth picker
+offers 0–5 and defaults to starship's own 3.
+
+When the user adds substitutions, the generator appends a
+`[directory.substitutions]` table. Keys and values are TOML-escaped, so a folder
+name containing a quote or backslash still parses:
+
+```toml
+[directory]
+style             = "bold directory"
+truncation_length = 1
+truncate_to_repo  = true
+
+[directory.substitutions]
+"projects" = "code"
+```
+
+The table is omitted entirely when there are no substitutions, keeping the
+common case short.
 
 ## The character block
 

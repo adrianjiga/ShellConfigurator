@@ -231,6 +231,49 @@ describe('generateToml', () => {
     expect(on).toContain("vimcmd_symbol  = '[❮](bold ok)'");
     expect(() => toml.parse(on)).not.toThrow();
   });
+
+  it('emits the chosen directory truncation length', () => {
+    const parsed = toml.parse(generateToml({ ...base, directoryTruncationLength: 1 })) as {
+      directory: { truncation_length: number };
+    };
+    expect(parsed.directory.truncation_length).toBe(1);
+  });
+
+  it('emits 0 to disable truncation and show the full path', () => {
+    const parsed = toml.parse(generateToml({ ...base, directoryTruncationLength: 0 })) as {
+      directory: { truncation_length: number };
+    };
+    expect(parsed.directory.truncation_length).toBe(0);
+  });
+
+  it('omits the substitutions table when there are no substitutions', () => {
+    expect(generateToml(base)).not.toContain('[directory.substitutions]');
+  });
+
+  it('emits a substitutions table with quoted keys', () => {
+    const generated = generateToml({
+      ...base,
+      directorySubstitutions: [{ from: 'projects', to: 'code' }],
+    });
+    expect(generated).toContain('[directory.substitutions]');
+    expect(generated).toContain('"projects" = "code"');
+
+    const parsed = toml.parse(generated) as {
+      directory: { substitutions: Record<string, string> };
+    };
+    expect(parsed.directory.substitutions).toEqual({ projects: 'code' });
+  });
+
+  it('escapes quotes and backslashes in substitution keys and values', () => {
+    const generated = generateToml({
+      ...base,
+      directorySubstitutions: [{ from: 'we"ird', to: 'x\\y' }],
+    });
+    const parsed = toml.parse(generated) as {
+      directory: { substitutions: Record<string, string> };
+    };
+    expect(parsed.directory.substitutions).toEqual({ 'we"ird': 'x\\y' });
+  });
 });
 
 describe('modules selected on both sides', () => {

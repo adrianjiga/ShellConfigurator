@@ -34,6 +34,8 @@ describe('serializeState', () => {
     expect(parsed.wizard.setDefaultShell).toBe('zsh');
     expect(parsed.wizard.skipStarshipInstall).toBe(true);
     expect(parsed.wizard.hasNerdFont).toBe(false);
+    expect(parsed.wizard.directoryTruncationLength).toBe(3);
+    expect(parsed.wizard.directorySubstitutions).toEqual([]);
   });
 
   it('omits runtime-only fields from the card', () => {
@@ -84,6 +86,38 @@ describe('parseState', () => {
     const restored = parseState(JSON.stringify(card));
     expect(restored.leftModules).toEqual(['directory', 'git_branch', 'git_status', 'character']);
     expect(restored.characterSymbol).toBe('arrow');
+  });
+
+  it('round-trips the directory truncation length and substitutions', () => {
+    const restored = parseState(
+      serializeState({
+        ...sampleState,
+        directoryTruncationLength: 1,
+        directorySubstitutions: [{ from: 'projects', to: 'code' }],
+      })
+    );
+    expect(restored.directoryTruncationLength).toBe(1);
+    expect(restored.directorySubstitutions).toEqual([{ from: 'projects', to: 'code' }]);
+  });
+
+  it('clamps an out-of-range truncation length from a hand-edited card', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.directoryTruncationLength = 99;
+    expect(parseState(JSON.stringify(card)).directoryTruncationLength).toBe(5);
+  });
+
+  it('drops malformed substitution entries and keeps the last duplicate source', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.directorySubstitutions = [
+      { from: 'a', to: 'one' },
+      { from: '', to: 'ignored' },
+      { from: 'b', to: 7 },
+      null,
+      { from: 'a', to: 'two' },
+    ] as never;
+    expect(parseState(JSON.stringify(card)).directorySubstitutions).toEqual([
+      { from: 'a', to: 'two' },
+    ]);
   });
 
   it('keeps a valid nerdFontToInstall none choice', () => {

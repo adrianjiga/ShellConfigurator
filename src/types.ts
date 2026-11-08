@@ -6,6 +6,12 @@ export type TerminalId = 'alacritty' | 'kitty' | 'wezterm' | 'ghostty' | 'foot';
 export type CharacterSymbol = 'arrow' | 'lambda' | 'dollar';
 /** The marker starship draws at the start of a wrapped input line. */
 export type ContinuationPrompt = 'dot' | 'arrow' | 'none';
+
+/** One `directory.substitutions` entry: rename a folder in the prompt. */
+export interface DirectorySubstitution {
+  from: string;
+  to: string;
+}
 export type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'apk' | 'script';
 export type InstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
@@ -109,6 +115,12 @@ export interface WizardState {
   /** Show a distinct character while the shell is in vim normal mode
    *  (starship's `character.vimcmd_symbol`). */
   vimMode: boolean;
+  /** How many parent folders the directory module shows; `0` disables
+   *  truncation (starship's `directory.truncation_length`). */
+  directoryTruncationLength: number;
+  /** Rename folders in the directory path (starship's
+   *  `directory.substitutions`). */
+  directorySubstitutions: DirectorySubstitution[];
   /** Adopt mode: keep the shared ~/.config/starship.toml instead of writing
    *  per-shell configs, wiring shells to that one file. */
   keepExistingConfig: boolean;
@@ -144,6 +156,8 @@ export const DEFAULT_STATE: WizardState = {
   continuationPrompt: 'dot',
   addNewline: true,
   vimMode: false,
+  directoryTruncationLength: 3,
+  directorySubstitutions: [],
   keepExistingConfig: false,
   sharedConfigToml: null,
   selectedShells: [],

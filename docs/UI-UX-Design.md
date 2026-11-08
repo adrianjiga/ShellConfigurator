@@ -123,7 +123,7 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 
 **Purpose**: Choose character symbol and color scheme.
 
-**Layout**: Five sections stacked vertically — character, palette, segment style (plain / powerline), wrapped-line marker, and prompt extras — each with its own focus indicator:
+**Layout**: Six sections stacked vertically — character, palette, segment style (plain / powerline), wrapped-line marker, prompt extras, and directory display — each with its own focus indicator:
 
 ```
   Style options
@@ -150,9 +150,13 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
   Prompt extras
   › [✓] Blank line before prompt
     [ ] Vim mode symbol
+
+  Directory display
+  › Depth: 3 folders        — ←→ adjusts; 0 shows the full path
+    Substitutions: none      — Enter to edit as from=to pairs
 ```
 
-`Tab` cycles focus between sections. The focused section shows items in bold and reacts to arrows; the extras section toggles its checkboxes with `Space`.
+`Tab` cycles focus between sections. The focused section shows items in bold and reacts to arrows; the extras section toggles its checkboxes with `Space`. The substitutions editor accepts comma-separated `from=to` pairs; Enter saves and Esc cancels.
 
 **Preview**: Updates live as selections change.
 

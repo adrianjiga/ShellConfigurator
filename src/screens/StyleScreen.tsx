@@ -4,8 +4,20 @@ import { NavHints } from '../components/NavHints.tsx';
 import { PickerRow } from '../components/PickerRow.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { colorsEnabled, uiColor } from '../config/colors.ts';
+import {
+  clampTruncationLength,
+  formatSubstitutions,
+  MAX_TRUNCATION_LENGTH,
+  MIN_TRUNCATION_LENGTH,
+  parseSubstitutions,
+} from '../config/directory.ts';
 import { inkColor, PALETTES, type PaletteColorName, type PaletteId } from '../config/palettes.ts';
-import type { CharacterSymbol, ContinuationPrompt, WizardState } from '../types.ts';
+import type {
+  CharacterSymbol,
+  ContinuationPrompt,
+  DirectorySubstitution,
+  WizardState,
+} from '../types.ts';
 
 interface StyleScreenProps {
   state: WizardState;
@@ -42,13 +54,25 @@ const CONTINUATION_OPTIONS: {
   { value: 'none', label: 'None', description: 'No marker on wrapped lines' },
 ];
 
-type FocusSection = 'char' | 'color' | 'powerline' | 'continuation' | 'extras';
+type FocusSection = 'char' | 'color' | 'powerline' | 'continuation' | 'extras' | 'directory';
 
-const FOCUS_ORDER: FocusSection[] = ['char', 'color', 'powerline', 'continuation', 'extras'];
+const FOCUS_ORDER: FocusSection[] = [
+  'char',
+  'color',
+  'powerline',
+  'continuation',
+  'extras',
+  'directory',
+];
 
 /** The checkbox rows in the "Prompt extras" section, top to bottom. */
 const EXTRA_ROWS = ['addNewline', 'vimMode'] as const;
 type ExtraRow = (typeof EXTRA_ROWS)[number];
+
+function depthLabel(value: number): string {
+  if (value === 0) return 'Full path';
+  return `${value} folder${value === 1 ? '' : 's'}`;
+}
 
 export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProps) {
   const [characterSymbol, setCharacterSymbol] = useState<CharacterSymbol>(state.characterSymbol);
@@ -59,8 +83,18 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
   );
   const [addNewline, setAddNewline] = useState<boolean>(state.addNewline);
   const [vimMode, setVimMode] = useState<boolean>(state.vimMode);
+  const [directoryTruncationLength, setDirectoryTruncationLength] = useState<number>(
+    state.directoryTruncationLength
+  );
+  const [directorySubstitutions, setDirectorySubstitutions] = useState<DirectorySubstitution[]>(
+    state.directorySubstitutions
+  );
   const [focus, setFocus] = useState<FocusSection>('char');
   const [extraCursor, setExtraCursor] = useState(0);
+  const [dirCursor, setDirCursor] = useState(0);
+  const [editingSubs, setEditingSubs] = useState(false);
+  const [subsDraft, setSubsDraft] = useState('');
+  const [subsError, setSubsError] = useState<string | null>(null);
   const isInitialMount = useRef(true);
 
   const charIdx = CHAR_OPTIONS.findIndex((o) => o.value === characterSymbol);
@@ -75,6 +109,8 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
     continuationPrompt,
     addNewline,
     vimMode,
+    directoryTruncationLength,
+    directorySubstitutions,
   });
 
   // Push live updates to parent state so preview stays in sync (skip initial
@@ -87,14 +123,61 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
       return;
     }
     onUpdate(selection());
-  }, [characterSymbol, palette, powerline, continuationPrompt, addNewline, vimMode]);
+  }, [
+    characterSymbol,
+    palette,
+    powerline,
+    continuationPrompt,
+    addNewline,
+    vimMode,
+    directoryTruncationLength,
+    directorySubstitutions,
+  ]);
 
   function toggleExtra(row: ExtraRow) {
     if (row === 'addNewline') setAddNewline((v) => !v);
     else setVimMode((v) => !v);
   }
 
+  function startEditingSubs() {
+    setSubsDraft(formatSubstitutions(directorySubstitutions));
+    setSubsError(null);
+    setEditingSubs(true);
+  }
+
+  function commitSubs() {
+    try {
+      setDirectorySubstitutions(parseSubstitutions(subsDraft));
+      setSubsError(null);
+      setEditingSubs(false);
+    } catch (error) {
+      setSubsError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   useInput((char, key) => {
+    // The substitution editor owns the keyboard while it is open, so a typed
+    // `q` or arrow cannot navigate the wizard underneath it.
+    if (editingSubs) {
+      if (key.escape) {
+        setEditingSubs(false);
+        setSubsError(null);
+        return;
+      }
+      if (key.return) {
+        commitSubs();
+        return;
+      }
+      if (key.backspace || key.delete) {
+        setSubsDraft((d) => d.slice(0, -1));
+        return;
+      }
+      if (char && !key.ctrl && !key.meta) {
+        setSubsDraft((d) => d + char);
+      }
+      return;
+    }
+
     if (key.escape) {
       onBack();
       return;
@@ -102,6 +185,12 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
 
     if (key.tab) {
       setFocus((f) => FOCUS_ORDER[(FOCUS_ORDER.indexOf(f) + 1) % FOCUS_ORDER.length]!);
+      return;
+    }
+
+    // On the substitutions row, Enter opens the editor instead of confirming.
+    if (focus === 'directory' && dirCursor === 1 && key.return) {
+      startEditingSubs();
       return;
     }
 
@@ -130,10 +219,25 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
         setContinuationPrompt(
           CONTINUATION_OPTIONS[Math.min(CONTINUATION_OPTIONS.length - 1, continuationIdx + 1)].value
         );
-    } else {
+    } else if (focus === 'extras') {
       if (key.upArrow) setExtraCursor((i) => Math.max(0, i - 1));
       if (key.downArrow) setExtraCursor((i) => Math.min(EXTRA_ROWS.length - 1, i + 1));
       if (char === ' ') toggleExtra(EXTRA_ROWS[extraCursor]!);
+    } else {
+      if (key.upArrow) setDirCursor((i) => Math.max(0, i - 1));
+      if (key.downArrow) setDirCursor((i) => Math.min(1, i + 1));
+      if (dirCursor === 0) {
+        if (key.leftArrow) {
+          setDirectoryTruncationLength((v) =>
+            clampTruncationLength(Math.max(MIN_TRUNCATION_LENGTH, v - 1))
+          );
+        }
+        if (key.rightArrow) {
+          setDirectoryTruncationLength((v) =>
+            clampTruncationLength(Math.min(MAX_TRUNCATION_LENGTH, v + 1))
+          );
+        }
+      }
     }
   });
 
@@ -261,6 +365,48 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
             label="Vim mode symbol"
             hint="Shows ❮ in vim normal mode (cmd, fish, zsh)"
           />
+        </Box>
+
+        {/* Directory display: depth plus optional folder substitutions. */}
+        <Box flexDirection="column" marginTop={1}>
+          <Text
+            color={uiColor(focus === 'directory' ? 'cyan' : 'gray')}
+            bold={focus === 'directory'}
+          >
+            Directory display
+          </Text>
+          <PickerRow
+            focused={focus === 'directory' && dirCursor === 0}
+            indent={1}
+            label={`Depth: ${depthLabel(directoryTruncationLength)}`}
+            hint="←→ adjusts · 0 shows the full path"
+          />
+          <PickerRow
+            focused={focus === 'directory' && dirCursor === 1}
+            indent={1}
+            label={
+              directorySubstitutions.length > 0
+                ? `Substitutions: ${formatSubstitutions(directorySubstitutions)}`
+                : 'Substitutions: none'
+            }
+            hint="Enter to edit · from=to, comma separated"
+          />
+          {editingSubs && (
+            <Box flexDirection="column" marginLeft={2}>
+              <Text color={uiColor('cyan')}>
+                {'> '}
+                {subsDraft}
+                <Text color={uiColor('cyan')}>▌</Text>
+              </Text>
+              {subsError ? (
+                <Text color={uiColor('red')}>{subsError}</Text>
+              ) : (
+                <Text color={uiColor('gray')} italic>
+                  Enter saves · Esc cancels
+                </Text>
+              )}
+            </Box>
+          )}
         </Box>
       </Box>
 

@@ -9,6 +9,10 @@
 ```typescript
 type ShellId = 'zsh' | 'bash' | 'fish' | 'nushell' | 'powershell';
 type CharacterSymbol = 'arrow' | 'lambda' | 'dollar';
+interface DirectorySubstitution {
+  from: string;
+  to: string;
+}
 type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'apk' | 'script';
 type InstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
@@ -43,6 +47,8 @@ interface WizardState {
   continuationPrompt: ContinuationPrompt; // Marker on wrapped input lines
   addNewline: boolean; // Blank line before each prompt
   vimMode: boolean; // Distinct character in vim normal mode
+  directoryTruncationLength: number; // Parent folders shown; 0 means full path
+  directorySubstitutions: DirectorySubstitution[]; // Folder-name substitutions
   selectedShells: ShellId[]; // Shells to configure
   packageManager: PackageManager; // Detected package manager
   installedShells: ShellId[]; // Shells already on system
@@ -602,6 +608,8 @@ every snapshot use.
     continuationPrompt: ContinuationPrompt;
     addNewline: boolean;
     vimMode: boolean;
+    directoryTruncationLength: number;
+    directorySubstitutions: DirectorySubstitution[];
     selectedShells: ShellId[];
     nerdFontToInstall: NerdFontChoice;
     setDefaultShell: ShellId | null;
