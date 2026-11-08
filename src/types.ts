@@ -4,6 +4,8 @@ import type { PaletteId } from './config/palettes.ts';
 export type ShellId = 'zsh' | 'bash' | 'fish' | 'nushell' | 'powershell';
 export type TerminalId = 'alacritty' | 'kitty' | 'wezterm' | 'ghostty' | 'foot';
 export type CharacterSymbol = 'arrow' | 'lambda' | 'dollar';
+/** The marker starship draws at the start of a wrapped input line. */
+export type ContinuationPrompt = 'dot' | 'arrow' | 'none';
 export type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'apk' | 'script';
 export type InstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
@@ -99,6 +101,14 @@ export interface WizardState {
    *  Font for the separator glyphs, so the generator falls back to the plain
    *  layout when one is missing. */
   powerline: boolean;
+  /** The marker shown at the start of a wrapped input line (starship's
+   *  `continuation_prompt`). */
+  continuationPrompt: ContinuationPrompt;
+  /** Insert a blank line before every prompt (starship's `add_newline`). */
+  addNewline: boolean;
+  /** Show a distinct character while the shell is in vim normal mode
+   *  (starship's `character.vimcmd_symbol`). */
+  vimMode: boolean;
   /** Adopt mode: keep the shared ~/.config/starship.toml instead of writing
    *  per-shell configs, wiring shells to that one file. */
   keepExistingConfig: boolean;
@@ -131,6 +141,9 @@ export const DEFAULT_STATE: WizardState = {
   characterSymbol: 'arrow',
   palette: 'default',
   powerline: false,
+  continuationPrompt: 'dot',
+  addNewline: true,
+  vimMode: false,
   keepExistingConfig: false,
   sharedConfigToml: null,
   selectedShells: [],

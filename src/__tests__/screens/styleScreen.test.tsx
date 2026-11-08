@@ -20,13 +20,17 @@ function setup(overrides = {}) {
 }
 
 describe('StyleScreen', () => {
-  it('renders the character, palette, and segment style sections', async () => {
+  it('renders the character, palette, segment style, and extras sections', async () => {
     const { instance } = setup();
     await flush();
     expect(instance.lastFrame()).toContain('Prompt character');
     expect(instance.lastFrame()).toContain('Colour palette');
     expect(instance.lastFrame()).toContain('Segment style');
+    expect(instance.lastFrame()).toContain('Wrapped-line marker');
+    expect(instance.lastFrame()).toContain('Prompt extras');
     expect(instance.lastFrame()).toContain('❯ Arrow');
+    expect(instance.lastFrame()).toContain('Blank line before prompt');
+    expect(instance.lastFrame()).toContain('Vim mode symbol');
   });
 
   it('lists every palette, so each preset has one of its own', async () => {
@@ -54,6 +58,9 @@ describe('StyleScreen', () => {
       characterSymbol: 'lambda',
       palette: 'default',
       powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
     });
   });
 
@@ -70,6 +77,9 @@ describe('StyleScreen', () => {
       characterSymbol: 'arrow',
       palette: 'vivid',
       powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
     });
   });
 
@@ -88,6 +98,9 @@ describe('StyleScreen', () => {
       characterSymbol: 'arrow',
       palette: 'default',
       powerline: true,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
     });
   });
 
@@ -114,19 +127,20 @@ describe('StyleScreen', () => {
       characterSymbol: 'lambda',
       palette: 'vivid',
       powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
     });
   });
 
-  it('wraps focus back to the character section on a third Tab', async () => {
+  it('wraps focus back to the character section after the last Tab', async () => {
     const { instance, onUpdate } = setup();
     await flush();
 
-    instance.stdin.write('\t'); // char → palette
-    await flush();
-    instance.stdin.write('\t'); // palette → powerline
-    await flush();
-    instance.stdin.write('\t'); // powerline → char
-    await flush();
+    for (let i = 0; i < 5; i++) {
+      instance.stdin.write('\t');
+      await flush();
+    }
     instance.stdin.write('\u001B[B'); // arrow → lambda
     await flush();
 
@@ -134,6 +148,9 @@ describe('StyleScreen', () => {
       characterSymbol: 'lambda',
       palette: 'default',
       powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
     });
   });
 
@@ -153,6 +170,9 @@ describe('StyleScreen', () => {
       characterSymbol: 'dollar',
       palette: 'default',
       powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
     });
 
     instance.stdin.write('\u001B[B'); // dollar is already last; stays there
@@ -180,6 +200,9 @@ describe('StyleScreen', () => {
       characterSymbol: 'arrow',
       palette: last.id,
       powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
     });
 
     instance.stdin.write('\u001B[B'); // last palette; stays there
@@ -208,6 +231,9 @@ describe('StyleScreen', () => {
       characterSymbol: 'arrow',
       palette: 'default',
       powerline: true,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
     });
 
     instance.stdin.write('\u001B[A'); // powerline → plain
@@ -216,6 +242,152 @@ describe('StyleScreen', () => {
       characterSymbol: 'arrow',
       palette: 'default',
       powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
+    });
+  });
+
+  it('changes the wrapped-line marker on a third Tab and pushes a live update', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+
+    instance.stdin.write('\t'); // → palette
+    await flush();
+    instance.stdin.write('\t'); // → segment style
+    await flush();
+    instance.stdin.write('\t'); // → wrapped-line marker
+    await flush();
+    instance.stdin.write('\u001B[B'); // dot → arrow
+    await flush();
+
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'arrow',
+      addNewline: true,
+      vimMode: false,
+    });
+  });
+
+  it('clamps the wrapped-line marker at both ends', async () => {
+    const { instance, onUpdate } = setup({ continuationPrompt: 'none' });
+    await flush();
+
+    for (let i = 0; i < 3; i++) {
+      instance.stdin.write('\t'); // → wrapped-line marker
+      await flush();
+    }
+
+    instance.stdin.write('\u001B[B'); // none is already last; stays there
+    await flush();
+    expect(onUpdate).not.toHaveBeenCalled();
+
+    instance.stdin.write('\u001B[A'); // none → arrow
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'arrow',
+      addNewline: true,
+      vimMode: false,
+    });
+  });
+
+  it('toggles the blank line and vim mode in the extras section', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+
+    for (let i = 0; i < 4; i++) {
+      instance.stdin.write('\t'); // → prompt extras
+      await flush();
+    }
+
+    instance.stdin.write(' '); // blank line on → off
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: false,
+      vimMode: false,
+    });
+
+    instance.stdin.write('\u001B[B'); // move to vim mode
+    await flush();
+    instance.stdin.write(' '); // vim mode off → on
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: false,
+      vimMode: true,
+    });
+  });
+
+  it('clamps the extras cursor at both ends', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+
+    for (let i = 0; i < 4; i++) {
+      instance.stdin.write('\t'); // → prompt extras
+      await flush();
+    }
+
+    instance.stdin.write('\u001B[A'); // first row; stays there
+    await flush();
+    instance.stdin.write(' '); // toggles addNewline
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: false,
+      vimMode: false,
+    });
+
+    instance.stdin.write('\u001B[B');
+    await flush();
+    instance.stdin.write('\u001B[B'); // last row; stays there
+    await flush();
+    instance.stdin.write(' '); // toggles vimMode, not addNewline again
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: false,
+      vimMode: true,
+    });
+  });
+
+  it('confirms the style extras with Enter', async () => {
+    const { instance, onNext } = setup();
+    await flush();
+
+    for (let i = 0; i < 4; i++) {
+      instance.stdin.write('\t'); // → prompt extras
+      await flush();
+    }
+    instance.stdin.write(' ');
+    await flush();
+    instance.stdin.write('\r');
+    await flush();
+
+    expect(onNext).toHaveBeenCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: false,
+      vimMode: false,
     });
   });
 

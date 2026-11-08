@@ -4,7 +4,7 @@ import { NavHints } from '../components/NavHints.tsx';
 import { PickerRow } from '../components/PickerRow.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { inkColor, PALETTES, type PaletteColorName, type PaletteId } from '../config/palettes.ts';
-import type { CharacterSymbol, WizardState } from '../types.ts';
+import type { CharacterSymbol, ContinuationPrompt, WizardState } from '../types.ts';
 
 interface StyleScreenProps {
   state: WizardState;
@@ -31,23 +31,49 @@ const POWERLINE_OPTIONS: { value: boolean; label: string; description: string }[
   },
 ];
 
-type FocusSection = 'char' | 'color' | 'powerline';
+const CONTINUATION_OPTIONS: {
+  value: ContinuationPrompt;
+  label: string;
+  description: string;
+}[] = [
+  { value: 'dot', label: '∙ Dot', description: "Starship's default marker" },
+  { value: 'arrow', label: '❯ Arrow', description: 'Matches the prompt character' },
+  { value: 'none', label: 'None', description: 'No marker on wrapped lines' },
+];
+
+type FocusSection = 'char' | 'color' | 'powerline' | 'continuation' | 'extras';
+
+const FOCUS_ORDER: FocusSection[] = ['char', 'color', 'powerline', 'continuation', 'extras'];
+
+/** The checkbox rows in the "Prompt extras" section, top to bottom. */
+const EXTRA_ROWS = ['addNewline', 'vimMode'] as const;
+type ExtraRow = (typeof EXTRA_ROWS)[number];
 
 export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProps) {
   const [characterSymbol, setCharacterSymbol] = useState<CharacterSymbol>(state.characterSymbol);
   const [palette, setPalette] = useState<PaletteId>(state.palette);
   const [powerline, setPowerline] = useState<boolean>(state.powerline);
+  const [continuationPrompt, setContinuationPrompt] = useState<ContinuationPrompt>(
+    state.continuationPrompt
+  );
+  const [addNewline, setAddNewline] = useState<boolean>(state.addNewline);
+  const [vimMode, setVimMode] = useState<boolean>(state.vimMode);
   const [focus, setFocus] = useState<FocusSection>('char');
+  const [extraCursor, setExtraCursor] = useState(0);
   const isInitialMount = useRef(true);
 
   const charIdx = CHAR_OPTIONS.findIndex((o) => o.value === characterSymbol);
   const colorIdx = PALETTES.findIndex((o) => o.id === palette);
   const powerlineIdx = POWERLINE_OPTIONS.findIndex((o) => o.value === powerline);
+  const continuationIdx = CONTINUATION_OPTIONS.findIndex((o) => o.value === continuationPrompt);
 
   const selection = (): Partial<WizardState> => ({
     characterSymbol,
     palette,
     powerline,
+    continuationPrompt,
+    addNewline,
+    vimMode,
   });
 
   // Push live updates to parent state so preview stays in sync (skip initial
@@ -60,16 +86,21 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
       return;
     }
     onUpdate(selection());
-  }, [characterSymbol, palette, powerline]);
+  }, [characterSymbol, palette, powerline, continuationPrompt, addNewline, vimMode]);
 
-  useInput((_, key) => {
+  function toggleExtra(row: ExtraRow) {
+    if (row === 'addNewline') setAddNewline((v) => !v);
+    else setVimMode((v) => !v);
+  }
+
+  useInput((char, key) => {
     if (key.escape) {
       onBack();
       return;
     }
 
     if (key.tab) {
-      setFocus((f) => (f === 'char' ? 'color' : f === 'color' ? 'powerline' : 'char'));
+      setFocus((f) => FOCUS_ORDER[(FOCUS_ORDER.indexOf(f) + 1) % FOCUS_ORDER.length]!);
       return;
     }
 
@@ -85,12 +116,23 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
     } else if (focus === 'color') {
       if (key.upArrow) setPalette(PALETTES[Math.max(0, colorIdx - 1)].id);
       if (key.downArrow) setPalette(PALETTES[Math.min(PALETTES.length - 1, colorIdx + 1)].id);
-    } else {
+    } else if (focus === 'powerline') {
       if (key.upArrow) setPowerline(POWERLINE_OPTIONS[Math.max(0, powerlineIdx - 1)].value);
       if (key.downArrow)
         setPowerline(
           POWERLINE_OPTIONS[Math.min(POWERLINE_OPTIONS.length - 1, powerlineIdx + 1)].value
         );
+    } else if (focus === 'continuation') {
+      if (key.upArrow)
+        setContinuationPrompt(CONTINUATION_OPTIONS[Math.max(0, continuationIdx - 1)].value);
+      if (key.downArrow)
+        setContinuationPrompt(
+          CONTINUATION_OPTIONS[Math.min(CONTINUATION_OPTIONS.length - 1, continuationIdx + 1)].value
+        );
+    } else {
+      if (key.upArrow) setExtraCursor((i) => Math.max(0, i - 1));
+      if (key.downArrow) setExtraCursor((i) => Math.min(EXTRA_ROWS.length - 1, i + 1));
+      if (char === ' ') toggleExtra(EXTRA_ROWS[extraCursor]!);
     }
   });
 
@@ -164,12 +206,57 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
             </Text>
           )}
         </Box>
+
+        {/* Continuation prompt picker */}
+        <Box flexDirection="column" marginTop={1}>
+          <Text color={focus === 'continuation' ? 'cyan' : 'gray'} bold={focus === 'continuation'}>
+            Wrapped-line marker
+          </Text>
+          {CONTINUATION_OPTIONS.map((opt, i) => (
+            <PickerRow
+              key={opt.value}
+              focused={focus === 'continuation' && i === continuationIdx}
+              selected={i === continuationIdx}
+              indent={1}
+              label={opt.label}
+              suffix={
+                <Text color="gray" italic>
+                  — {opt.description}
+                </Text>
+              }
+            />
+          ))}
+        </Box>
+
+        {/* Prompt extras: two independent checkboxes. */}
+        <Box flexDirection="column" marginTop={1}>
+          <Text color={focus === 'extras' ? 'cyan' : 'gray'} bold={focus === 'extras'}>
+            Prompt extras
+          </Text>
+          <PickerRow
+            focused={focus === 'extras' && extraCursor === 0}
+            selected={addNewline}
+            marker={addNewline ? '[✓]' : '[ ]'}
+            indent={1}
+            label="Blank line before prompt"
+            hint="Space toggles · starship add_newline"
+          />
+          <PickerRow
+            focused={focus === 'extras' && extraCursor === 1}
+            selected={vimMode}
+            marker={vimMode ? '[✓]' : '[ ]'}
+            indent={1}
+            label="Vim mode symbol"
+            hint="Shows ❮ in vim normal mode (cmd, fish, zsh)"
+          />
+        </Box>
       </Box>
 
       <NavHints
         hints={[
           { key: '↑↓', label: 'navigate' },
           { key: 'Tab', label: 'switch section' },
+          { key: 'Space', label: 'toggle' },
           { key: 'Enter', label: 'confirm' },
           { key: 'Esc', label: 'back' },
         ]}

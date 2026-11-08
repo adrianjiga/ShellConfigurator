@@ -27,6 +27,9 @@ function previewSignature(state: WizardState): string {
     state.palette,
     state.powerline,
     state.characterSymbol,
+    state.continuationPrompt,
+    state.addNewline,
+    state.vimMode,
     state.hasNerdFont,
     state.leftModules,
     state.rightModules,
@@ -166,7 +169,7 @@ function StaticPromptFrame({ state }: { state: WizardState }) {
       {/* Simulated previous command output */}
       <Text color="gray">$ some-command</Text>
       <Text color="gray">output line...</Text>
-      <Box height={1} />
+      {state.addNewline && <Box height={1} />}
 
       {/* Left prompt */}
       <Box flexDirection="row" flexWrap="wrap">

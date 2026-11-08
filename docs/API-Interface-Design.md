@@ -40,6 +40,9 @@ interface WizardState {
   characterSymbol: CharacterSymbol;
   palette: PaletteId; // Colour theme; one per preset, changeable on StyleScreen
   powerline: boolean; // Draw segments as interlocking coloured blocks
+  continuationPrompt: ContinuationPrompt; // Marker on wrapped input lines
+  addNewline: boolean; // Blank line before each prompt
+  vimMode: boolean; // Distinct character in vim normal mode
   selectedShells: ShellId[]; // Shells to configure
   packageManager: PackageManager; // Detected package manager
   installedShells: ShellId[]; // Shells already on system
@@ -596,6 +599,9 @@ every snapshot use.
     characterSymbol: CharacterSymbol;
     palette: PaletteId;
     powerline: boolean;
+    continuationPrompt: ContinuationPrompt;
+    addNewline: boolean;
+    vimMode: boolean;
     selectedShells: ShellId[];
     nerdFontToInstall: NerdFontChoice;
     setDefaultShell: ShellId | null;

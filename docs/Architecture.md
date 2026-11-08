@@ -137,6 +137,9 @@ interface WizardState {
   characterSymbol: CharacterSymbol;
   palette: PaletteId;
   powerline: boolean;
+  continuationPrompt: ContinuationPrompt;
+  addNewline: boolean;
+  vimMode: boolean;
   selectedShells: ShellId[];
   packageManager: PackageManager;
   installedShells: ShellId[];
@@ -168,18 +171,18 @@ App (owns state)
 
 ### Which Screens Set Which State
 
-| Screen                 | Fields Updated                                                            |
-| ---------------------- | ------------------------------------------------------------------------- |
-| WelcomeScreen          | `packageManager`, `skipStarshipInstall`                                   |
-| FontCheckScreen        | `hasNerdFont`, `nerdFontToInstall`                                        |
-| FontSelectScreen       | `nerdFontToInstall`, `hasNerdFont`                                        |
-| PresetScreen           | `preset`, `leftModules`, `rightModules`, `palette`, `powerline`           |
-| SegmentsScreen (left)  | `leftModules` (live via `onUpdate`)                                       |
-| SegmentsScreen (right) | `rightModules` (live via `onUpdate`)                                      |
-| StyleScreen            | `characterSymbol`, `palette`, `powerline`                                 |
-| ShellScreen            | `selectedShells`, `installedShells`, `setDefaultShell`                    |
-| InstallingScreen       | `installResults` (final task list passed via `advanceTo('done', update)`) |
-| DoneScreen             | (reads `installResults` for status display)                               |
+| Screen                 | Fields Updated                                                                           |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| WelcomeScreen          | `packageManager`, `skipStarshipInstall`                                                  |
+| FontCheckScreen        | `hasNerdFont`, `nerdFontToInstall`                                                       |
+| FontSelectScreen       | `nerdFontToInstall`, `hasNerdFont`                                                       |
+| PresetScreen           | `preset`, `leftModules`, `rightModules`, `palette`, `powerline`                          |
+| SegmentsScreen (left)  | `leftModules` (live via `onUpdate`)                                                      |
+| SegmentsScreen (right) | `rightModules` (live via `onUpdate`)                                                     |
+| StyleScreen            | `characterSymbol`, `palette`, `powerline`, `continuationPrompt`, `addNewline`, `vimMode` |
+| ShellScreen            | `selectedShells`, `installedShells`, `setDefaultShell`                                   |
+| InstallingScreen       | `installResults` (final task list passed via `advanceTo('done', update)`)                |
+| DoneScreen             | (reads `installResults` for status display)                                              |
 
 ### Live Preview Sync
 

@@ -1,4 +1,4 @@
-import type { CharacterSymbol } from '../types.ts';
+import type { CharacterSymbol, ContinuationPrompt } from '../types.ts';
 
 /**
  * The characters a prompt can end with, as the user sees them on screen.
@@ -11,6 +11,18 @@ export const CHARACTER_SYMBOLS: Record<CharacterSymbol, { success: string; error
   arrow: { success: '❯', error: '❯' },
   lambda: { success: 'λ', error: 'λ' },
   dollar: { success: '$', error: '$' },
+};
+
+/**
+ * Starship format strings for the marker at the start of a wrapped input line.
+ *
+ * `none` is the empty string, which starship accepts and renders as no marker.
+ * The default matches starship's own `'[∙](bright-black) '`.
+ */
+export const CONTINUATION_PROMPTS: Record<ContinuationPrompt, string> = {
+  dot: '[∙](bright-black) ',
+  arrow: '[❯](bright-black) ',
+  none: '',
 };
 
 /**

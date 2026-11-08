@@ -20,7 +20,9 @@ const base: WizardState = {
 describe('generateToml', () => {
   it('includes format line with left modules and $fill for right modules', () => {
     const toml = generateToml(base);
-    expect(toml).toContain('format       = "$directory$git_branch$fill$cmd_duration\\n$character"');
+    expect(toml).toContain(
+      'format              = "$directory$git_branch$fill$cmd_duration\\n$character"'
+    );
   });
 
   it('uses $fill to inline right modules instead of right_format', () => {
@@ -57,7 +59,7 @@ describe('generateToml', () => {
 
   it('styles modules by palette colour name and emits the palette table', () => {
     const generated = generateToml({ ...base, palette: 'tokyo-night' });
-    expect(generated).toContain('palette      = "tokyo-night"');
+    expect(generated).toContain('palette             = "tokyo-night"');
     expect(generated).toContain('style  = "bold directory"');
     expect(generated).toContain('[palettes.tokyo-night]');
     expect(generated).toContain('directory      = "#7aa2f7"');
@@ -105,7 +107,7 @@ describe('generateToml', () => {
 
   it('falls back to $character on second line when leftModules is empty', () => {
     const toml = generateToml({ ...base, leftModules: [], rightModules: [] });
-    expect(toml).toContain('format       = "\\n$character"');
+    expect(toml).toContain('format              = "\\n$character"');
   });
 
   it.each(MODULES.map((m) => [m.id, m.label]))('generates a module block for %s (%s)', (id) => {
@@ -194,6 +196,40 @@ describe('generateToml', () => {
     expect(parsed.format).toContain('$fill');
     expect(parsed.add_newline).toBe(true);
     expect(parsed.fill).toEqual({ symbol: ' ' });
+  });
+
+  it('emits the default continuation prompt', () => {
+    const parsed = toml.parse(generateToml(base)) as Record<string, unknown>;
+    expect(parsed.continuation_prompt).toBe('[∙](bright-black) ');
+  });
+
+  it.each([
+    ['dot', '[∙](bright-black) '],
+    ['arrow', '[❯](bright-black) '],
+    ['none', ''],
+  ] as const)('emits the %s continuation prompt', (continuationPrompt, expected) => {
+    const parsed = toml.parse(generateToml({ ...base, continuationPrompt })) as Record<
+      string,
+      unknown
+    >;
+    expect(parsed.continuation_prompt).toBe(expected);
+  });
+
+  it('can turn the blank line before the prompt off', () => {
+    const parsed = toml.parse(generateToml({ ...base, addNewline: false })) as Record<
+      string,
+      unknown
+    >;
+    expect(parsed.add_newline).toBe(false);
+  });
+
+  it('adds a vim normal-mode symbol only when vim mode is on', () => {
+    const off = generateToml({ ...base, leftModules: ['character'], vimMode: false });
+    expect(off).not.toContain('vimcmd_symbol');
+
+    const on = generateToml({ ...base, leftModules: ['character'], vimMode: true });
+    expect(on).toContain("vimcmd_symbol  = '[❮](bold ok)'");
+    expect(() => toml.parse(on)).not.toThrow();
   });
 });
 

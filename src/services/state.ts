@@ -2,6 +2,7 @@ import { CORE_MODULES, type ModuleId } from '../config/modules.ts';
 import type { PaletteId } from '../config/palettes.ts';
 import {
   type CharacterSymbol,
+  type ContinuationPrompt,
   type NerdFontChoice,
   NO_NERD_FONT,
   type ShellId,
@@ -32,6 +33,12 @@ export interface StateCard {
     palette: PaletteId;
     /** Interlocking coloured blocks; requires a Nerd Font to render. */
     powerline: boolean;
+    /** Marker for wrapped input lines. */
+    continuationPrompt: ContinuationPrompt;
+    /** Blank line before each prompt. */
+    addNewline: boolean;
+    /** Distinct character while the shell is in vim normal mode. */
+    vimMode: boolean;
     selectedShells: ShellId[];
     nerdFontToInstall: NerdFontChoice;
     setDefaultShell: ShellId | null;
@@ -83,6 +90,9 @@ export function serializeState(state: WizardState): string {
       characterSymbol: state.characterSymbol,
       palette: state.palette,
       powerline: state.powerline,
+      continuationPrompt: state.continuationPrompt,
+      addNewline: state.addNewline,
+      vimMode: state.vimMode,
       selectedShells: state.selectedShells,
       nerdFontToInstall: state.nerdFontToInstall,
       setDefaultShell: state.setDefaultShell,
@@ -166,6 +176,13 @@ export function parseState(json: string): WizardState {
         : 'arrow',
     palette: typeof wizard.palette === 'string' ? (wizard.palette as PaletteId) : 'default',
     powerline: wizard.powerline === true,
+    continuationPrompt:
+      wizard.continuationPrompt === 'arrow' || wizard.continuationPrompt === 'none'
+        ? wizard.continuationPrompt
+        : 'dot',
+    // Absent means "the starship default", which is on.
+    addNewline: wizard.addNewline !== false,
+    vimMode: wizard.vimMode === true,
     selectedShells,
     nerdFontToInstall: parseNerdFontChoice(wizard.nerdFontToInstall),
     setDefaultShell: typeof wizard.setDefaultShell === 'string' ? wizard.setDefaultShell : null,
