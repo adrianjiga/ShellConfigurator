@@ -7,20 +7,20 @@ add_newline         = true
 palette             = "pastel"
 
 [username]
-format = "([ $user ]($style)[](fg:username bg:directory))"
+format = "([ $user ]($style)[](fg:directory bg:username))"
 show_always = false
 style_user  = "bold fg:fg bg:username"
 style_root  = "bold fg:fg bg:err"
 
 [directory]
 style  = "bold fg:fg bg:directory"
-format = "([  $path$read_only ]($style)[](fg:directory bg:git_branch))"
+format = "([  $path$read_only ]($style)[](fg:git_branch bg:directory))"
 truncation_length = 3
 truncate_to_repo  = true
 
 [git_branch]
 style  = "bold fg:fg bg:git_branch"
-format = "([ $symbol$branch ]($style)[](fg:git_branch bg:git_status))"
+format = "([ $symbol$branch ]($style)[](fg:git_status bg:git_branch))"
 symbol = " "
 
 [git_status]
@@ -42,18 +42,18 @@ disabled = false
 
 [python]
 style  = "bold fg:fg bg:python"
-format = "([](fg:python bg:nodejs)[ $symbol$version ]($style))"
+format = "([](fg:nodejs bg:python)[ $symbol$version ]($style))"
 symbol   = " "
 disabled = false
 
 [cmd_duration]
 style  = "bold fg:fg bg:cmd_duration"
-format = "([](fg:cmd_duration bg:python)[ $duration ]($style))"
+format = "([](fg:python bg:cmd_duration)[ $duration ]($style))"
 min_time = 0
 
 [time]
 style  = "bold fg:fg bg:time"
-format = "([](fg:time bg:cmd_duration)[ $time ]($style))"
+format = "([](fg:cmd_duration bg:time)[ $time ]($style))"
 disabled    = false
 time_format = "%H:%M"
 

@@ -42,11 +42,11 @@ function buildFormatString(segments: ConfigurableModuleId[]): string {
 /**
  * Wraps a module's content in the separators for its position in the prompt.
  *
- * On the left the separator trails each segment and points right, tinted with the
- * *next* segment's background so the two blocks interlock. On the right it leads
- * each segment and points left, tinted with the previous one. Either way the outer
- * end of the run has no neighbour, so its separator gets no background and fades
- * into the terminal.
+ * On the left the separator trails each segment and points right; on the right it
+ * leads each segment and points left. The current block keeps its own background,
+ * while the arrow takes the neighbour's foreground colour. That way a selected
+ * neighbour which happens to render empty cannot leave a ghost-coloured background.
+ * The outer end has no neighbour and fades into the terminal.
  */
 function powerlineFormat(
   content: string,
@@ -54,12 +54,9 @@ function powerlineFormat(
   neighbour: PaletteColorName | null,
   side: 'left' | 'right'
 ): string {
-  const bg = neighbour ? ` bg:${neighbour}` : '';
+  const separatorStyle = neighbour ? `fg:${neighbour} bg:${color}` : `fg:${color}`;
   const block = `[ ${content} ]($style)`;
-  const separator =
-    side === 'left'
-      ? `[${SEPARATOR_RIGHT}](fg:${color}${bg})`
-      : `[${SEPARATOR_LEFT}](fg:${color}${bg})`;
+  const separator = `[${side === 'left' ? SEPARATOR_RIGHT : SEPARATOR_LEFT}](${separatorStyle})`;
   // Wrapped in a conditional group: starship drops a `(…)` group whose variables
   // are all empty, so a module with nothing to show (a clean repo's git_status, a
   // command too fast for cmd_duration) collapses instead of leaving an empty

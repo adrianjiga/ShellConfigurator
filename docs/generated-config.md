@@ -134,14 +134,15 @@ tints the text with `fg` and the segment background with the module's own colour
 ```toml
 [directory]
 style  = "bold fg:fg bg:directory"
-format = "([ $path$read_only ](bold fg:fg bg:directory)[\ue0b0](fg:directory bg:git_branch))"
+format = "([ $path$read_only ](bold fg:fg bg:directory)[\ue0b0](fg:git_branch bg:directory))"
 ```
 
 The `format` key is only emitted when the generated prompt is powerline. A plain
-prompt leaves starship's own default format alone. The separator inside the
-`format` is tinted with the _neighbouring_ segment's background so adjacent
-blocks interlock; the outer end of a run has no neighbour and fades into the
-terminal. Blocks are wrapped in a `(…)` group that starship drops when its
+prompt leaves starship's own default format alone. The separator arrow takes the
+_neighbouring_ segment's foreground colour against the current block's background.
+This keeps an inactive neighboring module from leaving a ghost-colored background;
+the outer end of a run has no neighbour and fades into the terminal. Blocks are
+wrapped in a `(…)` group that starship drops when its
 variables are all empty, so a module with nothing to show collapses instead of
 leaving a stray coloured block behind.
 

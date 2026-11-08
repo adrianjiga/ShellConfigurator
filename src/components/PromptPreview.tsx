@@ -190,8 +190,8 @@ function StaticPromptFrame({ state }: { state: WizardState }) {
       const separator = (
         <Text
           key={`${id}-sep`}
-          color={uiColor(color(def.id))}
-          backgroundColor={uiColor(neighbourColor)}
+          color={uiColor(neighbourColor ?? color(def.id))}
+          backgroundColor={uiColor(neighbourColor ? color(def.id) : undefined)}
         >
           {side === 'left' ? SEPARATOR_RIGHT : SEPARATOR_LEFT}
         </Text>

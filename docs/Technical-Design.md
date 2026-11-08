@@ -63,7 +63,7 @@ The same module under a powerline prompt, with `git_status` following it:
 ```toml
 [git_branch]
 style  = "bold fg:fg bg:git_branch"
-format = "([ $symbol$branch ]($style)[](fg:git_branch bg:git_status))"
+format = "([ $symbol$branch ]($style)[](fg:git_status bg:git_branch))"
 symbol = " "
 ```
 
