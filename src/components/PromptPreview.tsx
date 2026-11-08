@@ -31,6 +31,8 @@ function previewSignature(state: WizardState): string {
     state.continuationPrompt,
     state.addNewline,
     state.vimMode,
+    state.directoryTruncationLength,
+    state.directorySubstitutions,
     state.hasNerdFont,
     state.leftModules,
     state.rightModules,

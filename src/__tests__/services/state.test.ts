@@ -112,6 +112,21 @@ describe('parseState', () => {
     expect(parseState(JSON.stringify(card)).palette).toBe('default');
   });
 
+  it('rejects an unknown module id in a hand-edited card', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.leftModules = ['directory', 'unknown', 'directory', 'character'] as never;
+    expect(() => parseState(JSON.stringify(card))).toThrow(/unknown module 'unknown'/);
+  });
+
+  it('deduplicates valid module ids and removes right-side duplicates of left modules', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.leftModules = ['directory', 'directory', 'character'] as never;
+    card.wizard.rightModules = ['directory', 'time', 'time'] as never;
+    const restored = parseState(JSON.stringify(card));
+    expect(restored.leftModules).toEqual(['directory', 'character']);
+    expect(restored.rightModules).toEqual(['time']);
+  });
+
   it('drops malformed substitution entries and keeps the last duplicate source', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
     card.wizard.directorySubstitutions = [

@@ -1,5 +1,5 @@
 import { clampTruncationLength, DEFAULT_TRUNCATION_LENGTH } from '../config/directory.ts';
-import { CORE_MODULES, type ModuleId } from '../config/modules.ts';
+import { CORE_MODULES, getModule, type ModuleId } from '../config/modules.ts';
 import { PALETTES, type PaletteId } from '../config/palettes.ts';
 import {
   type CharacterSymbol,
@@ -115,6 +115,22 @@ export function serializeState(state: WizardState): string {
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((v) => typeof v === 'string');
 
+function parseModuleList(value: unknown, slot: 'left' | 'right'): ModuleId[] | null {
+  if (!isStringArray(value)) return null;
+
+  const parsed = new Set<ModuleId>();
+  for (const id of value) {
+    if (id === 'character' && slot === 'left') {
+      parsed.add(id);
+    } else if (getModule(id)) {
+      parsed.add(id as ModuleId);
+    } else {
+      throw new CliUsageError(`Invalid state card: unknown module '${id}' in ${slot}Modules`);
+    }
+  }
+  return [...parsed];
+}
+
 /**
  * Reads a card's `directory.substitutions`. Malformed entries are dropped
  * rather than failing the whole card, matching how the other optional fields
@@ -188,15 +204,18 @@ export function parseState(json: string): WizardState {
   const selectedShells = isStringArray(wizard.selectedShells)
     ? (wizard.selectedShells as ShellId[])
     : [];
+  const parsedLeftModules = parseModuleList(wizard.leftModules, 'left');
+  const leftModules = parsedLeftModules?.length ? parsedLeftModules : CORE_MODULES_DEFAULT;
+  const leftModuleSet = new Set(leftModules);
+  const rightModules = (parseModuleList(wizard.rightModules, 'right') ?? []).filter(
+    (id) => !leftModuleSet.has(id)
+  );
 
   return {
     ...runtimeDefaults(),
     preset: typeof wizard.preset === 'string' ? wizard.preset : null,
-    leftModules:
-      isStringArray(wizard.leftModules) && wizard.leftModules.length > 0
-        ? (wizard.leftModules as ModuleId[])
-        : CORE_MODULES_DEFAULT,
-    rightModules: isStringArray(wizard.rightModules) ? (wizard.rightModules as ModuleId[]) : [],
+    leftModules,
+    rightModules,
     characterSymbol:
       wizard.characterSymbol === 'lambda' || wizard.characterSymbol === 'dollar'
         ? wizard.characterSymbol

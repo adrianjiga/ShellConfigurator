@@ -151,6 +151,30 @@ describe('PromptPreview', () => {
     await settleRenderer();
     expect(renderer).toHaveBeenCalledTimes(2);
 
+    ui.rerender(
+      <PromptPreview
+        state={{ ...base, step: 'style', palette: 'vivid', directoryTruncationLength: 1 }}
+        renderPreview={renderer}
+      />
+    );
+    await settleRenderer();
+    expect(renderer).toHaveBeenCalledTimes(3);
+
+    ui.rerender(
+      <PromptPreview
+        state={{
+          ...base,
+          step: 'style',
+          palette: 'vivid',
+          directoryTruncationLength: 1,
+          directorySubstitutions: [{ from: 'projects', to: 'code' }],
+        }}
+        renderPreview={renderer}
+      />
+    );
+    await settleRenderer();
+    expect(renderer).toHaveBeenCalledTimes(4);
+
     ui.unmount();
   });
 });
