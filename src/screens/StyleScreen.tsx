@@ -7,8 +7,6 @@ import { colorsEnabled, uiColor } from '../config/colors.ts';
 import {
   clampTruncationLength,
   formatSubstitutions,
-  MAX_TRUNCATION_LENGTH,
-  MIN_TRUNCATION_LENGTH,
   parseSubstitutions,
 } from '../config/directory.ts';
 import { inkColor, PALETTES, type PaletteColorName, type PaletteId } from '../config/palettes.ts';
@@ -228,14 +226,10 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
       if (key.downArrow) setDirCursor((i) => Math.min(1, i + 1));
       if (dirCursor === 0) {
         if (key.leftArrow) {
-          setDirectoryTruncationLength((v) =>
-            clampTruncationLength(Math.max(MIN_TRUNCATION_LENGTH, v - 1))
-          );
+          setDirectoryTruncationLength((v) => clampTruncationLength(v - 1));
         }
         if (key.rightArrow) {
-          setDirectoryTruncationLength((v) =>
-            clampTruncationLength(Math.min(MAX_TRUNCATION_LENGTH, v + 1))
-          );
+          setDirectoryTruncationLength((v) => clampTruncationLength(v + 1));
         }
       }
     }

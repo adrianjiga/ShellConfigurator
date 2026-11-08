@@ -1,6 +1,6 @@
 import { clampTruncationLength, DEFAULT_TRUNCATION_LENGTH } from '../config/directory.ts';
 import { CORE_MODULES, type ModuleId } from '../config/modules.ts';
-import type { PaletteId } from '../config/palettes.ts';
+import { PALETTES, type PaletteId } from '../config/palettes.ts';
 import {
   type CharacterSymbol,
   type ContinuationPrompt,
@@ -201,7 +201,11 @@ export function parseState(json: string): WizardState {
       wizard.characterSymbol === 'lambda' || wizard.characterSymbol === 'dollar'
         ? wizard.characterSymbol
         : 'arrow',
-    palette: typeof wizard.palette === 'string' ? (wizard.palette as PaletteId) : 'default',
+    palette:
+      typeof wizard.palette === 'string' &&
+      PALETTES.some((palette) => palette.id === wizard.palette)
+        ? (wizard.palette as PaletteId)
+        : 'default',
     powerline: wizard.powerline === true,
     continuationPrompt:
       wizard.continuationPrompt === 'arrow' || wizard.continuationPrompt === 'none'

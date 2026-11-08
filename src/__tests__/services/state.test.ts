@@ -106,6 +106,12 @@ describe('parseState', () => {
     expect(parseState(JSON.stringify(card)).directoryTruncationLength).toBe(5);
   });
 
+  it('defaults an unknown palette in a hand-edited card', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.palette = 'not-a-palette' as never;
+    expect(parseState(JSON.stringify(card)).palette).toBe('default');
+  });
+
   it('drops malformed substitution entries and keeps the last duplicate source', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
     card.wizard.directorySubstitutions = [
