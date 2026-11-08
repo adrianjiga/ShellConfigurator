@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { PickerRow } from '../components/PickerRow.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
+import { uiColor } from '../config/colors.ts';
 import {
   type ConfigurableModuleId,
   MODULES,
@@ -205,25 +206,25 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
     <WizardLayout state={state}>
       <Box flexDirection="column" gap={1}>
         <Text bold>{side === 'left' ? 'Left prompt segments' : 'Right prompt segments'}</Text>
-        <Text color="gray">
+        <Text color={uiColor('gray')}>
           {side === 'left'
             ? 'Choose which info appears on the left of your prompt.'
             : 'Choose which info appears on the right (optional — press Enter to skip).'}
         </Text>
         {side === 'left' && (
-          <Text color="gray" italic>
+          <Text color={uiColor('gray')} italic>
             The prompt character (❯ λ $) is always shown at the end.
           </Text>
         )}
 
         <Box flexDirection="row" gap={1}>
-          <Text color="gray">Filter:</Text>
-          <Text color={filter ? 'white' : 'gray'}>{filter || 'type to search'}</Text>
-          <Text color="cyan">▌</Text>
+          <Text color={uiColor('gray')}>Filter:</Text>
+          <Text color={uiColor(filter ? 'white' : 'gray')}>{filter || 'type to search'}</Text>
+          <Text color={uiColor('cyan')}>▌</Text>
         </Box>
 
         <Box flexDirection="column">
-          {rows.length === 0 && <Text color="yellow">No modules match “{filter}”.</Text>}
+          {rows.length === 0 && <Text color={uiColor('yellow')}>No modules match “{filter}”.</Text>}
           {rows.map((row, i) => {
             const mod = MODULE_BY_ID.get(row.id)!;
             const showHeading = i === 0 || rows[i - 1]!.selected !== row.selected;
@@ -233,7 +234,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
             return (
               <Box key={row.id} flexDirection="column">
                 {showHeading && (
-                  <Text color="gray" bold>
+                  <Text color={uiColor('gray')} bold>
                     {row.selected ? 'Prompt order' : 'Available'}
                   </Text>
                 )}
@@ -245,7 +246,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
                   label={row.selected ? `${position}. ${mod.label}` : mod.label}
                   suffix={
                     row.taken ? (
-                      <Text color="gray" italic>
+                      <Text color={uiColor('gray')} italic>
                         — already on the left
                       </Text>
                     ) : undefined

@@ -1,7 +1,8 @@
 import { Box, Text, useInput } from 'ink';
-import SelectInput from 'ink-select-input';
+import { AppSelectInput } from '../components/AppSelectInput.tsx';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
+import { uiColor } from '../config/colors.ts';
 import { NO_NERD_FONT, type WizardState } from '../types.ts';
 
 interface FontCheckScreenProps {
@@ -51,13 +52,13 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
     <WizardLayout state={state}>
       <Box flexDirection="column" gap={1}>
         <Text bold>Nerd Font check</Text>
-        <Text color="gray">
+        <Text color={uiColor('gray')}>
           Nerd Fonts add icons to your prompt. Do any of these render as icons?
         </Text>
 
         <Box
           borderStyle="round"
-          borderColor="gray"
+          borderColor={uiColor('gray')}
           paddingX={2}
           paddingY={1}
           marginTop={1}
@@ -66,24 +67,24 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
         >
           <Box flexDirection="row" gap={2}>
             <Text> </Text>
-            <Text color="gray">folder icon</Text>
+            <Text color={uiColor('gray')}>folder icon</Text>
           </Box>
           <Box flexDirection="row" gap={2}>
             <Text> </Text>
-            <Text color="gray">git branch icon</Text>
+            <Text color={uiColor('gray')}>git branch icon</Text>
           </Box>
           <Box flexDirection="row" gap={2}>
             <Text> </Text>
-            <Text color="gray">node.js icon</Text>
+            <Text color={uiColor('gray')}>node.js icon</Text>
           </Box>
           <Box flexDirection="row" gap={2}>
             <Text> </Text>
-            <Text color="gray">python icon</Text>
+            <Text color={uiColor('gray')}>python icon</Text>
           </Box>
         </Box>
 
         <Box marginTop={1}>
-          <SelectInput items={items} onSelect={handleSelect} />
+          <AppSelectInput items={items} onSelect={handleSelect} />
         </Box>
       </Box>
 

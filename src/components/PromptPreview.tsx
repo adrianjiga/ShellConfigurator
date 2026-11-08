@@ -1,5 +1,6 @@
 import { Box, Text } from 'ink';
 import { useEffect, useRef, useState } from 'react';
+import { uiColor } from '../config/colors.ts';
 import { getModule, isConfigurableModule, type ModuleId } from '../config/modules.ts';
 import { getPalette, inkColor, type PaletteColorName } from '../config/palettes.ts';
 import { CHARACTER_SYMBOLS, SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../config/promptSymbols.ts';
@@ -73,7 +74,7 @@ export function PromptPreview({ state, renderPreview = renderPromptAsync }: Prom
 
   return (
     <Box flexDirection="column">
-      <Text bold color="gray">
+      <Text bold color={uiColor('gray')}>
         Preview
       </Text>
       {realPrompt !== null ? (
@@ -82,12 +83,12 @@ export function PromptPreview({ state, renderPreview = renderPromptAsync }: Prom
         <StaticPromptFrame state={state} />
       )}
       <Box marginTop={1} flexDirection="column">
-        <Text color="gray" italic>
+        <Text color={uiColor('gray')} italic>
           {leftSegmentCount} left segment{leftSegmentCount !== 1 ? 's' : ''}
           {state.rightModules.length > 0 ? `, ${state.rightModules.length} right` : ''}
         </Text>
         {realPrompt !== null && (
-          <Text color="gray" italic>
+          <Text color={uiColor('gray')} italic>
             rendered live by the starship binary
           </Text>
         )}
@@ -98,10 +99,16 @@ export function PromptPreview({ state, renderPreview = renderPromptAsync }: Prom
 
 function RealPromptFrame({ text }: { text: string }) {
   return (
-    <Box borderStyle="round" borderColor="gray" padding={1} flexDirection="column" marginTop={1}>
+    <Box
+      borderStyle="round"
+      borderColor={uiColor('gray')}
+      padding={1}
+      flexDirection="column"
+      marginTop={1}
+    >
       {/* Simulated previous command output, as in the static frame */}
-      <Text color="gray">$ some-command</Text>
-      <Text color="gray">output line...</Text>
+      <Text color={uiColor('gray')}>$ some-command</Text>
+      <Text color={uiColor('gray')}>output line...</Text>
       <Box height={1} />
       <Text wrap="wrap">{text}</Text>
     </Box>
@@ -119,7 +126,7 @@ function StaticPromptFrame({ state }: { state: WizardState }) {
 
   function renderCharacter() {
     return (
-      <Text key="character" color={color('ok')} bold>
+      <Text key="character" color={uiColor(color('ok'))} bold>
         {CHARACTER_SYMBOLS[characterSymbol].success}{' '}
       </Text>
     );
@@ -140,7 +147,7 @@ function StaticPromptFrame({ state }: { state: WizardState }) {
       const text = def.previewSegment(hasNerdFont);
       if (!powerline) {
         return [
-          <Text key={id} color={color(def.id)}>
+          <Text key={id} color={uiColor(color(def.id))}>
             {text}{' '}
           </Text>,
         ];
@@ -149,13 +156,22 @@ function StaticPromptFrame({ state }: { state: WizardState }) {
       const neighbour = segments[side === 'left' ? i + 1 : i - 1];
       const neighbourColor = neighbour ? color(neighbour) : undefined;
       const block = (
-        <Text key={`${id}-block`} color={color('fg')} backgroundColor={color(def.id)} bold>
+        <Text
+          key={`${id}-block`}
+          color={uiColor(color('fg'))}
+          backgroundColor={uiColor(color(def.id))}
+          bold
+        >
           {' '}
           {text}{' '}
         </Text>
       );
       const separator = (
-        <Text key={`${id}-sep`} color={color(def.id)} backgroundColor={neighbourColor}>
+        <Text
+          key={`${id}-sep`}
+          color={uiColor(color(def.id))}
+          backgroundColor={uiColor(neighbourColor)}
+        >
           {side === 'left' ? SEPARATOR_RIGHT : SEPARATOR_LEFT}
         </Text>
       );
@@ -165,10 +181,16 @@ function StaticPromptFrame({ state }: { state: WizardState }) {
   }
 
   return (
-    <Box borderStyle="round" borderColor="gray" padding={1} flexDirection="column" marginTop={1}>
+    <Box
+      borderStyle="round"
+      borderColor={uiColor('gray')}
+      padding={1}
+      flexDirection="column"
+      marginTop={1}
+    >
       {/* Simulated previous command output */}
-      <Text color="gray">$ some-command</Text>
-      <Text color="gray">output line...</Text>
+      <Text color={uiColor('gray')}>$ some-command</Text>
+      <Text color={uiColor('gray')}>output line...</Text>
       {state.addNewline && <Box height={1} />}
 
       {/* Left prompt */}
@@ -182,7 +204,7 @@ function StaticPromptFrame({ state }: { state: WizardState }) {
       {/* Right prompt (dimmed, shown below for simplicity) */}
       {rightModules.length > 0 && (
         <Box flexDirection="row" marginTop={1}>
-          <Text color="gray" italic>
+          <Text color={uiColor('gray')} italic>
             right:{' '}
           </Text>
           {renderSide(rightModules, 'right')}

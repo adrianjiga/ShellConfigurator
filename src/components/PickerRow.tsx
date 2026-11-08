@@ -1,5 +1,6 @@
 import { Box, Text } from 'ink';
 import type { ReactNode } from 'react';
+import { uiColor } from '../config/colors.ts';
 
 interface PickerRowProps {
   label: string;
@@ -37,12 +38,12 @@ export function PickerRow({
   return (
     <Box flexDirection="column">
       <Box flexDirection="row" gap={1} marginLeft={indent}>
-        <Text color={focused ? 'cyan' : 'gray'}>{focused ? '›' : ' '}</Text>
+        <Text color={uiColor(focused ? 'cyan' : 'gray')}>{focused ? '›' : ' '}</Text>
         {marker !== undefined && (
-          <Text color={disabled ? 'gray' : selected ? 'green' : 'gray'}>{marker}</Text>
+          <Text color={uiColor(disabled ? 'gray' : selected ? 'green' : 'gray')}>{marker}</Text>
         )}
         <Text
-          color={disabled ? 'gray' : selected || focused ? 'white' : 'gray'}
+          color={uiColor(disabled ? 'gray' : selected || focused ? 'white' : 'gray')}
           bold={(selected || focused) && !disabled}
           dimColor={disabled}
         >
@@ -52,7 +53,7 @@ export function PickerRow({
       </Box>
       {focused && hint && (
         <Box marginLeft={indent + 4}>
-          <Text color="gray" italic>
+          <Text color={uiColor('gray')} italic>
             {hint}
           </Text>
         </Box>

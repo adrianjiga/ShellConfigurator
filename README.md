@@ -13,10 +13,10 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/),
 - **Cross-shell**: configure zsh, bash, fish, nushell, and PowerShell in one run
 - **Automated installation**: installs Starship, Nerd Fonts (downloads verified against their published SHA-256 digest, extraction sandboxed in a worker), and any missing shells for you
 - **12 presets**: from minimal plain-text to Tokyo Night, Gruvbox Rainbow, and Catppuccin
-- **12 colour palettes**: one behind every preset, and any of them usable with any preset
+- **14 colour palettes**: one behind every preset, plus high-contrast and colour-blind-safe options; any of them usable with any preset
 - **Powerline prompts**: interlocking coloured blocks with Nerd Font separators
 - **Segment picker**: choose exactly which modules appear on the left and right of your prompt
-- **Style tuning**: palette, segment style, and character symbol selection
+- **Style tuning**: palette, segment style, character symbol, wrapped-line marker, blank-line and vim-mode toggles
 - **Headless mode**: the same logic is driven from a state card or flags via the `generate` and `apply` subcommands, for scripting and CI
 - **Adopt-existing-config**: keep your current `~/.config/starship.toml` (or import one from a URL) and only install fonts, Starship, missing shells, and the shell wiring
 - **Terminal font wiring**: detect your terminal (Alacritty, kitty, WezTerm, Ghostty, foot) and select the installed Nerd Font in its config automatically

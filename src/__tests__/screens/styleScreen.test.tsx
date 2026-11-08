@@ -6,7 +6,13 @@ import { DEFAULT_STATE } from '../../types.ts';
 import { pressEsc } from '../helpers/ink.ts';
 import { flush } from '../helpers/wait.ts';
 
-afterEach(cleanup);
+const savedNoColor = process.env.NO_COLOR;
+
+afterEach(() => {
+  cleanup();
+  if (savedNoColor === undefined) delete process.env.NO_COLOR;
+  else process.env.NO_COLOR = savedNoColor;
+});
 
 function setup(overrides = {}) {
   const state = { ...DEFAULT_STATE, ...overrides };
@@ -389,6 +395,30 @@ describe('StyleScreen', () => {
       addNewline: false,
       vimMode: false,
     });
+  });
+
+  it('shows a swatch of each palette’s own colours when colour is on', async () => {
+    delete process.env.NO_COLOR;
+    const { instance } = setup();
+    await flush();
+
+    const paletteLine = (instance.lastFrame() ?? '')
+      .split('\n')
+      .find((line) => line.includes('Default'));
+    expect(paletteLine).toBeDefined();
+    expect(paletteLine!).toContain('●');
+  });
+
+  it('hides the palette swatches but keeps the names when NO_COLOR is set', async () => {
+    process.env.NO_COLOR = '1';
+    const { instance } = setup();
+    await flush();
+
+    const paletteLine = (instance.lastFrame() ?? '')
+      .split('\n')
+      .find((line) => line.includes('Default'));
+    expect(paletteLine).toBeDefined();
+    expect(paletteLine!).not.toContain('●');
   });
 
   it('calls onBack on Escape', async () => {

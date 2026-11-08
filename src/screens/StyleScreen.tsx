@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { PickerRow } from '../components/PickerRow.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
+import { colorsEnabled, uiColor } from '../config/colors.ts';
 import { inkColor, PALETTES, type PaletteColorName, type PaletteId } from '../config/palettes.ts';
 import type { CharacterSymbol, ContinuationPrompt, WizardState } from '../types.ts';
 
@@ -143,7 +144,7 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
 
         {/* Character symbol picker */}
         <Box flexDirection="column" marginTop={1}>
-          <Text color={focus === 'char' ? 'cyan' : 'gray'} bold={focus === 'char'}>
+          <Text color={uiColor(focus === 'char' ? 'cyan' : 'gray')} bold={focus === 'char'}>
             Prompt character
           </Text>
           {CHAR_OPTIONS.map((opt, i) => (
@@ -159,7 +160,7 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
 
         {/* Palette picker */}
         <Box flexDirection="column" marginTop={1}>
-          <Text color={focus === 'color' ? 'cyan' : 'gray'} bold={focus === 'color'}>
+          <Text color={uiColor(focus === 'color' ? 'cyan' : 'gray')} bold={focus === 'color'}>
             Colour palette
           </Text>
           {PALETTES.map((opt, i) => (
@@ -170,19 +171,27 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
               indent={1}
               label={opt.label}
               // A swatch of the palette's own colours, so the list shows what it
-              // is describing rather than only naming it.
-              suffix={SWATCH_COLORS.map((name) => (
-                <Text key={name} color={inkColor(opt.colors[name])}>
-                  ●
-                </Text>
-              ))}
+              // is describing rather than only naming it. Without colour the dots
+              // are indistinguishable, so leave them out entirely.
+              suffix={
+                colorsEnabled()
+                  ? SWATCH_COLORS.map((name) => (
+                      <Text key={name} color={uiColor(inkColor(opt.colors[name]))}>
+                        ●
+                      </Text>
+                    ))
+                  : undefined
+              }
             />
           ))}
         </Box>
 
         {/* Powerline toggle */}
         <Box flexDirection="column" marginTop={1}>
-          <Text color={focus === 'powerline' ? 'cyan' : 'gray'} bold={focus === 'powerline'}>
+          <Text
+            color={uiColor(focus === 'powerline' ? 'cyan' : 'gray')}
+            bold={focus === 'powerline'}
+          >
             Segment style
           </Text>
           {POWERLINE_OPTIONS.map((opt, i) => (
@@ -193,14 +202,14 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
               indent={1}
               label={opt.label}
               suffix={
-                <Text color="gray" italic>
+                <Text color={uiColor('gray')} italic>
                   — {opt.description}
                 </Text>
               }
             />
           ))}
           {powerline && !state.hasNerdFont && (
-            <Text color="yellow">
+            <Text color={uiColor('yellow')}>
               {'  '}Powerline separators need a Nerd Font — a plain prompt will be generated
               instead.
             </Text>
@@ -209,7 +218,10 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
 
         {/* Continuation prompt picker */}
         <Box flexDirection="column" marginTop={1}>
-          <Text color={focus === 'continuation' ? 'cyan' : 'gray'} bold={focus === 'continuation'}>
+          <Text
+            color={uiColor(focus === 'continuation' ? 'cyan' : 'gray')}
+            bold={focus === 'continuation'}
+          >
             Wrapped-line marker
           </Text>
           {CONTINUATION_OPTIONS.map((opt, i) => (
@@ -220,7 +232,7 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
               indent={1}
               label={opt.label}
               suffix={
-                <Text color="gray" italic>
+                <Text color={uiColor('gray')} italic>
                   — {opt.description}
                 </Text>
               }
@@ -230,7 +242,7 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
 
         {/* Prompt extras: two independent checkboxes. */}
         <Box flexDirection="column" marginTop={1}>
-          <Text color={focus === 'extras' ? 'cyan' : 'gray'} bold={focus === 'extras'}>
+          <Text color={uiColor(focus === 'extras' ? 'cyan' : 'gray')} bold={focus === 'extras'}>
             Prompt extras
           </Text>
           <PickerRow

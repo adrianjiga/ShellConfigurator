@@ -1,5 +1,6 @@
 import { Box, Text, useStdout } from 'ink';
 import type React from 'react';
+import { uiColor } from '../config/colors.ts';
 import { STEP_ORDER, type WizardState, type WizardStep } from '../types.ts';
 import { PromptPreview } from './PromptPreview.tsx';
 
@@ -36,11 +37,11 @@ export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps
     <Box flexDirection="column" padding={1}>
       {/* Header */}
       <Box marginBottom={1} flexDirection="row" gap={1}>
-        <Text bold color="cyan">
+        <Text bold color={uiColor('cyan')}>
           ShellConfigurator
         </Text>
-        <Text color="gray">—</Text>
-        <Text color="gray">Starship prompt wizard</Text>
+        <Text color={uiColor('gray')}>—</Text>
+        <Text color={uiColor('gray')}>Starship prompt wizard</Text>
       </Box>
 
       {/* Progress bar */}
@@ -49,12 +50,16 @@ export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps
           const isActive = i === currentIndex;
           const isDone = i < currentIndex;
           return (
-            <Text key={step} color={isActive ? 'cyan' : isDone ? 'green' : 'gray'} bold={isActive}>
+            <Text
+              key={step}
+              color={uiColor(isActive ? 'cyan' : isDone ? 'green' : 'gray')}
+              bold={isActive}
+            >
               {isDone ? '●' : isActive ? '◉' : '○'}
             </Text>
           );
         })}
-        <Text color="gray">{` ${currentIndex + 1}. ${STEP_LABELS[state.step]}`}</Text>
+        <Text color={uiColor('gray')}>{` ${currentIndex + 1}. ${STEP_LABELS[state.step]}`}</Text>
       </Box>
 
       {/* Main content */}
@@ -64,7 +69,7 @@ export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps
           {children}
           {!hidePreview && !showPreview && (
             <Box marginTop={1}>
-              <Text color="gray" italic>
+              <Text color={uiColor('gray')} italic>
                 Preview hidden — widen the terminal to see it live.
               </Text>
             </Box>

@@ -1,5 +1,6 @@
 import { Box, Text } from 'ink';
 import React from 'react';
+import { uiColor } from '../config/colors.ts';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -32,11 +33,11 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
     return (
       <Box flexDirection="column" padding={1} gap={1}>
-        <Text bold color="red">
+        <Text bold color={uiColor('red')}>
           ShellConfigurator hit an unexpected error
         </Text>
-        <Text color="red">{error.message}</Text>
-        <Text color="gray">
+        <Text color={uiColor('red')}>{error.message}</Text>
+        <Text color={uiColor('gray')}>
           Nothing further was changed. Please re-run the wizard; if it keeps failing, report this
           with the message above.
         </Text>

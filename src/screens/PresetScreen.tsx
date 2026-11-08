@@ -1,8 +1,9 @@
 import { Box, Text, useInput } from 'ink';
-import SelectInput from 'ink-select-input';
 import { useState } from 'react';
+import { AppSelectInput } from '../components/AppSelectInput.tsx';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
+import { uiColor } from '../config/colors.ts';
 import { PRESETS } from '../config/presets.ts';
 import type { WizardState } from '../types.ts';
 
@@ -46,16 +47,16 @@ export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
     <WizardLayout state={state}>
       <Box flexDirection="column" gap={1}>
         <Text bold>Choose a starting preset</Text>
-        <Text color="gray">
+        <Text color={uiColor('gray')}>
           Select a preset theme to start from.{' '}
-          {state.hasNerdFont && <Text color="gray">★ = requires Nerd Font</Text>}
+          {state.hasNerdFont && <Text color={uiColor('gray')}>★ = requires Nerd Font</Text>}
           {!state.hasNerdFont && (
-            <Text color="yellow">Nerd Font presets hidden (no Nerd Font detected)</Text>
+            <Text color={uiColor('yellow')}>Nerd Font presets hidden (no Nerd Font detected)</Text>
           )}
         </Text>
 
         <Box marginTop={1} flexDirection="column">
-          <SelectInput
+          <AppSelectInput
             items={items}
             onSelect={handleSelect}
             onHighlight={(item) => setHighlightedId(item.value)}
@@ -65,7 +66,7 @@ export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
 
         {/* Description of highlighted preset */}
         <Box marginTop={1}>
-          <Text color="gray" italic>
+          <Text color={uiColor('gray')} italic>
             {compatible.find((p) => p.id === highlightedId)?.description}
           </Text>
         </Box>
