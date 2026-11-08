@@ -1,4 +1,5 @@
 import { Box, Text } from 'ink';
+import { uiColor } from '../config/colors.ts';
 
 interface Hint {
   key: string;
@@ -14,10 +15,10 @@ export function NavHints({ hints }: NavHintsProps) {
     <Box marginTop={1}>
       {hints.map((h) => (
         <Box key={h.key + h.label} marginRight={2}>
-          <Text bold color="cyan">
+          <Text bold color={uiColor('cyan')}>
             {h.key}
           </Text>
-          <Text color="gray"> {h.label}</Text>
+          <Text color={uiColor('gray')}> {h.label}</Text>
         </Box>
       ))}
     </Box>

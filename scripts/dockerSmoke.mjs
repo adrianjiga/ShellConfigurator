@@ -51,7 +51,7 @@ async function check(name, fn) {
 
 await check('node engine floor is met', () => {
   const major = Number(process.versions.node.split('.')[0]);
-  assert.ok(major >= 22, `node ${process.version} is below the >=22 engines floor`);
+  assert.ok(major >= 24, `node ${process.version} is below the >=24 engines floor`);
 });
 
 await check('detects the configured package manager', async () => {
@@ -159,6 +159,31 @@ await check(
   }
 );
 
+await check('generateToml emits the expanded prompt and directory options', () => {
+  const toml = generateToml({
+    ...DEFAULT_STATE,
+    preset: null,
+    leftModules: ['directory', 'character'],
+    rightModules: ['nodejs'],
+    hasNerdFont: true,
+    palette: 'vivid',
+    characterSymbol: 'lambda',
+    continuationPrompt: 'arrow',
+    addNewline: false,
+    vimMode: true,
+    directoryTruncationLength: 1,
+    directorySubstitutions: [{ from: 'projects', to: 'code' }],
+  });
+  const parsed = parse(toml);
+
+  assert.equal(parsed.palette, 'vivid');
+  assert.equal(parsed.add_newline, false);
+  assert.equal(parsed.continuation_prompt, '[❯](bright-black) ');
+  assert.equal(parsed.character?.vimcmd_symbol, '[❮](bold ok)');
+  assert.equal(parsed.directory?.truncation_length, 1);
+  assert.deepEqual(parsed.directory?.substitutions, { projects: 'code' });
+});
+
 await check('applyShellConfig writes banner + init line and is idempotent', () => {
   const rcPath = nodePath.join(homeDir, '.bashrc');
   rmSync(rcPath, { force: true });
@@ -205,7 +230,7 @@ await check('resetSharedShellConfig replaces a per-shell block with the unset gu
   const content = readFileSync(rcPath, 'utf8');
   assert.ok(content.includes('unset STARSHIP_CONFIG'), 'missing unset guard');
   assert.ok(!content.includes('export STARSHIP_CONFIG'), 'per-shell export survived reset');
-  assert.ok(!content.includes('starship init bash'), 'init line survived reset');
+  assert.ok(content.includes('starship init bash'), 'Starship init line was removed');
 });
 
 await check('applyShellConfig repairs a rc left with only a stale unset guard', () => {
@@ -262,7 +287,7 @@ await check('resetSharedShellConfig switches fish back to the shared config', ()
   const content = readFileSync(fishRc, 'utf8');
   assert.ok(content.includes('set -e STARSHIP_CONFIG'), 'missing unset guard');
   assert.ok(!content.includes('set -gx STARSHIP_CONFIG'), 'per-shell wiring survived reset');
-  assert.ok(!content.includes('starship init fish | source'), 'init line survived reset');
+  assert.ok(content.includes('starship init fish | source'), 'Starship init line was removed');
 });
 
 await check('getMissingStarshipPathDir flags ~/.local/bin when starship is unreachable', () => {

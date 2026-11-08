@@ -137,6 +137,11 @@ interface WizardState {
   characterSymbol: CharacterSymbol;
   palette: PaletteId;
   powerline: boolean;
+  continuationPrompt: ContinuationPrompt;
+  addNewline: boolean;
+  vimMode: boolean;
+  directoryTruncationLength: number; // Parent folders shown; 0 means full path
+  directorySubstitutions: DirectorySubstitution[]; // Folder-name substitutions
   selectedShells: ShellId[];
   packageManager: PackageManager;
   installedShells: ShellId[];
@@ -168,18 +173,18 @@ App (owns state)
 
 ### Which Screens Set Which State
 
-| Screen                 | Fields Updated                                                            |
-| ---------------------- | ------------------------------------------------------------------------- |
-| WelcomeScreen          | `packageManager`, `skipStarshipInstall`                                   |
-| FontCheckScreen        | `hasNerdFont`, `nerdFontToInstall`                                        |
-| FontSelectScreen       | `nerdFontToInstall`, `hasNerdFont`                                        |
-| PresetScreen           | `preset`, `leftModules`, `rightModules`, `palette`, `powerline`           |
-| SegmentsScreen (left)  | `leftModules` (live via `onUpdate`)                                       |
-| SegmentsScreen (right) | `rightModules` (live via `onUpdate`)                                      |
-| StyleScreen            | `characterSymbol`, `palette`, `powerline`                                 |
-| ShellScreen            | `selectedShells`, `installedShells`, `setDefaultShell`                    |
-| InstallingScreen       | `installResults` (final task list passed via `advanceTo('done', update)`) |
-| DoneScreen             | (reads `installResults` for status display)                               |
+| Screen                 | Fields Updated                                                                                                                                  |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| WelcomeScreen          | `packageManager`, `skipStarshipInstall`                                                                                                         |
+| FontCheckScreen        | `hasNerdFont`, `nerdFontToInstall`                                                                                                              |
+| FontSelectScreen       | `nerdFontToInstall`, `hasNerdFont`                                                                                                              |
+| PresetScreen           | `preset`, `leftModules`, `rightModules`, `palette`, `powerline`                                                                                 |
+| SegmentsScreen (left)  | `leftModules` (live via `onUpdate`)                                                                                                             |
+| SegmentsScreen (right) | `rightModules` (live via `onUpdate`)                                                                                                            |
+| StyleScreen            | `characterSymbol`, `palette`, `powerline`, `continuationPrompt`, `addNewline`, `vimMode`, `directoryTruncationLength`, `directorySubstitutions` |
+| ShellScreen            | `selectedShells`, `installedShells`, `setDefaultShell`                                                                                          |
+| InstallingScreen       | `installResults` (final task list passed via `advanceTo('done', update)`)                                                                       |
+| DoneScreen             | (reads `installResults` for status display)                                                                                                     |
 
 ### Live Preview Sync
 
@@ -229,15 +234,18 @@ src/
 ├── stepMachine.ts             Pure getNextStep/getPrevStep step navigation
 ├── types.ts                   WizardState, discriminated unions, STEP_ORDER, DEFAULT_STATE
 ├── config/
-│   ├── modules.ts             Module definitions (16 modules) — palette keying
+│   ├── modules.ts             Module definitions (31 modules) — palette keying
 │   ├── presets.ts             Preset definitions (12 presets)
 │   ├── shells.ts              Shell definitions (5 shells: binary, rc file, init line)
-│   ├── palettes.ts            Palette definitions (one `PaletteId` per preset)
+│   ├── palettes.ts            Palette definitions (14 palettes; each preset seeds one)
+│   ├── colors.ts              NO_COLOR policy: `colorsEnabled` / `uiColor`
 │   ├── status.ts              Task status → icon/colour mapping
 │   └── promptSymbols.ts       Prompt character symbol definitions
 ├── components/
 │   ├── WizardLayout.tsx       Screen wrapper + progress bar
 │   ├── PromptPreview.tsx      Live prompt panel (starship binary render)
+│   ├── PickerRow.tsx          Shared single/multi-choice row
+│   ├── AppSelectInput.tsx     ink-select-input wrapper with NO_COLOR-aware rows
 │   ├── NavHints.tsx           Keyboard hint bar
 │   └── ErrorBoundary.tsx      Border guards render errors without leaving raw mode on
 ├── screens/

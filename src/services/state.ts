@@ -1,7 +1,10 @@
-import { CORE_MODULES, type ModuleId } from '../config/modules.ts';
-import type { PaletteId } from '../config/palettes.ts';
+import { clampTruncationLength, DEFAULT_TRUNCATION_LENGTH } from '../config/directory.ts';
+import { CORE_MODULES, getModule, type ModuleId } from '../config/modules.ts';
+import { PALETTES, type PaletteId } from '../config/palettes.ts';
 import {
   type CharacterSymbol,
+  type ContinuationPrompt,
+  type DirectorySubstitution,
   type NerdFontChoice,
   NO_NERD_FONT,
   type ShellId,
@@ -32,6 +35,16 @@ export interface StateCard {
     palette: PaletteId;
     /** Interlocking coloured blocks; requires a Nerd Font to render. */
     powerline: boolean;
+    /** Marker for wrapped input lines. */
+    continuationPrompt: ContinuationPrompt;
+    /** Blank line before each prompt. */
+    addNewline: boolean;
+    /** Distinct character while the shell is in vim normal mode. */
+    vimMode: boolean;
+    /** Parent folders shown by the directory module; `0` shows the full path. */
+    directoryTruncationLength: number;
+    /** Folder renames applied to the directory path. */
+    directorySubstitutions: DirectorySubstitution[];
     selectedShells: ShellId[];
     nerdFontToInstall: NerdFontChoice;
     setDefaultShell: ShellId | null;
@@ -83,6 +96,11 @@ export function serializeState(state: WizardState): string {
       characterSymbol: state.characterSymbol,
       palette: state.palette,
       powerline: state.powerline,
+      continuationPrompt: state.continuationPrompt,
+      addNewline: state.addNewline,
+      vimMode: state.vimMode,
+      directoryTruncationLength: state.directoryTruncationLength,
+      directorySubstitutions: state.directorySubstitutions,
       selectedShells: state.selectedShells,
       nerdFontToInstall: state.nerdFontToInstall,
       setDefaultShell: state.setDefaultShell,
@@ -96,6 +114,41 @@ export function serializeState(state: WizardState): string {
 
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((v) => typeof v === 'string');
+
+function parseModuleList(value: unknown, slot: 'left' | 'right'): ModuleId[] | null {
+  if (!isStringArray(value)) return null;
+
+  const parsed = new Set<ModuleId>();
+  for (const id of value) {
+    if (id === 'character' && slot === 'left') {
+      parsed.add(id);
+    } else if (getModule(id)) {
+      parsed.add(id as ModuleId);
+    } else {
+      throw new CliUsageError(`Invalid state card: unknown module '${id}' in ${slot}Modules`);
+    }
+  }
+  return [...parsed];
+}
+
+/**
+ * Reads a card's `directory.substitutions`. Malformed entries are dropped
+ * rather than failing the whole card, matching how the other optional fields
+ * degrade; a duplicate source keeps the last entry, as TOML would.
+ */
+function parseSubstitutionList(value: unknown): DirectorySubstitution[] {
+  if (!Array.isArray(value)) return [];
+
+  const parsed = new Map<string, DirectorySubstitution>();
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const from = (entry as { from?: unknown }).from;
+    const to = (entry as { to?: unknown }).to;
+    if (typeof from !== 'string' || from.length === 0 || typeof to !== 'string') continue;
+    parsed.set(from, { from, to });
+  }
+  return [...parsed.values()];
+}
 
 /**
  * Resolves a card's `nerdFontToInstall` to a concrete choice. `none` and
@@ -151,21 +204,40 @@ export function parseState(json: string): WizardState {
   const selectedShells = isStringArray(wizard.selectedShells)
     ? (wizard.selectedShells as ShellId[])
     : [];
+  const parsedLeftModules = parseModuleList(wizard.leftModules, 'left');
+  const leftModules = parsedLeftModules?.length ? parsedLeftModules : CORE_MODULES_DEFAULT;
+  const leftModuleSet = new Set(leftModules);
+  const rightModules = (parseModuleList(wizard.rightModules, 'right') ?? []).filter(
+    (id) => !leftModuleSet.has(id)
+  );
 
   return {
     ...runtimeDefaults(),
     preset: typeof wizard.preset === 'string' ? wizard.preset : null,
-    leftModules:
-      isStringArray(wizard.leftModules) && wizard.leftModules.length > 0
-        ? (wizard.leftModules as ModuleId[])
-        : CORE_MODULES_DEFAULT,
-    rightModules: isStringArray(wizard.rightModules) ? (wizard.rightModules as ModuleId[]) : [],
+    leftModules,
+    rightModules,
     characterSymbol:
       wizard.characterSymbol === 'lambda' || wizard.characterSymbol === 'dollar'
         ? wizard.characterSymbol
         : 'arrow',
-    palette: typeof wizard.palette === 'string' ? (wizard.palette as PaletteId) : 'default',
+    palette:
+      typeof wizard.palette === 'string' &&
+      PALETTES.some((palette) => palette.id === wizard.palette)
+        ? (wizard.palette as PaletteId)
+        : 'default',
     powerline: wizard.powerline === true,
+    continuationPrompt:
+      wizard.continuationPrompt === 'arrow' || wizard.continuationPrompt === 'none'
+        ? wizard.continuationPrompt
+        : 'dot',
+    // Absent means "the starship default", which is on.
+    addNewline: wizard.addNewline !== false,
+    vimMode: wizard.vimMode === true,
+    directoryTruncationLength:
+      typeof wizard.directoryTruncationLength === 'number'
+        ? clampTruncationLength(wizard.directoryTruncationLength)
+        : DEFAULT_TRUNCATION_LENGTH,
+    directorySubstitutions: parseSubstitutionList(wizard.directorySubstitutions),
     selectedShells,
     nerdFontToInstall: parseNerdFontChoice(wizard.nerdFontToInstall),
     setDefaultShell: typeof wizard.setDefaultShell === 'string' ? wizard.setDefaultShell : null,

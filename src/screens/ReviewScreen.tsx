@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
+import { uiColor } from '../config/colors.ts';
 import { getShell } from '../config/shells.ts';
 import {
   ADOPT_MARKER,
@@ -56,7 +57,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
     <WizardLayout state={state}>
       <Box flexDirection="column" gap={1}>
         <Text bold>Review your configuration</Text>
-        <Text color="gray">
+        <Text color={uiColor('gray')}>
           {state.dryRun
             ? 'Running with --dry-run: nothing below will actually be installed or written.'
             : 'Everything below will be installed and written. Use Esc to go back and change things.'}
@@ -66,8 +67,10 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
           <Text bold>This run will</Text>
           {tasks.map((task) => (
             <Box key={task.id} flexDirection="row" gap={1} marginLeft={1}>
-              <Text color="cyan">•</Text>
-              <Text color={task.id === TASK_IDS.config ? 'green' : 'gray'}>{task.label}</Text>
+              <Text color={uiColor('cyan')}>•</Text>
+              <Text color={uiColor(task.id === TASK_IDS.config ? 'green' : 'gray')}>
+                {task.label}
+              </Text>
             </Box>
           ))}
         </Box>
@@ -82,24 +85,26 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
               // shows that file and the rc wiring — never a generated per-shell TOML.
               return (
                 <Box key={shellId} flexDirection="column" marginLeft={1}>
-                  <Text color="cyan" bold>
+                  <Text color={uiColor('cyan')} bold>
                     {getSharedConfigPath()} (shared)
                   </Text>
                   <Box marginLeft={2}>
-                    <Text color="yellow">{ADOPT_MARKER}</Text>
+                    <Text color={uiColor('yellow')}>{ADOPT_MARKER}</Text>
                   </Box>
                   {rcSnippet(shellId, true).map((line) => (
                     <Box key={line} marginLeft={2}>
-                      <Text color="yellow">{line}</Text>
+                      <Text color={uiColor('yellow')}>{line}</Text>
                     </Box>
                   ))}
                   <Box marginLeft={2}>
                     {state.sharedConfigToml ? (
-                      <Text color="gray" dimColor>
+                      <Text color={uiColor('gray')} dimColor>
                         {state.sharedConfigToml}
                       </Text>
                     ) : (
-                      <Text color="gray">The existing config above will be kept as-is.</Text>
+                      <Text color={uiColor('gray')}>
+                        The existing config above will be kept as-is.
+                      </Text>
                     )}
                   </Box>
                 </Box>
@@ -107,16 +112,16 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
             }
             return (
               <Box key={shellId} flexDirection="column" marginLeft={1}>
-                <Text color="cyan" bold>
+                <Text color={uiColor('cyan')} bold>
                   {getShellConfigPath(shellId)} ({label})
                 </Text>
                 {rcSnippet(shellId, false).map((line) => (
                   <Box key={line} marginLeft={2}>
-                    <Text color="yellow">{line}</Text>
+                    <Text color={uiColor('yellow')}>{line}</Text>
                   </Box>
                 ))}
                 <Box marginLeft={2}>
-                  <Text color="gray" dimColor>
+                  <Text color={uiColor('gray')} dimColor>
                     {generateToml(state)}
                   </Text>
                 </Box>
@@ -126,8 +131,9 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
         </Box>
 
         {fontId && (
-          <Text color="gray">
-            Nerd Font <Text color="cyan">{fontName}</Text> will be downloaded and installed.
+          <Text color={uiColor('gray')}>
+            Nerd Font <Text color={uiColor('cyan')}>{fontName}</Text> will be downloaded and
+            installed.
           </Text>
         )}
       </Box>

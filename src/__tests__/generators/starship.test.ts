@@ -20,7 +20,9 @@ const base: WizardState = {
 describe('generateToml', () => {
   it('includes format line with left modules and $fill for right modules', () => {
     const toml = generateToml(base);
-    expect(toml).toContain('format       = "$directory$git_branch$fill$cmd_duration\\n$character"');
+    expect(toml).toContain(
+      'format              = "$directory$git_branch$fill$cmd_duration\\n$character"'
+    );
   });
 
   it('uses $fill to inline right modules instead of right_format', () => {
@@ -45,9 +47,9 @@ describe('generateToml', () => {
     expect(toml).not.toContain('[fill]');
   });
 
-  it('uses nerd font symbol for git_branch when hasNerdFont is true', () => {
+  it('uses a Nerd Font branch glyph when hasNerdFont is true', () => {
     const toml = generateToml({ ...base, hasNerdFont: true });
-    expect(toml).toContain('symbol = " "');
+    expect(toml).toContain('symbol = " "');
   });
 
   it('uses text fallback for git_branch when hasNerdFont is false', () => {
@@ -55,9 +57,36 @@ describe('generateToml', () => {
     expect(toml).toContain('symbol = "on "');
   });
 
+  it('uses Nerd Font glyphs for the directory and runtime modules', () => {
+    const generated = generateToml({
+      ...base,
+      hasNerdFont: true,
+      leftModules: ['directory', 'nodejs', 'python', 'rust'],
+      rightModules: [],
+    });
+    expect(generated).toContain(
+      'format = "[ ]($style)[$path]($style)[$read_only]($read_only_style) "'
+    );
+    expect(generated).toContain('symbol   = " "');
+    expect(generated).toContain('symbol   = " "');
+    expect(generated).toContain('symbol   = " "');
+  });
+
+  it('keeps the directory Nerd Font glyph inside its powerline block', () => {
+    const generated = generateToml({
+      ...base,
+      hasNerdFont: true,
+      powerline: true,
+      leftModules: ['directory', 'character'],
+      rightModules: [],
+    });
+    expect(generated).toContain('[  $path$read_only ]($style)');
+    expect(generated.match(/^format =/gm)).toHaveLength(1);
+  });
+
   it('styles modules by palette colour name and emits the palette table', () => {
     const generated = generateToml({ ...base, palette: 'tokyo-night' });
-    expect(generated).toContain('palette      = "tokyo-night"');
+    expect(generated).toContain('palette             = "tokyo-night"');
     expect(generated).toContain('style  = "bold directory"');
     expect(generated).toContain('[palettes.tokyo-night]');
     expect(generated).toContain('directory      = "#7aa2f7"');
@@ -105,13 +134,39 @@ describe('generateToml', () => {
 
   it('falls back to $character on second line when leftModules is empty', () => {
     const toml = generateToml({ ...base, leftModules: [], rightModules: [] });
-    expect(toml).toContain('format       = "\\n$character"');
+    expect(toml).toContain('format              = "\\n$character"');
   });
 
   it.each(MODULES.map((m) => [m.id, m.label]))('generates a module block for %s (%s)', (id) => {
     const toml = generateToml({ ...base, leftModules: [id], rightModules: [] });
     expect(toml).toContain(`[${id}]`);
   });
+
+  it.each(MODULES.map((m) => m.id))(
+    'generates parseable TOML for the %s module in plain and powerline',
+    (id) => {
+      for (const powerline of [false, true]) {
+        const parsed = toml.parse(
+          generateToml({
+            ...base,
+            hasNerdFont: true,
+            powerline,
+            leftModules: [id],
+            rightModules: [],
+          })
+        ) as Record<string, unknown>;
+        expect(parsed[id], `${id} (powerline: ${powerline})`).toBeTruthy();
+      }
+    }
+  );
+
+  it.each(['status', 'os', 'shlvl', 'sudo', 'cpp'] as const)(
+    'explicitly enables %s, which starship disables by default',
+    (id) => {
+      const generated = generateToml({ ...base, leftModules: [id], rightModules: [] });
+      expect(generated).toMatch(/disabled\s*=\s*false/);
+    }
+  );
 
   it('generates a character module block', () => {
     const toml = generateToml({
@@ -168,6 +223,83 @@ describe('generateToml', () => {
     expect(parsed.format).toContain('$fill');
     expect(parsed.add_newline).toBe(true);
     expect(parsed.fill).toEqual({ symbol: ' ' });
+  });
+
+  it('emits the default continuation prompt', () => {
+    const parsed = toml.parse(generateToml(base)) as Record<string, unknown>;
+    expect(parsed.continuation_prompt).toBe('[∙](bright-black) ');
+  });
+
+  it.each([
+    ['dot', '[∙](bright-black) '],
+    ['arrow', '[❯](bright-black) '],
+    ['none', ''],
+  ] as const)('emits the %s continuation prompt', (continuationPrompt, expected) => {
+    const parsed = toml.parse(generateToml({ ...base, continuationPrompt })) as Record<
+      string,
+      unknown
+    >;
+    expect(parsed.continuation_prompt).toBe(expected);
+  });
+
+  it('can turn the blank line before the prompt off', () => {
+    const parsed = toml.parse(generateToml({ ...base, addNewline: false })) as Record<
+      string,
+      unknown
+    >;
+    expect(parsed.add_newline).toBe(false);
+  });
+
+  it('adds a vim normal-mode symbol only when vim mode is on', () => {
+    const off = generateToml({ ...base, leftModules: ['character'], vimMode: false });
+    expect(off).not.toContain('vimcmd_symbol');
+
+    const on = generateToml({ ...base, leftModules: ['character'], vimMode: true });
+    expect(on).toContain("vimcmd_symbol  = '[❮](bold ok)'");
+    expect(() => toml.parse(on)).not.toThrow();
+  });
+
+  it('emits the chosen directory truncation length', () => {
+    const parsed = toml.parse(generateToml({ ...base, directoryTruncationLength: 1 })) as {
+      directory: { truncation_length: number };
+    };
+    expect(parsed.directory.truncation_length).toBe(1);
+  });
+
+  it('emits 0 to disable truncation and show the full path', () => {
+    const parsed = toml.parse(generateToml({ ...base, directoryTruncationLength: 0 })) as {
+      directory: { truncation_length: number };
+    };
+    expect(parsed.directory.truncation_length).toBe(0);
+  });
+
+  it('omits the substitutions table when there are no substitutions', () => {
+    expect(generateToml(base)).not.toContain('[directory.substitutions]');
+  });
+
+  it('emits a substitutions table with quoted keys', () => {
+    const generated = generateToml({
+      ...base,
+      directorySubstitutions: [{ from: 'projects', to: 'code' }],
+    });
+    expect(generated).toContain('[directory.substitutions]');
+    expect(generated).toContain('"projects" = "code"');
+
+    const parsed = toml.parse(generated) as {
+      directory: { substitutions: Record<string, string> };
+    };
+    expect(parsed.directory.substitutions).toEqual({ projects: 'code' });
+  });
+
+  it('escapes quotes and backslashes in substitution keys and values', () => {
+    const generated = generateToml({
+      ...base,
+      directorySubstitutions: [{ from: 'we"ird', to: 'x\\y' }],
+    });
+    const parsed = toml.parse(generated) as {
+      directory: { substitutions: Record<string, string> };
+    };
+    expect(parsed.directory.substitutions).toEqual({ 'we"ird': 'x\\y' });
   });
 });
 
@@ -233,7 +365,7 @@ describe('powerline segments', () => {
     expect(generated).toContain('style  = "bold fg:fg bg:directory"');
   });
 
-  it('tints each left separator with the next segment’s colour', () => {
+  it('interlocks left separators using the next segment background', () => {
     const generated = generateToml(powerlineState);
     expect(generated).toContain(`[${SEPARATOR_RIGHT}](fg:directory bg:git_branch)`);
   });

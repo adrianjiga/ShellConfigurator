@@ -20,6 +20,7 @@ function lastWrittenContent(): string {
 }
 
 import * as fs from 'node:fs';
+import { getShell } from '../../config/shells.ts';
 import {
   applyShellConfig,
   backupSharedConfig,
@@ -341,6 +342,14 @@ describe('applyShellConfig', () => {
     expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
+  it('provides a Nushell setup command that Bash can parse', async () => {
+    const { execFileSync } = await import('node:child_process');
+    const command = getShell('nushell')!.initLine;
+
+    expect(command).toMatch(/^nu -c '/);
+    expect(() => execFileSync('bash', ['-n', '-c', command])).not.toThrow();
+  });
+
   it('returns manual note for powershell (no rc file)', () => {
     const result = applyShellConfig('powershell');
 
@@ -357,6 +366,15 @@ describe('applyShellConfig', () => {
     expect(result.applied).toBe(false);
     expect(result.note).toBe('already configured');
     expect(fs.writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it('does not report Nushell configured if only one autoload file exists', () => {
+    const nushell = getShell('nushell')!;
+    vi.mocked(fs.existsSync).mockImplementation((file) => file === nushell.initPath);
+
+    const result = applyShellConfig('nushell');
+
+    expect(result.note).not.toBe('already configured');
   });
 
   it('reports powershell as already configured when $PROFILE contains the init line', () => {
@@ -596,7 +614,7 @@ describe('resetSharedShellConfig', () => {
     expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
-  it('removes a stale per-shell block before adding the unset guard', () => {
+  it('removes a stale per-shell export but keeps Starship initialized on that shell', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(
       () =>
@@ -607,7 +625,7 @@ describe('resetSharedShellConfig', () => {
 
     expect(result.applied).toBe(true);
     expect(lastWrittenContent()).toBe(
-      `# Existing content\n# Added by ShellConfigurator\nunset STARSHIP_CONFIG\n`
+      `# Existing content\n# Added by ShellConfigurator\neval "$(starship init zsh)"\n\n# Added by ShellConfigurator\nunset STARSHIP_CONFIG\n`
     );
   });
 
@@ -625,7 +643,7 @@ describe('resetSharedShellConfig', () => {
     expect(result.note).toBe('already configured');
     const written = lastWrittenContent();
     expect(written).not.toContain('set -gx STARSHIP_CONFIG');
-    expect(written).not.toContain('starship init fish | source');
+    expect(written).toContain('starship init fish | source');
     expect(written).toContain('set -e STARSHIP_CONFIG');
   });
 

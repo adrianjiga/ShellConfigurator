@@ -2,6 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import { useEffect, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
+import { uiColor } from '../config/colors.ts';
 import { SHELLS } from '../config/shells.ts';
 import { detectCurrentShellAsync, detectInstalledShellsAsync } from '../services/detector.ts';
 import type { ShellId, WizardState } from '../types.ts';
@@ -116,10 +117,10 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
     <WizardLayout state={state}>
       <Box flexDirection="column" gap={1}>
         <Text bold>Select your shell(s)</Text>
-        <Text color="gray">Which shells should be configured to use Starship?</Text>
-        <Text color="gray">
-          Press <Text color="cyan">D</Text> on any selected shell to make it your login shell (runs{' '}
-          <Text color="cyan">chsh</Text>). Optional.
+        <Text color={uiColor('gray')}>Which shells should be configured to use Starship?</Text>
+        <Text color={uiColor('gray')}>
+          Press <Text color={uiColor('cyan')}>D</Text> on any selected shell to make it your login
+          shell (runs <Text color={uiColor('cyan')}>chsh</Text>). Optional.
         </Text>
 
         <Box flexDirection="column" marginTop={1}>
@@ -132,28 +133,30 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
             return (
               <Box key={shell.id} flexDirection="column">
                 <Box flexDirection="row" gap={1}>
-                  <Text color={isActive ? 'cyan' : 'gray'}>{isActive ? '›' : ' '}</Text>
-                  <Text color={isChecked ? 'green' : 'gray'}>{isChecked ? '[✓]' : '[ ]'}</Text>
-                  <Text color={isActive ? 'white' : 'gray'} bold={isActive}>
+                  <Text color={uiColor(isActive ? 'cyan' : 'gray')}>{isActive ? '›' : ' '}</Text>
+                  <Text color={uiColor(isChecked ? 'green' : 'gray')}>
+                    {isChecked ? '[✓]' : '[ ]'}
+                  </Text>
+                  <Text color={uiColor(isActive ? 'white' : 'gray')} bold={isActive}>
                     {shell.label}
                   </Text>
                   {isChecked && (
-                    <Text color={isInstalled ? 'green' : 'yellow'}>
+                    <Text color={uiColor(isInstalled ? 'green' : 'yellow')}>
                       {isInstalled ? '[installed]' : '[will install]'}
                     </Text>
                   )}
-                  {isDefault && <Text color="cyan">[will set as login shell]</Text>}
+                  {isDefault && <Text color={uiColor('cyan')}>[will set as login shell]</Text>}
                 </Box>
                 {isActive && shell.rcFile && (
                   <Box marginLeft={4}>
-                    <Text color="gray" italic>
+                    <Text color={uiColor('gray')} italic>
                       → {shell.rcFile}
                     </Text>
                   </Box>
                 )}
                 {isActive && shell.manualNote && (
                   <Box marginLeft={4}>
-                    <Text color="yellow" italic>
+                    <Text color={uiColor('yellow')} italic>
                       ⚠ Manual setup required — Starship will show a setup command after
                       installation.
                     </Text>
@@ -165,12 +168,12 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
         </Box>
 
         {installedShells === null && (
-          <Text color="yellow" italic>
+          <Text color={uiColor('yellow')} italic>
             Detecting installed shells…
           </Text>
         )}
         {selected.size === 0 && installedShells !== null && (
-          <Text color="yellow" italic>
+          <Text color={uiColor('yellow')} italic>
             Select at least one shell to continue.
           </Text>
         )}

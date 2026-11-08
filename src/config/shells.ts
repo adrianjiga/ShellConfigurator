@@ -16,6 +16,8 @@ export interface ShellDef {
    * detect that the manual setup has already been applied.
    */
   initPath?: string;
+  /** Additional files created by the manual setup, when all are required. */
+  additionalInitPaths?: string[];
   /** Renders a PATH addition in this shell's own syntax, when one is needed. */
   pathLine?: (dir: string) => string;
 }
@@ -46,15 +48,34 @@ export const SHELLS: ShellDef[] = [
     pathLine: (dir) => `fish_add_path ${dir}`,
   },
   {
-    // Three semicolon-joined steps: 1) create vendor/autoload, 2) write the
-    // STARSHIP_CONFIG export-env file, 3) write the starship init file.
+    // Executable from Bash: quote the Nushell program as a single argument to
+    // `nu -c`, escaping any embedded apostrophes for POSIX shells.
     id: 'nushell',
     binary: 'nu',
     label: 'Nushell',
     rcFile: null,
-    initLine: `mkdir ($nu.data-dir | path join "vendor/autoload"); $"export-env { $env.STARSHIP_CONFIG = '($nu.default-config-dir | path dirname | path join starship nushell.toml)' }" | save -f ($nu.data-dir | path join "vendor/autoload/starship-config.nu"); starship init nu | save -f ($nu.data-dir | path join "vendor/autoload/starship.nu")`,
-    manualNote: 'Run the above command once in Nushell to set up Starship.',
-    initPath: path.join(os.homedir(), '.local', 'share', 'nu', 'vendor', 'autoload', 'starship.nu'),
+    initLine: `nu -c ${posixShellQuote(`mkdir ($nu.data-dir | path join "vendor/autoload"); $"export-env { $env.STARSHIP_CONFIG = '($nu.default-config-dir | path dirname | path join starship nushell.toml)' }" | save -f ($nu.data-dir | path join "vendor/autoload/starship-config.nu"); starship init nu | save -f ($nu.data-dir | path join "vendor/autoload/starship.nu")`)}`,
+    manualNote: 'Run the command above from Bash (it invokes Nushell to write its autoload files).',
+    initPath: path.join(
+      os.homedir(),
+      '.local',
+      'share',
+      'nushell',
+      'vendor',
+      'autoload',
+      'starship.nu'
+    ),
+    additionalInitPaths: [
+      path.join(
+        os.homedir(),
+        '.local',
+        'share',
+        'nushell',
+        'vendor',
+        'autoload',
+        'starship-config.nu'
+      ),
+    ],
   },
   {
     id: 'powershell',
@@ -66,6 +87,10 @@ export const SHELLS: ShellDef[] = [
     initPath: path.join(os.homedir(), '.config', 'powershell', 'Microsoft.PowerShell_profile.ps1'),
   },
 ];
+
+function posixShellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
 
 export function getShell(id: ShellId): ShellDef | undefined {
   return SHELLS.find((s) => s.id === id);

@@ -104,15 +104,15 @@ different shell (e.g. bash), you may see the Starship prompt in the
 unconfigured shell. This happens because the configured parent shell exports
 `STARSHIP_CONFIG` to child processes.
 
-ShellConfigurator normally adds an `unset STARSHIP_CONFIG` guard to shells
-you chose **not** to configure, so the parent's prompt doesn't leak in. If
-you skipped a shell during the wizard, re-run it and select that shell to
-apply the guard.
+ShellConfigurator normally adds an `unset STARSHIP_CONFIG` guard to detected
+Starship-running shells you chose **not** to configure, so the parent's per-shell
+config doesn't leak in. It preserves the shell's Starship init line so it can
+continue using the shared config. Re-run the wizard to apply or repair this wiring.
 
 If the problem persists after a clean run, open the shell's RC file and check
-for a `STARSHIP_CONFIG` export that shouldn't be there. Remove any
-`# Added by ShellConfigurator` block and add `unset STARSHIP_CONFIG` (or
-`set -e STARSHIP_CONFIG` for fish) manually.
+for a `STARSHIP_CONFIG` export that shouldn't be there. Remove only that export
+(or `set -gx STARSHIP_CONFIG ...` for fish), keep the `starship init` line, and
+add `unset STARSHIP_CONFIG` (or `set -e STARSHIP_CONFIG` for fish) manually.
 
 ---
 
@@ -123,14 +123,15 @@ inject into. After the wizard completes, ShellConfigurator prints the exact
 commands you need to run in those shells. Follow the instructions on the
 **Done** screen.
 
-For Nushell, the wizard writes nothing for you — it prints a command you run
-once inside Nushell that creates the two files Nushell auto-sources at startup
+For Nushell, the wizard prints a Bash-compatible command that invokes `nu` and
+creates the two files Nushell auto-sources at startup
 (`starship-config.nu` pinning `$env.STARSHIP_CONFIG`, and `starship.nu` with the
 `starship init` output) in `$nu.data-dir/vendor/autoload` — by default
-`~/.local/share/nu/vendor/autoload/`. Verify they exist:
+`~/.local/share/nushell/vendor/autoload/`. Run it from Bash as shown, then verify
+the files exist:
 
-```nu
-ls ~/.local/share/nu/vendor/autoload/
+```bash
+ls ~/.local/share/nushell/vendor/autoload/
 ```
 
 ---

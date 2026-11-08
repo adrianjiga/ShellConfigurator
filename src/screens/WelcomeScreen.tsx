@@ -1,8 +1,9 @@
 import { Box, Text, useInput } from 'ink';
-import SelectInput from 'ink-select-input';
 import { useCallback, useEffect, useState } from 'react';
+import { AppSelectInput } from '../components/AppSelectInput.tsx';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
+import { uiColor } from '../config/colors.ts';
 import {
   detectContainerAsync,
   detectPackageManagerAsync,
@@ -117,38 +118,38 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
   return (
     <WizardLayout state={state} hidePreview>
       <Box flexDirection="column" gap={1}>
-        <Text bold color="cyan">
+        <Text bold color={uiColor('cyan')}>
           Welcome to ShellConfigurator
         </Text>
-        <Text color="gray">
+        <Text color={uiColor('gray')}>
           An interactive wizard for setting up your{' '}
-          <Text color="cyan" bold>
+          <Text color={uiColor('cyan')} bold>
             Starship
           </Text>{' '}
           cross-shell prompt.
         </Text>
-        <Text color="gray">Works with zsh, bash, fish, nushell, and powershell.</Text>
+        <Text color={uiColor('gray')}>Works with zsh, bash, fish, nushell, and powershell.</Text>
 
         <Box marginTop={1} flexDirection="column" gap={1}>
           {detection === null ? (
-            <Text color="yellow">Detecting system...</Text>
+            <Text color={uiColor('yellow')}>Detecting system...</Text>
           ) : (
             <>
               <Box flexDirection="row" gap={1}>
-                <Text color="gray">Package manager:</Text>
-                <Text color="cyan">{PM_LABELS[detection.pm]}</Text>
+                <Text color={uiColor('gray')}>Package manager:</Text>
+                <Text color={uiColor('cyan')}>{PM_LABELS[detection.pm]}</Text>
               </Box>
 
               {detection.terminal && (
                 <Box flexDirection="row" gap={1}>
-                  <Text color="gray">Terminal:</Text>
-                  <Text color="cyan">{TERMINAL_LABELS[detection.terminal]}</Text>
+                  <Text color={uiColor('gray')}>Terminal:</Text>
+                  <Text color={uiColor('cyan')}>{TERMINAL_LABELS[detection.terminal]}</Text>
                 </Box>
               )}
 
               {detection.container && (
                 <Box flexDirection="row" gap={1}>
-                  <Text color="gray">
+                  <Text color={uiColor('gray')}>
                     Container detected — font and default-shell steps will be skipped
                   </Text>
                 </Box>
@@ -156,30 +157,32 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
 
               {detection.starship.installed ? (
                 <Box flexDirection="column">
-                  <Text color="green">✓ Starship is installed</Text>
+                  <Text color={uiColor('green')}>✓ Starship is installed</Text>
                   {detection.starship.version && (
-                    <Text color="gray"> {detection.starship.version}</Text>
+                    <Text color={uiColor('gray')}> {detection.starship.version}</Text>
                   )}
                 </Box>
               ) : (
                 <Box flexDirection="column" gap={1}>
-                  <Text color="yellow">✗ Starship is not installed</Text>
+                  <Text color={uiColor('yellow')}>✗ Starship is not installed</Text>
                   {showManualHelp ? (
                     <Box flexDirection="column" gap={1}>
-                      <Text color="gray">
+                      <Text color={uiColor('gray')}>
                         Install Starship:{' '}
-                        <Text color="cyan">curl -sS https://starship.rs/install.sh | sh</Text>
+                        <Text color={uiColor('cyan')}>
+                          curl -sS https://starship.rs/install.sh | sh
+                        </Text>
                       </Text>
-                      <Text color="gray">
+                      <Text color={uiColor('gray')}>
                         Or see{' '}
-                        <Text color="cyan" underline>
+                        <Text color={uiColor('cyan')} underline>
                           https://starship.rs/guide/#step-1-install-starship
                         </Text>
                       </Text>
-                      <SelectInput items={manualItems} onSelect={handleManualChoice} />
+                      <AppSelectInput items={manualItems} onSelect={handleManualChoice} />
                     </Box>
                   ) : (
-                    <SelectInput items={installItems} onSelect={handleInstallChoice} />
+                    <AppSelectInput items={installItems} onSelect={handleInstallChoice} />
                   )}
                 </Box>
               )}

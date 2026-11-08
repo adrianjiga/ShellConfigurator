@@ -96,18 +96,22 @@ export const DEFAULT_PREVIEW_DEPS: PreviewDeps = {
     }
     return project;
   },
-  runStarshipPrompt: async (scratch, projectDir) =>
-    runCapture(
+  runStarshipPrompt: async (scratch, projectDir) => {
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      HOME: scratch,
+      PWD: projectDir,
+      STARSHIP_CONFIG: nodePath.join(scratch, STARSHIP_CONFIG_FILE),
+    };
+    // Starship formats its output for the calling shell when STARSHIP_SHELL is
+    // set (e.g. bash's literal `\[`/`\]` markers). Ink needs raw ANSI output.
+    delete env.STARSHIP_SHELL;
+    return runCapture(
       'starship',
       ['prompt', '--path', projectDir, '--terminal-width', String(PREVIEW_TERMINAL_WIDTH)],
-      {
-        env: {
-          ...process.env,
-          HOME: scratch,
-          STARSHIP_CONFIG: nodePath.join(scratch, STARSHIP_CONFIG_FILE),
-        },
-      }
-    ),
+      { env }
+    );
+  },
   cleanup: async (scratch) => {
     try {
       await rm(scratch, { recursive: true, force: true });

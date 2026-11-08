@@ -51,6 +51,25 @@ describe('PromptPreview', () => {
     expect(out).toContain('❯');
   });
 
+  it('shows Nerd Font symbols in the static preview when enabled', () => {
+    const out = frame({ hasNerdFont: true, leftModules: ['directory', 'git_branch', 'character'] });
+    expect(out).toContain('');
+    expect(out).toContain(' main');
+  });
+
+  it('reflects directory depth and substitutions in the static preview', () => {
+    expect(
+      frame({ directoryTruncationLength: 1, leftModules: ['directory', 'character'] })
+    ).toContain('…/myapp');
+    expect(
+      frame({
+        directoryTruncationLength: 0,
+        directorySubstitutions: [{ from: 'projects', to: 'code' }],
+        leftModules: ['directory', 'character'],
+      })
+    ).toContain('~/code/myapp');
+  });
+
   it('renders right modules under a right: label', () => {
     const out = frame({ leftModules: ['character'], rightModules: ['cmd_duration'] });
     expect(out).toContain('right:');
@@ -150,6 +169,30 @@ describe('PromptPreview', () => {
     );
     await settleRenderer();
     expect(renderer).toHaveBeenCalledTimes(2);
+
+    ui.rerender(
+      <PromptPreview
+        state={{ ...base, step: 'style', palette: 'vivid', directoryTruncationLength: 1 }}
+        renderPreview={renderer}
+      />
+    );
+    await settleRenderer();
+    expect(renderer).toHaveBeenCalledTimes(3);
+
+    ui.rerender(
+      <PromptPreview
+        state={{
+          ...base,
+          step: 'style',
+          palette: 'vivid',
+          directoryTruncationLength: 1,
+          directorySubstitutions: [{ from: 'projects', to: 'code' }],
+        }}
+        renderPreview={renderer}
+      />
+    );
+    await settleRenderer();
+    expect(renderer).toHaveBeenCalledTimes(4);
 
     ui.unmount();
   });

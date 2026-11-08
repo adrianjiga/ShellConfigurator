@@ -1,7 +1,8 @@
 import { Box, Text, useInput } from 'ink';
-import SelectInput from 'ink-select-input';
+import { AppSelectInput } from '../components/AppSelectInput.tsx';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
+import { uiColor } from '../config/colors.ts';
 import { getNerdFontsDir, NERD_FONTS } from '../services/installer.ts';
 import type { WizardState } from '../types.ts';
 
@@ -22,16 +23,16 @@ export function FontSelectScreen({ state, onNext, onBack }: FontSelectScreenProp
     <WizardLayout state={state}>
       <Box flexDirection="column" gap={1}>
         <Text bold>Choose a Nerd Font to install</Text>
-        <Text color="gray">
+        <Text color={uiColor('gray')}>
           The font will be downloaded from GitHub and installed to{' '}
-          <Text color="cyan">{getNerdFontsDir()}</Text>
+          <Text color={uiColor('cyan')}>{getNerdFontsDir()}</Text>
         </Text>
-        <Text color="gray" italic>
+        <Text color={uiColor('gray')} italic>
           You'll need to set this font in your terminal emulator settings after installing.
         </Text>
 
         <Box marginTop={1}>
-          <SelectInput
+          <AppSelectInput
             items={items}
             onSelect={(item) =>
               onNext({ nerdFontToInstall: { kind: 'install', id: item.value }, hasNerdFont: true })

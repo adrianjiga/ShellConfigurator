@@ -55,7 +55,7 @@ Example output for `git_branch` with a Nerd Font, on the default palette:
 ```toml
 [git_branch]
 style  = "bold git_branch"
-symbol = " "
+symbol = " "
 ```
 
 The same module under a powerline prompt, with `git_status` following it:
@@ -63,8 +63,8 @@ The same module under a powerline prompt, with `git_status` following it:
 ```toml
 [git_branch]
 style  = "bold fg:fg bg:git_branch"
-format = "([ $symbol$branch ]($style)[](fg:git_branch bg:git_status))"
-symbol = " "
+format = "([ $symbol$branch ]($style)[](fg:git_branch bg:git_status))"
+symbol = " "
 ```
 
 The surrounding `(…)` is a starship conditional group: it is dropped when every
@@ -146,7 +146,7 @@ Every config and rc write (per-shell, shared, and rc appends) goes through a
 temp-file-and-rename in the same directory, so a crash or interrupted run can
 never leave a half-written config or rc file.
 
-The shared `~/.config/starship.toml` is never touched, so a shell bootstrapped globally (or another tool) keeps working.
+Normal per-shell setup leaves the shared `~/.config/starship.toml` untouched, so a shell bootstrapped globally (or another tool) keeps working. Adopt mode is the explicit exception described below.
 
 **Adopt mode** (`keepExistingConfig`, set by `apply --adopt`/`--import-url`) is the exception to both of the above. No per-shell files are written at all; instead:
 
@@ -182,12 +182,13 @@ Two further details:
 - **PATH fix-up**: when Starship was installed via the official script and the binary landed in `~/.local/bin` (not on PATH in most environments), a PATH line in that shell's own syntax (`export PATH=...` for zsh/bash, `fish_add_path` for fish) is prepended before the init line — `getMissingStarshipPathDir()` is checked once after the install so the rc lines can repair PATH when the script install left the binary somewhere the shell won't look.
 - **Order matters**: the PATH and `STARSHIP_CONFIG` lines must come before the init line, or `starship init` cannot resolve either the binary or its config.
 
-`resetSharedShellConfig(shellId)` is the mirror image: it removes any per-shell
-block and appends `unset STARSHIP_CONFIG` (fish: `set -e STARSHIP_CONFIG`). Shells that still run
-starship but weren't given their own config use it to fall back to the shared file instead of
-inheriting a `STARSHIP_CONFIG` leaked from a configured parent shell. Both functions remove the
-other's old blocks, so "per-shell" and "shared" stay mutually exclusive no matter how many times the
-wizard is re-run.
+`resetSharedShellConfig(shellId)` removes the per-shell `STARSHIP_CONFIG` export
+and appends `unset STARSHIP_CONFIG` (fish: `set -e STARSHIP_CONFIG`) so the shell
+falls back to the shared file instead of inheriting a config leaked from a parent.
+It preserves an existing Starship init line, ensuring that an unselected shell
+still starts Starship with the shared config. Both functions remove stale opposing
+config blocks, so re-running the wizard can switch modes without losing shell
+startup wiring.
 
 **Adopt mode** reorders the three states rather than adding a fourth surface. `applyShellConfig`
 with `pointAtSharedConfig: true` still writes the `starship init` line, but omits the
@@ -225,8 +226,9 @@ the existing shared config or writes the `--import-url` fetch, and the RC tasks 
 `pointAtSharedConfig` so the shells read that shared file with no `STARSHIP_CONFIG` export. The RC step is one task per shell so
 a failure in one does not taint the others, and it is followed by a final
 best-effort pass that writes an `unset STARSHIP_CONFIG` guard into any
-Starship-running shell that wasn't selected (`resetSharedShellConfig`), so a
-configured parent's prompt never leaks into them.
+Starship-running shell that wasn't selected (`resetSharedShellConfig`). The guard
+prevents a configured parent's per-shell config from leaking into that shell;
+the existing Starship init line remains in place and uses the shared config.
 
 Choosing "Continue without Starship" sets `skipStarshipInstall`, so both the Starship task and the RC step (including the unset-guard pass) are omitted — writing `eval "$(starship init …)"` lines for a shell without Starship would error on every new shell.
 
@@ -405,7 +407,7 @@ WelcomeScreen and ShellScreen await them in `useEffect` with a `cancelled` guard
 
 ### Cross-Distro Smoke Testing
 
-The `.github/workflows/ci.yml` `distro-smoke` job runs the non-destructive parts — `detectPackageManagerAsync`, `detectInstalledShellsAsync`, `isStarshipInstalledAsync`, `generateToml` (parsed as TOML for every preset), `applyShellConfig` idempotency, the nushell manual command resolving to its per-shell config, and `applyShellConfig`/`resetSharedShellConfig` staying mutually exclusive across re-runs (stale unset guards dropped, polluted rc files repaired) — all against a scratch `HOME` inside Ubuntu, Debian, Fedora, Arch, and Alpine containers (`scripts/dockerSmoke.mjs`), plus synthetic `brew` and `script`-only entries. This exercises the detection chain against real `/etc/os-release` and package-manager layouts without a VM matrix. It caught the `which`-absence issue on Fedora that led to the `command -v` change above. Every matrix job also runs a `script` cell that chains three smokes against a scratch `HOME`: `wizard-check` (`scripts/ci/wizardSmoke.mjs`), which drives the _real_ `App` from `dist/` through the full install flow; `headlessGenerateSmoke.mjs`, which presses the real entrypoint through `generate` (stdout + `-o`/`--export`) and parses the result; and `headlessApplySmoke.mjs`, which runs `apply --dry-run` on a state card. Containers that ship an old Node get a pinned Node 22 tarball from `scripts/ci/distroSetup.sh` first, so every container runs the same engine floor.
+The `.github/workflows/ci.yml` `distro-smoke` job runs the non-destructive parts — `detectPackageManagerAsync`, `detectInstalledShellsAsync`, `isStarshipInstalledAsync`, `generateToml` (parsed as TOML for every preset), `applyShellConfig` idempotency, the Nushell setup command resolving to its per-shell config, and `applyShellConfig`/`resetSharedShellConfig` staying mutually exclusive across re-runs (stale unset guards dropped, polluted rc files repaired) — all against a scratch `HOME` inside Ubuntu, Debian, Fedora, Arch, and Alpine containers (`scripts/dockerSmoke.mjs`), plus synthetic `brew` and `script`-only entries. This exercises the detection chain against real `/etc/os-release` and package-manager layouts without a VM matrix. It caught the `which`-absence issue on Fedora that led to the `command -v` change above. Every matrix job also runs a `script` cell that chains three smokes against a scratch `HOME`: `wizard-check` (`scripts/ci/wizardSmoke.mjs`), which drives the _real_ `App` from `dist/` through the full install flow; `headlessGenerateSmoke.mjs`, which presses the real entrypoint through `generate` (stdout + `-o`/`--export`) and parses the result; and `headlessApplySmoke.mjs`, which runs `apply --dry-run` on a state card. Containers that ship an old Node get a pinned Node 24 tarball from `scripts/ci/distroSetup.sh` first, so every container meets the supported engine floor.
 
 The macOS leg of the Tests workflow (`tests.yml`) builds `dist/` and runs a headless smoke (`scripts/ci/macosSmoke.mjs`) against a scratch `HOME`: it drives the real entrypoint through `generate`/`apply --dry-run --adopt` so the darwin-only paths (brew detection, `~/Library/Fonts`) are exercised without installing or modifying the runner.
 

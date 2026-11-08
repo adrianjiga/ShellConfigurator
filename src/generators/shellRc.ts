@@ -143,7 +143,7 @@ function manualSetupApplied(shell: ShellDef): boolean {
       return false;
     }
   }
-  return true;
+  return (shell.additionalInitPaths ?? []).every((filePath) => fs.existsSync(filePath));
 }
 
 /**
@@ -373,10 +373,13 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
 
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
   // Drop any per-shell wiring an earlier "configure" run may have added.
-  const cleaned = removeShellConfiguratorBlocks(existing, [
-    starshipConfigLine(shellId)!,
-    shell.initLine,
-  ]);
+  // Keep the Starship init line: an unselected shell should use the shared
+  // config, not lose Starship entirely on its next launch.
+  const cleanedBlocks = removeShellConfiguratorBlocks(existing, [starshipConfigLine(shellId)!]);
+  const cleaned =
+    existing.includes(shell.initLine) && !cleanedBlocks.includes(shell.initLine)
+      ? `${cleanedBlocks.trimEnd()}\n${BLOCK_MARKER}\n${shell.initLine}\n`
+      : cleanedBlocks;
   const unsetLine = starshipUnsetLine(shellId)!;
 
   if (cleaned.includes(unsetLine)) {

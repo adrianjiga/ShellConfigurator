@@ -26,6 +26,10 @@ describe('FontCheckScreen', () => {
     expect(instance.lastFrame()).toContain('Nerd Font check');
     expect(instance.lastFrame()).toContain('folder icon');
     expect(instance.lastFrame()).toContain('git branch icon');
+    expect(instance.lastFrame()).toContain('');
+    expect(instance.lastFrame()).toContain('');
+    expect(instance.lastFrame()).toContain('');
+    expect(instance.lastFrame()).toContain('');
     expect(instance.lastFrame()).toContain('Yes, I already have one');
     expect(instance.lastFrame()).toContain('No, install one for me');
     expect(instance.lastFrame()).toContain('No, use text symbols only');

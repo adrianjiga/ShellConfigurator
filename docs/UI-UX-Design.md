@@ -59,7 +59,7 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 
 **Purpose**: Determine Nerd Font status.
 
-**Layout**: Shows a grid of 4 test icons that render correctly only with a Nerd Font installed. The user visually confirms whether they see icons or boxes.
+**Layout**: Shows four Nerd Font glyph samples (folder, Git branch, Node.js, and Python) in a bordered list. The user visually confirms whether they see icons or boxes.
 
 **Options**:
 
@@ -111,7 +111,7 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 
 - `›` marks the cursor position
 - Description shown only for the focused module
-- `character` module is not shown (always included automatically)
+- `character` module is not shown as a toggle; it is included automatically
 
 **Preview**: Updates in real time as modules are toggled — `useEffect` pushes every change to parent via `onUpdate`.
 
@@ -121,9 +121,9 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 
 ### 7. Style
 
-**Purpose**: Choose character symbol and color scheme.
+**Purpose**: Tune prompt symbols, palette, segment style, wrapped-line marker, prompt behavior, and directory display.
 
-**Layout**: Three sections stacked vertically — character, palette, and segment style (plain / powerline) — each with its own focus indicator:
+**Layout**: Six sections stacked vertically — character, palette, segment style (plain / powerline), wrapped-line marker, prompt extras, and directory display — each with its own focus indicator:
 
 ```
   Style options
@@ -134,20 +134,33 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
     Dollar   $
 
   Colour palette
-  › Default
-    Pastel
+  › Default   ● ● ● ● ●
+    Pastel    ● ● ● ● ●
     ...
 
   Segment style
   › Plain
     Powerline   — separators between segments
+
+  Wrapped-line marker
+  › ∙ Dot       — starship's default marker
+    ❯ Arrow     — matches the prompt character
+    None        — no marker on wrapped lines
+
+  Prompt extras
+  › [✓] Blank line before prompt
+    [ ] Vim mode symbol
+
+  Directory display
+  › Depth: 3 folders        — ←→ adjusts; 0 shows the full path
+    Substitutions: none      — Enter to edit as from=to pairs
 ```
 
-`Tab` cycles focus between sections. The focused section shows items in bold and reacts to arrows.
+`Tab` cycles focus between sections. The focused section shows items in bold and reacts to arrows; the extras section toggles its checkboxes with `Space`. The substitutions editor accepts comma-separated `from=to` pairs; Enter saves and Esc cancels.
 
 **Preview**: Updates live as selections change.
 
-**Keys**: `↑↓` navigate within focused section, `Tab` switch section, `Enter` confirm, `Esc` back
+**Keys**: `↑↓` navigate within focused section, `Space` toggle extras, `Tab` switch section, `Enter` confirm, `Esc` back
 
 ---
 
@@ -314,7 +327,7 @@ simulation below is shown instead; the scratch dir is always cleaned up afterwar
 The static fallback calls `previewSegment(hasNerdFont)` from each module definition
 to get display text:
 
-- With Nerd Font: ` main` (branch icon)
+- With Nerd Font: ` main` (branch icon; directory and runtime modules also use their glyphs)
 - Without: `on main`
 
 The live render instead shows exactly what the real binary prints for the same config,
@@ -325,11 +338,23 @@ so the two only line up where the generator and the static approximation already
 Colors come from two sources:
 
 1. **Palette colors** (from `palette`): every module is drawn in the palette entry of
-   the same name, and the prompt character in `ok`. There are twelve palettes, one
-   seeded by each preset.
+   the same name, and the prompt character in `ok`. There are fourteen palettes: one
+   seeded by each preset, plus `high-contrast` and `colorblind` for accessibility.
 2. **Powerline blocks** (from `powerline`): each segment is drawn as `fg` text on its
-   own colour as a background, followed (or preceded) by a separator tinted with its
-   neighbour's colour. The preview mirrors the generator so both show the same prompt.
+   own colour as a background; separators use the current segment as foreground and
+   the neighboring segment as background. The preview mirrors the generator.
+
+### Colour Accessibility
+
+Every colour prop in the wizard goes through `uiColor` in `config/colors.ts`. When
+`NO_COLOR` is set to a non-empty value (https://no-color.org), `uiColor` returns
+`undefined`, so Ink renders plain text. The `ink-select-input` lists use a gated
+wrapper for the same reason. Bold, dim, and the cursor markers still apply, so the
+screen keeps its hierarchy; only hue is removed. The palette swatches are hidden
+because five same-coloured dots carry no information.
+
+The generated `starship.toml` is unaffected — `NO_COLOR` governs the wizard's own
+output, not the config it writes.
 
 ### Update Behavior
 

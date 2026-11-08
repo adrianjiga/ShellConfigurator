@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useRef, useState } from 'react';
 import { WizardLayout } from '../components/WizardLayout.tsx';
+import { uiColor } from '../config/colors.ts';
 import { statusMark } from '../config/status.ts';
 import { killActiveCommand } from '../services/exec.ts';
 import {
@@ -95,12 +96,16 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
     <WizardLayout state={state} hidePreview>
       <Box flexDirection="column" gap={1}>
         <Text bold>Installing</Text>
-        <Text color="gray">This may take a moment. sudo prompts will appear in the terminal.</Text>
+        <Text color={uiColor('gray')}>
+          This may take a moment. sudo prompts will appear in the terminal.
+        </Text>
         {cancelling ? (
-          <Text color="yellow">Cancelling — waiting for the current step to stop...</Text>
+          <Text color={uiColor('yellow')}>
+            Cancelling — waiting for the current step to stop...
+          </Text>
         ) : (
-          <Text color="gray">
-            Press <Text color="cyan">c</Text> to cancel.
+          <Text color={uiColor('gray')}>
+            Press <Text color={uiColor('cyan')}>c</Text> to cancel.
           </Text>
         )}
 
@@ -108,9 +113,13 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
           {tasks.map((task) => (
             <Box key={task.id} flexDirection="column">
               <Box flexDirection="row" gap={1}>
-                <Text color={statusMark(task.status).color}>[{statusMark(task.status).icon}]</Text>
+                <Text color={uiColor(statusMark(task.status).color)}>
+                  [{statusMark(task.status).icon}]
+                </Text>
                 <Text
-                  color={task.status === 'running' ? 'white' : statusMark(task.status).color}
+                  color={uiColor(
+                    task.status === 'running' ? 'white' : statusMark(task.status).color
+                  )}
                   bold={task.status === 'running'}
                 >
                   {task.label}
@@ -118,14 +127,14 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
               </Box>
               {task.error && (
                 <Box marginLeft={4}>
-                  <Text color="red" italic>
+                  <Text color={uiColor('red')} italic>
                     {task.error}
                   </Text>
                 </Box>
               )}
               {task.note && !task.error && (
                 <Box marginLeft={4}>
-                  <Text color="gray" italic>
+                  <Text color={uiColor('gray')} italic>
                     {task.note}
                   </Text>
                 </Box>
@@ -136,7 +145,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
         {allDone && (
           <Box marginTop={1}>
-            <Text color="green">All done — continuing...</Text>
+            <Text color={uiColor('green')}>All done — continuing...</Text>
           </Box>
         )}
       </Box>

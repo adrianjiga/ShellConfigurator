@@ -6,7 +6,19 @@ import { DEFAULT_STATE } from '../../types.ts';
 import { pressEsc } from '../helpers/ink.ts';
 import { flush } from '../helpers/wait.ts';
 
-afterEach(cleanup);
+const savedNoColor = process.env.NO_COLOR;
+
+afterEach(() => {
+  cleanup();
+  if (savedNoColor === undefined) delete process.env.NO_COLOR;
+  else process.env.NO_COLOR = savedNoColor;
+});
+
+/** The directory fields every live update and confirmation carries. */
+const DIRECTORY_DEFAULTS = {
+  directoryTruncationLength: 3,
+  directorySubstitutions: [],
+};
 
 function setup(overrides = {}) {
   const state = { ...DEFAULT_STATE, ...overrides };
@@ -20,13 +32,17 @@ function setup(overrides = {}) {
 }
 
 describe('StyleScreen', () => {
-  it('renders the character, palette, and segment style sections', async () => {
+  it('renders the character, palette, segment style, and extras sections', async () => {
     const { instance } = setup();
     await flush();
     expect(instance.lastFrame()).toContain('Prompt character');
     expect(instance.lastFrame()).toContain('Colour palette');
     expect(instance.lastFrame()).toContain('Segment style');
+    expect(instance.lastFrame()).toContain('Wrapped-line marker');
+    expect(instance.lastFrame()).toContain('Prompt extras');
     expect(instance.lastFrame()).toContain('❯ Arrow');
+    expect(instance.lastFrame()).toContain('Blank line before prompt');
+    expect(instance.lastFrame()).toContain('Vim mode symbol');
   });
 
   it('lists every palette, so each preset has one of its own', async () => {
@@ -54,6 +70,10 @@ describe('StyleScreen', () => {
       characterSymbol: 'lambda',
       palette: 'default',
       powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
+      ...DIRECTORY_DEFAULTS,
     });
   });
 
@@ -70,6 +90,10 @@ describe('StyleScreen', () => {
       characterSymbol: 'arrow',
       palette: 'vivid',
       powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
+      ...DIRECTORY_DEFAULTS,
     });
   });
 
@@ -88,6 +112,10 @@ describe('StyleScreen', () => {
       characterSymbol: 'arrow',
       palette: 'default',
       powerline: true,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
+      ...DIRECTORY_DEFAULTS,
     });
   });
 
@@ -114,19 +142,21 @@ describe('StyleScreen', () => {
       characterSymbol: 'lambda',
       palette: 'vivid',
       powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
+      ...DIRECTORY_DEFAULTS,
     });
   });
 
-  it('wraps focus back to the character section on a third Tab', async () => {
+  it('wraps focus back to the character section after the last Tab', async () => {
     const { instance, onUpdate } = setup();
     await flush();
 
-    instance.stdin.write('\t'); // char → palette
-    await flush();
-    instance.stdin.write('\t'); // palette → powerline
-    await flush();
-    instance.stdin.write('\t'); // powerline → char
-    await flush();
+    for (let i = 0; i < 6; i++) {
+      instance.stdin.write('\t');
+      await flush();
+    }
     instance.stdin.write('\u001B[B'); // arrow → lambda
     await flush();
 
@@ -134,6 +164,10 @@ describe('StyleScreen', () => {
       characterSymbol: 'lambda',
       palette: 'default',
       powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
+      ...DIRECTORY_DEFAULTS,
     });
   });
 
@@ -153,6 +187,10 @@ describe('StyleScreen', () => {
       characterSymbol: 'dollar',
       palette: 'default',
       powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
+      ...DIRECTORY_DEFAULTS,
     });
 
     instance.stdin.write('\u001B[B'); // dollar is already last; stays there
@@ -180,6 +218,10 @@ describe('StyleScreen', () => {
       characterSymbol: 'arrow',
       palette: last.id,
       powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
+      ...DIRECTORY_DEFAULTS,
     });
 
     instance.stdin.write('\u001B[B'); // last palette; stays there
@@ -208,6 +250,10 @@ describe('StyleScreen', () => {
       characterSymbol: 'arrow',
       palette: 'default',
       powerline: true,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
+      ...DIRECTORY_DEFAULTS,
     });
 
     instance.stdin.write('\u001B[A'); // powerline → plain
@@ -216,7 +262,347 @@ describe('StyleScreen', () => {
       characterSymbol: 'arrow',
       palette: 'default',
       powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
+      ...DIRECTORY_DEFAULTS,
     });
+  });
+
+  it('changes the wrapped-line marker on a third Tab and pushes a live update', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+
+    instance.stdin.write('\t'); // → palette
+    await flush();
+    instance.stdin.write('\t'); // → segment style
+    await flush();
+    instance.stdin.write('\t'); // → wrapped-line marker
+    await flush();
+    instance.stdin.write('\u001B[B'); // dot → arrow
+    await flush();
+
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'arrow',
+      addNewline: true,
+      vimMode: false,
+      ...DIRECTORY_DEFAULTS,
+    });
+  });
+
+  it('clamps the wrapped-line marker at both ends', async () => {
+    const { instance, onUpdate } = setup({ continuationPrompt: 'none' });
+    await flush();
+
+    for (let i = 0; i < 3; i++) {
+      instance.stdin.write('\t'); // → wrapped-line marker
+      await flush();
+    }
+
+    instance.stdin.write('\u001B[B'); // none is already last; stays there
+    await flush();
+    expect(onUpdate).not.toHaveBeenCalled();
+
+    instance.stdin.write('\u001B[A'); // none → arrow
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'arrow',
+      addNewline: true,
+      vimMode: false,
+      ...DIRECTORY_DEFAULTS,
+    });
+  });
+
+  it('toggles the blank line and vim mode in the extras section', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+
+    for (let i = 0; i < 4; i++) {
+      instance.stdin.write('\t'); // → prompt extras
+      await flush();
+    }
+
+    instance.stdin.write(' '); // blank line on → off
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: false,
+      vimMode: false,
+      ...DIRECTORY_DEFAULTS,
+    });
+
+    instance.stdin.write('\u001B[B'); // move to vim mode
+    await flush();
+    instance.stdin.write(' '); // vim mode off → on
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: false,
+      vimMode: true,
+      ...DIRECTORY_DEFAULTS,
+    });
+  });
+
+  it('clamps the extras cursor at both ends', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+
+    for (let i = 0; i < 4; i++) {
+      instance.stdin.write('\t'); // → prompt extras
+      await flush();
+    }
+
+    instance.stdin.write('\u001B[A'); // first row; stays there
+    await flush();
+    instance.stdin.write(' '); // toggles addNewline
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: false,
+      vimMode: false,
+      ...DIRECTORY_DEFAULTS,
+    });
+
+    instance.stdin.write('\u001B[B');
+    await flush();
+    instance.stdin.write('\u001B[B'); // last row; stays there
+    await flush();
+    instance.stdin.write(' '); // toggles vimMode, not addNewline again
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: false,
+      vimMode: true,
+      ...DIRECTORY_DEFAULTS,
+    });
+  });
+
+  it('confirms the style extras with Enter', async () => {
+    const { instance, onNext } = setup();
+    await flush();
+
+    for (let i = 0; i < 4; i++) {
+      instance.stdin.write('\t'); // → prompt extras
+      await flush();
+    }
+    instance.stdin.write(' ');
+    await flush();
+    instance.stdin.write('\r');
+    await flush();
+
+    expect(onNext).toHaveBeenCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: false,
+      vimMode: false,
+      ...DIRECTORY_DEFAULTS,
+    });
+  });
+
+  it('reaches the directory section and adjusts the truncation depth', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+
+    for (let i = 0; i < 5; i++) {
+      instance.stdin.write('\t'); // → directory display
+      await flush();
+    }
+    expect(instance.lastFrame()).toContain('Directory display');
+    expect(instance.lastFrame()).toContain('Depth: 3 folders');
+
+    instance.stdin.write('\u001B[D'); // 3 → 2
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
+      directoryTruncationLength: 2,
+      directorySubstitutions: [],
+    });
+  });
+
+  it('clamps the truncation depth at the full path and the maximum', async () => {
+    const { instance, onUpdate } = setup({ directoryTruncationLength: 0 });
+    await flush();
+
+    for (let i = 0; i < 5; i++) {
+      instance.stdin.write('\t'); // → directory display
+      await flush();
+    }
+    expect(instance.lastFrame()).toContain('Depth: Full path');
+
+    instance.stdin.write('\u001B[D'); // already 0; stays there
+    await flush();
+    expect(onUpdate).not.toHaveBeenCalled();
+
+    instance.stdin.write('\u001B[C'); // 0 → 1
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ directoryTruncationLength: 1 })
+    );
+
+    const { instance: maxInstance, onUpdate: maxUpdate } = setup({
+      directoryTruncationLength: 5,
+    });
+    await flush();
+    for (let i = 0; i < 5; i++) {
+      maxInstance.stdin.write('\t');
+      await flush();
+    }
+    expect(maxInstance.lastFrame()).toContain('Depth: 5 folders');
+
+    maxInstance.stdin.write('\u001B[C'); // already 5; stays there
+    await flush();
+    expect(maxUpdate).not.toHaveBeenCalled();
+  });
+
+  it('edits directory substitutions and confirms them with Enter', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+
+    for (let i = 0; i < 5; i++) {
+      instance.stdin.write('\t'); // → directory display
+      await flush();
+    }
+    instance.stdin.write('\u001B[B'); // depth row → substitutions row
+    await flush();
+    instance.stdin.write('\r'); // open the editor
+    await flush();
+    expect(instance.lastFrame()).toContain('Enter saves');
+
+    for (const char of 'projects=code') {
+      instance.stdin.write(char);
+      await flush();
+    }
+    instance.stdin.write('\r'); // save
+    await flush();
+
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
+      directoryTruncationLength: 3,
+      directorySubstitutions: [{ from: 'projects', to: 'code' }],
+    });
+    expect(instance.lastFrame()).toContain('Substitutions: projects=code');
+  });
+
+  it('keeps the substitutions editor open and shows an error on malformed input', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+
+    for (let i = 0; i < 5; i++) {
+      instance.stdin.write('\t');
+      await flush();
+    }
+    instance.stdin.write('\u001B[B');
+    await flush();
+    instance.stdin.write('\r');
+    await flush();
+
+    for (const char of 'broken') {
+      instance.stdin.write(char);
+      await flush();
+    }
+    instance.stdin.write('\r'); // save fails
+    await flush();
+
+    expect(instance.lastFrame()).toContain('Missing \'=\' in "broken"');
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it('cancels the substitutions editor with Escape', async () => {
+    const { instance, onUpdate, onBack } = setup();
+    await flush();
+
+    for (let i = 0; i < 5; i++) {
+      instance.stdin.write('\t');
+      await flush();
+    }
+    instance.stdin.write('\u001B[B');
+    await flush();
+    instance.stdin.write('\r');
+    await flush();
+
+    instance.stdin.write('x');
+    await flush();
+    await pressEsc(instance.stdin);
+
+    expect(onBack).not.toHaveBeenCalled();
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(instance.lastFrame()).not.toContain('Enter saves');
+  });
+
+  it('confirms the directory settings with Enter', async () => {
+    const { instance, onNext } = setup({
+      directoryTruncationLength: 1,
+      directorySubstitutions: [{ from: 'src', to: 'source' }],
+    });
+    await flush();
+
+    instance.stdin.write('\r');
+    await flush();
+
+    expect(onNext).toHaveBeenCalledWith({
+      characterSymbol: 'arrow',
+      palette: 'default',
+      powerline: false,
+      continuationPrompt: 'dot',
+      addNewline: true,
+      vimMode: false,
+      directoryTruncationLength: 1,
+      directorySubstitutions: [{ from: 'src', to: 'source' }],
+    });
+  });
+
+  it('shows a swatch of each palette’s own colours when colour is on', async () => {
+    delete process.env.NO_COLOR;
+    const { instance } = setup();
+    await flush();
+
+    const paletteLine = (instance.lastFrame() ?? '')
+      .split('\n')
+      .find((line) => line.includes('Default'));
+    expect(paletteLine).toBeDefined();
+    expect(paletteLine!).toContain('●');
+  });
+
+  it('hides the palette swatches but keeps the names when NO_COLOR is set', async () => {
+    process.env.NO_COLOR = '1';
+    const { instance } = setup();
+    await flush();
+
+    const paletteLine = (instance.lastFrame() ?? '')
+      .split('\n')
+      .find((line) => line.includes('Default'));
+    expect(paletteLine).toBeDefined();
+    expect(paletteLine!).not.toContain('●');
   });
 
   it('calls onBack on Escape', async () => {

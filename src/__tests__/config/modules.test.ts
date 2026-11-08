@@ -16,11 +16,23 @@ describe('MODULES', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it('covers the phase 3 module library (at least 28 placeable modules)', () => {
+    expect(MODULES.length).toBeGreaterThanOrEqual(28);
+  });
+
   it('previewSegment returns a non-empty string', () => {
     for (const mod of MODULES) {
       expect(mod.previewSegment(true), `${mod.id} nerd font preview empty`).toBeTruthy();
       expect(mod.previewSegment(false), `${mod.id} text preview empty`).toBeTruthy();
     }
+  });
+
+  it('previews Nerd Font icons for the modules that provide them', () => {
+    expect(getModule('git_branch')?.previewSegment(true)).toContain('');
+    expect(getModule('nodejs')?.previewSegment(true)).toContain('');
+    expect(getModule('python')?.previewSegment(true)).toContain('');
+    expect(getModule('rust')?.previewSegment(true)).toContain('');
+    expect(getModule('git_branch')?.previewSegment(false)).toContain('on ');
   });
 });
 
