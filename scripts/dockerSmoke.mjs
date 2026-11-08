@@ -159,6 +159,31 @@ await check(
   }
 );
 
+await check('generateToml emits the expanded prompt and directory options', () => {
+  const toml = generateToml({
+    ...DEFAULT_STATE,
+    preset: null,
+    leftModules: ['directory', 'character'],
+    rightModules: ['nodejs'],
+    hasNerdFont: true,
+    palette: 'vivid',
+    characterSymbol: 'lambda',
+    continuationPrompt: 'arrow',
+    addNewline: false,
+    vimMode: true,
+    directoryTruncationLength: 1,
+    directorySubstitutions: [{ from: 'projects', to: 'code' }],
+  });
+  const parsed = parse(toml);
+
+  assert.equal(parsed.palette, 'vivid');
+  assert.equal(parsed.add_newline, false);
+  assert.equal(parsed.continuation_prompt, '[❯](bright-black) ');
+  assert.equal(parsed.character?.vimcmd_symbol, '[❮](bold ok)');
+  assert.equal(parsed.directory?.truncation_length, 1);
+  assert.deepEqual(parsed.directory?.substitutions, { projects: 'code' });
+});
+
 await check('applyShellConfig writes banner + init line and is idempotent', () => {
   const rcPath = nodePath.join(homeDir, '.bashrc');
   rmSync(rcPath, { force: true });
