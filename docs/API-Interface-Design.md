@@ -260,7 +260,7 @@ interface ShellDef {
 | bash       | `~/.bashrc`                  | `eval "$(starship init bash)"`                            |
 | fish       | `~/.config/fish/config.fish` | `starship init fish \| source`                            |
 | nushell    | `null` (manual)              | `nu -c '<quoted Nushell setup script>'` (Bash-compatible) |
-| powershell | `null` (manual)              | `Invoke-Expression (&starship init powershell)`           |
+| powershell | `null` (manual)              | `$env:STARSHIP_CONFIG = Join-Path $HOME ".config/starship/powershell.toml"; Invoke-Expression (&starship init powershell)` |
 
 Shells with `rcFile: null` are not wired through an RC file. Instead, `manualNote`
 and the setup command are displayed on DoneScreen. Nushell's command can be run

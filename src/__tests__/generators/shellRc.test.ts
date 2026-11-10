@@ -411,6 +411,14 @@ describe('applyShellConfig', () => {
     expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
+  it('pins STARSHIP_CONFIG to the per-shell config in the powershell init line', () => {
+    const line = getShell('powershell')!.initLine;
+
+    expect(line).toContain('$env:STARSHIP_CONFIG =');
+    expect(line).toContain('starship/powershell.toml');
+    expect(line).toContain('Invoke-Expression (&starship init powershell)');
+  });
+
   it('reports nushell as already configured when its autoload file exists', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
 
@@ -432,9 +440,7 @@ describe('applyShellConfig', () => {
 
   it('reports powershell as already configured when $PROFILE contains the init line', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockImplementation(
-      () => 'Invoke-Expression (&starship init powershell)\n'
-    );
+    vi.mocked(fs.readFileSync).mockImplementation(() => `${getShell('powershell')!.initLine}\n`);
 
     const result = applyShellConfig('powershell');
 
