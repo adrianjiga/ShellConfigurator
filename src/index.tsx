@@ -128,6 +128,11 @@ doctor options (read-only; exits non-zero when a check fails):
   --state <file>       Check the setup described by a saved state card
   --json               Print the report as JSON instead of the text summary
   --fix                Apply the available repairs, then re-check (like 'repair')
+
+repair options (fixes the failing checks; exits non-zero when one still fails):
+  --state <file>       Repair the setup described by a saved state card
+  --dry-run            Print the fixes it would apply; change nothing
+  --json               Print the report as JSON instead of the text summary
 `);
 }
 
@@ -194,7 +199,7 @@ export async function runDoctorCommand(flags: CliFlags): Promise<void> {
 /** Runs the doctor's fixes, then re-checks; a still-failing check exits non-zero. */
 export async function runRepairCommand(flags: CliFlags): Promise<void> {
   const state = flags.stateFile ? stateFromFlags(flags) : null;
-  const report = await runRepair(state);
+  const report = await runRepair(state, undefined, { dryRun: flags.dryRun });
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {

@@ -12,7 +12,7 @@ import { errorMessage } from './errors.ts';
 import { fontLabel, installNerdFont, installStarship } from './installer.ts';
 import { type TerminalFontResult, terminalLabel, wireTerminalFont } from './terminalFont.ts';
 
-export type RepairStatus = 'fixed' | 'failed' | 'skipped';
+export type RepairStatus = 'fixed' | 'failed' | 'skipped' | 'planned';
 
 export interface RepairAction {
   findingId: string;
@@ -27,6 +27,13 @@ export interface RepairReport {
   actions: RepairAction[];
   /** Mirrors the post-repair doctor report: only false when a check still fails. */
   ok: boolean;
+  /** True when the fixes were only planned, not applied. */
+  dryRun: boolean;
+}
+
+export interface RepairOptions {
+  /** Plan the fixes without applying anything; the after-report is skipped. */
+  dryRun?: boolean;
 }
 
 export interface RepairDeps {
@@ -52,6 +59,20 @@ export const DEFAULT_REPAIR_DEPS: RepairDeps = {
   wireTerminalFont,
   detectPackageManager: () => detectPackageManagerAsync(),
 };
+
+/** What a fix would do — the dry-run counterpart of actually applying it. */
+function describeFix(fix: DoctorFix): string {
+  switch (fix.kind) {
+    case 'reinstall-starship':
+      return 'reinstall Starship via the detected package manager';
+    case 'configure-shell':
+      return `add the starship init line to ${fix.shellId}`;
+    case 'reinstall-font':
+      return `reinstall ${fontLabel(fix.fontId)}`;
+    case 'wire-font':
+      return `set the ${terminalLabel(fix.terminalId)} font to "${fix.family}"`;
+  }
+}
 
 async function applyFix(
   fix: DoctorFix,
@@ -89,20 +110,33 @@ async function applyFix(
 }
 
 /**
- * Runs the doctor, applies every finding that carries a fix, then runs the
- * doctor again so the caller reports the *result*, not the intent. Each fix is
- * attempted independently: one failure does not stop the others.
+ * Runs the doctor, applies the fix for every failing check that carries one,
+ * then runs the doctor again so the caller reports the *result*, not the
+ * intent. Warnings are left alone — they describe states the user may have
+ * chosen. Each fix is attempted independently: one failure does not stop the
+ * others. With `dryRun` nothing is applied and the planned actions are
+ * reported against the unchanged before-report.
  */
 export async function runRepair(
   state: WizardState | null,
-  deps: RepairDeps = DEFAULT_REPAIR_DEPS
+  deps: RepairDeps = DEFAULT_REPAIR_DEPS,
+  options: RepairOptions = {}
 ): Promise<RepairReport> {
   const before = await deps.runDoctor(state);
   const pointAtShared = state?.keepExistingConfig ?? null;
   const actions: RepairAction[] = [];
 
   for (const finding of before.findings) {
-    if (!finding.fix) continue;
+    if (finding.status !== 'fail' || !finding.fix) continue;
+    if (options.dryRun) {
+      actions.push({
+        findingId: finding.id,
+        title: finding.title,
+        status: 'planned',
+        detail: describeFix(finding.fix),
+      });
+      continue;
+    }
     try {
       const { detail, status } = await applyFix(finding.fix, pointAtShared, deps);
       actions.push({ findingId: finding.id, title: finding.title, status, detail });
@@ -116,13 +150,16 @@ export async function runRepair(
     }
   }
 
-  const after = await deps.runDoctor(state);
-  return { before, after, actions, ok: after.ok };
+  const after = options.dryRun ? before : await deps.runDoctor(state);
+  return { before, after, actions, ok: after.ok, dryRun: options.dryRun ?? false };
 }
 
 /** Human-readable repair report; `--json` serializes the report directly. */
 export function formatRepairReport(report: RepairReport): string {
-  const lines = ['Starship repair', ''];
+  const lines = [
+    report.dryRun ? 'Starship repair (dry run — nothing was applied)' : 'Starship repair',
+    '',
+  ];
   if (report.actions.length === 0) {
     lines.push('Nothing to repair.');
   } else {
@@ -130,6 +167,8 @@ export function formatRepairReport(report: RepairReport): string {
       lines.push(`${action.status.toUpperCase().padEnd(7)} ${action.title} — ${action.detail}`);
     }
   }
-  lines.push('', 'After repair:', '', formatDoctorReport(report.after).trimEnd());
+  if (!report.dryRun) {
+    lines.push('', 'After repair:', '', formatDoctorReport(report.after).trimEnd());
+  }
   return `${lines.join('\n')}\n`;
 }

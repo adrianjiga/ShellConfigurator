@@ -473,7 +473,7 @@ describe('index headless routing', () => {
     const routed = await route(['repair']);
 
     expect(routed).toBe(true);
-    expect(mockRunRepair).toHaveBeenCalledWith(null);
+    expect(mockRunRepair).toHaveBeenCalledWith(null, undefined, { dryRun: undefined });
     expect(stdoutWrite).toHaveBeenCalledWith('REPAIRED\n');
     expect(mockRunDoctor).not.toHaveBeenCalled();
   });
@@ -485,8 +485,19 @@ describe('index headless routing', () => {
     const routed = await route(['doctor', '--fix']);
 
     expect(routed).toBe(true);
-    expect(mockRunRepair).toHaveBeenCalledWith(null);
+    expect(mockRunRepair).toHaveBeenCalledWith(null, undefined, { dryRun: undefined });
     expect(mockRunDoctor).not.toHaveBeenCalled();
+  });
+
+  it('passes --dry-run through to repair so nothing is applied', async () => {
+    mockRunRepair.mockResolvedValue({ ok: true, actions: [], dryRun: true });
+    mockFormatRepairReport.mockReturnValue('PLANNED\n');
+
+    const routed = await route(['repair', '--dry-run']);
+
+    expect(routed).toBe(true);
+    expect(mockRunRepair).toHaveBeenCalledWith(null, undefined, { dryRun: true });
+    expect(stdoutWrite).toHaveBeenCalledWith('PLANNED\n');
   });
 
   it('sets a non-zero exit code when a repair still fails a check', async () => {

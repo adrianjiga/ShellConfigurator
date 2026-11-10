@@ -43,6 +43,35 @@ describe('runRepair', () => {
     expect(deps.applyShellConfig).not.toHaveBeenCalled();
   });
 
+  it('leaves warnings alone even when they carry a fix', async () => {
+    const deps = makeDeps(
+      report([
+        {
+          id: 'a',
+          title: 'A',
+          status: 'warn',
+          detail: 'maybe',
+          fix: { kind: 'reinstall-starship' },
+        },
+      ])
+    );
+    const result = await runRepair(null, deps);
+    expect(result.actions).toEqual([]);
+    expect(deps.applyShellConfig).not.toHaveBeenCalled();
+    expect(deps.installStarship).not.toHaveBeenCalled();
+  });
+
+  it('plans fixes without applying them in dry-run', async () => {
+    const before = report([finding({ kind: 'configure-shell', shellId: 'zsh' })]);
+    const deps = makeDeps(before);
+    const result = await runRepair(null, deps, { dryRun: true });
+    expect(result.actions[0]).toMatchObject({ status: 'planned', detail: expect.any(String) });
+    expect(deps.applyShellConfig).not.toHaveBeenCalled();
+    expect(result.after).toBe(before);
+    expect(result.dryRun).toBe(true);
+    expect(deps.runDoctor).toHaveBeenCalledOnce();
+  });
+
   it('re-adds the init line for a shell', async () => {
     const deps = makeDeps(report([finding({ kind: 'configure-shell', shellId: 'zsh' })]));
     const result = await runRepair(null, deps);
@@ -165,6 +194,7 @@ describe('formatRepairReport', () => {
       after: report([{ id: 'a', title: 'Starship', status: 'pass', detail: 'starship 1.20' }]),
       actions: [{ findingId: 'x', title: 'Zsh', status: 'fixed', detail: 'rewired' }],
       ok: true,
+      dryRun: false,
     });
     expect(text).toContain('FIXED   Zsh — rewired');
     expect(text).toContain('After repair:');
@@ -177,7 +207,21 @@ describe('formatRepairReport', () => {
       after: report([]),
       actions: [],
       ok: true,
+      dryRun: false,
     });
     expect(text).toContain('Nothing to repair.');
+  });
+
+  it('labels a dry run and skips the post-repair report', () => {
+    const text = formatRepairReport({
+      before: report([]),
+      after: report([]),
+      actions: [{ findingId: 'x', title: 'Zsh', status: 'planned', detail: 'rewire zsh' }],
+      ok: false,
+      dryRun: true,
+    });
+    expect(text).toContain('dry run — nothing was applied');
+    expect(text).toContain('PLANNED Zsh — rewire zsh');
+    expect(text).not.toContain('After repair:');
   });
 });
