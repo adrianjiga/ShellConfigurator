@@ -192,6 +192,41 @@ describe('runDoctor', () => {
     expect(report.findings.some((f) => f.id === 'shell:bash')).toBe(true);
   });
 
+  it('reads the wiring mode from the rc instead of assuming per-shell', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `${ZSH_INIT}\n`);
+    files.set(getSharedConfigPath(), 'add_newline = true\n');
+    const report = await runDoctor(null, makeDeps(files));
+    expect(find(report, 'shell:zsh')).toMatchObject({ status: 'pass' });
+    expect(find(report, 'shell:zsh').detail).toContain(getSharedConfigPath());
+    expect(find(report, 'config').status).toBe('pass');
+  });
+
+  it('checks the per-shell config when the rc carries the per-shell export', async () => {
+    const report = await runDoctor(null, makeDeps(wired(new Map())));
+    expect(find(report, 'shell:zsh').status).toBe('pass');
+    expect(find(report, 'shell:zsh').detail).toContain(ZSH_CONFIG);
+  });
+
+  it('warns instead of failing when inferred shared wiring has no shared config', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `${ZSH_INIT}\n`);
+    const report = await runDoctor(null, makeDeps(files));
+    expect(find(report, 'shell:zsh')).toMatchObject({ status: 'warn' });
+    expect(find(report, 'shell:zsh').detail).toMatch(/no shared config/);
+    expect(find(report, 'shell:zsh').fix).toBeUndefined();
+    expect(report.ok).toBe(true);
+  });
+
+  it('passes a shell that sets its own STARSHIP_CONFIG', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `${ZSH_INIT}\nexport STARSHIP_CONFIG="$HOME/.config/my/starship.toml"\n`);
+    const report = await runDoctor(null, makeDeps(files));
+    expect(find(report, 'shell:zsh')).toMatchObject({ status: 'pass' });
+    expect(find(report, 'shell:zsh').detail).toMatch(/sets its own STARSHIP_CONFIG/);
+    expect(report.ok).toBe(true);
+  });
+
   it('passes version drift when nothing was recorded yet', async () => {
     const deps = makeDeps(wired(new Map()));
     const report = await runDoctor(baseState(), deps);

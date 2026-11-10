@@ -78,6 +78,29 @@ export const DEFAULT_DOCTOR_DEPS: DoctorDeps = {
   env: process.env,
 };
 
+/**
+ * Wiring mode for one shell when no state card is given: read from the rc
+ * itself. A per-shell STARSHIP_CONFIG export the tool wrote means per-shell
+ * mode; anything else (an adopt block, a bare init line, a user-managed setup)
+ * reads the shared config. Shells without a script rc file are wired
+ * per-shell by their manual setup, so they stay per-shell.
+ */
+export function shellPointsAtShared(
+  shellId: ShellId,
+  deps: Pick<DoctorDeps, 'exists' | 'readFile'> = DEFAULT_DOCTOR_DEPS
+): boolean {
+  const configLine = starshipConfigLine(shellId);
+  const rcFile = getShell(shellId)?.rcFile;
+  if (!configLine || !rcFile) return false;
+  const content = deps.exists(rcFile) ? deps.readFile(rcFile) : '';
+  return !content.includes(configLine);
+}
+
+/** True when the rc sets STARSHIP_CONFIG itself — a user-managed wiring. */
+function setsOwnConfig(content: string): boolean {
+  return content.includes('STARSHIP_CONFIG=') || content.includes('set -gx STARSHIP_CONFIG ');
+}
+
 async function checkStarship(deps: DoctorDeps): Promise<DoctorFinding> {
   const { installed, version } = await deps.isStarshipInstalled();
   return installed
@@ -189,9 +212,15 @@ function checkLocale(deps: DoctorDeps): DoctorFinding {
       };
 }
 
+interface ShellWiring {
+  id: ShellId;
+  pointAtShared: boolean;
+}
+
 function checkShellWiring(
   shellId: ShellId,
   pointAtShared: boolean,
+  fromState: boolean,
   deps: DoctorDeps
 ): DoctorFinding {
   const shell = getShell(shellId);
@@ -247,6 +276,25 @@ function checkShellWiring(
     };
   }
   if (!deps.exists(configPath)) {
+    // Without a state card the shared mode was inferred from the rc: the shell
+    // has no per-shell export, so it either sets STARSHIP_CONFIG itself or
+    // runs Starship on its defaults — neither is something a fix should
+    // overwrite, and neither should fail the report.
+    if (!fromState && pointAtShared) {
+      return setsOwnConfig(content)
+        ? {
+            id: `shell:${shellId}`,
+            title: shell.label,
+            status: 'pass',
+            detail: `sets its own STARSHIP_CONFIG instead of ${configPath}`,
+          }
+        : {
+            id: `shell:${shellId}`,
+            title: shell.label,
+            status: 'warn',
+            detail: `no shared config at ${configPath} — Starship runs on its defaults`,
+          };
+    }
     return {
       id: `shell:${shellId}`,
       title: shell.label,
@@ -263,14 +311,12 @@ function checkShellWiring(
   };
 }
 
-async function checkConfigs(
-  shellIds: ShellId[],
-  pointAtShared: boolean,
-  deps: DoctorDeps
-): Promise<DoctorFinding> {
-  const paths = pointAtShared
-    ? [getSharedConfigPath()]
-    : shellIds.map((id) => getShellConfigPath(id));
+async function checkConfigs(wiring: ShellWiring[], deps: DoctorDeps): Promise<DoctorFinding> {
+  const paths = [
+    ...new Set(
+      wiring.map((w) => (w.pointAtShared ? getSharedConfigPath() : getShellConfigPath(w.id)))
+    ),
+  ];
   const existing = paths.filter((p) => deps.exists(p));
   if (existing.length === 0) {
     return {
@@ -391,23 +437,27 @@ async function checkFontSelected(
 /**
  * Runs every health check against the machine. `state` is an optional state card
  * describing what the user intended to install; without one the doctor inspects
- * the shells that are actually present.
+ * the shells that are actually present and reads each shell's wiring mode from
+ * its rc instead of assuming per-shell mode.
  */
 export async function runDoctor(
   state: WizardState | null,
   deps: DoctorDeps = DEFAULT_DOCTOR_DEPS
 ): Promise<DoctorReport> {
-  const pointAtShared = state?.keepExistingConfig ?? false;
   const shellIds =
     state && state.selectedShells.length > 0
       ? state.selectedShells
       : await deps.detectInstalledShells();
+  const wiring: ShellWiring[] = shellIds.map((id) => ({
+    id,
+    pointAtShared: state ? state.keepExistingConfig : shellPointsAtShared(id, deps),
+  }));
 
   const findings: DoctorFinding[] = [
     await checkStarship(deps),
     checkLocale(deps),
-    ...shellIds.map((id) => checkShellWiring(id, pointAtShared, deps)),
-    await checkConfigs(shellIds, pointAtShared, deps),
+    ...wiring.map((w) => checkShellWiring(w.id, w.pointAtShared, state !== null, deps)),
+    await checkConfigs(wiring, deps),
     checkFontInstalled(state, deps),
     await checkFontSelected(state, deps),
     await checkVersionDrift(deps),

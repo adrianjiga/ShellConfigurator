@@ -1,7 +1,13 @@
 import { applyShellConfig } from '../generators/shellRc.ts';
 import type { PackageManager, ShellId, TerminalId, WizardState } from '../types.ts';
 import { detectPackageManagerAsync } from './detector.ts';
-import { type DoctorFix, type DoctorReport, formatDoctorReport, runDoctor } from './doctor.ts';
+import {
+  type DoctorFix,
+  type DoctorReport,
+  formatDoctorReport,
+  runDoctor,
+  shellPointsAtShared,
+} from './doctor.ts';
 import { errorMessage } from './errors.ts';
 import { fontLabel, installNerdFont, installStarship } from './installer.ts';
 import { type TerminalFontResult, terminalLabel, wireTerminalFont } from './terminalFont.ts';
@@ -25,6 +31,8 @@ export interface RepairReport {
 
 export interface RepairDeps {
   runDoctor: (state: WizardState | null) => Promise<DoctorReport>;
+  /** Resolves a shell's wiring mode from its rc when no state card is given. */
+  shellPointsAtShared: (shellId: ShellId) => boolean;
   applyShellConfig: (
     shellId: ShellId,
     options: { pointAtSharedConfig: boolean }
@@ -37,6 +45,7 @@ export interface RepairDeps {
 
 export const DEFAULT_REPAIR_DEPS: RepairDeps = {
   runDoctor: (state) => runDoctor(state),
+  shellPointsAtShared: (shellId) => shellPointsAtShared(shellId),
   applyShellConfig,
   installNerdFont,
   installStarship,
@@ -46,7 +55,7 @@ export const DEFAULT_REPAIR_DEPS: RepairDeps = {
 
 async function applyFix(
   fix: DoctorFix,
-  pointAtShared: boolean,
+  pointAtShared: boolean | null,
   deps: RepairDeps
 ): Promise<{ detail: string; status: RepairStatus }> {
   switch (fix.kind) {
@@ -57,7 +66,8 @@ async function applyFix(
       return { detail: `reinstalled Starship via ${pm}`, status: 'fixed' };
     }
     case 'configure-shell': {
-      const result = deps.applyShellConfig(fix.shellId, { pointAtSharedConfig: pointAtShared });
+      const shared = pointAtShared ?? deps.shellPointsAtShared(fix.shellId);
+      const result = deps.applyShellConfig(fix.shellId, { pointAtSharedConfig: shared });
       return result.applied
         ? { detail: `added the starship init line to ${fix.shellId}`, status: 'fixed' }
         : { detail: result.note ?? 'already configured', status: 'skipped' };
@@ -88,7 +98,7 @@ export async function runRepair(
   deps: RepairDeps = DEFAULT_REPAIR_DEPS
 ): Promise<RepairReport> {
   const before = await deps.runDoctor(state);
-  const pointAtShared = state?.keepExistingConfig ?? false;
+  const pointAtShared = state?.keepExistingConfig ?? null;
   const actions: RepairAction[] = [];
 
   for (const finding of before.findings) {

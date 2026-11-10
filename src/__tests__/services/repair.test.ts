@@ -19,6 +19,7 @@ function makeDeps(
 ): RepairDeps {
   return {
     runDoctor: vi.fn().mockResolvedValueOnce(before).mockResolvedValue(after),
+    shellPointsAtShared: vi.fn().mockReturnValue(false),
     applyShellConfig: vi.fn().mockReturnValue({ applied: true }),
     installStarship: vi.fn().mockResolvedValue(undefined),
     installNerdFont: vi.fn().mockResolvedValue(undefined),
@@ -53,6 +54,18 @@ describe('runRepair', () => {
     const deps = makeDeps(report([finding({ kind: 'configure-shell', shellId: 'fish' })]));
     await runRepair(state({ keepExistingConfig: true }), deps);
     expect(deps.applyShellConfig).toHaveBeenCalledWith('fish', { pointAtSharedConfig: true });
+  });
+
+  it('reads the wiring mode from the rc when there is no state card', async () => {
+    const deps = makeDeps(
+      report([finding({ kind: 'configure-shell', shellId: 'zsh' })]),
+      undefined,
+      {
+        shellPointsAtShared: vi.fn().mockReturnValue(true),
+      }
+    );
+    await runRepair(null, deps);
+    expect(deps.applyShellConfig).toHaveBeenCalledWith('zsh', { pointAtSharedConfig: true });
   });
 
   it('marks an already-configured shell as skipped', async () => {
