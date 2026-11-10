@@ -52,9 +52,10 @@ describe('generateToml', () => {
     expect(toml).toContain('symbol = " "');
   });
 
-  it('uses text fallback for git_branch when hasNerdFont is false', () => {
+  it('uses an empty symbol for git_branch when hasNerdFont is false', () => {
     const toml = generateToml({ ...base, hasNerdFont: false });
-    expect(toml).toContain('symbol = "on "');
+    expect(toml).toContain('[git_branch]');
+    expect(toml).toContain('symbol = ""');
   });
 
   it('uses Nerd Font glyphs for the directory and runtime modules', () => {

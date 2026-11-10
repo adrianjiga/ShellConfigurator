@@ -13,7 +13,7 @@ truncate_to_repo  = true
 
 [git_branch]
 style  = "bold git_branch"
-symbol = "on "
+symbol = ""
 
 [cmd_duration]
 style  = "bold cmd_duration"
