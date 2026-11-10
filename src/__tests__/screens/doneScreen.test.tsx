@@ -230,4 +230,23 @@ describe('DoneScreen over real install results', () => {
 
     expect(instance.lastFrame()).toContain('nothing to restore');
   });
+
+  it('never restores backups from a dry-run session with r', async () => {
+    mocks.restoreConfigBackups.mockReturnValue([
+      {
+        what: 'shared',
+        restoredTo: '/home/u/.config/starship.toml',
+        restoredFrom: '/home/u/.config/starship.toml.bak-x',
+      },
+    ]);
+    const instance = render(<DoneScreen state={{ ...DEFAULT_STATE, dryRun: true }} />);
+    await flush();
+
+    instance.stdin.write('r');
+    await flush();
+
+    expect(mocks.restoreConfigBackups).not.toHaveBeenCalled();
+    expect(instance.lastFrame()).not.toContain('Restored configs');
+    expect(instance.lastFrame()).not.toContain('Press r');
+  });
 });

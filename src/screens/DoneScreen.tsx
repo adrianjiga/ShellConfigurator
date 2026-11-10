@@ -45,8 +45,9 @@ export function DoneScreen({ state }: DoneScreenProps) {
       return;
     }
     // One-key undo: copy the newest backups back over the configs (the same
-    // code path the CLI's --restore flag runs).
-    if (char.toLowerCase() === 'r' && restored === null) {
+    // code path the CLI's --restore flag runs). Never in a dry run — nothing
+    // was changed here, so restoring old backups would clobber real files.
+    if (char.toLowerCase() === 'r' && restored === null && !state.dryRun) {
       setRestored(restoreConfigBackups());
     }
   });
@@ -294,12 +295,14 @@ export function DoneScreen({ state }: DoneScreenProps) {
         <Text color={uiColor('gray')}> to exit.</Text>
       </Box>
 
-      <Box marginTop={1}>
-        <Text color={uiColor('gray')}>
-          Press <Text color={uiColor('cyan')}>r</Text> to undo with the newest backups (the{' '}
-          <Text color={uiColor('cyan')}>--restore</Text> CLI action).
-        </Text>
-      </Box>
+      {!state.dryRun && (
+        <Box marginTop={1}>
+          <Text color={uiColor('gray')}>
+            Press <Text color={uiColor('cyan')}>r</Text> to undo with the newest backups (the{' '}
+            <Text color={uiColor('cyan')}>--restore</Text> CLI action).
+          </Text>
+        </Box>
+      )}
 
       {restored !== null && (
         <Box flexDirection="column" marginTop={1} gap={0}>
