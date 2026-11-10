@@ -195,21 +195,56 @@ const BLOCK_MARKER = '# Added by ShellConfigurator';
  */
 export const ADOPT_MARKER = '# Added by ShellConfigurator (shared config)';
 
+function isBlockMarkerLine(line: string): boolean {
+  const t = line.trim();
+  return t === BLOCK_MARKER || t.startsWith(`${BLOCK_MARKER} `);
+}
+
+/**
+ * True for the lines a managed block can contain besides the marker: the PATH,
+ * STARSHIP_CONFIG export, init and unset lines the wizard writes in that
+ * shell's syntax. Anything else — a blank line or a line the user added — ends
+ * the block, so user lines glued directly under the marker are never deleted
+ * with it.
+ */
+function isManagedLine(shell: ShellDef, line: string): boolean {
+  const t = line.trim();
+  if (t === shell.initLine) return true;
+  if (shell.id === 'fish') {
+    return (
+      t.startsWith('set -gx STARSHIP_CONFIG ') ||
+      t === 'set -e STARSHIP_CONFIG' ||
+      t.startsWith('fish_add_path ')
+    );
+  }
+  return (
+    t.startsWith('export STARSHIP_CONFIG=') ||
+    t === 'unset STARSHIP_CONFIG' ||
+    (t.startsWith('export PATH="') && t.endsWith(':$PATH"'))
+  );
+}
+
 /**
  * Drops every "Added by ShellConfigurator" block containing any needle, so a
  * re-run can repair an rc polluted by the opposite block from an earlier run.
+ * A block only spans the lines the wizard itself writes, never user lines
+ * appended directly after it.
  */
-function removeShellConfiguratorBlocks(content: string, needles: string[]): string {
+function removeShellConfiguratorBlocks(
+  content: string,
+  shell: ShellDef,
+  needles: string[]
+): string {
   const lines = content.split('\n');
   const out: string[] = [];
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
     // Adopt-mode blocks share the marker prefix, so both are recognised here.
-    if (line.trim() === BLOCK_MARKER || line.trim().startsWith(`${BLOCK_MARKER} `)) {
+    if (isBlockMarkerLine(line)) {
       const block = [line];
       let j = i + 1;
-      while (j < lines.length && lines[j].trim() !== '') {
+      while (j < lines.length && !isBlockMarkerLine(lines[j]) && isManagedLine(shell, lines[j])) {
         block.push(lines[j]);
         j++;
       }
@@ -321,7 +356,7 @@ export function applyShellConfig(
   } else {
     cleanNeedles.push(ADOPT_MARKER);
   }
-  const cleaned = removeShellConfiguratorBlocks(existing, cleanNeedles);
+  const cleaned = removeShellConfiguratorBlocks(existing, shell, cleanNeedles);
 
   // The PATH and STARSHIP_CONFIG lines must come before the init line, or
   // `starship init` cannot resolve either the binary or its config.
@@ -375,7 +410,9 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
   // Drop any per-shell wiring an earlier "configure" run may have added.
   // Keep the Starship init line: an unselected shell should use the shared
   // config, not lose Starship entirely on its next launch.
-  const cleanedBlocks = removeShellConfiguratorBlocks(existing, [starshipConfigLine(shellId)!]);
+  const cleanedBlocks = removeShellConfiguratorBlocks(existing, shell, [
+    starshipConfigLine(shellId)!,
+  ]);
   const cleaned =
     existing.includes(shell.initLine) && !cleanedBlocks.includes(shell.initLine)
       ? `${cleanedBlocks.trimEnd()}\n${BLOCK_MARKER}\n${shell.initLine}\n`

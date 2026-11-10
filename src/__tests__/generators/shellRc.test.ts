@@ -287,6 +287,59 @@ describe('applyShellConfig', () => {
     );
   });
 
+  it('keeps user lines glued directly under a stale adopt block', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() =>
+      [
+        '# Added by ShellConfigurator (shared config)',
+        'eval "$(starship init zsh)"',
+        'export EDITOR=vim',
+      ].join('\n')
+    );
+
+    const result = applyShellConfig('zsh');
+
+    expect(result.applied).toBe(true);
+    const finalContent = lastWrittenContent();
+    expect(finalContent).toContain('export EDITOR=vim');
+    expect(finalContent.match(/starship init zsh/g)).toHaveLength(1);
+    expect(finalContent).toContain('STARSHIP_CONFIG');
+  });
+
+  it('keeps user lines glued under the per-shell block an adopt run removes', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() =>
+      [
+        '# Added by ShellConfigurator',
+        `export STARSHIP_CONFIG="${expectedConfigPath}"`,
+        'eval "$(starship init zsh)"',
+        'export EDITOR=vim',
+      ].join('\n')
+    );
+
+    const result = applyShellConfig('zsh', { pointAtSharedConfig: true });
+
+    expect(result.applied).toBe(true);
+    const finalContent = lastWrittenContent();
+    expect(finalContent).toContain('export EDITOR=vim');
+    expect(finalContent).not.toContain('STARSHIP_CONFIG');
+    expect(finalContent.match(/starship init zsh/g)).toHaveLength(1);
+  });
+
+  it('keeps user lines glued under the unset block a per-shell run removes', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() =>
+      ['# Added by ShellConfigurator', 'unset STARSHIP_CONFIG', 'export EDITOR=vim'].join('\n')
+    );
+
+    const result = applyShellConfig('bash');
+
+    expect(result.applied).toBe(true);
+    const finalContent = lastWrittenContent();
+    expect(finalContent).toContain('export EDITOR=vim');
+    expect(finalContent).not.toContain('unset STARSHIP_CONFIG');
+  });
+
   it('is idempotent — skips when the STARSHIP_CONFIG line is already present', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(
@@ -627,6 +680,26 @@ describe('resetSharedShellConfig', () => {
     expect(lastWrittenContent()).toBe(
       `# Existing content\n# Added by ShellConfigurator\neval "$(starship init zsh)"\n\n# Added by ShellConfigurator\nunset STARSHIP_CONFIG\n`
     );
+  });
+
+  it('keeps user lines glued under the per-shell block it removes', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() =>
+      [
+        '# Added by ShellConfigurator',
+        `export STARSHIP_CONFIG="${expectedConfigPath}"`,
+        'eval "$(starship init zsh)"',
+        'export EDITOR=vim',
+      ].join('\n')
+    );
+
+    const result = resetSharedShellConfig('zsh');
+
+    expect(result.applied).toBe(true);
+    const written = lastWrittenContent();
+    expect(written).toContain('export EDITOR=vim');
+    expect(written).not.toContain(`export STARSHIP_CONFIG="${expectedConfigPath}"`);
+    expect(written).toContain('unset STARSHIP_CONFIG');
   });
 
   it('keeps the unset guard and drops a stale per-shell block (idempotent)', () => {
