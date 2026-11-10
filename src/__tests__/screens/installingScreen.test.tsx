@@ -171,6 +171,29 @@ describe('InstallingScreen', () => {
     expect(onNext).not.toHaveBeenCalled();
   });
 
+  it('aborts the chain and kills the running command on unmount', async () => {
+    let signal: AbortSignal | undefined;
+    mocks.buildTaskList.mockReturnValue(statusFixture());
+    mocks.runInstallTasks.mockImplementation(
+      (
+        _state: WizardState,
+        _deps: InstallTaskDeps,
+        _onUpdate: (id: string, patch: Partial<InstallTask>) => void,
+        abortSignal?: AbortSignal
+      ) => {
+        signal = abortSignal;
+        return new Promise<InstallTask[]>(() => {});
+      }
+    );
+    const { instance } = setup();
+    await flush();
+
+    instance.unmount();
+
+    expect(signal?.aborted).toBe(true);
+    expect(mocks.killActiveCommand).toHaveBeenCalled();
+  });
+
   it('advances with the results once every task has finished', async () => {
     const results: InstallTask[] = [
       { id: 'starship', label: 'Install Starship', status: 'done' },
