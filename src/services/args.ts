@@ -196,7 +196,9 @@ export function parseCliArgs(argv: string[]): CliFlags {
     // it exists; the token we consumed is never reused).
     const value = token.inlineValue ?? argv[i + 1];
     const hasValue =
-      token.inlineValue !== undefined || (value !== undefined && !value.startsWith('-'));
+      token.inlineValue !== undefined
+        ? token.inlineValue !== ''
+        : value !== undefined && value !== '' && !value.startsWith('-');
 
     if (
       token.inlineValue === undefined &&
@@ -210,6 +212,7 @@ export function parseCliArgs(argv: string[]): CliFlags {
     if (!hasValue) {
       if (VALUE_FLAGS.has(flag)) {
         result.warnings.push(`Flag '${flag}' needs a value; ignoring it`);
+        if (token.inlineValue === undefined && argv[i + 1] === '') i++;
       } else if (flag.startsWith('-')) {
         result.warnings.push(`Unknown flag '${flag}'; ignoring it`);
       }

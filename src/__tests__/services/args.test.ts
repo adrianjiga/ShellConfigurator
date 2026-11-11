@@ -149,6 +149,30 @@ describe('parseCliArgs', () => {
       expect(f.powerline).toBeUndefined();
     });
 
+    it('rejects an empty inline value instead of accepting it silently', () => {
+      const f = parseCliArgs(['--preset=']);
+      expect(f.preset).toBeUndefined();
+      expect(f.warnings).toEqual([expect.stringContaining("Flag '--preset' needs a value")]);
+    });
+
+    it('rejects an empty -o value instead of falling back to stdout', () => {
+      const f = parseCliArgs(['-o=']);
+      expect(f.outputFile).toBeUndefined();
+      expect(f.warnings).toHaveLength(1);
+    });
+
+    it('does not let an empty --shells value wipe the selected shells', () => {
+      const f = parseCliArgs(['--shells=']);
+      expect(f.shells).toBeUndefined();
+    });
+
+    it('rejects an empty next-token value and consumes it', () => {
+      const f = parseCliArgs(['--preset', '', '--dry-run']);
+      expect(f.preset).toBeUndefined();
+      expect(f.dryRun).toBe(true);
+      expect(f.warnings).toHaveLength(1);
+    });
+
     it('--output maps to outputFile', () => {
       expect(parseCliArgs(['--output', 'out.toml']).outputFile).toBe('out.toml');
     });
