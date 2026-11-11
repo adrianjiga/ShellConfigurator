@@ -78,6 +78,17 @@ export interface RestoredConfig {
   restoredFrom: string;
 }
 
+export interface RestoreFailure {
+  what: 'shared' | ShellId;
+  restoredFrom: string;
+  error: string;
+}
+
+export interface RestoreOutcome {
+  restored: RestoredConfig[];
+  failed: RestoreFailure[];
+}
+
 /** Newest *.bak-* entry for `prefix` inside `dir`, by ISO-stamped file name. */
 function newestBackup(dir: string, prefix: string): string | null {
   let entries: string[];
@@ -91,22 +102,36 @@ function newestBackup(dir: string, prefix: string): string | null {
   return newest ? path.join(dir, newest) : null;
 }
 
-function restoreOne(what: 'shared' | ShellId, target: string, backup: string): RestoredConfig {
-  fs.copyFileSync(backup, target);
-  return { what, restoredTo: target, restoredFrom: backup };
+function restoreOne(
+  what: 'shared' | ShellId,
+  target: string,
+  backup: string,
+  outcome: RestoreOutcome
+): void {
+  try {
+    fs.copyFileSync(backup, target);
+    outcome.restored.push({ what, restoredTo: target, restoredFrom: backup });
+  } catch (err) {
+    outcome.failed.push({
+      what,
+      restoredFrom: backup,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 /**
  * Copies the newest .bak-* snapshot back over the live config for the shared
  * config and every per-shell config that has one. Backups are kept, not deleted.
- * Returns every restored config; an empty array means nothing to restore.
+ * A config that fails to copy is reported in `failed` and does not stop the
+ * rest; an empty outcome means nothing to restore.
  */
-export function restoreConfigBackups(): RestoredConfig[] {
+export function restoreConfigBackups(): RestoreOutcome {
   const base = configHome();
-  const restored: RestoredConfig[] = [];
+  const outcome: RestoreOutcome = { restored: [], failed: [] };
 
   const newestShared = newestBackup(base, 'starship.toml');
-  if (newestShared) restored.push(restoreOne('shared', getSharedConfigPath(), newestShared));
+  if (newestShared) restoreOne('shared', getSharedConfigPath(), newestShared, outcome);
 
   const shellsDir = path.join(base, 'starship');
   if (fs.existsSync(shellsDir)) {
@@ -122,11 +147,11 @@ export function restoreConfigBackups(): RestoredConfig[] {
     for (const shellId of shells) {
       const backup = newestBackup(shellsDir, `${shellId}.toml`);
       if (!backup) continue;
-      restored.push(restoreOne(shellId, getShellConfigPath(shellId), backup));
+      restoreOne(shellId, getShellConfigPath(shellId), backup, outcome);
     }
   }
 
-  return restored;
+  return outcome;
 }
 
 /**

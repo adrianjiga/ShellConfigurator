@@ -194,18 +194,21 @@ describe('DoneScreen over real install results', () => {
   });
 
   it('restores the newest backups and lists them with r', async () => {
-    mocks.restoreConfigBackups.mockReturnValue([
-      {
-        what: 'zsh',
-        restoredTo: '/home/u/.config/starship/zsh.toml',
-        restoredFrom: '/home/u/.config/starship/zsh.toml.bak-x',
-      },
-      {
-        what: 'shared',
-        restoredTo: '/home/u/.config/starship.toml',
-        restoredFrom: '/home/u/.config/starship.toml.bak-x',
-      },
-    ]);
+    mocks.restoreConfigBackups.mockReturnValue({
+      restored: [
+        {
+          what: 'zsh',
+          restoredTo: '/home/u/.config/starship/zsh.toml',
+          restoredFrom: '/home/u/.config/starship/zsh.toml.bak-x',
+        },
+        {
+          what: 'shared',
+          restoredTo: '/home/u/.config/starship.toml',
+          restoredFrom: '/home/u/.config/starship.toml.bak-x',
+        },
+      ],
+      failed: [],
+    });
     const instance = render(<DoneScreen state={DEFAULT_STATE} />);
     await flush();
 
@@ -220,8 +223,34 @@ describe('DoneScreen over real install results', () => {
     expect(frame).toContain('shared: /home/u/.config/starship.toml (from');
   });
 
+  it('lists restore failures instead of hiding them', async () => {
+    mocks.restoreConfigBackups.mockReturnValue({
+      restored: [
+        {
+          what: 'shared',
+          restoredTo: '/home/u/.config/starship.toml',
+          restoredFrom: '/home/u/.config/starship.toml.bak-x',
+        },
+      ],
+      failed: [
+        { what: 'zsh', restoredFrom: '/home/u/.config/starship/zsh.toml.bak-x', error: 'EACCES' },
+      ],
+    });
+    const instance = render(<DoneScreen state={DEFAULT_STATE} />);
+    await flush();
+
+    instance.stdin.write('r');
+    await flush();
+
+    const frame = instance.lastFrame() ?? '';
+    expect(frame).toContain('Restored configs from their newest backups:');
+    expect(frame).toContain('shared: /home/u/.config/starship.toml (from');
+    expect(frame).toContain('zsh: could not restore');
+    expect(frame).toContain('EACCES');
+  });
+
   it('reports when there are no backups to restore with r', async () => {
-    mocks.restoreConfigBackups.mockReturnValue([]);
+    mocks.restoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
     const instance = render(<DoneScreen state={DEFAULT_STATE} />);
     await flush();
 
@@ -232,13 +261,16 @@ describe('DoneScreen over real install results', () => {
   });
 
   it('never restores backups from a dry-run session with r', async () => {
-    mocks.restoreConfigBackups.mockReturnValue([
-      {
-        what: 'shared',
-        restoredTo: '/home/u/.config/starship.toml',
-        restoredFrom: '/home/u/.config/starship.toml.bak-x',
-      },
-    ]);
+    mocks.restoreConfigBackups.mockReturnValue({
+      restored: [
+        {
+          what: 'shared',
+          restoredTo: '/home/u/.config/starship.toml',
+          restoredFrom: '/home/u/.config/starship.toml.bak-x',
+        },
+      ],
+      failed: [],
+    });
     const instance = render(<DoneScreen state={{ ...DEFAULT_STATE, dryRun: true }} />);
     await flush();
 

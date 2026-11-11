@@ -156,10 +156,13 @@ describe('index restore flag', () => {
   it('prints the restored configs for --restore', () => {
     const backup = '/home/u/.config/starship.toml.bak-2026-09-09T09-30-00-000Z';
     const backup2 = '/home/u/.config/starship/zsh.toml.bak-2026-09-08T10-00-00-000Z';
-    mockRestoreConfigBackups.mockReturnValue([
-      { what: 'shared', restoredTo: '/home/u/.config/starship.toml', restoredFrom: backup },
-      { what: 'zsh', restoredTo: '/home/u/.config/starship/zsh.toml', restoredFrom: backup2 },
-    ]);
+    mockRestoreConfigBackups.mockReturnValue({
+      restored: [
+        { what: 'shared', restoredTo: '/home/u/.config/starship.toml', restoredFrom: backup },
+        { what: 'zsh', restoredTo: '/home/u/.config/starship/zsh.toml', restoredFrom: backup2 },
+      ],
+      failed: [],
+    });
 
     expect(runGlobalFlags(parseCliArgs(['--restore']))).toBe(true);
 
@@ -171,15 +174,45 @@ describe('index restore flag', () => {
     );
   });
 
+  it('reports partial restore failures instead of claiming success', () => {
+    const backup = '/home/u/.config/starship/zsh.toml.bak-2026-09-08T10-00-00-000Z';
+    const stderrWrite = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true as never);
+    const savedExitCode = process.exitCode;
+    mockRestoreConfigBackups.mockReturnValue({
+      restored: [
+        { what: 'shared', restoredTo: '/home/u/.config/starship.toml', restoredFrom: backup },
+      ],
+      failed: [{ what: 'zsh' as const, restoredFrom: backup, error: 'EACCES: permission denied' }],
+    });
+
+    try {
+      expect(runGlobalFlags(parseCliArgs(['--restore']))).toBe(true);
+
+      expect(stdoutWrite).toHaveBeenCalledWith(
+        expect.stringContaining('shared: /home/u/.config/starship.toml')
+      );
+      expect(stderrWrite).toHaveBeenCalledWith(
+        expect.stringContaining('Could not restore some configs')
+      );
+      expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('EACCES'));
+      expect(process.exitCode).toBe(1);
+    } finally {
+      stderrWrite.mockRestore();
+      process.exitCode = savedExitCode;
+    }
+  });
+
   it('accepts --undo as an alias for --restore', () => {
-    mockRestoreConfigBackups.mockReturnValue([]);
+    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
 
     expect(runGlobalFlags(parseCliArgs(['--undo']))).toBe(true);
     expect(mockRestoreConfigBackups).toHaveBeenCalled();
   });
 
   it('reports when there is nothing to restore', () => {
-    mockRestoreConfigBackups.mockReturnValue([]);
+    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
 
     runGlobalFlags(parseCliArgs(['--restore']));
 
@@ -187,7 +220,7 @@ describe('index restore flag', () => {
   });
 
   it('prefers --version over --restore regardless of argv order', () => {
-    mockRestoreConfigBackups.mockReturnValue([]);
+    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
 
     expect(runGlobalFlags(parseCliArgs(['--restore', '--version']))).toBe(true);
     expect(runGlobalFlags(parseCliArgs(['--version', '--restore']))).toBe(true);
@@ -196,7 +229,7 @@ describe('index restore flag', () => {
   });
 
   it('refuses --restore in a dry run instead of restoring', () => {
-    mockRestoreConfigBackups.mockReturnValue([]);
+    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
 
     expect(() => runGlobalFlags(parseCliArgs(['--dry-run', '--restore']))).toThrow(
       /cannot run in a dry run/
@@ -205,7 +238,7 @@ describe('index restore flag', () => {
   });
 
   it('refuses --restore alongside a subcommand', () => {
-    mockRestoreConfigBackups.mockReturnValue([]);
+    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
 
     expect(() =>
       runGlobalFlags(parseCliArgs(['generate', '--preset', 'pure-prompt', '--restore']))

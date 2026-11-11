@@ -805,7 +805,7 @@ describe('restoreConfigBackups', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     readdirSyncMock.mockReturnValue([]);
 
-    expect(restoreConfigBackups()).toEqual([]);
+    expect(restoreConfigBackups()).toEqual({ restored: [], failed: [] });
     expect(fs.copyFileSync).not.toHaveBeenCalled();
   });
 
@@ -821,8 +821,9 @@ describe('restoreConfigBackups', () => {
       return [];
     });
 
-    const restored = restoreConfigBackups();
+    const { restored, failed } = restoreConfigBackups();
 
+    expect(failed).toEqual([]);
     expect(restored).toHaveLength(1);
     expect(restored[0]?.what).toBe('shared');
     expect(restored[0]?.restoredTo).toBe(getSharedConfigPath());
@@ -843,13 +844,38 @@ describe('restoreConfigBackups', () => {
       return [];
     });
 
-    const restored = restoreConfigBackups();
+    const { restored, failed } = restoreConfigBackups();
 
+    expect(failed).toEqual([]);
     expect(restored.map((r) => r.what).sort()).toEqual(['bash', 'zsh']);
     const zsh = restored.find((r) => r.what === 'zsh');
     expect(zsh?.restoredFrom).toContain('2026-09-09T09-30-00-000Z');
     expect(zsh?.restoredTo).toBe(getShellConfigPath('zsh'));
     expect(fs.copyFileSync).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports a failing copy and still restores the rest', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    readdirSyncMock.mockImplementation((dir) => {
+      if (dir === shellsDir) {
+        return [
+          'zsh.toml.bak-2026-09-09T09-30-00-000Z',
+          'bash.toml.bak-2026-09-09T09-31-00-000Z',
+        ];
+      }
+      return [];
+    });
+    vi.mocked(fs.copyFileSync).mockImplementation((_src: string, dest: string) => {
+      if (dest === getShellConfigPath('zsh')) throw new Error('EACCES: permission denied');
+    });
+
+    const { restored, failed } = restoreConfigBackups();
+
+    expect(restored.map((r) => r.what)).toEqual(['bash']);
+    expect(failed).toHaveLength(1);
+    expect(failed[0]?.what).toBe('zsh');
+    expect(failed[0]?.restoredFrom).toContain('zsh.toml.bak-2026-09-09T09-30-00-000Z');
+    expect(failed[0]?.error).toContain('EACCES');
   });
 
   it('ignores files that are not config backups and unknown shell ids', () => {
@@ -861,7 +887,7 @@ describe('restoreConfigBackups', () => {
       return [];
     });
 
-    expect(restoreConfigBackups()).toEqual([]);
+    expect(restoreConfigBackups()).toEqual({ restored: [], failed: [] });
     expect(fs.copyFileSync).not.toHaveBeenCalled();
   });
 });

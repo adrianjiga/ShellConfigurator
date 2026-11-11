@@ -6,7 +6,7 @@ import { getShell } from '../config/shells.ts';
 import { type ReportedStatus, statusMark } from '../config/status.ts';
 import {
   getShellConfigPath,
-  type RestoredConfig,
+  type RestoreOutcome,
   restoreConfigBackups,
 } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
@@ -33,7 +33,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
   const fontId = fontIdToInstall(state.nerdFontToInstall);
   const fontName = fontId ? fontLabel(fontId) : null;
   // Null until the user presses r, so a single keypress runs the restore once.
-  const [restored, setRestored] = useState<RestoredConfig[] | null>(null);
+  const [outcome, setOutcome] = useState<RestoreOutcome | null>(null);
 
   const failures = state.installResults.filter((t) => t.status === 'failed');
   const hasFailures = failures.length > 0;
@@ -45,8 +45,8 @@ export function DoneScreen({ state }: DoneScreenProps) {
       return;
     }
     // No backups were made in a dry run, so restoring would clobber real files.
-    if (char.toLowerCase() === 'r' && restored === null && !state.dryRun) {
-      setRestored(restoreConfigBackups());
+    if (char.toLowerCase() === 'r' && outcome === null && !state.dryRun) {
+      setOutcome(restoreConfigBackups());
     }
   });
 
@@ -302,16 +302,23 @@ export function DoneScreen({ state }: DoneScreenProps) {
         </Box>
       )}
 
-      {restored !== null && (
+      {outcome !== null && (
         <Box flexDirection="column" marginTop={1} gap={0}>
           <Text color={uiColor('cyan')}>
-            {restored.length > 0
+            {outcome.restored.length > 0
               ? 'Restored configs from their newest backups:'
-              : 'No ShellConfigurator backups found — nothing to restore.'}
+              : outcome.failed.length > 0
+                ? 'Could not restore any configs:'
+                : 'No ShellConfigurator backups found — nothing to restore.'}
           </Text>
-          {restored.map((r) => (
+          {outcome.restored.map((r) => (
             <Text key={r.what} color={uiColor('gray')} dimColor>
               {r.what}: {r.restoredTo} (from {r.restoredFrom})
+            </Text>
+          ))}
+          {outcome.failed.map((f) => (
+            <Text key={`failed-${f.what}`} color={uiColor('red')} dimColor>
+              {f.what}: could not restore from {f.restoredFrom} ({f.error})
             </Text>
           ))}
         </Box>

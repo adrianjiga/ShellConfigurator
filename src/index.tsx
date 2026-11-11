@@ -141,14 +141,23 @@ repair options (fixes the failing checks; exits non-zero when one still fails):
 
 /** Restore the shared and per-shell configs from their newest backups. */
 export function runRestore(): void {
-  const restored = restoreConfigBackups();
-  if (restored.length === 0) {
+  const { restored, failed } = restoreConfigBackups();
+  if (restored.length === 0 && failed.length === 0) {
     process.stdout.write('Nothing to restore — no ShellConfigurator backups found.\n');
     return;
   }
-  process.stdout.write('Restored configs from their newest backups:\n');
-  for (const r of restored) {
-    process.stdout.write(`  ${r.what}: ${r.restoredTo} (from ${r.restoredFrom})\n`);
+  if (restored.length > 0) {
+    process.stdout.write('Restored configs from their newest backups:\n');
+    for (const r of restored) {
+      process.stdout.write(`  ${r.what}: ${r.restoredTo} (from ${r.restoredFrom})\n`);
+    }
+  }
+  if (failed.length > 0) {
+    process.stderr.write('Could not restore some configs:\n');
+    for (const f of failed) {
+      process.stderr.write(`  ${f.what} (from ${f.restoredFrom}): ${f.error}\n`);
+    }
+    process.exitCode = 1;
   }
 }
 
