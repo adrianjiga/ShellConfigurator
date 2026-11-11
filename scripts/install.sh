@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #
 # Install shell-configurator for the current user.
 #
@@ -8,7 +8,7 @@
 # needed. Safe to re-run: a previous install is replaced in place.
 #
 # Usage: curl -fsSL https://raw.githubusercontent.com/adrianjiga/ShellConfigurator/master/scripts/install.sh | sh
-set -euo pipefail
+set -eu
 
 REPO="adrianjiga/ShellConfigurator"
 API_LATEST="https://api.github.com/repos/${REPO}/releases/latest"
