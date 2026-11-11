@@ -237,9 +237,16 @@ describe('index restoreTerminal', () => {
     expect(setRawMode).toHaveBeenCalledWith(false);
   });
 
-  it('shows the cursor again', () => {
+  it('shows the cursor again on a TTY stdout', () => {
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
     restoreTerminal();
     expect(stdoutWrite).toHaveBeenCalledWith('\u001B[?25h');
+  });
+
+  it('writes no escape codes when stdout is a pipe', () => {
+    Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true });
+    restoreTerminal();
+    expect(stdoutWrite).not.toHaveBeenCalled();
   });
 
   it('does not throw when stdin has no setRawMode', () => {

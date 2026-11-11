@@ -65,7 +65,7 @@ export const SHOW_CURSOR = '\u001B[?25h';
 export function restoreTty(): void {
   setRawModeStandard(false);
   try {
-    process.stdout.write(SHOW_CURSOR);
+    if (process.stdout.isTTY) process.stdout.write(SHOW_CURSOR);
   } catch {
     // Stream already gone; nothing to restore.
   }
