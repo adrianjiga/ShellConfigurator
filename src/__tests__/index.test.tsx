@@ -78,10 +78,10 @@ import { render } from 'ink';
 import {
   applyInstallOutcomeExitCode,
   emitFlagWarnings,
-  handleCliArgs,
   recordInstallOutcome,
   reportFatal,
   restoreTerminal,
+  runGlobalFlags,
   runHeadlessCommand,
 } from '../index.tsx';
 import { parseCliArgs } from '../services/args.ts';
@@ -89,9 +89,6 @@ import { CliUsageError } from '../services/errors.ts';
 import { DEFAULT_STATE, type InstallTask, type WizardState } from '../types.ts';
 
 describe('index CLI handling', () => {
-  const originalArgv = process.argv.slice();
-  const originalExitCode = process.exitCode;
-
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
   let stderrWrite: ReturnType<typeof vi.spyOn>;
 
@@ -101,59 +98,44 @@ describe('index CLI handling', () => {
   });
 
   afterEach(() => {
-    process.argv = originalArgv;
-    process.exitCode = originalExitCode;
     stdoutWrite.mockRestore();
     stderrWrite.mockRestore();
     vi.mocked(render).mockClear();
   });
 
   it.each(['--version', '-v'])('prints version for %s', (flag) => {
-    process.argv = ['node', 'index.tsx', flag];
-    const result = handleCliArgs();
-    expect(result).toBe(true);
+    expect(runGlobalFlags(parseCliArgs([flag]))).toBe(true);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringMatching(/^\d+\.\d+\.\d+\n$/));
   });
 
   it.each(['--help', '-h'])('prints help and exits for %s', (flag) => {
-    process.argv = ['node', 'index.tsx', flag];
-    const result = handleCliArgs();
-    expect(result).toBe(true);
+    expect(runGlobalFlags(parseCliArgs([flag]))).toBe(true);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Usage:'));
   });
 
   it('documents the --no-install alias in help', () => {
-    process.argv = ['node', 'index.tsx', '--help'];
-    handleCliArgs();
+    runGlobalFlags(parseCliArgs(['--help']));
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('--no-install'));
   });
 
   it('documents that flags can precede or follow the subcommand', () => {
-    process.argv = ['node', 'index.tsx', '--help'];
-    handleCliArgs();
+    runGlobalFlags(parseCliArgs(['--help']));
     expect(stdoutWrite).toHaveBeenCalledWith(
       expect.stringContaining('before or after the subcommand')
     );
   });
 
   it('does not consume args when unknown flags are passed', () => {
-    process.argv = ['node', 'index.tsx', '--bogus'];
-    const result = handleCliArgs();
-    expect(result).toBe(false);
+    expect(runGlobalFlags(parseCliArgs(['--bogus']))).toBe(false);
     expect(stdoutWrite).not.toHaveBeenCalled();
   });
 
   it('treats non-flag args as not a flag request', () => {
-    process.argv = ['node', 'index.tsx', 'somefile'];
-    const result = handleCliArgs();
-    expect(result).toBe(false);
+    expect(runGlobalFlags(parseCliArgs(['somefile']))).toBe(false);
   });
 });
 
 describe('index restore flag', () => {
-  const originalArgv = process.argv.slice();
-  const originalExitCode = process.exitCode;
-
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -162,8 +144,6 @@ describe('index restore flag', () => {
   });
 
   afterEach(() => {
-    process.argv = originalArgv;
-    process.exitCode = originalExitCode;
     stdoutWrite.mockRestore();
   });
 
@@ -174,11 +154,9 @@ describe('index restore flag', () => {
       { what: 'shared', restoredTo: '/home/u/.config/starship.toml', restoredFrom: backup },
       { what: 'zsh', restoredTo: '/home/u/.config/starship/zsh.toml', restoredFrom: backup2 },
     ]);
-    process.argv = ['node', 'index.tsx', '--restore'];
 
-    const result = handleCliArgs();
+    expect(runGlobalFlags(parseCliArgs(['--restore']))).toBe(true);
 
-    expect(result).toBe(true);
     expect(stdoutWrite).toHaveBeenCalledWith(
       expect.stringContaining('shared: /home/u/.config/starship.toml')
     );
@@ -189,19 +167,25 @@ describe('index restore flag', () => {
 
   it('accepts --undo as an alias for --restore', () => {
     mockRestoreConfigBackups.mockReturnValue([]);
-    process.argv = ['node', 'index.tsx', '--undo'];
 
-    expect(handleCliArgs()).toBe(true);
+    expect(runGlobalFlags(parseCliArgs(['--undo']))).toBe(true);
     expect(mockRestoreConfigBackups).toHaveBeenCalled();
   });
 
   it('reports when there is nothing to restore', () => {
     mockRestoreConfigBackups.mockReturnValue([]);
-    process.argv = ['node', 'index.tsx', '--restore'];
 
-    handleCliArgs();
+    runGlobalFlags(parseCliArgs(['--restore']));
 
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Nothing to restore'));
+  });
+
+  it('prefers --version over --restore regardless of argv order', () => {
+    mockRestoreConfigBackups.mockReturnValue([]);
+
+    expect(runGlobalFlags(parseCliArgs(['--restore', '--version']))).toBe(true);
+    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringMatching(/^\d+\.\d+\.\d+\n$/));
   });
 });
 

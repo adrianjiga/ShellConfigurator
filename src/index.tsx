@@ -149,21 +149,18 @@ export function runRestore(): void {
   }
 }
 
-export function handleCliArgs(): boolean {
-  const args = process.argv.slice(2);
-  for (const arg of args) {
-    if (arg === '--version' || arg === '-v') {
-      process.stdout.write(`${VERSION}\n`);
-      return true;
-    }
-    if (arg === '--help' || arg === '-h') {
-      printHelp();
-      return true;
-    }
-    if (arg === '--restore' || arg === '--undo') {
-      runRestore();
-      return true;
-    }
+export function runGlobalFlags(flags: CliFlags): boolean {
+  if (flags.help) {
+    printHelp();
+    return true;
+  }
+  if (flags.version) {
+    process.stdout.write(`${VERSION}\n`);
+    return true;
+  }
+  if (flags.restore) {
+    runRestore();
+    return true;
   }
   return false;
 }
@@ -253,7 +250,7 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const flags: CliFlags = parseCliArgs(args);
 
-  if (handleCliArgs()) return;
+  if (runGlobalFlags(flags)) return;
   emitFlagWarnings(flags);
   if (await runHeadlessCommand(flags, args.join(' '))) return;
 
