@@ -251,7 +251,8 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   const dropped: string[] = [];
   if (flags.preset) dropped.push('--preset');
   if (flags.palette) dropped.push('--palette');
-  if (flags.powerline !== undefined) dropped.push(flags.powerline ? '--powerline' : '--no-powerline');
+  if (flags.powerline !== undefined)
+    dropped.push(flags.powerline ? '--powerline' : '--no-powerline');
   if (flags.shells) dropped.push('--shells');
   if (flags.font) dropped.push('--font');
   if (flags.hasNerdFont !== undefined)
