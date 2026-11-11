@@ -301,16 +301,18 @@ export function crash(prefix: string, err: unknown): void {
 process.on('uncaughtException', (err) => crash('ShellConfigurator crashed', err));
 process.on('unhandledRejection', (err) => crash('ShellConfigurator crashed', err));
 
-async function main(): Promise<void> {
-  // Global flags first (--version/--help/--restore), then headless subcommands;
-  // whichever consumes the args keeps the process from starting Ink. The flags
-  // are parsed once and shared by the router and the wizard's dry-run choice.
-  const args = process.argv.slice(2);
-  const flags: CliFlags = parseCliArgs(args);
-
-  if (runGlobalFlags(flags)) return;
+/** Everything before the wizard: warnings, global flags, headless subcommands. */
+export async function routeCli(argv: string[]): Promise<{ handled: boolean; flags: CliFlags }> {
+  const flags: CliFlags = parseCliArgs(argv);
   emitFlagWarnings(flags);
-  if (await runHeadlessCommand(flags, args.join(' '))) return;
+  if (runGlobalFlags(flags)) return { handled: true, flags };
+  const handled = await runHeadlessCommand(flags, argv.join(' '));
+  return { handled, flags };
+}
+
+async function main(): Promise<void> {
+  const { handled, flags } = await routeCli(process.argv.slice(2));
+  if (handled) return;
 
   const app = render(
     <ErrorBoundary onError={(err) => reportFatal('ShellConfigurator hit a render error', err)}>

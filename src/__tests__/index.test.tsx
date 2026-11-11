@@ -82,6 +82,7 @@ import {
   recordInstallOutcome,
   reportFatal,
   restoreTerminal,
+  routeCli,
   runGlobalFlags,
   runHeadlessCommand,
 } from '../index.tsx';
@@ -362,6 +363,41 @@ describe('index wizard history recording', () => {
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not record this run'));
     warn.mockRestore();
+  });
+});
+
+describe('index routeCli', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+  let stderrWrite: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+    stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+  });
+
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+    stderrWrite.mockRestore();
+  });
+
+  it('prints parser warnings before a global flag handles the run', async () => {
+    const { handled } = await routeCli(['--bogus', '--help']);
+
+    expect(handled).toBe(true);
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining("Unknown flag '--bogus'"));
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Usage:'));
+  });
+
+  it('routes a headless subcommand to completion', async () => {
+    const { handled } = await routeCli(['generate', '--preset', 'pure-prompt']);
+
+    expect(handled).toBe(true);
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('format'));
+  });
+
+  it('leaves a plain run to the interactive wizard', async () => {
+    expect((await routeCli([])).handled).toBe(false);
+    expect((await routeCli(['--dry-run'])).handled).toBe(false);
   });
 });
 
