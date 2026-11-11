@@ -292,8 +292,14 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   return false;
 }
 
-process.on('uncaughtException', (err) => reportFatal('ShellConfigurator crashed', err));
-process.on('unhandledRejection', (err) => reportFatal('ShellConfigurator crashed', err));
+/** Reports the crash and exits immediately, so a dead process cannot hang on Ink's stdin. */
+export function crash(prefix: string, err: unknown): void {
+  reportFatal(prefix, err);
+  process.exit(process.exitCode ?? 1);
+}
+
+process.on('uncaughtException', (err) => crash('ShellConfigurator crashed', err));
+process.on('unhandledRejection', (err) => crash('ShellConfigurator crashed', err));
 
 async function main(): Promise<void> {
   // Global flags first (--version/--help/--restore), then headless subcommands;

@@ -77,6 +77,7 @@ vi.mock('../services/repair.ts', () => ({
 import { render } from 'ink';
 import {
   applyInstallOutcomeExitCode,
+  crash,
   emitFlagWarnings,
   recordInstallOutcome,
   reportFatal,
@@ -542,6 +543,32 @@ describe('index headless routing', () => {
     await route(['repair']);
 
     expect(process.exitCode).toBe(1);
+  });
+});
+
+describe('index crash handler', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.exitCode = 0;
+  });
+
+  it('exits with 1 after reporting an uncaught error', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+
+    crash('ShellConfigurator crashed', new Error('boom'));
+
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Error: boom'));
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it('exits with 2 after reporting a CLI usage error', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+
+    crash('ShellConfigurator crashed', new CliUsageError('Unknown preset: nope'));
+
+    expect(exit).toHaveBeenCalledWith(2);
   });
 });
 
