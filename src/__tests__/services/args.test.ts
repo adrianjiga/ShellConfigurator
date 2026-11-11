@@ -215,6 +215,25 @@ describe('parseCliArgs', () => {
     it('-o sets outputFile', () => {
       expect(parseCliArgs(['-o', 'out.toml']).outputFile).toBe('out.toml');
     });
+
+    it('applies every boolean short flag in a cluster', () => {
+      const f = parseCliArgs(['-dv']);
+      expect(f.dryRun).toBe(true);
+      expect(f.version).toBe(true);
+    });
+
+    it('-dvh sets all three boolean shorts', () => {
+      const f = parseCliArgs(['-dvh']);
+      expect(f.dryRun).toBe(true);
+      expect(f.version).toBe(true);
+      expect(f.help).toBe(true);
+    });
+
+    it('keeps a cluster containing -o unknown', () => {
+      expect(parseCliArgs(['-do']).warnings).toEqual([
+        expect.stringContaining("Unknown flag '-do'"),
+      ]);
+    });
   });
 
   describe('combines subcommand + flags', () => {

@@ -142,6 +142,17 @@ export function parseCliArgs(argv: string[]): CliFlags {
       );
     }
 
+    // Combined short boolean flags (-dv); -o takes a value and cannot combine.
+    if (token.inlineValue === undefined && /^-[^-]{2,}$/.test(token.name)) {
+      const chars = [...token.name.slice(1)];
+      if (chars.every((c) => c === 'd' || c === 'v' || c === 'h')) {
+        if (chars.includes('h')) result.help = true;
+        if (chars.includes('v')) result.version = true;
+        if (chars.includes('d')) result.dryRun = true;
+        continue;
+      }
+    }
+
     // Boolean flags — the value is the flag itself. `--flag=x` is not boolean:
     // a value on a boolean flag is a contradiction, so warn and drop the token.
     if (token.inlineValue === undefined) {
