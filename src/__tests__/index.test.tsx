@@ -401,6 +401,15 @@ describe('index headless routing', () => {
     );
   });
 
+  it('rejects headless flags that lack a subcommand instead of dropping them', async () => {
+    await expect(route(['--preset', 'pure', '-o', 'x.toml'])).rejects.toThrow(
+      /--preset, -o\/--output require a subcommand/
+    );
+    await expect(route(['--json'])).rejects.toThrow(/--json require a subcommand/);
+    await expect(route(['--shells', 'zsh'])).rejects.toThrow(/--shells require a subcommand/);
+    await expect(route(['--state', 'card.json'])).rejects.toThrow(/--state require a subcommand/);
+  });
+
   it('surfaces a bogus flag as a CliUsageError', async () => {
     await expect(route(['apply', '--preset', 'nope'])).rejects.toThrow(CliUsageError);
     await expect(route(['generate', '--palette', 'nope'])).rejects.toThrow(/palette/);

@@ -240,12 +240,33 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
     await runRepairCommand(flags);
     return true;
   }
-  // No subcommand: the interactive wizard runs next — adopt/import are headless
-  // apply-options, so silently dropping them here would fake a successful adopt.
+  // No subcommand: the interactive wizard runs next — silently dropping
+  // headless flags here would fake the run the user asked for.
   if (flags.adopt || flags.importUrl) {
     throw new CliUsageError(
       '--adopt and --import-url require the apply subcommand. ' +
         'Usage: shell-configurator apply --adopt [--shells <id,...>]'
+    );
+  }
+  const dropped: string[] = [];
+  if (flags.preset) dropped.push('--preset');
+  if (flags.palette) dropped.push('--palette');
+  if (flags.powerline !== undefined) dropped.push(flags.powerline ? '--powerline' : '--no-powerline');
+  if (flags.shells) dropped.push('--shells');
+  if (flags.font) dropped.push('--font');
+  if (flags.hasNerdFont !== undefined)
+    dropped.push(flags.hasNerdFont ? '--has-nerd-font' : '--no-nerd-font');
+  if (flags.characterSymbol) dropped.push('--character');
+  if (flags.setDefaultShell) dropped.push('--set-default');
+  if (flags.skipStarship) dropped.push('--skip-starship');
+  if (flags.stateFile) dropped.push('--state');
+  if (flags.outputFile) dropped.push('-o/--output');
+  if (flags.exportFile) dropped.push('--export');
+  if (flags.json) dropped.push('--json');
+  if (flags.fix) dropped.push('--fix');
+  if (dropped.length > 0) {
+    throw new CliUsageError(
+      `${dropped.join(', ')} require a subcommand (generate, apply, doctor or repair).`
     );
   }
   return false;
