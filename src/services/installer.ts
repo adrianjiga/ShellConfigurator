@@ -8,12 +8,13 @@ import { commandExists, commandPath, runCommand } from './exec.ts';
 import { type ExtractedFontFile, extractFontFiles } from './fontExtractor.ts';
 
 // Package names per shell per package manager. Missing combos are intentional
-// (powershell is brew/pacman-only), so `undefined` is a valid lookup.
+// (powershell is brew/pacman-only, nushell is absent from Debian/Ubuntu
+// repos), so `undefined` is a valid lookup.
 const SHELL_PACKAGES: Record<ShellId, Partial<Record<PackageManager, string>>> = {
   bash: { pacman: 'bash', apt: 'bash', dnf: 'bash', brew: 'bash', apk: 'bash' },
   zsh: { pacman: 'zsh', apt: 'zsh', dnf: 'zsh', brew: 'zsh', apk: 'zsh' },
   fish: { pacman: 'fish', apt: 'fish', dnf: 'fish', brew: 'fish', apk: 'fish' },
-  nushell: { pacman: 'nushell', apt: 'nushell', dnf: 'nushell', brew: 'nushell', apk: 'nushell' },
+  nushell: { pacman: 'nushell', dnf: 'nushell', brew: 'nushell', apk: 'nushell' },
   powershell: { pacman: 'powershell', brew: 'powershell' },
 };
 
@@ -83,48 +84,53 @@ export const SCRIPT_INSTALL_BIN_DIR = path.join(os.homedir(), '.local', 'bin');
 
 const STARSHIP_INSTALL_URL = 'https://starship.rs/install.sh';
 
-export async function installStarship(pm: PackageManager): Promise<void> {
-  if (pm === 'script') {
-    // Accepted risk: when no package manager is detected we fall back to piping
-    // Starship's official install script, which we deliberately run unchanged
-    // (only pinning --bin-dir). That trusts starship.rs, its CDN and the script
-    // over another first-party channel; it is the documented installation path
-    // and the practical only option on package-manager-less systems. The script
-    // is downloaded to a temp dir first and vetted for an empty body, so a
-    // failed or empty download fails the step instead of running garbage.
-    if (!commandExists('curl')) {
-      throw new Error(
-        'Cannot download Starship: "curl" is not installed. Install curl and try again, ' +
-          'or install Starship manually (see https://starship.rs/install).'
-      );
-    }
+async function installStarshipViaScript(): Promise<void> {
+  // Accepted risk: we deliberately run Starship's official install script
+  // unchanged (only pinning --bin-dir). That trusts starship.rs, its CDN and
+  // the script over another first-party channel; it is the documented
+  // installation path and the practical only option on package-manager-less
+  // systems. The script is downloaded to a temp dir first and vetted for an
+  // empty body, so a failed or empty download fails the step instead of
+  // running garbage.
+  if (!commandExists('curl')) {
+    throw new Error(
+      'Cannot download Starship: "curl" is not installed. Install curl and try again, ' +
+        'or install Starship manually (see https://starship.rs/install).'
+    );
+  }
 
-    // Downloaded to a file rather than piped into sh: a pipeline reports only the
-    // last command's exit status, so a failed curl would look like a clean install.
-    // -f also turns an HTTP error into a curl failure instead of an HTML error page.
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-starship-'));
-    const scriptPath = path.join(tmpDir, 'install.sh');
-    try {
-      await runCommand(['curl', '-fsS', '-o', scriptPath, STARSHIP_INSTALL_URL]);
-      if (!fs.existsSync(scriptPath) || fs.statSync(scriptPath).size === 0) {
-        throw new Error(`Downloaded an empty install script from ${STARSHIP_INSTALL_URL}`);
-      }
-      // --bin-dir pins the drop location: without it the script defaults to
-      // /usr/local/bin, which is root-owned and would trigger a sudo prompt.
-      // POSIXLY_CORRECT keeps the script happy on distros where /bin/sh is bash.
-      fs.mkdirSync(SCRIPT_INSTALL_BIN_DIR, { recursive: true });
-      await runCommand([
-        'env',
-        'POSIXLY_CORRECT=1',
-        'sh',
-        scriptPath,
-        '--yes',
-        '--bin-dir',
-        SCRIPT_INSTALL_BIN_DIR,
-      ]);
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+  // Downloaded to a file rather than piped into sh: a pipeline reports only the
+  // last command's exit status, so a failed curl would look like a clean install.
+  // -f also turns an HTTP error into a curl failure instead of an HTML error page.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-starship-'));
+  const scriptPath = path.join(tmpDir, 'install.sh');
+  try {
+    await runCommand(['curl', '-fsS', '-o', scriptPath, STARSHIP_INSTALL_URL]);
+    if (!fs.existsSync(scriptPath) || fs.statSync(scriptPath).size === 0) {
+      throw new Error(`Downloaded an empty install script from ${STARSHIP_INSTALL_URL}`);
     }
+    // --bin-dir pins the drop location: without it the script defaults to
+    // /usr/local/bin, which is root-owned and would trigger a sudo prompt.
+    // POSIXLY_CORRECT keeps the script happy on distros where /bin/sh is bash.
+    fs.mkdirSync(SCRIPT_INSTALL_BIN_DIR, { recursive: true });
+    await runCommand([
+      'env',
+      'POSIXLY_CORRECT=1',
+      'sh',
+      scriptPath,
+      '--yes',
+      '--bin-dir',
+      SCRIPT_INSTALL_BIN_DIR,
+    ]);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+export async function installStarship(pm: PackageManager): Promise<void> {
+  // Debian 12, Ubuntu 22.04/24.04 and Fedora carry no starship package.
+  if (pm === 'script' || pm === 'apt' || pm === 'dnf') {
+    await installStarshipViaScript();
     return;
   }
 

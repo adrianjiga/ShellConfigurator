@@ -187,18 +187,36 @@ describe('NERD_FONTS', () => {
 });
 
 describe('installStarship', () => {
-  it('installs via apt', async () => {
+  it('installs via the official script because apt carries no starship package', async () => {
     await installStarship('apt');
-    expect(mockSpawn).toHaveBeenCalledWith('sudo', ['apt-get', 'install', '-y', 'starship'], {
-      stdio: 'inherit',
-    });
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'env',
+      [
+        'POSIXLY_CORRECT=1',
+        'sh',
+        expect.stringContaining('install.sh'),
+        '--yes',
+        '--bin-dir',
+        SCRIPT_INSTALL_BIN_DIR,
+      ],
+      { stdio: 'inherit' }
+    );
   });
 
-  it('installs via dnf', async () => {
+  it('installs via the official script because dnf carries no starship package', async () => {
     await installStarship('dnf');
-    expect(mockSpawn).toHaveBeenCalledWith('sudo', ['dnf', 'install', '-y', 'starship'], {
-      stdio: 'inherit',
-    });
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'env',
+      [
+        'POSIXLY_CORRECT=1',
+        'sh',
+        expect.stringContaining('install.sh'),
+        '--yes',
+        '--bin-dir',
+        SCRIPT_INSTALL_BIN_DIR,
+      ],
+      { stdio: 'inherit' }
+    );
   });
 
   it('installs via pacman', async () => {
@@ -286,19 +304,19 @@ describe('installStarship', () => {
     const boom = new Error('spawn ENOENT');
     spawnOutcome({ error: boom });
 
-    await expect(installStarship('apt')).rejects.toThrow('spawn ENOENT');
+    await expect(installStarship('pacman')).rejects.toThrow('spawn ENOENT');
   });
 
   it('throws when the command exits with a non-zero status', async () => {
     spawnOutcome({ status: 1 });
 
-    await expect(installStarship('apt')).rejects.toThrow('exit code 1');
+    await expect(installStarship('pacman')).rejects.toThrow('exit code 1');
   });
 
   it('throws when the command is killed by a signal', async () => {
     spawnOutcome({ signal: 'SIGKILL', status: null });
 
-    await expect(installStarship('apt')).rejects.toThrow('killed by signal SIGKILL');
+    await expect(installStarship('pacman')).rejects.toThrow('killed by signal SIGKILL');
   });
 });
 
@@ -317,11 +335,8 @@ describe('installShell', () => {
     });
   });
 
-  it('installs nushell via apt', async () => {
-    await installShell('nushell', 'apt');
-    expect(mockSpawn).toHaveBeenCalledWith('sudo', ['apt-get', 'install', '-y', 'nushell'], {
-      stdio: 'inherit',
-    });
+  it('refuses to install nushell via apt because Debian/Ubuntu carry no package', async () => {
+    await expect(installShell('nushell', 'apt')).rejects.toThrow('No package for nushell on apt');
   });
 
   it('installs zsh via apk', async () => {
@@ -604,12 +619,16 @@ describe('getMissingStarshipPathDir', () => {
 });
 
 describe('shellInstallSupported', () => {
-  it.each(['bash', 'zsh', 'fish', 'nushell'] as const)(
+  it.each(['bash', 'zsh', 'fish'] as const)(
     'can install %s via a real package manager',
     (shellId) => {
       expect(shellInstallSupported(shellId, 'apt')).toBe(true);
     }
   );
+
+  it('cannot install nushell via apt', () => {
+    expect(shellInstallSupported('nushell', 'apt')).toBe(false);
+  });
 
   it('cannot install powershell via managers with no package for it', () => {
     expect(shellInstallSupported('powershell', 'apt')).toBe(false);
