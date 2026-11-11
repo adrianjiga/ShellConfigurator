@@ -3,9 +3,9 @@
  *
  * Deliberately dependency-free and hand-rolled: the tool ships a bundled,
  * offline tarball, so a flag parser must not add a runtime dependency. The
- * subcommand is the first positional token; a stray word there is an error
- * (it must not silently drop the user into the installer), while a typo'd flag
- * is only warned about so the run can still proceed.
+ * subcommand is the first positional token, and anything the parser does not
+ * recognize is a usage error rather than a warning — a typo must never start
+ * the real installer.
  */
 import { CliUsageError } from './errors.ts';
 
@@ -49,12 +49,6 @@ export interface CliFlags {
   help: boolean;
   version: boolean;
   restore: boolean;
-  /**
-   * Problems found while parsing: unknown flags, values given to boolean flags,
-   * and known value flags that got no value. Ignored for the run — the caller
-   * prints them to stderr so the user sees the typo.
-   */
-  warnings: string[];
 }
 
 const SHORT_FLAGS: Record<string, string> = {
@@ -163,6 +157,14 @@ function splitToken(token: string): { name: string; inlineValue?: string } {
   return { name: token.slice(0, eq), inlineValue: token.slice(eq + 1) };
 }
 
+/** Parses the `=value` form of a boolean flag; undefined when unrecognizable. */
+function parseBooleanValue(raw: string): boolean | undefined {
+  const normalized = raw.toLowerCase();
+  if (['true', '1', 'yes'].includes(normalized)) return true;
+  if (['false', '0', 'no'].includes(normalized)) return false;
+  return undefined;
+}
+
 export function quoteArgv(argv: string[]): string {
   return argv
     .map((arg) =>
@@ -177,7 +179,6 @@ export function parseCliArgs(argv: string[]): CliFlags {
     help: false,
     version: false,
     restore: false,
-    warnings: [],
   };
 
   let subcommandSeen = false;
@@ -214,43 +215,38 @@ export function parseCliArgs(argv: string[]): CliFlags {
       if (token.inlineValue === undefined) {
         booleanFlag(result, true);
       } else {
-        result.warnings.push(`Flag '${flag}' does not take a value; ignoring '${arg}'`);
+        const parsed = parseBooleanValue(token.inlineValue);
+        if (parsed === undefined) {
+          throw new CliUsageError(`Cannot parse '${arg}': '${flag}' takes true or false`);
+        }
+        booleanFlag(result, parsed);
       }
       continue;
     }
 
-    // Value flags — the inline `=` value, else the next token (skip it only when
-    // it exists; the token we consumed is never reused).
+    // Value flags — the inline `=` value, else the next token.
     const valueFlag = VALUE_FLAGS[flag];
+    if (valueFlag === undefined) {
+      throw new CliUsageError(`Unknown flag '${flag}'`);
+    }
     const value = token.inlineValue ?? argv[i + 1];
-    const hasValue =
-      token.inlineValue !== undefined
-        ? token.inlineValue !== ''
-        : value !== undefined && value !== '' && !value.startsWith('-');
 
     if (
       token.inlineValue === undefined &&
       value !== undefined &&
-      valueFlag !== undefined &&
       SUBCOMMANDS.includes(value as Subcommand)
     ) {
       throw new CliUsageError(`Flag '${flag}' needs a value; '${value}' is a subcommand name`);
     }
 
+    const hasValue =
+      token.inlineValue !== undefined
+        ? token.inlineValue !== ''
+        : value !== undefined && value !== '' && !value.startsWith('-');
     if (!hasValue) {
-      if (valueFlag !== undefined) {
-        result.warnings.push(`Flag '${flag}' needs a value; ignoring it`);
-        if (token.inlineValue === undefined && argv[i + 1] === '') i++;
-      } else {
-        result.warnings.push(`Unknown flag '${flag}'; ignoring it`);
-      }
-      continue;
+      throw new CliUsageError(`Flag '${flag}' needs a value`);
     }
 
-    if (valueFlag === undefined) {
-      result.warnings.push(`Unknown flag '${flag}'; ignoring it`);
-      continue;
-    }
     valueFlag(result, value);
     if (token.inlineValue === undefined) i++;
   }

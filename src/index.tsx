@@ -179,13 +179,6 @@ export function runGlobalFlags(flags: CliFlags): boolean {
   return false;
 }
 
-/** Prints parser warnings (unknown/malformed flags) to stderr. */
-export function emitFlagWarnings(flags: CliFlags): void {
-  for (const warning of flags.warnings) {
-    process.stderr.write(`shell-configurator: warning: ${warning}\n`);
-  }
-}
-
 /** The config flags present on the command line, by the name shown to the user. */
 function presentConfigFlags(flags: CliFlags): string[] {
   const present: string[] = [];
@@ -304,10 +297,9 @@ export function crash(prefix: string, err: unknown): void {
 process.on('uncaughtException', (err) => crash('ShellConfigurator crashed', err));
 process.on('unhandledRejection', (err) => crash('ShellConfigurator crashed', err));
 
-/** Everything before the wizard: warnings, global flags, headless subcommands. */
+/** Everything before the wizard: global flags, headless subcommands. */
 export async function routeCli(argv: string[]): Promise<{ handled: boolean; flags: CliFlags }> {
   const flags: CliFlags = parseCliArgs(argv);
-  emitFlagWarnings(flags);
   if (runGlobalFlags(flags)) return { handled: true, flags };
   const handled = await runHeadlessCommand(flags, quoteArgv(argv));
   return { handled, flags };

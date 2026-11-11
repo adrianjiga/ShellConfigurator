@@ -144,33 +144,34 @@ describe('parseCliArgs', () => {
       expect(f.powerline).toBe(false);
     });
 
-    it('ignores an inline value on a boolean flag', () => {
-      const f = parseCliArgs(['--powerline=true']);
-      expect(f.powerline).toBeUndefined();
+    it('parses an inline boolean value', () => {
+      expect(parseCliArgs(['--powerline=true']).powerline).toBe(true);
+      expect(parseCliArgs(['--powerline=false']).powerline).toBe(false);
+      expect(parseCliArgs(['--dry-run=yes']).dryRun).toBe(true);
+      expect(parseCliArgs(['--dry-run=no']).dryRun).toBe(false);
+      expect(parseCliArgs(['--no-powerline=true']).powerline).toBe(false);
+    });
+
+    it('rejects an unparseable inline boolean value', () => {
+      expect(() => parseCliArgs(['--dry-run=maybe'])).toThrow(/'--dry-run' takes true or false/);
     });
 
     it('rejects an empty inline value instead of accepting it silently', () => {
-      const f = parseCliArgs(['--preset=']);
-      expect(f.preset).toBeUndefined();
-      expect(f.warnings).toEqual([expect.stringContaining("Flag '--preset' needs a value")]);
+      expect(() => parseCliArgs(['--preset='])).toThrow(/Flag '--preset' needs a value/);
     });
 
     it('rejects an empty -o value instead of falling back to stdout', () => {
-      const f = parseCliArgs(['-o=']);
-      expect(f.outputFile).toBeUndefined();
-      expect(f.warnings).toHaveLength(1);
+      expect(() => parseCliArgs(['-o='])).toThrow(/Flag '--output' needs a value/);
     });
 
-    it('does not let an empty --shells value wipe the selected shells', () => {
-      const f = parseCliArgs(['--shells=']);
-      expect(f.shells).toBeUndefined();
+    it('rejects an empty --shells value instead of wiping the selection', () => {
+      expect(() => parseCliArgs(['--shells='])).toThrow(/Flag '--shells' needs a value/);
     });
 
-    it('rejects an empty next-token value and consumes it', () => {
-      const f = parseCliArgs(['--preset', '', '--dry-run']);
-      expect(f.preset).toBeUndefined();
-      expect(f.dryRun).toBe(true);
-      expect(f.warnings).toHaveLength(1);
+    it('rejects an empty next-token value', () => {
+      expect(() => parseCliArgs(['--preset', '', '--dry-run'])).toThrow(
+        /Flag '--preset' needs a value/
+      );
     });
 
     it('--output maps to outputFile', () => {
@@ -230,9 +231,7 @@ describe('parseCliArgs', () => {
     });
 
     it('keeps a cluster containing -o unknown', () => {
-      expect(parseCliArgs(['-do']).warnings).toEqual([
-        expect.stringContaining("Unknown flag '-do'"),
-      ]);
+      expect(() => parseCliArgs(['-do'])).toThrow("Unknown flag '-do'");
     });
   });
 
@@ -252,69 +251,51 @@ describe('parseCliArgs', () => {
     });
   });
 
-  it('skips value when next token is a flag', () => {
-    const f = parseCliArgs(['--preset', '--no-powerline']);
-    expect(f.preset).toBeUndefined();
-    expect(f.powerline).toBe(false);
-  });
-
-  describe('quoteArgv', () => {
-  it('leaves shell-safe tokens bare', () => {
-    expect(quoteArgv(['generate', '--preset', 'pure-prompt', '-o', 'out.toml'])).toBe(
-      'generate --preset pure-prompt -o out.toml'
+  it('rejects a value flag whose next token is a flag instead of swallowing it', () => {
+    expect(() => parseCliArgs(['--preset', '--no-powerline'])).toThrow(
+      /Flag '--preset' needs a value/
     );
   });
 
-  it('quotes tokens with spaces so recorded commands re-run verbatim', () => {
-    expect(quoteArgv(['--state', 'my card.json'])).toBe("--state 'my card.json'");
+  describe('quoteArgv', () => {
+    it('leaves shell-safe tokens bare', () => {
+      expect(quoteArgv(['generate', '--preset', 'pure-prompt', '-o', 'out.toml'])).toBe(
+        'generate --preset pure-prompt -o out.toml'
+      );
+    });
+
+    it('quotes tokens with spaces so recorded commands re-run verbatim', () => {
+      expect(quoteArgv(['--state', 'my card.json'])).toBe("--state 'my card.json'");
+    });
+
+    it('escapes embedded single quotes', () => {
+      expect(quoteArgv(["it's.toml"])).toBe("'it'\\''s.toml'");
+    });
+
+    it('quotes an empty token', () => {
+      expect(quoteArgv([''])).toBe("''");
+    });
   });
 
-  it('escapes embedded single quotes', () => {
-    expect(quoteArgv(["it's.toml"])).toBe("'it'\\''s.toml'");
-  });
-
-  it('quotes an empty token', () => {
-    expect(quoteArgv([''])).toBe("''");
-  });
-});
-
-describe('warnings', () => {
+  describe('usage errors', () => {
     it('collects none for a clean command line', () => {
-      expect(parseCliArgs(['generate', '--preset', 'pure']).warnings).toEqual([]);
+      expect(parseCliArgs(['generate', '--preset', 'pure']).subcommand).toBe('generate');
     });
 
-    it('warns about an unknown flag without treating it as an error', () => {
-      const f = parseCliArgs(['generate', '--bogus']);
-      expect(f.warnings).toEqual([expect.stringContaining("Unknown flag '--bogus'")]);
-      expect(f.subcommand).toBe('generate');
+    it('aborts on an unknown flag instead of starting the run', () => {
+      expect(() => parseCliArgs(['generate', '--bogus'])).toThrow("Unknown flag '--bogus'");
+      expect(() => parseCliArgs(['--bogus', 'generate'])).toThrow("Unknown flag '--bogus'");
     });
 
-    it('warns when a boolean flag is given a value', () => {
-      const f = parseCliArgs(['--dry-run=true']);
-      expect(f.dryRun).toBeUndefined();
-      expect(f.warnings).toEqual([
-        expect.stringContaining("Flag '--dry-run' does not take a value"),
-      ]);
+    it('aborts when a known value flag is left without a value', () => {
+      expect(() => parseCliArgs(['--preset'])).toThrow(/Flag '--preset' needs a value/);
+      expect(() => parseCliArgs(['--preset', '--dry-run'])).toThrow(
+        /Flag '--preset' needs a value/
+      );
     });
 
-    it('warns when a known value flag is left without a value', () => {
-      expect(parseCliArgs(['--preset']).warnings).toEqual([
-        expect.stringContaining("Flag '--preset' needs a value"),
-      ]);
-      expect(parseCliArgs(['--preset', '--dry-run']).warnings).toEqual([
-        expect.stringContaining("Flag '--preset' needs a value"),
-      ]);
-    });
-
-    it('still parses the rest of the line when a flag warns', () => {
-      const f = parseCliArgs(['generate', '--preset', 'pure', '--bogus']);
-      expect(f.subcommand).toBe('generate');
-      expect(f.preset).toBe('pure');
-      expect(f.warnings).toHaveLength(1);
-    });
-
-    it('warns about an unknown short flag', () => {
-      expect(parseCliArgs(['-z']).warnings).toEqual([expect.stringContaining("Unknown flag '-z'")]);
+    it('aborts on an unknown short flag', () => {
+      expect(() => parseCliArgs(['-z'])).toThrow("Unknown flag '-z'");
     });
   });
 });

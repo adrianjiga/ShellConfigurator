@@ -64,7 +64,6 @@ const flags = (partial: Partial<CliFlags>): CliFlags => ({
   help: false,
   version: false,
   restore: false,
-  warnings: [],
   ...partial,
 });
 

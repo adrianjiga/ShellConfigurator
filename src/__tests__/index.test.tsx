@@ -78,7 +78,6 @@ import { render } from 'ink';
 import {
   applyInstallOutcomeExitCode,
   crash,
-  emitFlagWarnings,
   recordInstallOutcome,
   reportFatal,
   restoreTerminal,
@@ -136,8 +135,8 @@ describe('index CLI handling', () => {
     expect(help).toContain('--shells is');
   });
 
-  it('does not consume args when unknown flags are passed', () => {
-    expect(runGlobalFlags(parseCliArgs(['--bogus']))).toBe(false);
+  it('rejects unknown flags before the global flags run', () => {
+    expect(() => parseCliArgs(['--bogus'])).toThrow("Unknown flag '--bogus'");
     expect(stdoutWrite).not.toHaveBeenCalled();
   });
 });
@@ -212,33 +211,6 @@ describe('index restore flag', () => {
       runGlobalFlags(parseCliArgs(['generate', '--preset', 'pure-prompt', '--restore']))
     ).toThrow(/cannot be combined with the generate subcommand/);
     expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
-  });
-});
-
-describe('index flag warnings', () => {
-  let stderrWrite: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
-  });
-
-  afterEach(() => {
-    stderrWrite.mockRestore();
-  });
-
-  it('prints each parser warning to stderr', () => {
-    emitFlagWarnings(parseCliArgs(['generate', '--bogus', '--preset']));
-
-    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining("Unknown flag '--bogus'"));
-    expect(stderrWrite).toHaveBeenCalledWith(
-      expect.stringContaining("Flag '--preset' needs a value")
-    );
-  });
-
-  it('stays silent for a clean parse', () => {
-    emitFlagWarnings(parseCliArgs(['generate', '--preset', 'pure']));
-
-    expect(stderrWrite).not.toHaveBeenCalled();
   });
 });
 
@@ -389,12 +361,9 @@ describe('index routeCli', () => {
     stderrWrite.mockRestore();
   });
 
-  it('prints parser warnings before a global flag handles the run', async () => {
-    const { handled } = await routeCli(['--bogus', '--help']);
-
-    expect(handled).toBe(true);
-    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining("Unknown flag '--bogus'"));
-    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Usage:'));
+  it('rejects a mistyped flag instead of letting a global flag win', async () => {
+    await expect(routeCli(['--bogus', '--help'])).rejects.toThrow("Unknown flag '--bogus'");
+    expect(stdoutWrite).not.toHaveBeenCalledWith(expect.stringContaining('Usage:'));
   });
 
   it('routes a headless subcommand to completion', async () => {
@@ -437,7 +406,6 @@ describe('index headless routing', () => {
 
   it('returns false for a plain global flag, leaving it for the wizard', async () => {
     expect(await route(['--help'])).toBe(false);
-    expect(await route(['--bogus'])).toBe(false);
   });
 
   it('rejects adopt flags that lack the apply subcommand instead of dropping them', async () => {
