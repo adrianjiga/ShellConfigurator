@@ -156,6 +156,18 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['--import', 'base.json']).stateFile).toBe('base.json');
       expect(parseCliArgs(['--state', 'base.json']).stateFile).toBe('base.json');
     });
+
+    it('does not let a value flag swallow a subcommand name', () => {
+      expect(() => parseCliArgs(['--preset', 'apply', '--state', 'card.json'])).toThrow(
+        /Flag '--preset' needs a value; 'apply' is a subcommand name/
+      );
+      expect(() => parseCliArgs(['--shells', 'apply'])).toThrow(/is a subcommand name/);
+      expect(() => parseCliArgs(['--set-default', 'generate'])).toThrow(/is a subcommand name/);
+    });
+
+    it('still accepts an inline value that happens to match a subcommand name', () => {
+      expect(parseCliArgs(['--preset=apply']).preset).toBe('apply');
+    });
   });
 
   describe('short flag expansion', () => {

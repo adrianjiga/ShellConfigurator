@@ -189,6 +189,15 @@ export function parseCliArgs(argv: string[]): CliFlags {
     const value = token.inlineValue ?? argv[i + 1];
     const hasValue = value !== undefined && !value.startsWith('-');
 
+    if (
+      token.inlineValue === undefined &&
+      value !== undefined &&
+      VALUE_FLAGS.has(flag) &&
+      SUBCOMMANDS.includes(value as Subcommand)
+    ) {
+      throw new CliUsageError(`Flag '${flag}' needs a value; '${value}' is a subcommand name`);
+    }
+
     if (!hasValue) {
       if (VALUE_FLAGS.has(flag)) {
         result.warnings.push(`Flag '${flag}' needs a value; ignoring it`);
