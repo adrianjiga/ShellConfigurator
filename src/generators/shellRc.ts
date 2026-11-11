@@ -201,11 +201,8 @@ function isBlockMarkerLine(line: string): boolean {
 }
 
 /**
- * True for the lines a managed block can contain besides the marker: the PATH,
- * STARSHIP_CONFIG export, init and unset lines the wizard writes in that
- * shell's syntax. Anything else — a blank line or a line the user added — ends
- * the block, so user lines glued directly under the marker are never deleted
- * with it.
+ * The lines a managed block may contain: anything else (a blank line, a user
+ * line) ends the block.
  */
 function isManagedLine(shell: ShellDef, line: string): boolean {
   const t = line.trim();
@@ -227,8 +224,6 @@ function isManagedLine(shell: ShellDef, line: string): boolean {
 /**
  * Drops every "Added by ShellConfigurator" block containing any needle, so a
  * re-run can repair an rc polluted by the opposite block from an earlier run.
- * A block only spans the lines the wizard itself writes, never user lines
- * appended directly after it.
  */
 function removeShellConfiguratorBlocks(
   content: string,

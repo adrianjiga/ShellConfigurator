@@ -27,18 +27,15 @@ export interface RepairReport {
   actions: RepairAction[];
   /** Mirrors the post-repair doctor report: only false when a check still fails. */
   ok: boolean;
-  /** True when the fixes were only planned, not applied. */
   dryRun: boolean;
 }
 
 export interface RepairOptions {
-  /** Plan the fixes without applying anything; the after-report is skipped. */
   dryRun?: boolean;
 }
 
 export interface RepairDeps {
   runDoctor: (state: WizardState | null) => Promise<DoctorReport>;
-  /** Resolves a shell's wiring mode from its rc when no state card is given. */
   shellPointsAtShared: (shellId: ShellId) => boolean;
   applyShellConfig: (
     shellId: ShellId,
@@ -60,7 +57,7 @@ export const DEFAULT_REPAIR_DEPS: RepairDeps = {
   detectPackageManager: () => detectPackageManagerAsync(),
 };
 
-/** What a fix would do — the dry-run counterpart of actually applying it. */
+/** The dry-run counterpart of applying a fix. */
 function describeFix(fix: DoctorFix): string {
   switch (fix.kind) {
     case 'reinstall-starship':
@@ -110,12 +107,9 @@ async function applyFix(
 }
 
 /**
- * Runs the doctor, applies the fix for every failing check that carries one,
- * then runs the doctor again so the caller reports the *result*, not the
- * intent. Warnings are left alone — they describe states the user may have
- * chosen. Each fix is attempted independently: one failure does not stop the
- * others. With `dryRun` nothing is applied and the planned actions are
- * reported against the unchanged before-report.
+ * Applies the fix for every failing check that carries one, then re-runs the
+ * doctor. Warnings are left alone; fixes are attempted independently. With
+ * `dryRun` nothing is applied.
  */
 export async function runRepair(
   state: WizardState | null,

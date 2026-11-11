@@ -44,9 +44,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
       exit();
       return;
     }
-    // One-key undo: copy the newest backups back over the configs (the same
-    // code path the CLI's --restore flag runs). Never in a dry run — nothing
-    // was changed here, so restoring old backups would clobber real files.
+    // No backups were made in a dry run, so restoring would clobber real files.
     if (char.toLowerCase() === 'r' && restored === null && !state.dryRun) {
       setRestored(restoreConfigBackups());
     }

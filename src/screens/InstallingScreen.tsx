@@ -68,9 +68,6 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
     return () => {
       unmounted = true;
-      // An unmount mid-install (Ink teardown, a route change) must stop the
-      // chain the same way Ctrl-C does, or the tasks keep running with no
-      // screen left to own or report them.
       controller.abort();
       killActiveCommand();
     };

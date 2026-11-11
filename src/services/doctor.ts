@@ -79,11 +79,8 @@ export const DEFAULT_DOCTOR_DEPS: DoctorDeps = {
 };
 
 /**
- * Wiring mode for one shell when no state card is given: read from the rc
- * itself. A per-shell STARSHIP_CONFIG export the tool wrote means per-shell
- * mode; anything else (an adopt block, a bare init line, a user-managed setup)
- * reads the shared config. Shells without a script rc file are wired
- * per-shell by their manual setup, so they stay per-shell.
+ * Wiring mode inferred from the rc when no state card is given: our per-shell
+ * STARSHIP_CONFIG export means per-shell, anything else shared.
  */
 export function shellPointsAtShared(
   shellId: ShellId,
@@ -96,7 +93,6 @@ export function shellPointsAtShared(
   return !content.includes(configLine);
 }
 
-/** True when the rc sets STARSHIP_CONFIG itself — a user-managed wiring. */
 function setsOwnConfig(content: string): boolean {
   return content.includes('STARSHIP_CONFIG=') || content.includes('set -gx STARSHIP_CONFIG ');
 }
@@ -276,10 +272,6 @@ function checkShellWiring(
     };
   }
   if (!deps.exists(configPath)) {
-    // Without a state card the shared mode was inferred from the rc: the shell
-    // has no per-shell export, so it either sets STARSHIP_CONFIG itself or
-    // runs Starship on its defaults — neither is something a fix should
-    // overwrite, and neither should fail the report.
     if (!fromState && pointAtShared) {
       return setsOwnConfig(content)
         ? {
@@ -435,10 +427,8 @@ async function checkFontSelected(
 }
 
 /**
- * Runs every health check against the machine. `state` is an optional state card
- * describing what the user intended to install; without one the doctor inspects
- * the shells that are actually present and reads each shell's wiring mode from
- * its rc instead of assuming per-shell mode.
+ * Runs every health check against the machine. Without a state card the
+ * wiring mode of each present shell is read from its rc.
  */
 export async function runDoctor(
   state: WizardState | null,

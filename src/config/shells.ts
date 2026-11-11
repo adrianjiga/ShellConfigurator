@@ -82,8 +82,7 @@ export const SHELLS: ShellDef[] = [
     binary: 'pwsh',
     label: 'PowerShell',
     rcFile: null,
-    // Pin STARSHIP_CONFIG before the init, or PowerShell falls back to the
-    // shared starship.toml and never reads the generated powershell.toml.
+    // Must be set before init, or PowerShell reads the shared starship.toml.
     initLine:
       '$env:STARSHIP_CONFIG = Join-Path $HOME ".config/starship/powershell.toml"; Invoke-Expression (&starship init powershell)',
     manualNote: 'Add the above line to your $PROFILE file in PowerShell.',

@@ -40,15 +40,8 @@ function buildFormatString(segments: ConfigurableModuleId[]): string {
 }
 
 /**
- * Wraps a module's content in its separator and coloured block.
- *
- * Every segment carries its separator on its leading edge, coloured with
- * Starship's `prev_bg` (1.20+): the separator inherits whatever actually
- * rendered before it, so a module that shows nothing (a clean repo's
- * git_status, python outside a project) takes its separator with it instead
- * of leaving a stray coloured block behind. On the left the separator trails
- * the previous block pointing right; on the right it leads the block pointing
- * left. The outer ends fade into the terminal via `bg:prev_bg`/`bg:none`.
+ * Leading separator styled with starship's `prev_bg` (1.20+) so a collapsed
+ * module takes its separator with it.
  */
 function powerlineFormat(
   content: string,
@@ -66,7 +59,6 @@ function powerlineFormat(
 interface BlockContext {
   state: WizardState;
   powerline: boolean;
-  /** False only for the first left-side segment, which starts flush at the prompt. */
   separator: boolean;
   side: 'left' | 'right';
 }
@@ -152,9 +144,7 @@ export function generateToml(state: WizardState): string {
   const leftSegments = leftModules.filter(isConfigurableModule);
   const rightSegments = rightModules.filter(isConfigurableModule);
 
-  // The left side ends in a literal fade-out arrow coloured with prev_bg, so
-  // it follows whatever module actually rendered last rather than a
-  // configured neighbour that may show nothing.
+  // The fade-out arrow follows whatever module rendered last.
   const leftFormat =
     buildFormatString(leftSegments) +
     (powerline && leftSegments.length > 0 ? `[${SEPARATOR_RIGHT}](fg:prev_bg)` : '');
@@ -170,9 +160,8 @@ export function generateToml(state: WizardState): string {
   parts.push('\\n$character');
   const format = parts.filter(Boolean).join('');
 
-  // Every segment except the first left-side one carries a leading separator;
-  // the first sits flush at the start of the prompt. The right side's first
-  // separator fades in from prev_bg (nothing before it but $fill).
+  // The first left-side segment starts flush; every other one is preceded by
+  // its separator.
   const blocksFor = (segments: ConfigurableModuleId[], at: 'left' | 'right') =>
     segments.map((id, i) =>
       moduleBlock(id, { state, powerline, separator: at === 'right' || i > 0, side: at })

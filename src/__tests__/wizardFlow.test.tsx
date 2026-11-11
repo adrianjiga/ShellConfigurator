@@ -272,8 +272,6 @@ describe('full wizard walkthrough', () => {
     );
     await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
-    // git_branch under hasNerdFont:false leaves the symbol empty — starship's
-    // own format already renders the word "on" before it.
     expect(toml).toContain('symbol = ""');
     expect(toml).not.toContain('symbol = " "');
     const results = recordOutcome.mock.calls.at(-1)?.[0] as InstallTask[] | undefined;

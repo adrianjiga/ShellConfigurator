@@ -167,9 +167,7 @@ style_root  = "${tomlBasic(styleFor('err'))}"
 
     previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.gitBranch : 'on '}main`,
     content: '$symbol$branch',
-    // Starship's own git_branch format already opens with the word "on ", so
-    // without a Nerd Font the symbol must stay empty — "on " here would render
-    // "on on main".
+    // starship's git_branch format already renders "on " before the symbol.
     settings: ({ hasNerdFont }) =>
       `symbol = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.gitBranch : '')}"`,
   },
