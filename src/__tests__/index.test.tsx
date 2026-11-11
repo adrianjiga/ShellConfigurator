@@ -184,8 +184,27 @@ describe('index restore flag', () => {
     mockRestoreConfigBackups.mockReturnValue([]);
 
     expect(runGlobalFlags(parseCliArgs(['--restore', '--version']))).toBe(true);
+    expect(runGlobalFlags(parseCliArgs(['--version', '--restore']))).toBe(true);
     expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringMatching(/^\d+\.\d+\.\d+\n$/));
+  });
+
+  it('refuses --restore in a dry run instead of restoring', () => {
+    mockRestoreConfigBackups.mockReturnValue([]);
+
+    expect(() => runGlobalFlags(parseCliArgs(['--dry-run', '--restore']))).toThrow(
+      /cannot run in a dry run/
+    );
+    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
+  });
+
+  it('refuses --restore alongside a subcommand', () => {
+    mockRestoreConfigBackups.mockReturnValue([]);
+
+    expect(() =>
+      runGlobalFlags(parseCliArgs(['generate', '--preset', 'pure-prompt', '--restore']))
+    ).toThrow(/cannot be combined with the generate subcommand/);
+    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
   });
 });
 

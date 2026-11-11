@@ -159,6 +159,17 @@ export function runGlobalFlags(flags: CliFlags): boolean {
     return true;
   }
   if (flags.restore) {
+    if (flags.subcommand) {
+      throw new CliUsageError(
+        `--restore cannot be combined with the ${flags.subcommand} subcommand; ` +
+          'run it on its own.'
+      );
+    }
+    if (flags.dryRun) {
+      throw new CliUsageError(
+        '--restore rewrites config files from their backups; it cannot run in a dry run.'
+      );
+    }
     runRestore();
     return true;
   }
