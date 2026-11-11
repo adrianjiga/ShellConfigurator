@@ -183,6 +183,36 @@ export function emitFlagWarnings(flags: CliFlags): void {
   }
 }
 
+/** The config flags present on the command line, by the name shown to the user. */
+function presentConfigFlags(flags: CliFlags): string[] {
+  const present: string[] = [];
+  if (flags.preset) present.push('--preset');
+  if (flags.palette) present.push('--palette');
+  if (flags.powerline !== undefined)
+    present.push(flags.powerline ? '--powerline' : '--no-powerline');
+  if (flags.shells) present.push('--shells');
+  if (flags.font) present.push('--font');
+  if (flags.hasNerdFont !== undefined)
+    present.push(flags.hasNerdFont ? '--has-nerd-font' : '--no-nerd-font');
+  if (flags.characterSymbol) present.push('--character');
+  if (flags.setDefaultShell) present.push('--set-default');
+  if (flags.skipStarship) present.push('--skip-starship');
+  if (flags.adopt) present.push('--adopt');
+  if (flags.importUrl) present.push('--import-url');
+  if (flags.outputFile) present.push('-o/--output');
+  if (flags.exportFile) present.push('--export');
+  return present;
+}
+
+function warnIgnoredFlags(flags: CliFlags, subcommand: string): void {
+  if (flags.stateFile) return;
+  for (const flag of presentConfigFlags(flags)) {
+    process.stderr.write(
+      `shell-configurator: warning: ${flag} is ignored by ${subcommand} without --state\n`
+    );
+  }
+}
+
 /**
  * Runs the read-only health check. A failing check sets the process exit code
  * (so CI and scripts can gate on it) but never throws — the report is the
@@ -194,6 +224,7 @@ export async function runDoctorCommand(flags: CliFlags): Promise<void> {
     await runRepairCommand(flags);
     return;
   }
+  warnIgnoredFlags(flags, 'doctor');
   const state = flags.stateFile ? stateFromFlags(flags) : null;
   const report = await runDoctor(state);
   if (flags.json) {
@@ -206,6 +237,7 @@ export async function runDoctorCommand(flags: CliFlags): Promise<void> {
 
 /** Runs the doctor's fixes, then re-checks; a still-failing check exits non-zero. */
 export async function runRepairCommand(flags: CliFlags): Promise<void> {
+  warnIgnoredFlags(flags, 'repair');
   const state = flags.stateFile ? stateFromFlags(flags) : null;
   const report = await runRepair(state, undefined, { dryRun: flags.dryRun });
   if (flags.json) {
@@ -248,21 +280,8 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
         'Usage: shell-configurator apply --adopt [--shells <id,...>]'
     );
   }
-  const dropped: string[] = [];
-  if (flags.preset) dropped.push('--preset');
-  if (flags.palette) dropped.push('--palette');
-  if (flags.powerline !== undefined)
-    dropped.push(flags.powerline ? '--powerline' : '--no-powerline');
-  if (flags.shells) dropped.push('--shells');
-  if (flags.font) dropped.push('--font');
-  if (flags.hasNerdFont !== undefined)
-    dropped.push(flags.hasNerdFont ? '--has-nerd-font' : '--no-nerd-font');
-  if (flags.characterSymbol) dropped.push('--character');
-  if (flags.setDefaultShell) dropped.push('--set-default');
-  if (flags.skipStarship) dropped.push('--skip-starship');
+  const dropped = presentConfigFlags(flags);
   if (flags.stateFile) dropped.push('--state');
-  if (flags.outputFile) dropped.push('-o/--output');
-  if (flags.exportFile) dropped.push('--export');
   if (flags.json) dropped.push('--json');
   if (flags.fix) dropped.push('--fix');
   if (dropped.length > 0) {

@@ -454,6 +454,32 @@ describe('index headless routing', () => {
     expect(process.exitCode).not.toBe(1);
   });
 
+  it('warns when doctor gets config flags without --state', async () => {
+    mockRunDoctor.mockResolvedValue({ ok: true, findings: [] });
+    mockFormatDoctorReport.mockReturnValue('HEALTHY\n');
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+
+    await route(['doctor', '--shells', 'zsh']);
+
+    expect(stderrWrite).toHaveBeenCalledWith(
+      expect.stringContaining('--shells is ignored by doctor without --state')
+    );
+    stderrWrite.mockRestore();
+  });
+
+  it('warns when repair gets config flags without --state', async () => {
+    mockRunRepair.mockResolvedValue({ ok: true, actions: [] });
+    mockFormatRepairReport.mockReturnValue('REPAIRED\n');
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+
+    await route(['repair', '--font', 'none']);
+
+    expect(stderrWrite).toHaveBeenCalledWith(
+      expect.stringContaining('--font is ignored by repair without --state')
+    );
+    stderrWrite.mockRestore();
+  });
+
   it('prints the doctor report as JSON with --json', async () => {
     const report = { ok: true, findings: [{ id: 'starship', title: 'Starship', status: 'pass' }] };
     mockRunDoctor.mockResolvedValue(report);
