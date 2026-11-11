@@ -865,7 +865,10 @@ describe('restoreConfigBackups', () => {
       }
       return [];
     });
-    vi.mocked(fs.copyFileSync).mockImplementation((_src: string, dest: string) => {
+    const copyFileSyncMock = fs.copyFileSync as unknown as Mock<
+      (src: string, dest: string) => void
+    >;
+    copyFileSyncMock.mockImplementation((_src: string, dest: string) => {
       if (dest === getShellConfigPath('zsh')) throw new Error('EACCES: permission denied');
     });
 
