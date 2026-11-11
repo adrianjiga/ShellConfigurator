@@ -133,6 +133,11 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['-o=out.toml']).outputFile).toBe('out.toml');
     });
 
+    it('accepts an inline value that starts with a dash', () => {
+      expect(parseCliArgs(['-o=-out.toml']).outputFile).toBe('-out.toml');
+      expect(parseCliArgs(['--output=-weird.toml']).outputFile).toBe('-weird.toml');
+    });
+
     it('does not reuse the next token after an inline value', () => {
       const f = parseCliArgs(['--preset=catppuccin', '--no-powerline']);
       expect(f.preset).toBe('catppuccin');

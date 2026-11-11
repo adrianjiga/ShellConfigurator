@@ -195,7 +195,8 @@ export function parseCliArgs(argv: string[]): CliFlags {
     // Value flags — the inline `=` value, else the next token (skip it only when
     // it exists; the token we consumed is never reused).
     const value = token.inlineValue ?? argv[i + 1];
-    const hasValue = value !== undefined && !value.startsWith('-');
+    const hasValue =
+      token.inlineValue !== undefined || (value !== undefined && !value.startsWith('-'));
 
     if (
       token.inlineValue === undefined &&
