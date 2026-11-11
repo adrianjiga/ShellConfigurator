@@ -6,15 +6,22 @@ import { readTerminalFontFamily, wireTerminalFont } from '../../services/termina
 
 let tmp: string;
 const originalXdg = process.env.XDG_CONFIG_HOME;
+const originalHome = process.env.HOME;
+const originalKittyDir = process.env.KITTY_CONFIG_DIRECTORY;
 
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sc-terminal-'));
   process.env.XDG_CONFIG_HOME = tmp;
+  process.env.HOME = tmp;
 });
 
 afterEach(() => {
   if (originalXdg === undefined) delete process.env.XDG_CONFIG_HOME;
   else process.env.XDG_CONFIG_HOME = originalXdg;
+  if (originalHome === undefined) delete process.env.HOME;
+  else process.env.HOME = originalHome;
+  if (originalKittyDir === undefined) delete process.env.KITTY_CONFIG_DIRECTORY;
+  else process.env.KITTY_CONFIG_DIRECTORY = originalKittyDir;
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -156,6 +163,47 @@ describe('wireTerminalFont', () => {
     expect(result.applied).toBe(false);
     expect(result.note).toContain('alacritty.yml');
     expect(read('alacritty/alacritty.yml')).toBe('font:\n  family: "Old"\n');
+  });
+
+  it('edits a kitty config in KITTY_CONFIG_DIRECTORY instead of creating the XDG one', () => {
+    process.env.KITTY_CONFIG_DIRECTORY = path.join(tmp, 'kitty-env');
+    write('kitty-env/kitty.conf', 'font_family Hack Nerd Font\n');
+
+    const result = wireTerminalFont('kitty', 'FiraCode Nerd Font');
+
+    expect(result.applied).toBe(true);
+    expect(result.path).toBe(path.join(tmp, 'kitty-env', 'kitty.conf'));
+    expect(read('kitty-env/kitty.conf')).toBe('font_family FiraCode Nerd Font\n');
+    expect(fs.existsSync(path.join(tmp, 'kitty', 'kitty.conf'))).toBe(false);
+    expect(readTerminalFontFamily('kitty')).toBe('FiraCode Nerd Font');
+  });
+
+  it.skipIf(process.platform !== 'darwin')(
+    'edits the macOS Preferences kitty config instead of creating the XDG one',
+    () => {
+      write('Library/Preferences/kitty/kitty.conf', 'font_family Hack Nerd Font\n');
+
+      const result = wireTerminalFont('kitty', 'FiraCode Nerd Font');
+
+      expect(result.applied).toBe(true);
+      expect(result.path).toBe(path.join(tmp, 'Library', 'Preferences', 'kitty', 'kitty.conf'));
+      expect(read('Library/Preferences/kitty/kitty.conf')).toBe(
+        'font_family FiraCode Nerd Font\n'
+      );
+      expect(fs.existsSync(path.join(tmp, 'kitty', 'kitty.conf'))).toBe(false);
+    }
+  );
+
+  it('edits a legacy ~/.alacritty.toml instead of creating the XDG one', () => {
+    write('.alacritty.toml', '[font.normal]\nfamily = "Old"\n');
+
+    const result = wireTerminalFont('alacritty', 'FiraCode Nerd Font');
+
+    expect(result.applied).toBe(true);
+    expect(result.path).toBe(path.join(tmp, '.alacritty.toml'));
+    expect(read('.alacritty.toml')).toBe('[font.normal]\nfamily = "FiraCode Nerd Font"\n');
+    expect(fs.existsSync(path.join(tmp, 'alacritty', 'alacritty.toml'))).toBe(false);
+    expect(readTerminalFontFamily('alacritty')).toBe('FiraCode Nerd Font');
   });
 
   it('never edits wezterm and returns the snippet instead', () => {

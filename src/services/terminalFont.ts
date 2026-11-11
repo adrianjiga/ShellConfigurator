@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { backupStamp } from '../generators/shellRc.ts';
 import { assertNever, type TerminalId } from '../types.ts';
@@ -120,6 +121,37 @@ function terminalConfigPath(id: TerminalId): string {
   }
 }
 
+// kitty and alacritty look in more places than the XDG default; editing a new
+// file in the primary location would shadow the user's real config there.
+function configLookupPaths(id: TerminalId): string[] {
+  if (id === 'kitty') {
+    const paths: string[] = [];
+    const kittyDir = process.env.KITTY_CONFIG_DIRECTORY;
+    if (kittyDir) paths.push(path.join(kittyDir, 'kitty.conf'));
+    paths.push(path.join(configHome(), 'kitty', 'kitty.conf'));
+    if (process.platform === 'darwin') {
+      paths.push(path.join(os.homedir(), 'Library', 'Preferences', 'kitty', 'kitty.conf'));
+    }
+    return paths;
+  }
+  if (id === 'alacritty') {
+    const root = configHome();
+    return [
+      alacrittyTomlPath(),
+      alacrittyYmlPath(),
+      path.join(root, 'alacritty.toml'),
+      path.join(root, 'alacritty.yml'),
+      path.join(os.homedir(), '.alacritty.toml'),
+      path.join(os.homedir(), '.alacritty.yml'),
+    ];
+  }
+  return [terminalConfigPath(id)];
+}
+
+function resolveTerminalConfigPath(id: TerminalId): string {
+  return configLookupPaths(id).find((p) => fs.existsSync(p)) ?? terminalConfigPath(id);
+}
+
 function backupIfExists(filePath: string): string | undefined {
   if (!fs.existsSync(filePath)) return undefined;
   const backup = `${filePath}.bak-${backupStamp()}`;
@@ -142,20 +174,15 @@ export function wireTerminalFont(id: TerminalId, family: string): TerminalFontRe
     };
   }
 
-  if (
-    id === 'alacritty' &&
-    !fs.existsSync(alacrittyTomlPath()) &&
-    fs.existsSync(alacrittyYmlPath())
-  ) {
-    const yml = alacrittyYmlPath();
+  const filePath = resolveTerminalConfigPath(id);
+  if (id === 'alacritty' && filePath.endsWith('.yml')) {
     return {
       applied: false,
-      path: yml,
-      note: `alacritty.yml is in use — add font.family: "${family}" under font: in ${yml}`,
+      path: filePath,
+      note: `alacritty.yml is in use — add font.family: "${family}" under font: in ${filePath}`,
     };
   }
 
-  const filePath = terminalConfigPath(id);
   const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
 
   let updated: string;
@@ -190,10 +217,7 @@ export function wireTerminalFont(id: TerminalId, family: string): TerminalFontRe
 export function readTerminalFontFamily(id: TerminalId): string | null {
   if (id === 'wezterm') return null;
 
-  let filePath = terminalConfigPath(id);
-  if (id === 'alacritty' && !fs.existsSync(filePath) && fs.existsSync(alacrittyYmlPath())) {
-    filePath = alacrittyYmlPath();
-  }
+  const filePath = resolveTerminalConfigPath(id);
   if (!fs.existsSync(filePath)) return null;
 
   const content = fs.readFileSync(filePath, 'utf8');
