@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { MODULES } from '../../config/modules.ts';
 import { PALETTES } from '../../config/palettes.ts';
 import { PRESETS } from '../../config/presets.ts';
-import { SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../../config/promptSymbols.ts';
+import { NERD_FONT_SYMBOLS, SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../../config/promptSymbols.ts';
 import { generateToml } from '../../generators/starship.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
@@ -366,20 +366,26 @@ describe('powerline segments', () => {
     expect(generated).toContain('style  = "bold fg:fg bg:directory"');
   });
 
-  it('interlocks left separators using the next segment background', () => {
+  it('leads left segments with a separator on their own background', () => {
     const generated = generateToml(powerlineState);
-    expect(generated).toContain(`[${SEPARATOR_RIGHT}](fg:directory bg:git_branch)`);
+    expect(generated).toContain(`[${SEPARATOR_RIGHT}](fg:prev_bg bg:git_branch)`);
   });
 
-  it('leaves the outermost separator without a background', () => {
+  it('leaves the first left segment without a separator', () => {
     const generated = generateToml(powerlineState);
-    expect(generated).toContain(`[${SEPARATOR_RIGHT}](fg:git_branch)`);
+    expect(generated).toContain(`[ ${NERD_FONT_SYMBOLS.directory}$path$read_only ]($style)`);
+    expect(generated).not.toContain(`bg:directory)`);
   });
 
-  it('points right-hand separators back at the previous segment', () => {
+  it('ends the left side with a fade-out literal coloured by prev_bg', () => {
     const generated = generateToml(powerlineState);
-    expect(generated).toContain(`[${SEPARATOR_LEFT}](fg:nodejs)`);
-    expect(generated).toContain(`[${SEPARATOR_LEFT}](fg:cmd_duration bg:nodejs)`);
+    expect(generated).toContain(`$directory$git_branch[${SEPARATOR_RIGHT}](fg:prev_bg)$fill`);
+  });
+
+  it('fades right-hand separators in from the previous segment', () => {
+    const generated = generateToml(powerlineState);
+    expect(generated).toContain(`[${SEPARATOR_LEFT}](fg:nodejs bg:prev_bg)`);
+    expect(generated).toContain(`[${SEPARATOR_LEFT}](fg:cmd_duration bg:prev_bg)`);
   });
 
   it('collapses an empty module instead of leaving a blank block', () => {

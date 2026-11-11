@@ -40,39 +40,39 @@ function buildFormatString(segments: ConfigurableModuleId[]): string {
 }
 
 /**
- * Wraps a module's content in the separators for its position in the prompt.
+ * Wraps a module's content in its separator and coloured block.
  *
- * On the left the separator trails each segment and points right; on the right it
- * leads each segment and points left. Its foreground matches the current block
- * and its background matches the neighboring block, forming the conventional
- * interlocking powerline shape. The outer end fades into the terminal.
+ * Every segment carries its separator on its leading edge, coloured with
+ * Starship's `prev_bg` (1.20+): the separator inherits whatever actually
+ * rendered before it, so a module that shows nothing (a clean repo's
+ * git_status, python outside a project) takes its separator with it instead
+ * of leaving a stray coloured block behind. On the left the separator trails
+ * the previous block pointing right; on the right it leads the block pointing
+ * left. The outer ends fade into the terminal via `bg:prev_bg`/`bg:none`.
  */
 function powerlineFormat(
   content: string,
   color: PaletteColorName,
-  neighbour: PaletteColorName | null,
-  side: 'left' | 'right'
+  side: 'left' | 'right',
+  separator: boolean
 ): string {
-  const separatorStyle = neighbour ? `fg:${color} bg:${neighbour}` : `fg:${color}`;
   const block = `[ ${content} ]($style)`;
-  const separator = `[${side === 'left' ? SEPARATOR_RIGHT : SEPARATOR_LEFT}](${separatorStyle})`;
-  // Wrapped in a conditional group: starship drops a `(…)` group whose variables
-  // are all empty, so a module with nothing to show (a clean repo's git_status, a
-  // command too fast for cmd_duration) collapses instead of leaving an empty
-  // coloured block and a stray separator in the prompt.
-  return side === 'left' ? `(${block}${separator})` : `(${separator}${block})`;
+  if (!separator) return `(${block})`;
+  const separatorStyle = side === 'left' ? `fg:prev_bg bg:${color}` : `fg:${color} bg:prev_bg`;
+  const glyph = `[${side === 'left' ? SEPARATOR_RIGHT : SEPARATOR_LEFT}](${separatorStyle})`;
+  return `(${glyph}${block})`;
 }
 
 interface BlockContext {
   state: WizardState;
   powerline: boolean;
-  /** The colour of the segment the separator points into, if there is one. */
-  neighbour: PaletteColorName | null;
+  /** False only for the first left-side segment, which starts flush at the prompt. */
+  separator: boolean;
   side: 'left' | 'right';
 }
 
 function moduleBlock(id: ModuleId, ctx: BlockContext): string {
-  const { state, powerline, neighbour, side } = ctx;
+  const { state, powerline, separator, side } = ctx;
 
   // The character is not a placeable module, so it has no MODULES entry. It also
   // sits on its own line below the prompt, where there is nothing to interlock
@@ -113,7 +113,7 @@ disabled = false
       id === 'directory' && state.hasNerdFont
         ? `${NERD_FONT_SYMBOLS.directory}${def.content}`
         : def.content;
-    lines.push(`format = "${tomlBasic(powerlineFormat(content, def.id, neighbour, side))}"`);
+    lines.push(`format = "${tomlBasic(powerlineFormat(content, def.id, side, separator))}"`);
   }
 
   const settings = def.settings?.({
@@ -152,7 +152,12 @@ export function generateToml(state: WizardState): string {
   const leftSegments = leftModules.filter(isConfigurableModule);
   const rightSegments = rightModules.filter(isConfigurableModule);
 
-  const leftFormat = buildFormatString(leftSegments);
+  // The left side ends in a literal fade-out arrow coloured with prev_bg, so
+  // it follows whatever module actually rendered last rather than a
+  // configured neighbour that may show nothing.
+  const leftFormat =
+    buildFormatString(leftSegments) +
+    (powerline && leftSegments.length > 0 ? `[${SEPARATOR_RIGHT}](fg:prev_bg)` : '');
   const rightFormat = buildFormatString(rightSegments);
 
   // Use $fill to right-align modules on the same line, then \n$character
@@ -165,16 +170,16 @@ export function generateToml(state: WizardState): string {
   parts.push('\\n$character');
   const format = parts.filter(Boolean).join('');
 
-  // On the left the separator points at the next segment; on the right, the
-  // previous one. Either way the segment at the outer end has no neighbour.
+  // Every segment except the first left-side one carries a leading separator;
+  // the first sits flush at the start of the prompt. The right side's first
+  // separator fades in from prev_bg (nothing before it but $fill).
   const blocksFor = (segments: ConfigurableModuleId[], at: 'left' | 'right') =>
-    segments.map((id, i) => {
-      const neighbour = segments[at === 'left' ? i + 1 : i - 1] ?? null;
-      return moduleBlock(id, { state, powerline, neighbour, side: at });
-    });
+    segments.map((id, i) =>
+      moduleBlock(id, { state, powerline, separator: at === 'right' || i > 0, side: at })
+    );
 
   const characterBlock = leftModules.includes('character')
-    ? [moduleBlock('character', { state, powerline, neighbour: null, side: 'left' })]
+    ? [moduleBlock('character', { state, powerline, separator: false, side: 'left' })]
     : [];
 
   const blocks = [
