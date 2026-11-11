@@ -57,7 +57,6 @@ export interface CliFlags {
   warnings: string[];
 }
 
-/** A flag that takes no value, so the next token is not consumed as its value. */
 const SHORT_FLAGS: Record<string, string> = {
   '-o': '--output',
   '-d': '--dry-run',
@@ -65,38 +64,97 @@ const SHORT_FLAGS: Record<string, string> = {
   '-h': '--help',
 };
 
-/** Flags whose presence alone is the value. An `=` form is a contradiction. */
-const BOOLEAN_FLAGS = new Set<string>([
-  '--help',
-  '--version',
-  '--restore',
-  '--undo',
-  '--dry-run',
-  '--no-install',
-  '--powerline',
-  '--no-powerline',
-  '--has-nerd-font',
-  '--no-nerd-font',
-  '--skip-starship',
-  '--adopt',
-  '--json',
-  '--fix',
-]);
+/** Boolean flags; the handler applies the value (the bare form means true). */
+const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> = {
+  '--help': (r, v) => {
+    r.help = v;
+  },
+  '--version': (r, v) => {
+    r.version = v;
+  },
+  '--restore': (r, v) => {
+    r.restore = v;
+  },
+  '--undo': (r, v) => {
+    r.restore = v;
+  },
+  '--dry-run': (r, v) => {
+    r.dryRun = v;
+  },
+  '--no-install': (r, v) => {
+    r.dryRun = v;
+  },
+  '--powerline': (r, v) => {
+    r.powerline = v;
+  },
+  '--no-powerline': (r, v) => {
+    r.powerline = !v;
+  },
+  '--has-nerd-font': (r, v) => {
+    r.hasNerdFont = v;
+  },
+  '--no-nerd-font': (r, v) => {
+    r.hasNerdFont = !v;
+  },
+  '--skip-starship': (r, v) => {
+    r.skipStarship = v;
+  },
+  '--adopt': (r, v) => {
+    r.adopt = v;
+  },
+  '--json': (r, v) => {
+    r.json = v;
+  },
+  '--fix': (r, v) => {
+    r.fix = v;
+  },
+};
 
-/** Flags that consume the next token (or an inline `=value`) as their value. */
-const VALUE_FLAGS = new Set<string>([
-  '--preset',
-  '--palette',
-  '--shells',
-  '--font',
-  '--character',
-  '--set-default',
-  '--import',
-  '--state',
-  '--import-url',
-  '--output',
-  '--export',
-]);
+/** Value flags; the handler stores the consumed value. */
+const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
+  '--preset': (r, v) => {
+    r.preset = v;
+  },
+  '--palette': (r, v) => {
+    r.palette = v;
+  },
+  '--shells': (r, v) => {
+    r.shells = v
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  },
+  '--font': (r, v) => {
+    r.font = v;
+  },
+  '--character': (r, v) => {
+    r.characterSymbol = v;
+  },
+  '--set-default': (r, v) => {
+    r.setDefaultShell = v;
+  },
+  '--import': (r, v) => {
+    r.stateFile = v;
+  },
+  '--state': (r, v) => {
+    r.stateFile = v;
+  },
+  '--import-url': (r, v) => {
+    r.importUrl = v;
+  },
+  '--output': (r, v) => {
+    r.outputFile = v;
+  },
+  '--export': (r, v) => {
+    r.exportFile = v;
+  },
+};
+
+const SHORT_BOOLEAN_FLAGS = new Set(
+  Object.entries(SHORT_FLAGS)
+    .filter(([, long]) => BOOLEAN_FLAGS[long] !== undefined)
+    .map(([short]) => short)
+);
 
 /** Splits a token into its long-form name and any inline `=` value. */
 function splitToken(token: string): { name: string; inlineValue?: string } {
@@ -137,74 +195,33 @@ export function parseCliArgs(argv: string[]): CliFlags {
         subcommandSeen = true;
         continue;
       }
-      throw new CliUsageError(
-        `Unknown command '${arg}' (available: ${SUBCOMMANDS.join(', ')})`
-      );
+      throw new CliUsageError(`Unknown command '${arg}' (available: ${SUBCOMMANDS.join(', ')})`);
     }
 
     // Combined short boolean flags (-dv); -o takes a value and cannot combine.
     if (token.inlineValue === undefined && /^-[^-]{2,}$/.test(token.name)) {
       const chars = [...token.name.slice(1)];
-      if (chars.every((c) => c === 'd' || c === 'v' || c === 'h')) {
-        if (chars.includes('h')) result.help = true;
-        if (chars.includes('v')) result.version = true;
-        if (chars.includes('d')) result.dryRun = true;
+      if (chars.every((c) => SHORT_BOOLEAN_FLAGS.has(`-${c}`))) {
+        for (const c of chars) {
+          BOOLEAN_FLAGS[SHORT_FLAGS[`-${c}`]!](result, true);
+        }
         continue;
       }
     }
 
-    // Boolean flags — the value is the flag itself. `--flag=x` is not boolean:
-    // a value on a boolean flag is a contradiction, so warn and drop the token.
-    if (token.inlineValue === undefined) {
-      switch (flag) {
-        case '--help':
-          result.help = true;
-          continue;
-        case '--version':
-          result.version = true;
-          continue;
-        case '--restore':
-        case '--undo':
-          result.restore = true;
-          continue;
-        case '--dry-run':
-          result.dryRun = true;
-          continue;
-        case '--no-install':
-          result.dryRun = true;
-          continue;
-        case '--powerline':
-          result.powerline = true;
-          continue;
-        case '--no-powerline':
-          result.powerline = false;
-          continue;
-        case '--has-nerd-font':
-          result.hasNerdFont = true;
-          continue;
-        case '--no-nerd-font':
-          result.hasNerdFont = false;
-          continue;
-        case '--skip-starship':
-          result.skipStarship = true;
-          continue;
-        case '--adopt':
-          result.adopt = true;
-          continue;
-        case '--json':
-          result.json = true;
-          continue;
-        case '--fix':
-          result.fix = true;
-          continue;
+    const booleanFlag = BOOLEAN_FLAGS[flag];
+    if (booleanFlag !== undefined) {
+      if (token.inlineValue === undefined) {
+        booleanFlag(result, true);
+      } else {
+        result.warnings.push(`Flag '${flag}' does not take a value; ignoring '${arg}'`);
       }
-    } else if (BOOLEAN_FLAGS.has(flag)) {
-      result.warnings.push(`Flag '${flag}' does not take a value; ignoring '${arg}'`);
       continue;
     }
 
     // Value flags — the inline `=` value, else the next token (skip it only when
     // it exists; the token we consumed is never reused).
+    const valueFlag = VALUE_FLAGS[flag];
     const value = token.inlineValue ?? argv[i + 1];
     const hasValue =
       token.inlineValue !== undefined
@@ -214,61 +231,27 @@ export function parseCliArgs(argv: string[]): CliFlags {
     if (
       token.inlineValue === undefined &&
       value !== undefined &&
-      VALUE_FLAGS.has(flag) &&
+      valueFlag !== undefined &&
       SUBCOMMANDS.includes(value as Subcommand)
     ) {
       throw new CliUsageError(`Flag '${flag}' needs a value; '${value}' is a subcommand name`);
     }
 
     if (!hasValue) {
-      if (VALUE_FLAGS.has(flag)) {
+      if (valueFlag !== undefined) {
         result.warnings.push(`Flag '${flag}' needs a value; ignoring it`);
         if (token.inlineValue === undefined && argv[i + 1] === '') i++;
-      } else if (flag.startsWith('-')) {
+      } else {
         result.warnings.push(`Unknown flag '${flag}'; ignoring it`);
       }
       continue;
     }
 
-    switch (flag) {
-      case '--preset':
-        result.preset = value;
-        break;
-      case '--palette':
-        result.palette = value;
-        break;
-      case '--shells':
-        result.shells = value
-          .split(',')
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0);
-        break;
-      case '--font':
-        result.font = value;
-        break;
-      case '--character':
-        result.characterSymbol = value;
-        break;
-      case '--set-default':
-        result.setDefaultShell = value;
-        break;
-      case '--import':
-      case '--state':
-        result.stateFile = value;
-        break;
-      case '--import-url':
-        result.importUrl = value;
-        break;
-      case '--output':
-        result.outputFile = value;
-        break;
-      case '--export':
-        result.exportFile = value;
-        break;
-      default:
-        result.warnings.push(`Unknown flag '${flag}'; ignoring it`);
-        continue;
+    if (valueFlag === undefined) {
+      result.warnings.push(`Unknown flag '${flag}'; ignoring it`);
+      continue;
     }
+    valueFlag(result, value);
     if (token.inlineValue === undefined) i++;
   }
 
