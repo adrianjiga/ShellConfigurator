@@ -93,12 +93,13 @@ Usage:
   shell-configurator --restore    restore configs from their newest backup
 
 Options:
-  -h, --help       Show this help and exit
-  -v, --version    Print the version and exit
-  -d, --dry-run    Generate config in-memory and show a summary; installs nothing
-  --no-install     Alias for --dry-run
-  --restore        Copy the newest .bak-* snapshot back over the shared and
-                   per-shell configs created by earlier wizard runs
+  -h, --help          Show this help and exit
+  -v, --version       Print the version and exit
+  -d, --dry-run       Install nothing; print what would happen (generate still
+                     writes -o/--export files)
+  --no-install        Alias for --dry-run
+  --restore, --undo   Copy the newest .bak-* snapshot back over the shared and
+                     per-shell configs created by earlier wizard runs
 
   Flags may appear before or after the subcommand (e.g. "--dry-run generate"
   works like "generate --dry-run"); when a flag is repeated the last one wins.
@@ -113,9 +114,9 @@ generate options (the config — a versioned state card with --export):
   --character <arrow|lambda|dollar> The prompt character symbol
   --set-default <shell>  Make a shell the login default
   --skip-starship      Do not install or require Starship
-  -o <file>            Write the TOML here instead of stdout
+  -o, --output <file>  Write the TOML here instead of stdout
   --export <file>      Write the state card here (add -o to keep the TOML too)
-  --import <file>      Start from a saved state card instead of flags
+  --import, --state <file>  Start from a saved state card instead of flags
 
 apply options (a headless install from a state card):
   --state <file>       The state card describing the install (also: --import)
@@ -123,6 +124,8 @@ apply options (a headless install from a state card):
   --adopt              Keep the existing shared starship.toml instead of
                        regenerating it (per-shell files are never written)
   --import-url <url>   Fetch a starship.toml over the web and adopt it (implies --adopt)
+  Without --state, apply also takes the generate options above; --shells is
+  then required.
 
 doctor options (read-only; exits non-zero when a check fails):
   --state <file>       Check the setup described by a saved state card

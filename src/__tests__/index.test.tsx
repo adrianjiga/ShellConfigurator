@@ -127,6 +127,15 @@ describe('index CLI handling', () => {
     );
   });
 
+  it('lists every accepted flag in the help text', () => {
+    runGlobalFlags(parseCliArgs(['--help']));
+    const help = String(stdoutWrite.mock.calls[0]?.[0]);
+    expect(help).toContain('--restore, --undo');
+    expect(help).toContain('-o, --output <file>');
+    expect(help).toContain('--import, --state <file>');
+    expect(help).toContain('--shells is');
+  });
+
   it('does not consume args when unknown flags are passed', () => {
     expect(runGlobalFlags(parseCliArgs(['--bogus']))).toBe(false);
     expect(stdoutWrite).not.toHaveBeenCalled();
