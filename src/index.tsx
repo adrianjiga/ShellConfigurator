@@ -5,7 +5,7 @@ import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { restoreConfigBackups } from './generators/shellRc.ts';
 import type { CliFlags } from './services/args.ts';
-import { parseCliArgs } from './services/args.ts';
+import { parseCliArgs, quoteArgv } from './services/args.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
 import { CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags } from './services/headless.ts';
@@ -306,7 +306,7 @@ export async function routeCli(argv: string[]): Promise<{ handled: boolean; flag
   const flags: CliFlags = parseCliArgs(argv);
   emitFlagWarnings(flags);
   if (runGlobalFlags(flags)) return { handled: true, flags };
-  const handled = await runHeadlessCommand(flags, argv.join(' '));
+  const handled = await runHeadlessCommand(flags, quoteArgv(argv));
   return { handled, flags };
 }
 

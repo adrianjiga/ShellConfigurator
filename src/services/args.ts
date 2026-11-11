@@ -105,6 +105,14 @@ function splitToken(token: string): { name: string; inlineValue?: string } {
   return { name: token.slice(0, eq), inlineValue: token.slice(eq + 1) };
 }
 
+export function quoteArgv(argv: string[]): string {
+  return argv
+    .map((arg) =>
+      arg === '' || /[^\w@%+=:,./-]/.test(arg) ? `'${arg.replaceAll("'", `'\\''`)}'` : arg
+    )
+    .join(' ');
+}
+
 export function parseCliArgs(argv: string[]): CliFlags {
   const result: CliFlags = {
     subcommand: null,

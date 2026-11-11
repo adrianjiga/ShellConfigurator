@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type CliFlags, parseCliArgs } from '../../services/args.ts';
+import { type CliFlags, parseCliArgs, quoteArgv } from '../../services/args.ts';
 
 describe('parseCliArgs', () => {
   it('returns defaults when argv is empty', () => {
@@ -210,7 +210,27 @@ describe('parseCliArgs', () => {
     expect(f.powerline).toBe(false);
   });
 
-  describe('warnings', () => {
+  describe('quoteArgv', () => {
+  it('leaves shell-safe tokens bare', () => {
+    expect(quoteArgv(['generate', '--preset', 'pure-prompt', '-o', 'out.toml'])).toBe(
+      'generate --preset pure-prompt -o out.toml'
+    );
+  });
+
+  it('quotes tokens with spaces so recorded commands re-run verbatim', () => {
+    expect(quoteArgv(['--state', 'my card.json'])).toBe("--state 'my card.json'");
+  });
+
+  it('escapes embedded single quotes', () => {
+    expect(quoteArgv(["it's.toml"])).toBe("'it'\\''s.toml'");
+  });
+
+  it('quotes an empty token', () => {
+    expect(quoteArgv([''])).toBe("''");
+  });
+});
+
+describe('warnings', () => {
     it('collects none for a clean command line', () => {
       expect(parseCliArgs(['generate', '--preset', 'pure']).warnings).toEqual([]);
     });
