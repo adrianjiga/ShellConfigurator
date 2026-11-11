@@ -36,27 +36,33 @@ function setLine(content: string, pattern: RegExp, line: string): string {
 }
 
 /**
- * Sets `family` in Alacritty's `[font.normal]` table. Alacritty accepts either a
- * nested table or an inline `normal = { … }`, and rejects an unknown `family`
- * key directly under `[font]`; each shape is updated in place, and a missing
- * table is appended.
+ * Sets `family` in Alacritty's `[font.normal]` table. Handles the inline
+ * `normal = { … }` shape, dotted `normal.family`/`font.normal.family` keys and
+ * the `[font.normal]` header (with optional spacing or trailing comment); a
+ * missing table is appended, never duplicated.
  */
 function setTomlFont(content: string, family: string): string {
   const line = `family = "${family}"`;
 
-  const inlineRe = /^([ \t]*)normal\s*=\s*\{([^}]*)\}[ \t]*$/m;
+  const inlineRe = /^([ \t]*)normal\s*=\s*\{([^}]*)\}([ \t]*(?:#.*)?)$/m;
   const inlineMatch = inlineRe.exec(content);
   if (inlineMatch) {
-    const [, indent, inner] = inlineMatch;
+    const [, indent, inner, trailing] = inlineMatch;
     const body = /family\s*=/.test(inner)
       ? inner.replace(/family\s*=\s*"[^"]*"/, line)
       : inner.trim() === ''
         ? ` ${line} `
         : ` ${line},${inner}`;
-    return content.replace(inlineRe, () => `${indent}normal = {${body}}`);
+    return content.replace(inlineRe, () => `${indent}normal = {${body}}${trailing}`);
   }
 
-  const headerMatch = /^\[font\.normal\]\s*$/m.exec(content);
+  const dottedRe = /^([ \t]*(?:font\.)?normal\.family)[ \t]*=[ \t]*"[^"]*"[ \t]*(?:#.*)?$/m;
+  if (dottedRe.test(content)) {
+    return content.replace(dottedRe, (_m, prefix: string) => `${prefix} = "${family}"`);
+  }
+
+  const headerRe = /^[ \t]*\[[ \t]*font\.normal[ \t]*\][ \t]*(?:#.*)?$/m;
+  const headerMatch = headerRe.exec(content);
   if (!headerMatch || headerMatch.index === undefined) {
     return appendBlock(content, `[font.normal]\n${line}`);
   }

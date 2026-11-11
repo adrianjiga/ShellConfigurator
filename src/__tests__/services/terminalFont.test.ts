@@ -106,6 +106,38 @@ describe('wireTerminalFont', () => {
     expect(again.applied).toBe(false);
   });
 
+  it('updates an inline alacritty font table with a trailing comment', () => {
+    write('alacritty/alacritty.toml', '[font]\nnormal = { family = "Old" } # main font\n');
+
+    wireTerminalFont('alacritty', 'Hack Nerd Font');
+
+    expect(read('alacritty/alacritty.toml')).toBe(
+      '[font]\nnormal = { family = "Hack Nerd Font" } # main font\n'
+    );
+  });
+
+  it('recognises an alacritty [font.normal] header with spacing or a comment', () => {
+    write('alacritty/alacritty.toml', '[ font.normal ] # main font\nfamily = "Old"\n');
+
+    wireTerminalFont('alacritty', 'Hack Nerd Font');
+
+    expect(read('alacritty/alacritty.toml')).toBe(
+      '[ font.normal ] # main font\nfamily = "Hack Nerd Font"\n'
+    );
+  });
+
+  it.each([
+    '[font]\nnormal.family = "Old"\nstyle = "Bold"\n',
+    'font.normal.family = "Old"\n',
+  ])('updates the dotted alacritty family key written as %s', (original) => {
+    write('alacritty/alacritty.toml', original);
+
+    wireTerminalFont('alacritty', 'Hack Nerd Font');
+
+    expect(read('alacritty/alacritty.toml')).toBe(original.replace('"Old"', '"Hack Nerd Font"'));
+    expect(read('alacritty/alacritty.toml').match(/^\[font.normal\]/gm)).toBeNull();
+  });
+
   it('adds a [font.normal] table when only [font] exists', () => {
     write('alacritty/alacritty.toml', '[font]\nsize = 12\n');
 
