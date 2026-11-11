@@ -29,8 +29,22 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['repair']).subcommand).toBe('repair');
     });
 
-    it('ignores unknown positional tokens', () => {
-      expect(parseCliArgs(['deploy']).subcommand).toBeNull();
+    it('rejects an unknown word in the subcommand position', () => {
+      expect(() => parseCliArgs(['deploy'])).toThrow(/Unknown command 'deploy'/);
+      expect(() => parseCliArgs(['docter'])).toThrow(/Unknown command 'docter'/);
+      expect(() => parseCliArgs(['generat'])).toThrow(/Unknown command 'generat'/);
+    });
+
+    it('lists the available commands in the error', () => {
+      expect(() => parseCliArgs(['deploy'])).toThrow(/generate, apply, doctor, repair/);
+    });
+
+    it('rejects a second positional argument', () => {
+      expect(() => parseCliArgs(['generate', 'apply'])).toThrow(/Unexpected argument 'apply'/);
+    });
+
+    it('rejects a bare word dropped after a boolean flag', () => {
+      expect(() => parseCliArgs(['--powerline', 'false'])).toThrow(/Unknown command 'false'/);
     });
   });
 

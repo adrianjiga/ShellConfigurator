@@ -129,10 +129,6 @@ describe('index CLI handling', () => {
     expect(runGlobalFlags(parseCliArgs(['--bogus']))).toBe(false);
     expect(stdoutWrite).not.toHaveBeenCalled();
   });
-
-  it('treats non-flag args as not a flag request', () => {
-    expect(runGlobalFlags(parseCliArgs(['somefile']))).toBe(false);
-  });
 });
 
 describe('index restore flag', () => {

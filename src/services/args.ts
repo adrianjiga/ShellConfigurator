@@ -2,14 +2,16 @@
  * Minimal CLI argument parser for the public headless flag surface (D2).
  *
  * Deliberately dependency-free and hand-rolled: the tool ships a bundled,
- * offline tarball, so a flag parser must not add a runtime dependency. It
- * recognises the subcommand as the first positional token and then walks the
- * flags. Anything unknown is collected as a warning rather than an error so
- * the same argv can still fall through to the existing global-flag handling —
- * a typo'd flag must be surfaced, but it must not abort the run.
+ * offline tarball, so a flag parser must not add a runtime dependency. The
+ * subcommand is the first positional token; a stray word there is an error
+ * (it must not silently drop the user into the installer), while a typo'd flag
+ * is only warned about so the run can still proceed.
  */
+import { CliUsageError } from './errors.ts';
 
 export type Subcommand = 'generate' | 'apply' | 'doctor' | 'repair';
+
+export const SUBCOMMANDS: readonly Subcommand[] = ['generate', 'apply', 'doctor', 'repair'];
 
 export interface CliFlags {
   /** The subcommand, or null when the run is interactive or a plain flag. */
@@ -119,14 +121,17 @@ export function parseCliArgs(argv: string[]): CliFlags {
     const flag = SHORT_FLAGS[token.name] ?? token.name;
 
     if (!flag.startsWith('-')) {
-      if (
-        !subcommandSeen &&
-        (flag === 'generate' || flag === 'apply' || flag === 'doctor' || flag === 'repair')
-      ) {
-        result.subcommand = flag;
-        subcommandSeen = true;
+      if (subcommandSeen) {
+        throw new CliUsageError(`Unexpected argument '${arg}'`);
       }
-      continue;
+      if (SUBCOMMANDS.includes(flag as Subcommand)) {
+        result.subcommand = flag as Subcommand;
+        subcommandSeen = true;
+        continue;
+      }
+      throw new CliUsageError(
+        `Unknown command '${arg}' (available: ${SUBCOMMANDS.join(', ')})`
+      );
     }
 
     // Boolean flags — the value is the flag itself. `--flag=x` is not boolean:
