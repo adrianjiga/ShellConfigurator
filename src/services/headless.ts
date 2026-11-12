@@ -315,6 +315,9 @@ export async function fetchImportedConfig(
   if (!response.ok) {
     throw new CliRunError(`Could not fetch '${url}': HTTP ${response.status}`);
   }
+  if (response.url && !response.url.toLowerCase().startsWith('https://')) {
+    throw new CliRunError(`Could not fetch '${url}': redirected to a non-https URL ${response.url}`);
+  }
 
   // A declared content-length is a cheap first gate; the actual byte count is
   // the real check, so a lying or chunked server cannot sneak past.

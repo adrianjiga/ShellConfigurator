@@ -55,8 +55,8 @@ import {
   runGenerate,
   stateFromFlags,
 } from '../../services/headless.ts';
-import { DEFAULT_INSTALL_TASK_DEPS } from '../../services/installTasks.ts';
 import { NERD_FONTS } from '../../services/installer.ts';
+import { DEFAULT_INSTALL_TASK_DEPS } from '../../services/installTasks.ts';
 import { STATE_VERSION, serializeState } from '../../services/state.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
@@ -164,9 +164,9 @@ describe('stateFromFlags', () => {
   });
 
   it('rejects a default shell that is not one of the shells being configured', () => {
-    expect(() =>
-      stateFromFlags(flags({ shells: ['bash'], setDefaultShell: 'zsh' }))
-    ).toThrow(/not one of the shells being configured/);
+    expect(() => stateFromFlags(flags({ shells: ['bash'], setDefaultShell: 'zsh' }))).toThrow(
+      /not one of the shells being configured/
+    );
     expect(() =>
       stateFromFlags(flags({ shells: ['bash'], setDefaultShell: 'bash' }))
     ).not.toThrow();
@@ -221,7 +221,12 @@ describe('stateFromFlags', () => {
 
   it('applies the remaining scalar flags', () => {
     const state = stateFromFlags(
-      flags({ characterSymbol: 'lambda', shells: ['zsh'], setDefaultShell: 'zsh', skipStarship: true })
+      flags({
+        characterSymbol: 'lambda',
+        shells: ['zsh'],
+        setDefaultShell: 'zsh',
+        skipStarship: true,
+      })
     );
     expect(state.characterSymbol).toBe('lambda');
     expect(state.setDefaultShell).toBe('zsh');
@@ -711,15 +716,25 @@ describe('runApply', () => {
   });
 
   it('refuses a plain-http import URL', async () => {
-    await expect(
-      fetchImportedConfig('http://example.com/starship.toml')
-    ).rejects.toThrow(/requires an https URL/);
+    await expect(fetchImportedConfig('http://example.com/starship.toml')).rejects.toThrow(
+      /requires an https URL/
+    );
   });
 
   it('accepts an uppercase scheme', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('[a]', { status: 200 }));
 
     await expect(fetchImportedConfig('HTTPS://example.com/starship.toml')).resolves.toBe('[a]');
+  });
+
+  it('rejects a redirect that lands on plain http', async () => {
+    const response = new Response('[a]', { status: 200 });
+    Object.defineProperty(response, 'url', { value: 'http://mirror.example.com/config.toml' });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+
+    await expect(fetchImportedConfig('https://example.com/starship.toml')).rejects.toThrow(
+      /redirected to a non-https URL/
+    );
   });
 
   it('rejects an HTTP error when fetching an imported config as a run failure', async () => {
@@ -750,9 +765,9 @@ describe('runApply', () => {
       new Response('<!DOCTYPE html><html><body>gist</body></html>', { status: 200 })
     );
 
-    await expect(
-      fetchImportedConfig('https://gist.example.com/not-raw')
-    ).rejects.toThrow(/returned HTML, not a TOML config/);
+    await expect(fetchImportedConfig('https://gist.example.com/not-raw')).rejects.toThrow(
+      /returned HTML, not a TOML config/
+    );
   });
 
   it('rejects an oversized imported config based on the declared content-length', async () => {
