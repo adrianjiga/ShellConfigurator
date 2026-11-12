@@ -388,6 +388,19 @@ describe('runGenerate', () => {
     }
   });
 
+  it('rejects writing the card and the TOML to the same file', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const out = path.join(dir, 'starship.toml');
+      expect(() =>
+        runGenerate(flags({ preset: 'pure-prompt', exportFile: out, outputFile: out }))
+      ).toThrow(CliUsageError);
+      expect(fs.existsSync(out)).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('reports an unwritable -o path as a run failure', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
     try {

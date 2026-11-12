@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { MODULES } from '../config/modules.ts';
 import { PALETTES } from '../config/palettes.ts';
 import { PRESETS } from '../config/presets.ts';
@@ -205,10 +206,18 @@ export function runGenerate(flags: CliFlags): void {
     throw new CliUsageError('--adopt and --import-url are only valid with the apply subcommand.');
   }
   const state = stateFromFlags(flags);
+  const toml = generateToml(state);
 
-  // --export and -o are siblings, not alternatives: the versioned card records
-  // the decisions while the TOML is the artifact. When only the card is wanted,
-  // nothing else goes to stdout.
+  if (
+    flags.outputFile &&
+    flags.exportFile &&
+    path.resolve(flags.outputFile) === path.resolve(flags.exportFile)
+  ) {
+    throw new CliUsageError(
+      `Refusing to write the TOML and the state card to the same file: ${flags.outputFile}`
+    );
+  }
+
   if (flags.exportFile) {
     try {
       fs.writeFileSync(flags.exportFile, serializeState(state));
@@ -219,7 +228,6 @@ export function runGenerate(flags: CliFlags): void {
     }
   }
 
-  const toml = generateToml(state);
   if (flags.outputFile) {
     try {
       fs.writeFileSync(flags.outputFile, toml);
