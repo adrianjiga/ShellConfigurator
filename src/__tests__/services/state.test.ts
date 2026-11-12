@@ -149,6 +149,15 @@ describe('parseState', () => {
     expect(restored.rightModules).toEqual(['time']);
   });
 
+  it('keeps an empty left module list instead of restoring the defaults', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.leftModules = [];
+    card.wizard.rightModules = ['time'];
+    const restored = parseState(JSON.stringify(card));
+    expect(restored.leftModules).toEqual([]);
+    expect(restored.rightModules).toEqual(['time']);
+  });
+
   it('drops malformed substitution entries and keeps the last duplicate source', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
     card.wizard.directorySubstitutions = [
