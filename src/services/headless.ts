@@ -97,6 +97,12 @@ function assertValidState(state: WizardState): void {
   for (const shell of state.selectedShells) {
     if (!SHELL_IDS.has(shell)) throw unknown('shell id', shell, [...SHELL_IDS]);
   }
+  if (state.setDefaultShell !== null && !state.selectedShells.includes(state.setDefaultShell)) {
+    throw new CliUsageError(
+      `Cannot set '${state.setDefaultShell}' as the default shell: it is not one of the ` +
+        `shells being configured (${state.selectedShells.join(', ') || 'none'}).`
+    );
+  }
   const font = state.nerdFontToInstall;
   if (font.kind === 'install' && !FONT_IDS.has(font.id)) {
     throw unknown('Nerd Font', font.id, [...FONT_IDS]);

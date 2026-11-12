@@ -163,6 +163,15 @@ describe('stateFromFlags', () => {
     expect(state.powerline).toBe(false);
   });
 
+  it('rejects a default shell that is not one of the shells being configured', () => {
+    expect(() =>
+      stateFromFlags(flags({ shells: ['bash'], setDefaultShell: 'zsh' }))
+    ).toThrow(/not one of the shells being configured/);
+    expect(() =>
+      stateFromFlags(flags({ shells: ['bash'], setDefaultShell: 'bash' }))
+    ).not.toThrow();
+  });
+
   it('throws CliUsageError for an unknown shell id', () => {
     expect(() => stateFromFlags(flags({ shells: ['zsh', 'csh'] }))).toThrow(/csh/);
   });
@@ -212,7 +221,7 @@ describe('stateFromFlags', () => {
 
   it('applies the remaining scalar flags', () => {
     const state = stateFromFlags(
-      flags({ characterSymbol: 'lambda', setDefaultShell: 'zsh', skipStarship: true })
+      flags({ characterSymbol: 'lambda', shells: ['zsh'], setDefaultShell: 'zsh', skipStarship: true })
     );
     expect(state.characterSymbol).toBe('lambda');
     expect(state.setDefaultShell).toBe('zsh');
