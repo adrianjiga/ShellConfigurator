@@ -133,6 +133,7 @@ describe('index CLI handling', () => {
     expect(help).toContain('-o, --output <file>');
     expect(help).toContain('--import, --state <file>');
     expect(help).toContain('--shells is');
+    expect(help).not.toContain('read-only');
   });
 
   it('rejects unknown flags before the global flags run', () => {

@@ -128,7 +128,7 @@ apply options (a headless install from a state card):
   Without --state, apply also takes the generate options above; --shells is
   then required.
 
-doctor options (read-only; exits non-zero when a check fails):
+doctor options (checks the setup; exits non-zero when a check fails):
   --state <file>       Check the setup described by a saved state card
   --json               Print the report as JSON instead of the text summary
   --fix                Apply the available repairs, then re-check (like 'repair')
