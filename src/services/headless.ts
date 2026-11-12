@@ -6,6 +6,7 @@ import { PRESETS } from '../config/presets.ts';
 import { SHELLS } from '../config/shells.ts';
 import { statusMark } from '../config/status.ts';
 import { generateToml } from '../generators/starship.ts';
+import { getSharedConfigPath } from '../generators/shellRc.ts';
 import {
   type CharacterSymbol,
   DEFAULT_STATE,
@@ -406,10 +407,17 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
     );
     printTasks(tasks);
     if (state.keepExistingConfig) {
-      process.stdout.write('\nConfig to keep (no per-shell TOML is generated):\n\n');
       if (state.sharedConfigToml) {
+        process.stdout.write('\nConfig to keep (no per-shell TOML is generated):\n\n');
         process.stdout.write(state.sharedConfigToml);
         if (!state.sharedConfigToml.endsWith('\n')) process.stdout.write('\n');
+      } else {
+        const shared = getSharedConfigPath();
+        process.stdout.write(
+          fs.existsSync(shared)
+            ? `\nConfig to keep: ${shared} (left untouched)\n`
+            : `\nNo config to keep yet: ${shared} does not exist, and a real run would leave that as is.\n`
+        );
       }
     } else {
       process.stdout.write('\nGenerated starship.toml:\n\n');
