@@ -263,6 +263,12 @@ export async function fetchImportedConfig(
   if (!/^https?:\/\//.test(url)) {
     throw new CliUsageError(`--import-url expects an http(s) URL, got '${url}'`);
   }
+  if (!/^https:\/\//.test(url)) {
+    throw new CliUsageError(
+      `--import-url requires an https URL, got '${url}' — the downloaded config runs ` +
+        'commands on every prompt, so it must not travel over plain http.'
+    );
+  }
 
   const timeoutMs = options.timeoutMs ?? IMPORT_FETCH_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? IMPORT_FETCH_MAX_BYTES;

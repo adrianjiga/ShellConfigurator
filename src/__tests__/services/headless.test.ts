@@ -584,6 +584,12 @@ describe('runApply', () => {
     ).rejects.toThrow(CliUsageError);
   });
 
+  it('refuses a plain-http import URL', async () => {
+    await expect(
+      fetchImportedConfig('http://example.com/starship.toml')
+    ).rejects.toThrow(/requires an https URL/);
+  });
+
   it('rejects an HTTP error when fetching an imported config as a run failure', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
 
