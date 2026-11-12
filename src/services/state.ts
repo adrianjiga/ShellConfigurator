@@ -119,6 +119,14 @@ const isStringArray = (value: unknown): value is string[] =>
 
 const SHELL_IDS = new Set<string>(SHELLS.map((shell) => shell.id));
 
+function parseBoolean(value: unknown, field: string, fallback: boolean): boolean {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'boolean') {
+    throw new CliUsageError(`Invalid state card: ${field} must be true or false`);
+  }
+  return value;
+}
+
 function parseShellList(value: unknown): ShellId[] {
   if (!isStringArray(value)) return [];
   const parsed = new Set<ShellId>();
@@ -248,14 +256,14 @@ export function parseState(json: string): WizardState {
       PALETTES.some((palette) => palette.id === wizard.palette)
         ? (wizard.palette as PaletteId)
         : 'default',
-    powerline: wizard.powerline === true,
+    powerline: parseBoolean(wizard.powerline, 'powerline', false),
     continuationPrompt:
       wizard.continuationPrompt === 'arrow' || wizard.continuationPrompt === 'none'
         ? wizard.continuationPrompt
         : 'dot',
     // Absent means "the starship default", which is on.
-    addNewline: wizard.addNewline !== false,
-    vimMode: wizard.vimMode === true,
+    addNewline: parseBoolean(wizard.addNewline, 'addNewline', true),
+    vimMode: parseBoolean(wizard.vimMode, 'vimMode', false),
     directoryTruncationLength:
       typeof wizard.directoryTruncationLength === 'number'
         ? clampTruncationLength(wizard.directoryTruncationLength)
@@ -267,8 +275,8 @@ export function parseState(json: string): WizardState {
       typeof wizard.setDefaultShell === 'string' && SHELL_IDS.has(wizard.setDefaultShell)
         ? (wizard.setDefaultShell as ShellId)
         : null,
-    skipStarshipInstall: wizard.skipStarshipInstall === true,
-    keepExistingConfig: wizard.keepExistingConfig === true,
-    hasNerdFont: wizard.hasNerdFont === true,
+    skipStarshipInstall: parseBoolean(wizard.skipStarshipInstall, 'skipStarshipInstall', false),
+    keepExistingConfig: parseBoolean(wizard.keepExistingConfig, 'keepExistingConfig', false),
+    hasNerdFont: parseBoolean(wizard.hasNerdFont, 'hasNerdFont', false),
   };
 }

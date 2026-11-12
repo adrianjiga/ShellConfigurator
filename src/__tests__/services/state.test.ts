@@ -125,6 +125,14 @@ describe('parseState', () => {
     expect(parseState(JSON.stringify(card)).selectedShells).toEqual(['zsh', 'fish']);
   });
 
+  it('rejects a string where a card boolean belongs', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.skipStarshipInstall = 'true' as never;
+    expect(() => parseState(JSON.stringify(card))).toThrow(
+      /skipStarshipInstall must be true or false/
+    );
+  });
+
   it('round-trips the directory truncation length and substitutions', () => {
     const restored = parseState(
       serializeState({
