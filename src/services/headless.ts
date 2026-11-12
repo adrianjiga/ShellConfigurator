@@ -331,6 +331,14 @@ export async function fetchImportedConfig(
   if (content.trim().length === 0) {
     throw new CliRunError(`'${url}' returned no config content`);
   }
+  // A common mistake is a rendered page (e.g. a non-raw gist URL) instead of
+  // the raw file; adopting HTML as starship.toml breaks every prompt. No TOML
+  // construct starts with '<', so this cannot reject a valid config.
+  if (content.trimStart().startsWith('<')) {
+    throw new CliRunError(
+      `'${url}' returned HTML, not a TOML config — use the raw file URL.`
+    );
+  }
   return content;
 }
 

@@ -619,6 +619,16 @@ describe('runApply', () => {
     ).rejects.toThrow(/no config content/);
   });
 
+  it('rejects an HTML page instead of adopting it as a config', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('<!DOCTYPE html><html><body>gist</body></html>', { status: 200 })
+    );
+
+    await expect(
+      fetchImportedConfig('https://gist.example.com/not-raw')
+    ).rejects.toThrow(/returned HTML, not a TOML config/);
+  });
+
   it('rejects an oversized imported config based on the declared content-length', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('small', { status: 200, headers: { 'content-length': '9000000' } })
