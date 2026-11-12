@@ -260,10 +260,11 @@ export async function fetchImportedConfig(
   url: string,
   options: FetchConfigOptions = {}
 ): Promise<string> {
-  if (!/^https?:\/\//.test(url)) {
+  const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(url)?.[1]?.toLowerCase();
+  if (scheme !== 'http' && scheme !== 'https') {
     throw new CliUsageError(`--import-url expects an http(s) URL, got '${url}'`);
   }
-  if (!/^https:\/\//.test(url)) {
+  if (scheme !== 'https') {
     throw new CliUsageError(
       `--import-url requires an https URL, got '${url}' — the downloaded config runs ` +
         'commands on every prompt, so it must not travel over plain http.'

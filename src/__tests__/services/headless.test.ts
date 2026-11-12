@@ -590,6 +590,12 @@ describe('runApply', () => {
     ).rejects.toThrow(/requires an https URL/);
   });
 
+  it('accepts an uppercase scheme', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('[a]', { status: 200 }));
+
+    await expect(fetchImportedConfig('HTTPS://example.com/starship.toml')).resolves.toBe('[a]');
+  });
+
   it('rejects an HTTP error when fetching an imported config as a run failure', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
 
