@@ -404,6 +404,22 @@ describe('runApply', () => {
     expect(output).toContain('Generated starship.toml');
   });
 
+  it('refuses a real run with no shells selected', async () => {
+    await expect(runApply(flags({ subcommand: 'apply' }))).rejects.toThrow(/none are selected/);
+    expect(mockRunInstallTasks).not.toHaveBeenCalled();
+  });
+
+  it('does not download an import URL when the plan has no shells', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('[a]', { status: 200 }));
+
+    await expect(
+      runApply(flags({ subcommand: 'apply', importUrl: 'https://example.com/raw' }))
+    ).rejects.toThrow(/none are selected/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('runs the install pipeline and records a successful run in history', async () => {
     mockRunInstallTasks.mockResolvedValue(doneTasks as never);
     await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }), 'apply --shells zsh');

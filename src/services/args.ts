@@ -199,9 +199,7 @@ export function parseCliArgs(argv: string[]): CliFlags {
       throw new CliUsageError(`Unknown command '${arg}' (available: ${SUBCOMMANDS.join(', ')})`);
     }
 
-    // Combined short boolean flags (-dv); -o takes a value and cannot combine.
-    if (token.inlineValue === undefined && /^-[^-]{2,}$/.test(token.name)) {
-      const chars = [...token.name.slice(1)];
+    if (token.inlineValue === undefined && /^-[^-]{2,}$/.test(token.name)) {      const chars = [...token.name.slice(1)];
       if (chars.every((c) => SHORT_BOOLEAN_FLAGS.has(`-${c}`))) {
         for (const c of chars) {
           BOOLEAN_FLAGS[SHORT_FLAGS[`-${c}`]!](result, true);

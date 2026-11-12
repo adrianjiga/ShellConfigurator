@@ -66,8 +66,6 @@ export function restoreTerminal(): void {
 
 export function reportFatal(prefix: string, err: unknown): void {
   restoreTerminal();
-  // User mistakes and run failures read clean — no stack. Usage errors are
-  // exit 2; run failures are exit 1.
   if (err instanceof CliUsageError || err instanceof CliRunError) {
     process.stderr.write(`\nshell-configurator: ${err.message}\n`);
     process.exitCode = err instanceof CliUsageError ? 2 : 1;

@@ -298,8 +298,6 @@ export async function fetchImportedConfig(
     );
   }
 
-  // Read incrementally so an undeclared, oversized body stops at the cap
-  // instead of being buffered whole first.
   const chunks: Uint8Array[] = [];
   let total = 0;
   const reader = response.body?.getReader();
@@ -317,7 +315,6 @@ export async function fetchImportedConfig(
       }
     } catch (err) {
       if (err instanceof CliRunError) throw err;
-      // The body read can fail after the headers arrived (timeout, reset).
       if (err instanceof DOMException && err.name === 'TimeoutError') {
         throw new CliRunError(`Could not fetch '${url}': request timed out after ${timeoutMs}ms`);
       }
@@ -331,9 +328,6 @@ export async function fetchImportedConfig(
   if (content.trim().length === 0) {
     throw new CliRunError(`'${url}' returned no config content`);
   }
-  // A common mistake is a rendered page (e.g. a non-raw gist URL) instead of
-  // the raw file; adopting HTML as starship.toml breaks every prompt. No TOML
-  // construct starts with '<', so this cannot reject a valid config.
   if (content.trimStart().startsWith('<')) {
     throw new CliRunError(
       `'${url}' returned HTML, not a TOML config — use the raw file URL.`
@@ -348,6 +342,14 @@ export async function fetchImportedConfig(
  */
 async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
   let state = stateFromFlags(flags);
+
+  if (!flags.dryRun && state.selectedShells.length === 0) {
+    throw new CliUsageError(
+      'apply configures at least one shell, but none are selected. ' +
+        'Pass --shells <id,...> or a --state card that selects shells.'
+    );
+  }
+
   if (flags.importUrl) {
     state = {
       ...state,
@@ -372,16 +374,6 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
  */
 export async function runApply(flags: CliFlags, command?: string): Promise<void> {
   const state = await prepareApplyState(flags);
-
-  // Refuse a real run with no targets before it touches the system: the config
-  // task would only fail after Starship was already installed. (A --dry-run of
-  // an empty plan is still a useful preview.)
-  if (!flags.dryRun && state.selectedShells.length === 0) {
-    throw new CliUsageError(
-      'apply configures at least one shell, but none are selected. ' +
-        'Pass --shells <id,...> or a --state card that selects shells.'
-    );
-  }
 
   const tasks = buildTaskList(state);
 
