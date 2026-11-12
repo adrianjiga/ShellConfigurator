@@ -297,11 +297,29 @@ export async function fetchImportedConfig(
     );
   }
 
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.byteLength > maxBytes) {
-    throw new CliRunError(`Could not fetch '${url}': config exceeds ${maxBytes} bytes`);
+  // Read incrementally so an undeclared, oversized body stops at the cap
+  // instead of being buffered whole first.
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const reader = response.body?.getReader();
+  if (reader) {
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          await reader.cancel();
+          throw new CliRunError(`Could not fetch '${url}': config exceeds ${maxBytes} bytes`);
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
   }
-  const content = buffer.toString('utf8');
+
+  const content = Buffer.concat(chunks).toString('utf8');
   if (content.trim().length === 0) {
     throw new CliRunError(`'${url}' returned no config content`);
   }

@@ -637,6 +637,28 @@ describe('runApply', () => {
     ).rejects.toThrow(/config exceeds 1000000 bytes/);
   });
 
+  it('stops reading an oversized streamed body instead of buffering it whole', async () => {
+    let cancelled = false;
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        if (pulled > 50) throw new Error('kept reading past the cap');
+        controller.enqueue(new Uint8Array(100_000));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(body, { status: 200 }));
+
+    await expect(
+      fetchImportedConfig('https://example.com/stream', { maxBytes: 1_000_000 })
+    ).rejects.toThrow(/config exceeds 1000000 bytes/);
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThanOrEqual(12);
+  });
+
   it('times out a hung import fetch and says how long it waited', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(
       new DOMException('The operation was aborted', 'TimeoutError')
