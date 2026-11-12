@@ -56,6 +56,7 @@ import {
   stateFromFlags,
 } from '../../services/headless.ts';
 import { DEFAULT_INSTALL_TASK_DEPS } from '../../services/installTasks.ts';
+import { NERD_FONTS } from '../../services/installer.ts';
 import { STATE_VERSION, serializeState } from '../../services/state.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
@@ -94,6 +95,19 @@ describe('stateFromFlags', () => {
   it('infers hasNerdFont from a preset that needs one', () => {
     expect(stateFromFlags(flags({ preset: 'pastel-powerline' })).hasNerdFont).toBe(true);
     expect(stateFromFlags(flags({ preset: 'pure-prompt' })).hasNerdFont).toBe(false);
+  });
+
+  it('plans the font install a Nerd Font preset needs', () => {
+    const state = stateFromFlags(flags({ preset: 'pastel-powerline' }));
+    expect(state.nerdFontToInstall).toEqual({ kind: 'install', id: NERD_FONTS[0].id });
+    expect(stateFromFlags(flags({ preset: 'pure-prompt' })).nerdFontToInstall).toEqual({
+      kind: 'none',
+    });
+  });
+
+  it('does not plan a font install when the user says glyphs already render', () => {
+    const state = stateFromFlags(flags({ preset: 'pastel-powerline', hasNerdFont: true }));
+    expect(state.nerdFontToInstall).toEqual({ kind: 'none' });
   });
 
   it('lets an explicit --no-nerd-font beat the preset inference', () => {

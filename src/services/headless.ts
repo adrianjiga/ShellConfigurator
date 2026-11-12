@@ -150,6 +150,14 @@ export function stateFromFlags(flags: CliFlags): WizardState {
       if (flags.hasNerdFont === undefined) {
         state = { ...state, hasNerdFont: preset.requiresNerdFont };
       }
+      if (
+        preset.requiresNerdFont &&
+        flags.hasNerdFont === undefined &&
+        flags.font === undefined &&
+        !flags.stateFile
+      ) {
+        state = { ...state, nerdFontToInstall: { kind: 'install', id: NERD_FONTS[0].id } };
+      }
     }
   }
 
