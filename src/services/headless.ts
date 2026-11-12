@@ -314,6 +314,13 @@ export async function fetchImportedConfig(
         }
         chunks.push(value);
       }
+    } catch (err) {
+      if (err instanceof CliRunError) throw err;
+      // The body read can fail after the headers arrived (timeout, reset).
+      if (err instanceof DOMException && err.name === 'TimeoutError') {
+        throw new CliRunError(`Could not fetch '${url}': request timed out after ${timeoutMs}ms`);
+      }
+      throw new CliRunError(`Could not fetch '${url}': ${errorMessage(err)}`);
     } finally {
       reader.releaseLock();
     }

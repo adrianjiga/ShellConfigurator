@@ -669,6 +669,19 @@ describe('runApply', () => {
     );
   });
 
+  it('reports a body that fails mid-read as a run failure, not a stack trace', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(10));
+        controller.error(new Error('ECONNRESET'));
+      },
+    });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(body, { status: 200 }));
+
+    await expect(fetchImportedConfig('https://example.com/reset')).rejects.toThrow(CliRunError);
+    await expect(fetchImportedConfig('https://example.com/reset')).rejects.toThrow(/ECONNRESET/);
+  });
+
   it('passes a timeout signal to fetch so a hung request aborts', async () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
