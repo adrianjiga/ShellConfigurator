@@ -201,6 +201,11 @@ export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigRes
  */
 export function writeSharedConfig(toml: string): WriteConfigResult {
   const configPath = getSharedConfigPath();
+  const configDir = path.dirname(configPath);
+
+  if (!fs.existsSync(configDir)) {
+    fs.mkdirSync(configDir, { recursive: true });
+  }
 
   let backedUpTo: string | undefined;
   if (fs.existsSync(configPath)) {

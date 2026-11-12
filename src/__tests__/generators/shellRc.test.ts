@@ -160,6 +160,14 @@ describe('writeSharedConfig', () => {
     expect(fs.renameSync).toHaveBeenCalledWith(expect.stringContaining('.tmp'), sharedPath);
   });
 
+  it('creates the config directory when it is missing', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+
+    writeSharedConfig('# imported');
+
+    expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(sharedPath), { recursive: true });
+  });
+
   it('backs up an existing shared config before overwriting it', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
 
@@ -858,10 +866,7 @@ describe('restoreConfigBackups', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     readdirSyncMock.mockImplementation((dir) => {
       if (dir === shellsDir) {
-        return [
-          'zsh.toml.bak-2026-09-09T09-30-00-000Z',
-          'bash.toml.bak-2026-09-09T09-31-00-000Z',
-        ];
+        return ['zsh.toml.bak-2026-09-09T09-30-00-000Z', 'bash.toml.bak-2026-09-09T09-31-00-000Z'];
       }
       return [];
     });
