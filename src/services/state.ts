@@ -211,7 +211,7 @@ export function parseState(json: string): WizardState {
     ? (wizard.selectedShells as ShellId[])
     : [];
   const parsedLeftModules = parseModuleList(wizard.leftModules, 'left');
-  const leftModules = parsedLeftModules ?? CORE_MODULES_DEFAULT;
+  const leftModules = parsedLeftModules ?? [...CORE_MODULES_DEFAULT];
   const leftModuleSet = new Set(leftModules);
   const rightModules = (parseModuleList(wizard.rightModules, 'right') ?? []).filter(
     (id) => !leftModuleSet.has(id)

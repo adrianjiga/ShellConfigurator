@@ -158,6 +158,14 @@ describe('parseState', () => {
     expect(restored.rightModules).toEqual(['time']);
   });
 
+  it('hands out its own default module list, not the shared constant', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    delete (card.wizard as Partial<StateCard['wizard']>).leftModules;
+    const restored = parseState(JSON.stringify(card));
+    restored.leftModules.push('time');
+    expect(parseState(JSON.stringify(card)).leftModules).not.toContain('time');
+  });
+
   it('drops malformed substitution entries and keeps the last duplicate source', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
     card.wizard.directorySubstitutions = [
