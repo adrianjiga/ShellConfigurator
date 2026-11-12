@@ -5,7 +5,7 @@ import { PALETTES } from '../config/palettes.ts';
 import { PRESETS } from '../config/presets.ts';
 import { SHELLS } from '../config/shells.ts';
 import { statusMark } from '../config/status.ts';
-import { getSharedConfigPath } from '../generators/shellRc.ts';
+import { getSharedConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import {
   type CharacterSymbol,
@@ -232,7 +232,7 @@ export function runGenerate(flags: CliFlags): void {
 
   if (flags.exportFile) {
     try {
-      fs.writeFileSync(flags.exportFile, serializeState(state));
+      writeFileAtomic(flags.exportFile, serializeState(state));
     } catch (err) {
       throw new CliRunError(
         `Could not write state card to '${flags.exportFile}': ${errorMessage(err)}`
@@ -242,7 +242,7 @@ export function runGenerate(flags: CliFlags): void {
 
   if (flags.outputFile) {
     try {
-      fs.writeFileSync(flags.outputFile, toml);
+      writeFileAtomic(flags.outputFile, toml);
     } catch (err) {
       throw new CliRunError(`Could not write TOML to '${flags.outputFile}': ${errorMessage(err)}`);
     }

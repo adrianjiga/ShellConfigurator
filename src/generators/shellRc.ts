@@ -38,7 +38,7 @@ export function backupStamp(): string {
  * leave a half-written config or rc file, and a reader never sees a truncated
  * file. On failure the temp file is removed and the original error re-thrown.
  */
-function writeFileAtomic(filePath: string, content: string): void {
+export function writeFileAtomic(filePath: string, content: string): void {
   const tmpPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.tmp`);
   try {
     fs.writeFileSync(tmpPath, content, 'utf8');

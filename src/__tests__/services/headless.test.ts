@@ -433,6 +433,20 @@ describe('runGenerate', () => {
     }
   });
 
+  it('leaves no temp file behind when the atomic write fails', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const out = path.join(dir, 'starship.toml');
+      fs.mkdirSync(out);
+      expect(() => runGenerate(flags({ preset: 'pure-prompt', outputFile: out }))).toThrow(
+        CliRunError
+      );
+      expect(fs.readdirSync(dir)).toEqual(['starship.toml']);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('reports an unwritable -o path as a run failure', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
     try {
