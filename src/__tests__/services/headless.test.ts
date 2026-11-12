@@ -102,6 +102,22 @@ describe('stateFromFlags', () => {
     expect(state.powerline).toBe(true);
   });
 
+  it('warns when powerline is on without a Nerd Font', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+    stateFromFlags(flags({ preset: 'pastel-powerline', font: 'none' }));
+    expect(stderr).toHaveBeenCalledWith(
+      expect.stringContaining('powerline separators need a Nerd Font')
+    );
+    stderr.mockRestore();
+  });
+
+  it('does not warn when the preset has a font to render glyphs with', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+    stateFromFlags(flags({ preset: 'pastel-powerline' }));
+    expect(stderr).not.toHaveBeenCalled();
+    stderr.mockRestore();
+  });
+
   it('lets a --font install imply hasNerdFont after a plain preset', () => {
     const state = stateFromFlags(flags({ preset: 'pure-prompt', font: 'FiraCode' }));
     expect(state.hasNerdFont).toBe(true);

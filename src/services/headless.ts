@@ -183,6 +183,11 @@ export function stateFromFlags(flags: CliFlags): WizardState {
   }
 
   assertValidState(state);
+  if (state.powerline && !state.hasNerdFont) {
+    process.stderr.write(
+      'shell-configurator: warning: powerline separators need a Nerd Font; a plain prompt will be generated.\n'
+    );
+  }
   return state;
 }
 
