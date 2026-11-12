@@ -348,6 +348,17 @@ describe('runGenerate', () => {
     vi.restoreAllMocks();
   });
 
+  it('rejects an adopt-mode state card', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = writeFixtureCard(dir, { keepExistingConfig: true });
+      expect(() => runGenerate(flags({ stateFile: card }))).toThrow(CliUsageError);
+      expect(() => runGenerate(flags({ stateFile: card }))).toThrow(/adopt-mode/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('rejects --adopt on the generate subcommand', () => {
     expect(() => runGenerate(flags({ adopt: true }))).toThrow(/apply subcommand/);
   });

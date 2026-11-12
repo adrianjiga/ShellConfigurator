@@ -213,6 +213,11 @@ export function runGenerate(flags: CliFlags): void {
     throw new CliUsageError('--adopt and --import-url are only valid with the apply subcommand.');
   }
   const state = stateFromFlags(flags);
+  if (state.keepExistingConfig) {
+    throw new CliUsageError(
+      'generate has nothing to write for an adopt-mode card; use apply, or drop keepExistingConfig.'
+    );
+  }
   const toml = generateToml(state);
 
   if (
