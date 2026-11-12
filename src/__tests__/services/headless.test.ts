@@ -110,6 +110,23 @@ describe('stateFromFlags', () => {
     expect(state.nerdFontToInstall).toEqual({ kind: 'none' });
   });
 
+  it('keeps the font facts a card recorded when a preset is layered on top', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const haveFont = writeFixtureCard(dir, { hasNerdFont: true });
+      expect(
+        stateFromFlags(flags({ stateFile: haveFont, preset: 'pure-prompt' })).hasNerdFont
+      ).toBe(true);
+
+      const noFont = writeFixtureCard(dir, { hasNerdFont: false });
+      const state = stateFromFlags(flags({ stateFile: noFont, preset: 'pastel-powerline' }));
+      expect(state.hasNerdFont).toBe(false);
+      expect(state.nerdFontToInstall).toEqual({ kind: 'none' });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('lets an explicit --no-nerd-font beat the preset inference', () => {
     const state = stateFromFlags(flags({ preset: 'pastel-powerline', hasNerdFont: false }));
     expect(state.hasNerdFont).toBe(false);
