@@ -4,7 +4,7 @@ import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
 const sampleState: WizardState = {
   ...DEFAULT_STATE,
-  preset: 'catppuccin',
+  preset: 'catppuccin-powerline',
   leftModules: ['directory', 'git_branch', 'git_status', 'character'],
   rightModules: ['time', 'battery'],
   characterSymbol: 'lambda',
@@ -23,7 +23,7 @@ describe('serializeState', () => {
     expect(card.endsWith('\n')).toBe(true);
     const parsed = JSON.parse(card) as StateCard;
     expect(parsed.version).toBe(STATE_VERSION);
-    expect(parsed.wizard.preset).toBe('catppuccin');
+    expect(parsed.wizard.preset).toBe('catppuccin-powerline');
     expect(parsed.wizard.leftModules).toEqual(sampleState.leftModules);
     expect(parsed.wizard.rightModules).toEqual(sampleState.rightModules);
     expect(parsed.wizard.characterSymbol).toBe('lambda');
@@ -102,6 +102,27 @@ describe('parseState', () => {
     const restored = parseState(JSON.stringify(card));
     expect(restored.leftModules).toEqual(['directory', 'git_branch', 'git_status', 'character']);
     expect(restored.characterSymbol).toBe('arrow');
+  });
+
+  it('drops an unknown preset and default shell instead of keeping raw strings', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.preset = 'not-a-preset';
+    card.wizard.setDefaultShell = 'csh' as never;
+    const restored = parseState(JSON.stringify(card));
+    expect(restored.preset).toBeNull();
+    expect(restored.setDefaultShell).toBeNull();
+  });
+
+  it('rejects an unknown shell id in selectedShells', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.selectedShells = ['zsh', 'csh'] as never;
+    expect(() => parseState(JSON.stringify(card))).toThrow(/unknown shell 'csh'/);
+  });
+
+  it('deduplicates selectedShells', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.selectedShells = ['zsh', 'zsh', 'fish'] as never;
+    expect(parseState(JSON.stringify(card)).selectedShells).toEqual(['zsh', 'fish']);
   });
 
   it('round-trips the directory truncation length and substitutions', () => {

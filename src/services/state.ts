@@ -1,6 +1,8 @@
 import { clampTruncationLength, DEFAULT_TRUNCATION_LENGTH } from '../config/directory.ts';
 import { CORE_MODULES, getModule, type ModuleId } from '../config/modules.ts';
 import { PALETTES, type PaletteId } from '../config/palettes.ts';
+import { PRESETS } from '../config/presets.ts';
+import { SHELLS } from '../config/shells.ts';
 import {
   type CharacterSymbol,
   type ContinuationPrompt,
@@ -115,6 +117,20 @@ export function serializeState(state: WizardState): string {
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((v) => typeof v === 'string');
 
+const SHELL_IDS = new Set<string>(SHELLS.map((shell) => shell.id));
+
+function parseShellList(value: unknown): ShellId[] {
+  if (!isStringArray(value)) return [];
+  const parsed = new Set<ShellId>();
+  for (const id of value) {
+    if (!SHELL_IDS.has(id)) {
+      throw new CliUsageError(`Invalid state card: unknown shell '${id}' in selectedShells`);
+    }
+    parsed.add(id as ShellId);
+  }
+  return [...parsed];
+}
+
 function parseModuleList(value: unknown, slot: 'left' | 'right'): ModuleId[] | null {
   if (!isStringArray(value)) return null;
 
@@ -207,9 +223,7 @@ export function parseState(json: string): WizardState {
     throw new CliUsageError('Invalid state card: missing wizard object');
   }
 
-  const selectedShells = isStringArray(wizard.selectedShells)
-    ? (wizard.selectedShells as ShellId[])
-    : [];
+  const selectedShells = parseShellList(wizard.selectedShells);
   const parsedLeftModules = parseModuleList(wizard.leftModules, 'left');
   const leftModules = parsedLeftModules ?? [...CORE_MODULES_DEFAULT];
   const leftModuleSet = new Set(leftModules);
@@ -219,7 +233,10 @@ export function parseState(json: string): WizardState {
 
   return {
     ...runtimeDefaults(),
-    preset: typeof wizard.preset === 'string' ? wizard.preset : null,
+    preset:
+      typeof wizard.preset === 'string' && PRESETS.some((preset) => preset.id === wizard.preset)
+        ? wizard.preset
+        : null,
     leftModules,
     rightModules,
     characterSymbol:
@@ -246,7 +263,10 @@ export function parseState(json: string): WizardState {
     directorySubstitutions: parseSubstitutionList(wizard.directorySubstitutions),
     selectedShells,
     nerdFontToInstall: parseNerdFontChoice(wizard.nerdFontToInstall),
-    setDefaultShell: typeof wizard.setDefaultShell === 'string' ? wizard.setDefaultShell : null,
+    setDefaultShell:
+      typeof wizard.setDefaultShell === 'string' && SHELL_IDS.has(wizard.setDefaultShell)
+        ? (wizard.setDefaultShell as ShellId)
+        : null,
     skipStarshipInstall: wizard.skipStarshipInstall === true,
     keepExistingConfig: wizard.keepExistingConfig === true,
     hasNerdFont: wizard.hasNerdFont === true,
