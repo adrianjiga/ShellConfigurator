@@ -64,6 +64,18 @@ describe('parseState', () => {
     );
   });
 
+  it('blames an older tool for an older card version', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.version = 0;
+    expect(() => parseState(JSON.stringify(card))).toThrow(/older ShellConfigurator/);
+  });
+
+  it('blames a newer tool for an unknown non-numeric version', () => {
+    expect(() => parseState(JSON.stringify({ version: 'one', wizard: {} }))).toThrow(
+      /newer ShellConfigurator/
+    );
+  });
+
   it('rejects a card without a wizard object', () => {
     expect(() => parseState(JSON.stringify({ version: 1 }))).toThrow(/missing wizard/);
   });

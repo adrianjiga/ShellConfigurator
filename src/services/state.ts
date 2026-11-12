@@ -190,9 +190,12 @@ export function parseState(json: string): WizardState {
 
   const version = (card as StateCard | null)?.version;
   if (version !== STATE_VERSION) {
+    const clue =
+      typeof version === 'number' && version < STATE_VERSION
+        ? 'This card was written by an older ShellConfigurator; regenerate it with this version.'
+        : 'This card was written by a newer ShellConfigurator; upgrade to read it.';
     throw new CliUsageError(
-      `Unsupported state card version: ${String(version)} (expected ${STATE_VERSION}). ` +
-        `This card was written by a newer ShellConfigurator; upgrade to read it.`
+      `Unsupported state card version: ${String(version)} (expected ${STATE_VERSION}). ${clue}`
     );
   }
 
