@@ -134,6 +134,12 @@ describe('parseState', () => {
     expect(() => parseState(JSON.stringify(card))).toThrow(/unknown module 'unknown'/);
   });
 
+  it('explains that character belongs on the left when a card puts it on the right', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.rightModules = ['character'] as never;
+    expect(() => parseState(JSON.stringify(card))).toThrow(/belongs in leftModules/);
+  });
+
   it('deduplicates valid module ids and removes right-side duplicates of left modules', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
     card.wizard.leftModules = ['directory', 'directory', 'character'] as never;

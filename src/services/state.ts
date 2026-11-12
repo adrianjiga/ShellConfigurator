@@ -120,9 +120,12 @@ function parseModuleList(value: unknown, slot: 'left' | 'right'): ModuleId[] | n
 
   const parsed = new Set<ModuleId>();
   for (const id of value) {
-    if (id === 'character' && slot === 'left') {
-      parsed.add(id);
-    } else if (getModule(id)) {
+    if (id === 'character' && slot === 'right') {
+      throw new CliUsageError(
+        "Invalid state card: 'character' belongs in leftModules, not rightModules"
+      );
+    }
+    if (id === 'character' || getModule(id)) {
       parsed.add(id as ModuleId);
     } else {
       throw new CliUsageError(`Invalid state card: unknown module '${id}' in ${slot}Modules`);
