@@ -200,7 +200,7 @@ export function parseState(json: string): WizardState {
   }
 
   const wizard = (card as StateCard).wizard;
-  if (!wizard || typeof wizard !== 'object') {
+  if (!wizard || typeof wizard !== 'object' || Array.isArray(wizard)) {
     throw new CliUsageError('Invalid state card: missing wizard object');
   }
 

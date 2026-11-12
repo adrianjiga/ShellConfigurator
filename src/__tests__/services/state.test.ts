@@ -80,6 +80,10 @@ describe('parseState', () => {
     expect(() => parseState(JSON.stringify({ version: 1 }))).toThrow(/missing wizard/);
   });
 
+  it('rejects an array in place of the wizard object', () => {
+    expect(() => parseState(JSON.stringify({ version: 1, wizard: [] }))).toThrow(/missing wizard/);
+  });
+
   it('starts runtime fields at their defaults', () => {
     const restored = parseState(serializeState(sampleState));
     expect(restored.step).toBe('welcome');
