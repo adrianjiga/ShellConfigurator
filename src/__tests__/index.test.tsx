@@ -86,7 +86,7 @@ import {
   runHeadlessCommand,
 } from '../index.tsx';
 import { parseCliArgs } from '../services/args.ts';
-import { CliUsageError } from '../services/errors.ts';
+import { CliRunError, CliUsageError } from '../services/errors.ts';
 import { DEFAULT_STATE, type InstallTask, type WizardState } from '../types.ts';
 
 describe('index CLI handling', () => {
@@ -176,9 +176,7 @@ describe('index restore flag', () => {
 
   it('reports partial restore failures instead of claiming success', () => {
     const backup = '/home/u/.config/starship/zsh.toml.bak-2026-09-08T10-00-00-000Z';
-    const stderrWrite = vi
-      .spyOn(process.stderr, 'write')
-      .mockImplementation(() => true as never);
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
     const savedExitCode = process.exitCode;
     mockRestoreConfigBackups.mockReturnValue({
       restored: [
@@ -659,5 +657,16 @@ describe('index reportFatal', () => {
       expect.stringContaining('prefix:') as unknown as string
     );
     expect(process.exitCode).toBe(2);
+  });
+
+  it('reports a run failure cleanly and exits 1', () => {
+    reportFatal('prefix', new CliRunError("Could not write TOML to 'x': EACCES"));
+    expect(stderrWrite).toHaveBeenCalledWith(
+      "\nshell-configurator: Could not write TOML to 'x': EACCES\n"
+    );
+    expect(stderrWrite).not.toHaveBeenCalledWith(
+      expect.stringContaining('prefix:') as unknown as string
+    );
+    expect(process.exitCode).toBe(1);
   });
 });

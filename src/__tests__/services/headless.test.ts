@@ -48,7 +48,7 @@ vi.mock('../../services/history.ts', () => ({
 
 import type { ModuleId } from '../../config/modules.ts';
 import type { CliFlags } from '../../services/args.ts';
-import { CliUsageError } from '../../services/errors.ts';
+import { CliRunError, CliUsageError } from '../../services/errors.ts';
 import {
   fetchImportedConfig,
   runApply,
@@ -341,24 +341,24 @@ describe('runGenerate', () => {
     }
   });
 
-  it('reports an unwritable -o path as a usage error', () => {
+  it('reports an unwritable -o path as a run failure', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
     try {
       const out = path.join(dir, 'missing-dir', 'starship.toml');
       expect(() => runGenerate(flags({ preset: 'pure-prompt', outputFile: out }))).toThrow(
-        CliUsageError
+        CliRunError
       );
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('reports an unwritable --export path as a usage error', () => {
+  it('reports an unwritable --export path as a run failure', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
     try {
       const out = path.join(dir, 'missing-dir', 'card.json');
       expect(() => runGenerate(flags({ preset: 'pure-prompt', exportFile: out }))).toThrow(
-        CliUsageError
+        CliRunError
       );
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -578,13 +578,13 @@ describe('runApply', () => {
     expect(output).not.toContain('Generated starship.toml');
   });
 
-  it('rejects a non-http import URL', async () => {
+  it('rejects a non-http import URL as a usage error', async () => {
     await expect(
       runApply(flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'ftp://nope' }))
-    ).rejects.toThrow(/http\(s\) URL/);
+    ).rejects.toThrow(CliUsageError);
   });
 
-  it('rejects an HTTP error when fetching an imported config', async () => {
+  it('rejects an HTTP error when fetching an imported config as a run failure', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
 
     await expect(
@@ -592,6 +592,9 @@ describe('runApply', () => {
         flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'https://example.com/404' })
       )
     ).rejects.toThrow(/HTTP 404/);
+    await expect(fetchImportedConfig('https://example.com/404', { timeoutMs: 5 })).rejects.toThrow(
+      CliRunError
+    );
   });
 
   it('rejects an empty body from a URL fetch', async () => {

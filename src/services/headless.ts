@@ -19,7 +19,7 @@ import {
   detectPackageManagerAsync,
   detectTerminalAsync,
 } from './detector.ts';
-import { CliUsageError, errorMessage } from './errors.ts';
+import { CliRunError, CliUsageError, errorMessage } from './errors.ts';
 import { appendHistory } from './history.ts';
 import { NERD_FONTS } from './installer.ts';
 import { buildTaskList, DEFAULT_INSTALL_TASK_DEPS, runInstallTasks } from './installTasks.ts';
@@ -200,7 +200,7 @@ export function runGenerate(flags: CliFlags): void {
     try {
       fs.writeFileSync(flags.exportFile, serializeState(state));
     } catch (err) {
-      throw new CliUsageError(
+      throw new CliRunError(
         `Could not write state card to '${flags.exportFile}': ${errorMessage(err)}`
       );
     }
@@ -211,9 +211,7 @@ export function runGenerate(flags: CliFlags): void {
     try {
       fs.writeFileSync(flags.outputFile, toml);
     } catch (err) {
-      throw new CliUsageError(
-        `Could not write TOML to '${flags.outputFile}': ${errorMessage(err)}`
-      );
+      throw new CliRunError(`Could not write TOML to '${flags.outputFile}': ${errorMessage(err)}`);
     }
   } else if (!flags.exportFile) {
     process.stdout.write(toml);
@@ -275,19 +273,19 @@ export async function fetchImportedConfig(
   } catch (err) {
     // AbortSignal.timeout rejects with a TimeoutError DOMException on timeout.
     if (err instanceof DOMException && err.name === 'TimeoutError') {
-      throw new CliUsageError(`Could not fetch '${url}': request timed out after ${timeoutMs}ms`);
+      throw new CliRunError(`Could not fetch '${url}': request timed out after ${timeoutMs}ms`);
     }
-    throw new CliUsageError(`Could not fetch '${url}': ${errorMessage(err)}`);
+    throw new CliRunError(`Could not fetch '${url}': ${errorMessage(err)}`);
   }
   if (!response.ok) {
-    throw new CliUsageError(`Could not fetch '${url}': HTTP ${response.status}`);
+    throw new CliRunError(`Could not fetch '${url}': HTTP ${response.status}`);
   }
 
   // A declared content-length is a cheap first gate; the actual byte count is
   // the real check, so a lying or chunked server cannot sneak past.
   const declaredSize = Number(response.headers.get('content-length') ?? '0');
   if (declaredSize > maxBytes) {
-    throw new CliUsageError(
+    throw new CliRunError(
       `Could not fetch '${url}': server reports ${declaredSize} bytes, ` +
         `above the ${maxBytes} byte limit.`
     );
@@ -295,11 +293,11 @@ export async function fetchImportedConfig(
 
   const buffer = Buffer.from(await response.arrayBuffer());
   if (buffer.byteLength > maxBytes) {
-    throw new CliUsageError(`Could not fetch '${url}': config exceeds ${maxBytes} bytes`);
+    throw new CliRunError(`Could not fetch '${url}': config exceeds ${maxBytes} bytes`);
   }
   const content = buffer.toString('utf8');
   if (content.trim().length === 0) {
-    throw new CliUsageError(`'${url}' returned no config content`);
+    throw new CliRunError(`'${url}' returned no config content`);
   }
   return content;
 }

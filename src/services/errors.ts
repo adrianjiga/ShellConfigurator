@@ -19,3 +19,15 @@ export class CliUsageError extends Error {
     this.name = 'CliUsageError';
   }
 }
+
+/**
+ * A failure while executing a headless run — an unwritable output file, a
+ * fetch that did not complete. Rendered like CliUsageError (bare message, no
+ * stack) but with exit code 1: the command line was fine, the run failed.
+ */
+export class CliRunError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CliRunError';
+  }
+}

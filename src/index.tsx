@@ -7,7 +7,7 @@ import { restoreConfigBackups } from './generators/shellRc.ts';
 import type { CliFlags } from './services/args.ts';
 import { parseCliArgs, quoteArgv } from './services/args.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
-import { CliUsageError, errorMessage } from './services/errors.ts';
+import { CliRunError, CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags } from './services/headless.ts';
 import { appendHistory, writeSnapshot } from './services/history.ts';
 import { formatRepairReport, runRepair } from './services/repair.ts';
@@ -66,10 +66,11 @@ export function restoreTerminal(): void {
 
 export function reportFatal(prefix: string, err: unknown): void {
   restoreTerminal();
-  // A user mistake in the headless flags/card reads clean — no stack, exit 2.
-  if (err instanceof CliUsageError) {
+  // User mistakes and run failures read clean — no stack. Usage errors are
+  // exit 2; run failures are exit 1.
+  if (err instanceof CliUsageError || err instanceof CliRunError) {
     process.stderr.write(`\nshell-configurator: ${err.message}\n`);
-    process.exitCode = 2;
+    process.exitCode = err instanceof CliUsageError ? 2 : 1;
     return;
   }
   const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
