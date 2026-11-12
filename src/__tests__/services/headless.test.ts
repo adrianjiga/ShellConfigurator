@@ -172,6 +172,13 @@ describe('stateFromFlags', () => {
     ).not.toThrow();
   });
 
+  it('deduplicates --shells', () => {
+    expect(stateFromFlags(flags({ shells: ['zsh', 'zsh', 'bash'] })).selectedShells).toEqual([
+      'zsh',
+      'bash',
+    ]);
+  });
+
   it('throws CliUsageError for an unknown shell id', () => {
     expect(() => stateFromFlags(flags({ shells: ['zsh', 'csh'] }))).toThrow(/csh/);
   });

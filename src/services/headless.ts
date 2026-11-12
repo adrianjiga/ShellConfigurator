@@ -5,8 +5,8 @@ import { PALETTES } from '../config/palettes.ts';
 import { PRESETS } from '../config/presets.ts';
 import { SHELLS } from '../config/shells.ts';
 import { statusMark } from '../config/status.ts';
-import { generateToml } from '../generators/starship.ts';
 import { getSharedConfigPath } from '../generators/shellRc.ts';
+import { generateToml } from '../generators/starship.ts';
 import {
   type CharacterSymbol,
   DEFAULT_STATE,
@@ -172,7 +172,7 @@ export function stateFromFlags(flags: CliFlags): WizardState {
   if (flags.palette) state = { ...state, palette: flags.palette as WizardState['palette'] };
   if (flags.powerline !== undefined) state = { ...state, powerline: flags.powerline };
   if (flags.shells) {
-    const shells = flags.shells.filter((id) => SHELL_IDS.has(id)) as ShellId[];
+    const shells = [...new Set(flags.shells.filter((id) => SHELL_IDS.has(id)))] as ShellId[];
     state = { ...state, selectedShells: shells };
   }
   if (flags.characterSymbol) {
@@ -316,7 +316,9 @@ export async function fetchImportedConfig(
     throw new CliRunError(`Could not fetch '${url}': HTTP ${response.status}`);
   }
   if (response.url && !response.url.toLowerCase().startsWith('https://')) {
-    throw new CliRunError(`Could not fetch '${url}': redirected to a non-https URL ${response.url}`);
+    throw new CliRunError(
+      `Could not fetch '${url}': redirected to a non-https URL ${response.url}`
+    );
   }
 
   // A declared content-length is a cheap first gate; the actual byte count is
@@ -360,9 +362,7 @@ export async function fetchImportedConfig(
     throw new CliRunError(`'${url}' returned no config content`);
   }
   if (content.trimStart().startsWith('<')) {
-    throw new CliRunError(
-      `'${url}' returned HTML, not a TOML config — use the raw file URL.`
-    );
+    throw new CliRunError(`'${url}' returned HTML, not a TOML config — use the raw file URL.`);
   }
   return content;
 }
