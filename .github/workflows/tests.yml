@@ -7,7 +7,8 @@ on:
     branches: [master]
   workflow_dispatch:
 
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   coverage:
