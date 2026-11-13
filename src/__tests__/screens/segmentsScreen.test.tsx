@@ -75,6 +75,16 @@ describe('SegmentsScreen', () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
+  it('takes a module off the right side when it is picked on the left', async () => {
+    const { instance, onUpdate } = setup({ rightModules: ['username', 'time'] });
+    await flush();
+    await press(instance, DOWN, DOWN, ' ');
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      leftModules: ['directory', 'git_branch', 'username', 'character'],
+      rightModules: ['time'],
+    });
+  });
+
   it('appends a newly enabled module to the end of the prompt order', async () => {
     const { instance, onUpdate } = setup();
     await flush();
@@ -82,6 +92,7 @@ describe('SegmentsScreen', () => {
     await press(instance, DOWN, DOWN, ' ');
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['directory', 'git_branch', 'username', 'character'],
+      rightModules: [],
     });
   });
 
@@ -91,6 +102,7 @@ describe('SegmentsScreen', () => {
     await press(instance, ' ');
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['git_branch', 'character'],
+      rightModules: [],
     });
   });
 
@@ -100,6 +112,7 @@ describe('SegmentsScreen', () => {
     await press(instance, DOWN, ' ');
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['directory', 'character'],
+      rightModules: [],
     });
   });
 
@@ -109,6 +122,7 @@ describe('SegmentsScreen', () => {
     await press(instance, '\r');
     expect(onNext).toHaveBeenCalledWith({
       leftModules: ['directory', 'git_branch', 'character'],
+      rightModules: [],
     });
   });
 
@@ -173,6 +187,7 @@ describe('SegmentsScreen', () => {
     await press(instance, SHIFT_DOWN);
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['git_branch', 'directory', 'character'],
+      rightModules: [],
     });
   });
 
@@ -182,6 +197,7 @@ describe('SegmentsScreen', () => {
     await press(instance, DOWN, SHIFT_UP);
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['git_branch', 'directory', 'character'],
+      rightModules: [],
     });
   });
 
@@ -212,6 +228,7 @@ describe('SegmentsScreen', () => {
     await press(instance, SHIFT_DOWN);
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['directory', 'git_status', 'git_branch', 'character'],
+      rightModules: [],
     });
   });
 
@@ -224,6 +241,7 @@ describe('SegmentsScreen', () => {
     await press(instance, ' ');
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['directory', 'git_status', 'character'],
+      rightModules: [],
     });
   });
 

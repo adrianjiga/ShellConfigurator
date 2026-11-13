@@ -82,7 +82,14 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
   const rows = buildRows(selected, filter, takenByLeft);
 
   const applyModules = (commit: (update: Partial<WizardState>) => void, modules: ModuleId[]) => {
-    const update = side === 'left' ? { leftModules: modules } : { rightModules: modules };
+    // A module moved to the left leaves the right, so it never renders twice.
+    const update =
+      side === 'left'
+        ? {
+            leftModules: modules,
+            rightModules: state.rightModules.filter((id) => !modules.includes(id)),
+          }
+        : { rightModules: modules };
     commit(update);
   };
 
