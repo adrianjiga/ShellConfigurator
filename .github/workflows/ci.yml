@@ -112,7 +112,6 @@ jobs:
         with:
           path: /tmp/node-tarball-cache
           key: node-${{ runner.arch }}-${{ env.NODE_VERSION }}
-          restore-keys: node-${{ runner.arch }}-
       - name: Run the smoke test in ${{ matrix.image }}
         env:
           IMAGE: ${{ matrix.image }}
