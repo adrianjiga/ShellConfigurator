@@ -99,6 +99,7 @@ try {
 
   unmount();
   console.log('\nWizard smoke passed.');
+  process.exit(0);
 } catch (err) {
   const last = show();
   console.error(`FAIL wizard smoke: ${err instanceof Error ? err.message : String(err)}`);
