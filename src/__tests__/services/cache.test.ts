@@ -76,7 +76,9 @@ describe('cacheFont / pinnedDigest / cachedFont', () => {
       path: fontCachePath('Hack'),
       digest,
       bytes: buffer.byteLength,
+      buffer,
     });
+    expect(cached?.buffer.equals(buffer)).toBe(true);
   });
 
   it('treats a tampered archive as absent instead of returning corrupted bytes', () => {

@@ -297,7 +297,7 @@ export async function installNerdFont(fontId: string): Promise<string | undefine
 
   const cached = cachedFont(fontId);
   if (cached) {
-    await installFontFiles(font.zipName, fs.readFileSync(cached.path));
+    await installFontFiles(font.zipName, cached.buffer);
     return `installed ${font.label} from cache`;
   }
 

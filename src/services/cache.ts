@@ -21,6 +21,8 @@ export interface CachedFont {
   digest: string;
   /** Archive size in bytes. */
   bytes: number;
+  /** The verified archive itself, so callers install the exact bytes checked. */
+  buffer: Buffer;
 }
 
 /** Per-app font store: <cacheDir>/fonts/. */
@@ -92,7 +94,7 @@ export function cachedFont(fontId: string): CachedFont | null {
   }
   if (sha256Digest(buffer) !== digest) return null;
 
-  return { id: fontId, path: file, digest, bytes: buffer.byteLength };
+  return { id: fontId, path: file, digest, bytes: buffer.byteLength, buffer };
 }
 
 /** <cacheDir>/starship.version — the version the last apply produced. */
