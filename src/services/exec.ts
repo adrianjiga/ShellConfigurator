@@ -26,13 +26,17 @@ export function commandExists(cmd: string): boolean {
   return probe(cmd) !== null;
 }
 
-export async function commandExistsAsync(cmd: string): Promise<boolean> {
+export async function commandPathAsync(cmd: string): Promise<string | null> {
   try {
     const { stdout } = await execFileP('sh', probeArgs(cmd), { encoding: 'utf8' });
-    return stdout.trim().length > 0;
+    return stdout.trim() || null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function commandExistsAsync(cmd: string): Promise<boolean> {
+  return (await commandPathAsync(cmd)) !== null;
 }
 
 /** A captured command is killed after this long, so a hung binary cannot block detection. */

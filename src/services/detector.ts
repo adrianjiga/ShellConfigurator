@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import { promisify } from 'node:util';
 import { SHELLS } from '../config/shells.ts';
 import type { PackageManager, ShellId, TerminalId } from '../types.ts';
-import { commandExistsAsync, runCapture } from './exec.ts';
+import { commandExistsAsync, commandPathAsync, runCapture } from './exec.ts';
 
 const readFileP = promisify(fs.readFile);
 
@@ -47,10 +47,12 @@ function packageManagerForDistro(id: string): PackageManager | null {
 }
 
 export async function detectPackageManagerAsync(): Promise<PackageManager> {
-  const [hasBrew, hasPacman] = await Promise.all([
+  const [hasBrew, pacmanPath] = await Promise.all([
     commandExistsAsync('brew'),
-    commandExistsAsync('pacman'),
+    commandPathAsync('pacman'),
   ]);
+  // Debian and Ubuntu ship a Pac-Man game as /usr/games/pacman.
+  const hasPacman = pacmanPath !== null && !pacmanPath.split('/').includes('games');
   if (hasBrew) return 'brew';
   if (hasPacman) return 'pacman';
 

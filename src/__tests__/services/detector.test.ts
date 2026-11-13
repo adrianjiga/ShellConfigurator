@@ -126,6 +126,18 @@ describe('detectPackageManagerAsync', () => {
     expect(await detectPackageManagerAsync()).toBe('dnf');
   });
 
+  it('ignores the Pac-Man game in /usr/games', async () => {
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
+      const name = (args[1] as string[])[3];
+      if (name === 'pacman') cb(null, '/usr/games/pacman\n', '');
+      else if (name === 'apt-get') cb(null, '/usr/bin/apt-get\n', '');
+      else cb(new Error('not found'), '', '');
+    });
+    readFileAsyncReturns('ID=ubuntu');
+    expect(await detectPackageManagerAsync()).toBe('apt');
+  });
+
   it('lets the distro id choose between several package managers', async () => {
     execFileByArg((arg) => arg === 'apt-get' || arg === 'dnf');
     readFileAsyncReturns('ID=fedora\nNAME="Fedora"');
