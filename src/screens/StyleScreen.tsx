@@ -207,7 +207,8 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
     }
 
     if (key.tab) {
-      setFocus((f) => FOCUS_ORDER[(FOCUS_ORDER.indexOf(f) + 1) % FOCUS_ORDER.length]!);
+      const delta = key.shift ? FOCUS_ORDER.length - 1 : 1;
+      setFocus((f) => FOCUS_ORDER[(FOCUS_ORDER.indexOf(f) + delta) % FOCUS_ORDER.length]!);
       return;
     }
 

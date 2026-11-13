@@ -627,3 +627,17 @@ describe('StyleScreen key bursts', () => {
     );
   });
 });
+
+describe('StyleScreen section order', () => {
+  it('moves back a section on Shift+Tab', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+    instance.stdin.write('\u001B[Z'); // Shift+Tab: wraps from the first section to the last
+    await flush();
+    instance.stdin.write('\u001B[C'); // → raises the directory depth
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ directoryTruncationLength: 4 })
+    );
+  });
+});
