@@ -10,15 +10,15 @@ if command -v apt-get >/dev/null 2>&1; then
   fi
   DEBIAN_FRONTEND=noninteractive timeout 300 apt-get install -y -qq -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3 nodejs npm curl tar
 elif command -v dnf >/dev/null 2>&1; then
-  dnf install -y -q nodejs npm curl tar
+  timeout 600 dnf install -y -q nodejs npm curl tar
 elif command -v pacman >/dev/null 2>&1; then
   # --disable-sandbox keeps pacman working under qemu emulation (local dev
   # on arm64); harmless on native runners.
-  pacman -Syu --noconfirm --disable-sandbox nodejs npm curl tar
+  timeout 600 pacman -Syu --noconfirm --disable-sandbox nodejs npm curl tar
 elif command -v apk >/dev/null 2>&1; then
   # bash is not preinstalled on Alpine but the smoke harness drives the
   # container with bash -euxo pipefail, so install it alongside the toolchain.
-  apk add --no-cache nodejs npm curl tar bash
+  timeout 600 apk add --no-cache nodejs npm curl tar bash
 else
   echo "No supported package manager found" >&2
   exit 1
