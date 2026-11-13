@@ -303,6 +303,41 @@ describe('readTerminalFontFamily', () => {
     expect(readTerminalFontFamily('alacritty')).toBe('Alacritty Font');
   });
 
+  it.each([
+    ['[font.bold]\nfamily = "Bold"\n\n[font.normal]\nfamily = "Normal"\n', 'Normal'],
+    ['[font]\nnormal = { family = "Inline", style = "Regular" }\n', 'Inline'],
+    ["[font]\nnormal.family = 'Dotted'\n", 'Dotted'],
+    ['font.normal = { family = "TopInline" }\n', 'TopInline'],
+    ['[colors]\nnormal = { family = "Nope" }\n', null],
+  ])('reads the alacritty normal family from %j', (content, expected) => {
+    write('alacritty/alacritty.toml', content);
+    expect(readTerminalFontFamily('alacritty')).toBe(expected);
+  });
+
+  it('reads the last kitty font_family, including the family="X" spelling', () => {
+    write(
+      'kitty/kitty.conf',
+      'font_family Old\nfont_family family="Hack Nerd Font" style=Regular\n'
+    );
+    expect(readTerminalFontFamily('kitty')).toBe('Hack Nerd Font');
+  });
+
+  it('reads the first ghostty font-family after the last reset', () => {
+    write(
+      'ghostty/config',
+      'font-family = Old\nfont-family = ""\nfont-family = "New"\nfont-family = Fallback\n'
+    );
+    expect(readTerminalFontFamily('ghostty')).toBe('New');
+  });
+
+  it("reads foot's [main] font with its fallbacks, ignoring [csd]", () => {
+    write(
+      'foot/foot.ini',
+      '[csd]\nfont=Title\n[main]\nfont=Fira Code:size=11,Symbols Nerd Font:size=11\n'
+    );
+    expect(readTerminalFontFamily('foot')).toBe('Fira Code, Symbols Nerd Font');
+  });
+
   it('returns null when nothing is configured', () => {
     expect(readTerminalFontFamily('kitty')).toBeNull();
     expect(readTerminalFontFamily('wezterm')).toBeNull();

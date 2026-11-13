@@ -280,23 +280,85 @@ export function readTerminalFontFamily(id: TerminalId): string | null {
   } catch {
     return null;
   }
-  let match: RegExpMatchArray | null;
   switch (id) {
     case 'alacritty':
-      match =
-        content.match(/^\s*family:\s*"?([^"\n]+)"?/m) ??
-        content.match(/^\s*family\s*=\s*"([^"]+)"/m);
-      break;
+      return filePath.endsWith('.yml') ? readYamlFamily(content) : readTomlFamily(content);
     case 'kitty':
-      match = content.match(/^font_family\s+(.+)$/m);
-      break;
+      return readKittyFamily(content);
     case 'ghostty':
-      match = content.match(/^font-family\s*=\s*"?([^"\n]+)"?$/m);
-      break;
+      return readGhosttyFamily(content);
     case 'foot':
-      match = content.match(/^\s*font\s*=\s*([^:\n]+)/m);
-      break;
+      return readFootFamily(content);
   }
+}
 
-  return match?.[1]?.trim() ?? null;
+function unquote(value: string): string {
+  return value
+    .trim()
+    .replace(/^(["'])(.*)\1$/, '$2')
+    .trim();
+}
+
+function readYamlFamily(content: string): string | null {
+  const match = content.match(/^\s*family:\s*"?([^"\n]+)"?/m);
+  return match?.[1]?.trim() || null;
+}
+
+/** The family in alacritty's normal font, in any of the shapes the writer edits. */
+function readTomlFamily(content: string): string | null {
+  const sections = tomlSections(content);
+  const body = (name: string | null) => {
+    const section = sections.find((s) => s.name === name);
+    return section ? content.slice(section.start, section.end) : '';
+  };
+  const value = '("[^"]*"|\'[^\']*\')';
+  const patterns: Array<[string | null, RegExp]> = [
+    ['font.normal', new RegExp(`^[ \\t]*family[ \\t]*=[ \\t]*${value}`, 'm')],
+    ['font', new RegExp(`^[ \\t]*normal\\.family[ \\t]*=[ \\t]*${value}`, 'm')],
+    ['font', new RegExp(`^[ \\t]*normal\\s*=\\s*\\{[^}]*family\\s*=\\s*${value}`, 'm')],
+    [null, new RegExp(`^[ \\t]*font\\.normal\\.family[ \\t]*=[ \\t]*${value}`, 'm')],
+    [null, new RegExp(`^[ \\t]*font\\.normal\\s*=\\s*\\{[^}]*family\\s*=\\s*${value}`, 'm')],
+  ];
+  for (const [section, pattern] of patterns) {
+    const match = body(section).match(pattern);
+    if (match?.[1]) return unquote(match[1]) || null;
+  }
+  return null;
+}
+
+/** kitty applies the last font_family line; `family="X"` is its newer spelling. */
+function readKittyFamily(content: string): string | null {
+  const lines = [...content.matchAll(/^[ \t]*font_family[ \t]+(.+)$/gm)];
+  const value = lines.at(-1)?.[1]?.trim();
+  if (!value) return null;
+  const named = value.match(/(?:^|\s)family=("[^"]*"|'[^']*'|\S+)/);
+  return (named ? unquote(named[1]!) : value) || null;
+}
+
+/** Ghostty builds a fallback list from font-family lines; an empty value resets it. */
+function readGhosttyFamily(content: string): string | null {
+  let primary: string | null = null;
+  for (const match of content.matchAll(/^[ \t]*font-family[ \t]*=(.*)$/gm)) {
+    const value = unquote(match[1] ?? '');
+    if (value === '') primary = null;
+    else if (primary === null) primary = value;
+  }
+  return primary;
+}
+
+/** foot's [main] font, as its comma-separated families without size options. */
+function readFootFamily(content: string): string | null {
+  const sections = tomlSections(content);
+  for (const name of [null, 'main']) {
+    const section = sections.find((s) => s.name === name);
+    if (!section) continue;
+    const match = content.slice(section.start, section.end).match(/^[ \t]*font[ \t]*=(.*)$/m);
+    if (!match) continue;
+    const families = (match[1] ?? '')
+      .split(',')
+      .map((entry) => entry.split(':')[0]!.trim())
+      .filter(Boolean);
+    return families.length > 0 ? families.join(', ') : null;
+  }
+  return null;
 }
