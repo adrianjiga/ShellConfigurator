@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [lint, format:check, typecheck, build]
+        check: [lint, "format:check", typecheck, build]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -80,7 +80,7 @@ jobs:
             setup: true
             finalize: true
             wizard-check: true
-          - image: fedora:41
+          - image: fedora:44
             package-manager: dnf
             setup: true
             finalize: true
