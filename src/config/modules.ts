@@ -309,9 +309,19 @@ time_format = "%H:%M"
     previewSegment: () => '🔋 85%',
     content: '$symbol$percentage',
     stylesItself: true,
-    settings: ({ styleFor }) =>
+    // Starship's default battery symbols are Nerd Font glyphs.
+    settings: ({ styleFor, hasNerdFont }) =>
       `
-disabled = false
+disabled = false${
+        hasNerdFont
+          ? ''
+          : `
+full_symbol        = "🔋 "
+charging_symbol    = "⚡️ "
+discharging_symbol = "🔋 "
+unknown_symbol     = "🔋 "
+empty_symbol       = "🪫 "`
+      }
 
 [[battery.display]]
 threshold = 30

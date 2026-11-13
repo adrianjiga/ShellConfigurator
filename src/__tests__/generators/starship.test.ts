@@ -486,3 +486,20 @@ describe('unknown module ids', () => {
     expect((toml.parse(out) as { format: string }).format).toBe('$directory\n$character');
   });
 });
+
+describe('battery symbols', () => {
+  it('uses emoji instead of Nerd Font glyphs when there is no Nerd Font', () => {
+    const parsed = toml.parse(
+      generateToml({ ...DEFAULT_STATE, hasNerdFont: false, leftModules: ['battery', 'character'] })
+    ) as { battery: Record<string, unknown> };
+    expect(parsed.battery.full_symbol).toBe('🔋 ');
+    expect(parsed.battery.empty_symbol).toBe('🪫 ');
+  });
+
+  it("keeps starship's glyph defaults with a Nerd Font", () => {
+    const parsed = toml.parse(
+      generateToml({ ...DEFAULT_STATE, hasNerdFont: true, leftModules: ['battery', 'character'] })
+    ) as { battery: Record<string, unknown> };
+    expect(parsed.battery.full_symbol).toBeUndefined();
+  });
+});
