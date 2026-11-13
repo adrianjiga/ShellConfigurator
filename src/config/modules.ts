@@ -351,8 +351,8 @@ style     = "${tomlBasic(styleFor('battery'))}"
     content: '$symbol$number',
     settings: () =>
       `
-symbol    = "✦"
-threshold = 1
+symbol           = "✦"
+number_threshold = 1
 `.trim(),
   },
   status: {
