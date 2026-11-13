@@ -237,6 +237,23 @@ describe('parseState', () => {
     expect(() => parseState(JSON.stringify(card))).toThrow(/unknown nerdFontToInstall kind/);
   });
 
+  it('rejects a wrong-shape nerdFontToInstall instead of reading it as no font', () => {
+    const asString = {
+      version: STATE_VERSION,
+      wizard: { nerdFontToInstall: 'JetBrainsMono' },
+    };
+    expect(() => parseState(JSON.stringify(asString))).toThrow(/must be an object/);
+
+    const noKind = { version: STATE_VERSION, wizard: { nerdFontToInstall: { id: 'Hack' } } };
+    expect(() => parseState(JSON.stringify(noKind))).toThrow(/needs a kind/);
+  });
+
+  it('treats an absent nerdFontToInstall as no font', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.nerdFontToInstall = undefined as never;
+    expect(parseState(JSON.stringify(card)).nerdFontToInstall).toEqual({ kind: 'none' });
+  });
+
   it('defaults absent modules to the core set', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
     card.wizard.leftModules = undefined as never;

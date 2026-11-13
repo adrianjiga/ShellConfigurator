@@ -184,9 +184,17 @@ function parseSubstitutionList(value: unknown): DirectorySubstitution[] {
  * the installer as garbage.
  */
 function parseNerdFontChoice(value: unknown): NerdFontChoice {
-  if (typeof value !== 'object' || value === null) return NO_NERD_FONT;
+  if (value === undefined || value === null) return NO_NERD_FONT;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new CliUsageError('Invalid state card: nerdFontToInstall must be an object');
+  }
   const kind = (value as { kind?: unknown }).kind;
-  if (kind === undefined || kind === 'none') return NO_NERD_FONT;
+  if (kind === undefined) {
+    throw new CliUsageError(
+      'Invalid state card: nerdFontToInstall needs a kind (none, select or install)'
+    );
+  }
+  if (kind === 'none') return NO_NERD_FONT;
   if (kind === 'select') return { kind: 'select' };
   if (kind === 'install') {
     const id = (value as { id?: unknown }).id;
