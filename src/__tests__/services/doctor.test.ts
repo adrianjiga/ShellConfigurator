@@ -25,6 +25,8 @@ function makeDeps(
 ): DoctorDeps {
   return {
     isStarshipInstalled: vi.fn().mockResolvedValue({ installed: true, version: 'starship 1.20.0' }),
+    getMissingStarshipPathDir: vi.fn().mockReturnValue(null),
+    readStarshipVersion: vi.fn().mockResolvedValue(null),
     detectCurrentShell: vi.fn().mockResolvedValue('zsh'),
     readCachedStarshipVersion: vi.fn().mockReturnValue(null),
     detectInstalledShells: vi.fn().mockResolvedValue(['zsh']),
@@ -75,6 +77,54 @@ describe('runDoctor', () => {
       status: 'fail',
       fix: { kind: 'reinstall-starship' },
     });
+  });
+
+  it('passes when a script install is present but not on PATH', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
+      getMissingStarshipPathDir: vi.fn().mockReturnValue('/home/u/.local/bin'),
+      readStarshipVersion: vi.fn().mockResolvedValue('starship 1.20.0'),
+    });
+    const report = await runDoctor(baseState(), deps);
+    expect(find(report, 'starship')).toMatchObject({ status: 'pass' });
+    expect(find(report, 'starship').detail).toContain('/home/u/.local/bin');
+  });
+
+  it('does not offer a reinstall when the card skipped installing starship', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
+    });
+    const report = await runDoctor(baseState({ skipStarshipInstall: true }), deps);
+    expect(find(report, 'starship').fix).toBeUndefined();
+  });
+
+  it('asks starship for its version once per run', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      readCachedStarshipVersion: vi.fn().mockReturnValue('starship 1.20.0'),
+    });
+    await runDoctor(baseState(), deps);
+    expect(deps.isStarshipInstalled).toHaveBeenCalledOnce();
+  });
+
+  it('does not blame the config when starship cannot be reached', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
+      verifyConfig: vi.fn().mockRejectedValue(new Error('spawn starship ENOENT')),
+    });
+    const report = await runDoctor(baseState(), deps);
+    expect(find(report, 'config')).toMatchObject({ status: 'warn' });
+    expect(find(report, 'config').detail).toMatch(/not reachable/);
+    expect(deps.verifyConfig).not.toHaveBeenCalled();
+  });
+
+  it('still verifies with the script install dir when PATH lacks it', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
+      getMissingStarshipPathDir: vi.fn().mockReturnValue('/home/u/.local/bin'),
+      readStarshipVersion: vi.fn().mockResolvedValue('starship 1.20.0'),
+    });
+    const report = await runDoctor(baseState(), deps);
+    expect(find(report, 'config')).toMatchObject({ status: 'pass' });
   });
 
   it('warns when no locale is set, passes a UTF-8 one', async () => {

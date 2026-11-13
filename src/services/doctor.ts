@@ -20,7 +20,12 @@ import {
 } from './detector.ts';
 import { errorMessage } from './errors.ts';
 import { runCapture } from './exec.ts';
-import { fontLabel, getFontFamily, getNerdFontsDir } from './installer.ts';
+import {
+  fontLabel,
+  getFontFamily,
+  getMissingStarshipPathDir,
+  getNerdFontsDir,
+} from './installer.ts';
 import { readTerminalFontFamily, terminalLabel } from './terminalFont.ts';
 
 export type DoctorStatus = 'pass' | 'warn' | 'fail';
@@ -48,6 +53,10 @@ export interface DoctorReport {
 
 export interface DoctorDeps {
   isStarshipInstalled: typeof isStarshipInstalledAsync;
+  /** The script-install bin dir when starship is there but not on PATH, or null. */
+  getMissingStarshipPathDir: () => string | null;
+  /** Runs `starship --version` with the script install dir on PATH. */
+  readStarshipVersion: (pathDir: string) => Promise<string | null>;
   detectCurrentShell: typeof detectCurrentShellAsync;
   /** The starship version the last install/apply recorded, or null. */
   readCachedStarshipVersion: () => string | null;
@@ -64,21 +73,42 @@ export interface DoctorDeps {
 
 export const DEFAULT_DOCTOR_DEPS: DoctorDeps = {
   isStarshipInstalled: isStarshipInstalledAsync,
+  getMissingStarshipPathDir,
+  readStarshipVersion: (pathDir) => readStarshipVersion(pathDir),
   detectCurrentShell: detectCurrentShellAsync,
   readCachedStarshipVersion: () => cachedStarshipVersion(),
   detectInstalledShells: detectInstalledShellsAsync,
   detectTerminal: detectTerminalAsync,
   readFontFamily: readTerminalFontFamily,
-  verifyConfig: (configPath) =>
-    runCapture('starship', ['print-config'], {
-      env: { ...process.env, STARSHIP_CONFIG: configPath },
-    }).then(() => undefined),
+  verifyConfig: (configPath) => {
+    const pathDir = getMissingStarshipPathDir();
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      STARSHIP_CONFIG: configPath,
+    };
+    if (pathDir) env.PATH = withPathDir(pathDir);
+    return runCapture('starship', ['print-config'], { env }).then(() => undefined);
+  },
   readFile: (path) => fs.readFileSync(path, 'utf8'),
   exists: (path) => fs.existsSync(path),
   hasNerdFonts: () => fontDirs().some((dir) => hasNerdFontFiles(dir)),
   isContainer: detectContainerAsync,
   env: process.env,
 };
+
+function withPathDir(dir: string): string {
+  return `${dir}${process.env.PATH ? `:${process.env.PATH}` : ''}`;
+}
+
+async function readStarshipVersion(pathDir: string): Promise<string | null> {
+  try {
+    return await runCapture('starship', ['--version'], {
+      env: { ...process.env, PATH: withPathDir(pathDir) },
+    });
+  } catch {
+    return null;
+  }
+}
 
 const NERD_FONT_FILE = /nerd ?font/i;
 
@@ -124,17 +154,40 @@ function setsOwnConfig(content: string): boolean {
   return content.includes('STARSHIP_CONFIG=') || content.includes('set -gx STARSHIP_CONFIG ');
 }
 
-async function checkStarship(deps: DoctorDeps): Promise<DoctorFinding> {
-  const { installed, version } = await deps.isStarshipInstalled();
-  return installed
-    ? { id: 'starship', title: 'Starship', status: 'pass', detail: version ?? 'installed' }
-    : {
-        id: 'starship',
-        title: 'Starship',
-        status: 'fail',
-        detail: 'starship is not on PATH',
-        fix: { kind: 'reinstall-starship' },
-      };
+interface StarshipProbe {
+  installed: boolean;
+  version?: string;
+  /** Where a script install put the binary, when PATH does not have it yet. */
+  pathDir?: string;
+}
+
+async function probeStarship(deps: DoctorDeps): Promise<StarshipProbe> {
+  const probe = await deps.isStarshipInstalled();
+  if (probe.installed) return probe;
+  const pathDir = deps.getMissingStarshipPathDir();
+  if (!pathDir) return probe;
+  const version = await deps.readStarshipVersion(pathDir);
+  return version ? { installed: true, version, pathDir } : probe;
+}
+
+function checkStarship(probe: StarshipProbe, state: WizardState | null): DoctorFinding {
+  if (probe.installed) {
+    return {
+      id: 'starship',
+      title: 'Starship',
+      status: 'pass',
+      detail: probe.pathDir
+        ? `${probe.version ?? 'installed'} (in ${probe.pathDir}, not on PATH until you restart)`
+        : (probe.version ?? 'installed'),
+    };
+  }
+  return {
+    id: 'starship',
+    title: 'Starship',
+    status: 'fail',
+    detail: 'starship is not on PATH',
+    ...(state?.skipStarshipInstall ? {} : { fix: { kind: 'reinstall-starship' as const } }),
+  };
 }
 
 /**
@@ -142,7 +195,7 @@ async function checkStarship(deps: DoctorDeps): Promise<DoctorFinding> {
  * last install/apply recorded? A mismatch means a package-manager upgrade or
  * downgrade happened outside the tool — something the rc stamp cannot see.
  */
-async function checkVersionDrift(deps: DoctorDeps): Promise<DoctorFinding> {
+function checkVersionDrift(probe: StarshipProbe, deps: DoctorDeps): DoctorFinding {
   const cached = deps.readCachedStarshipVersion();
   if (!cached) {
     return {
@@ -152,7 +205,7 @@ async function checkVersionDrift(deps: DoctorDeps): Promise<DoctorFinding> {
       detail: 'no prior install recorded to compare against',
     };
   }
-  const { installed, version } = await deps.isStarshipInstalled();
+  const { installed, version } = probe;
   if (!installed || !version) {
     return {
       id: 'version-drift',
@@ -371,7 +424,11 @@ function checkShellWiring(
   };
 }
 
-async function checkConfigs(wiring: ShellWiring[], deps: DoctorDeps): Promise<DoctorFinding> {
+async function checkConfigs(
+  wiring: ShellWiring[],
+  probe: StarshipProbe,
+  deps: DoctorDeps
+): Promise<DoctorFinding> {
   const paths = [
     ...new Set(
       wiring.map((w) => (w.pointAtShared ? getSharedConfigPath() : getShellConfigPath(w.id)))
@@ -384,6 +441,14 @@ async function checkConfigs(wiring: ShellWiring[], deps: DoctorDeps): Promise<Do
       title: 'Config files',
       status: 'warn',
       detail: 'no Starship config found',
+    };
+  }
+  if (!probe.installed) {
+    return {
+      id: 'config',
+      title: 'Config files',
+      status: 'warn',
+      detail: `cannot verify ${existing.join(', ')} — starship is not reachable`,
     };
   }
   for (const configPath of existing) {
@@ -552,14 +617,16 @@ export async function runDoctor(
     pointAtShared: state ? state.keepExistingConfig : shellPointsAtShared(id, deps),
   }));
 
+  const probe = await probeStarship(deps);
+
   const findings: DoctorFinding[] = [
-    await checkStarship(deps),
+    checkStarship(probe, state),
     checkLocale(deps),
     ...wiring.map((w) => checkShellWiring(w.id, w.pointAtShared, state !== null, deps)),
-    await checkConfigs(wiring, deps),
+    await checkConfigs(wiring, probe, deps),
     await checkFontInstalled(state, deps),
     await checkFontSelected(state, deps),
-    await checkVersionDrift(deps),
+    checkVersionDrift(probe, deps),
     await checkRunningShell(shellIds, deps),
   ];
 
