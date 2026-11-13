@@ -1034,14 +1034,14 @@ describe('backupSharedConfig', () => {
     expect(fs.copyFileSync).toHaveBeenCalledWith(getSharedConfigPath(), backup);
   });
 
-  it('honours XDG_CONFIG_HOME for the shared config', () => {
+  it('ignores XDG_CONFIG_HOME for the shared config, as Starship does', () => {
     process.env.XDG_CONFIG_HOME = '/home/u/.dotfiles/config';
     vi.mocked(fs.existsSync).mockReturnValue(true);
 
     const backup = backupSharedConfig();
 
     expect(backup).toMatch(
-      new RegExp(`^${path.join('/home/u/.dotfiles/config', 'starship.toml.bak-')}`)
+      new RegExp(`^${path.join(os.homedir(), '.config', 'starship.toml.bak-')}`)
     );
   });
 

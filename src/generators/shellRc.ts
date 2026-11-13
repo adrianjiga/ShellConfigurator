@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getShell, isShellId, type ShellDef } from '../config/shells.ts';
-import { configHome } from '../services/paths.ts';
+import { configHome, homeDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 
 export interface WriteConfigResult {
@@ -26,7 +26,8 @@ export function getShellConfigPath(shellId: ShellId): string {
  * (see backupSharedConfig / restoreConfigBackups).
  */
 export function getSharedConfigPath(): string {
-  return path.join(configHome(), 'starship.toml');
+  // Starship's own default ignores XDG_CONFIG_HOME.
+  return path.join(homeDir(), '.config', 'starship.toml');
 }
 
 export function backupStamp(): string {
@@ -164,8 +165,9 @@ export function restoreConfigBackups(): RestoreOutcome {
   const base = configHome();
   const outcome: RestoreOutcome = { restored: [], failed: [] };
 
-  const newestShared = newestBackup(base, 'starship.toml');
-  if (newestShared) restoreOne('shared', getSharedConfigPath(), newestShared, outcome);
+  const shared = getSharedConfigPath();
+  const newestShared = newestBackup(path.dirname(shared), path.basename(shared));
+  if (newestShared) restoreOne('shared', shared, newestShared, outcome);
 
   const shellsDir = path.join(base, 'starship');
   if (fs.existsSync(shellsDir)) {

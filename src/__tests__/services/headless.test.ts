@@ -512,36 +512,36 @@ describe('runApply', () => {
 
   it('says plainly when --adopt --dry-run finds no config to keep', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
-    const previous = process.env.XDG_CONFIG_HOME;
-    process.env.XDG_CONFIG_HOME = dir;
+    const previous = process.env.HOME;
+    process.env.HOME = dir;
+    fs.mkdirSync(path.join(dir, '.config'));
     try {
       await runApply(flags({ subcommand: 'apply', shells: ['bash'], adopt: true, dryRun: true }));
       const output = stdoutWrite.mock.calls
         .map((call: [string, ...unknown[]]) => String(call[0]))
         .join('');
       expect(output).toContain('No config to keep yet');
-      expect(output).toContain(path.join(dir, 'starship.toml'));
+      expect(output).toContain(path.join(dir, '.config', 'starship.toml'));
     } finally {
-      if (previous === undefined) delete process.env.XDG_CONFIG_HOME;
-      else process.env.XDG_CONFIG_HOME = previous;
+      process.env.HOME = previous;
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
   it('names the config --adopt --dry-run would keep', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
-    const previous = process.env.XDG_CONFIG_HOME;
-    process.env.XDG_CONFIG_HOME = dir;
-    fs.writeFileSync(path.join(dir, 'starship.toml'), 'format = "x"\n');
+    const previous = process.env.HOME;
+    process.env.HOME = dir;
+    fs.mkdirSync(path.join(dir, '.config'));
+    fs.writeFileSync(path.join(dir, '.config', 'starship.toml'), 'format = "x"\n');
     try {
       await runApply(flags({ subcommand: 'apply', shells: ['bash'], adopt: true, dryRun: true }));
       const output = stdoutWrite.mock.calls
         .map((call: [string, ...unknown[]]) => String(call[0]))
         .join('');
-      expect(output).toContain(`Config to keep: ${path.join(dir, 'starship.toml')}`);
+      expect(output).toContain(`Config to keep: ${path.join(dir, '.config', 'starship.toml')}`);
     } finally {
-      if (previous === undefined) delete process.env.XDG_CONFIG_HOME;
-      else process.env.XDG_CONFIG_HOME = previous;
+      process.env.HOME = previous;
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
@@ -726,8 +726,9 @@ describe('runApply', () => {
 
   it('adopts the existing shared config when --adopt is passed without --import-url', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
-    const previous = process.env.XDG_CONFIG_HOME;
-    process.env.XDG_CONFIG_HOME = dir;
+    const previous = process.env.HOME;
+    process.env.HOME = dir;
+    fs.mkdirSync(path.join(dir, '.config'));
     try {
       await runApply(flags({ subcommand: 'apply', shells: ['zsh'], adopt: true, dryRun: true }));
       const output = stdoutWrite.mock.calls
@@ -736,8 +737,7 @@ describe('runApply', () => {
       expect(output).toContain('No config to keep yet');
       expect(output).not.toContain('Generated starship.toml');
     } finally {
-      if (previous === undefined) delete process.env.XDG_CONFIG_HOME;
-      else process.env.XDG_CONFIG_HOME = previous;
+      process.env.HOME = previous;
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
