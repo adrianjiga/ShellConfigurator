@@ -128,9 +128,17 @@ function parseBoolean(value: unknown, field: string, fallback: boolean): boolean
 }
 
 function parseShellList(value: unknown): ShellId[] {
-  if (!isStringArray(value)) return [];
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new CliUsageError('Invalid state card: selectedShells must be an array of shell ids');
+  }
   const parsed = new Set<ShellId>();
   for (const id of value) {
+    if (typeof id !== 'string') {
+      throw new CliUsageError(
+        `Invalid state card: selectedShells entry ${String(id)} is not a shell id`
+      );
+    }
     if (!SHELL_IDS.has(id)) {
       throw new CliUsageError(`Invalid state card: unknown shell '${id}' in selectedShells`);
     }

@@ -130,6 +130,12 @@ describe('parseState', () => {
     expect(parseState(JSON.stringify(card)).selectedShells).toEqual(['zsh', 'fish']);
   });
 
+  it('says which selectedShells entry is not a shell id', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.selectedShells = ['zsh', 42] as never;
+    expect(() => parseState(JSON.stringify(card))).toThrow(/entry 42 is not a shell id/);
+  });
+
   it('rejects a string where a card boolean belongs', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
     card.wizard.skipStarshipInstall = 'true' as never;
