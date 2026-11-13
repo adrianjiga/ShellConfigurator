@@ -6,6 +6,7 @@ import {
   appendHistory,
   type HistoryRecord,
   historyFilePath,
+  lastRunShells,
   recordRun,
   snapshotDir,
   snapshotPath,
@@ -178,5 +179,19 @@ describe('snapshotDir / snapshotPath / writeSnapshot', () => {
     expect(first).not.toBe(second);
     expect(sameMillisecond).toBe(`${first}-2`);
     expect(fs.readdirSync(snapshotDir())).toHaveLength(3);
+  });
+});
+
+describe('lastRunShells', () => {
+  it('returns null when no run has been recorded', () => {
+    expect(lastRunShells()).toBeNull();
+  });
+
+  it('reads the shells of the newest run that left a snapshot', () => {
+    recordRun({ kind: 'install', state: { ...DEFAULT_STATE, selectedShells: ['zsh'] } });
+    recordRun({ kind: 'apply', state: { ...DEFAULT_STATE, selectedShells: ['bash', 'fish'] } });
+    appendHistory(record('apply'));
+
+    expect(lastRunShells()).toEqual(['bash', 'fish']);
   });
 });

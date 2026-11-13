@@ -190,11 +190,12 @@ function restoreOne(
 
 /**
  * Copies the newest .bak-* snapshot back over the live config for the shared
- * config and every per-shell config that has one. Backups are kept, not deleted.
+ * config and every per-shell config that has one (only `onlyShells`, when the
+ * shells the last run touched are known). Backups are kept, not deleted.
  * A config that fails to copy is reported in `failed` and does not stop the
  * rest; an empty outcome means nothing to restore.
  */
-export function restoreConfigBackups(): RestoreOutcome {
+export function restoreConfigBackups(onlyShells?: readonly ShellId[]): RestoreOutcome {
   const base = configHome();
   const outcome: RestoreOutcome = { restored: [], failed: [] };
 
@@ -214,6 +215,7 @@ export function restoreConfigBackups(): RestoreOutcome {
       entries.map((e) => /^(.+)\.toml\.bak-.*$/.exec(e)?.[1]).filter(isShellId)
     );
     for (const shellId of shells) {
+      if (onlyShells && !onlyShells.includes(shellId)) continue;
       const backup = newestBackup(shellsDir, `${shellId}.toml`);
       if (!backup) continue;
       restoreOne(shellId, getShellConfigPath(shellId), backup, outcome);

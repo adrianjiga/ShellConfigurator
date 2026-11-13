@@ -1186,6 +1186,19 @@ describe('restoreConfigBackups', () => {
     expect(calls[1]).toEqual([restored[0]?.restoredFrom, getSharedConfigPath()]);
   });
 
+  it('only restores the shells it is told the last run touched', () => {
+    readdirSyncMock.mockImplementation((dir) =>
+      dir === shellsDir
+        ? ['zsh.toml.bak-2026-09-09T09-30-00-000Z', 'bash.toml.bak-2026-09-09T09-31-00-000Z']
+        : []
+    );
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === shellsDir);
+
+    const { restored } = restoreConfigBackups(['bash']);
+
+    expect(restored.map((r) => r.what)).toEqual(['bash']);
+  });
+
   it('restores the newest backup for every per-shell config that has one', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     readdirSyncMock.mockImplementation((dir) => {

@@ -9,7 +9,7 @@ import { parseCliArgs, quoteArgv } from './services/args.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
 import { CliRunError, CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags } from './services/headless.ts';
-import { recordRun } from './services/history.ts';
+import { lastRunShells, recordRun } from './services/history.ts';
 import { formatRepairReport, runRepair } from './services/repair.ts';
 import { restoreTty } from './services/tty.ts';
 import type { InstallTask, WizardState } from './types.ts';
@@ -136,7 +136,7 @@ repair options (fixes the failing checks; exits non-zero when one still fails):
 
 /** Restore the shared and per-shell configs from their newest backups. */
 export function runRestore(): void {
-  const { restored, failed } = restoreConfigBackups();
+  const { restored, failed } = restoreConfigBackups(lastRunShells() ?? undefined);
   if (restored.length === 0 && failed.length === 0) {
     process.stdout.write('Nothing to restore — no ShellConfigurator backups found.\n');
     return;

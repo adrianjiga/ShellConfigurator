@@ -1,9 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { writeFileAtomic } from '../generators/shellRc.ts';
-import type { InstallTask, WizardState } from '../types.ts';
+import type { InstallTask, ShellId, WizardState } from '../types.ts';
 import { stateDir } from './paths.ts';
-import { serializeState } from './state.ts';
+import { parseState, serializeState } from './state.ts';
 
 /**
  * What a recorded run did. `install` is the interactive wizard; `apply` is a
@@ -131,4 +131,28 @@ export function writeSnapshot(state: WizardState, timestamp?: string): string {
   for (let n = 2; fs.existsSync(snapshotPath(id)); n++) id = `${base}-${n}`;
   writeFileAtomic(snapshotPath(id), serializeState(state));
   return id;
+}
+
+/**
+ * The shells the most recent recorded run configured, from its snapshot card,
+ * or null when no readable run is recorded.
+ */
+export function lastRunShells(): ShellId[] | null {
+  let lines: string[];
+  try {
+    lines = fs.readFileSync(historyFilePath(), 'utf8').split('\n').filter(Boolean);
+  } catch {
+    return null;
+  }
+  for (const line of lines.reverse()) {
+    try {
+      const record = JSON.parse(line) as Partial<HistoryRecord>;
+      if (typeof record.snapshotId !== 'string') continue;
+      const card = fs.readFileSync(snapshotPath(record.snapshotId), 'utf8');
+      return parseState(card).selectedShells;
+    } catch {
+      // A torn line or missing snapshot: try the run before it.
+    }
+  }
+  return null;
 }

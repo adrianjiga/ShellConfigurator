@@ -46,7 +46,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
     }
     // No backups were made in a dry run, so restoring would clobber real files.
     if (char.toLowerCase() === 'r' && outcome === null && !state.dryRun) {
-      setOutcome(restoreConfigBackups());
+      setOutcome(restoreConfigBackups(state.selectedShells));
     }
   });
 
