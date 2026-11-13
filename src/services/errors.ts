@@ -5,7 +5,8 @@
  * own, so use this everywhere a catch slot reports a failure.
  */
 export function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  if (err instanceof Error) return err.message || err.name;
+  return String(err);
 }
 
 /**
