@@ -59,9 +59,14 @@ describe('PromptPreview', () => {
   });
 
   it('reflects directory depth and substitutions in the static preview', () => {
-    expect(
-      frame({ directoryTruncationLength: 1, leftModules: ['directory', 'character'] })
-    ).toContain('…/myapp');
+    const truncated = frame({
+      directoryTruncationLength: 1,
+      leftModules: ['directory', 'character'],
+    });
+    // Starship's default truncation symbol is empty, so nothing marks the cut.
+    expect(truncated).toContain('myapp');
+    expect(truncated).not.toContain('…/');
+    expect(truncated).not.toContain('projects');
     expect(
       frame({
         directoryTruncationLength: 0,
@@ -69,6 +74,14 @@ describe('PromptPreview', () => {
         leftModules: ['directory', 'character'],
       })
     ).toContain('~/code/myapp');
+    // Like starship, a substitution matches text anywhere in the path.
+    expect(
+      frame({
+        directoryTruncationLength: 0,
+        directorySubstitutions: [{ from: 'my', to: 'our' }],
+        leftModules: ['directory', 'character'],
+      })
+    ).toContain('~/projects/ourapp');
   });
 
   it('renders right modules under a right: label', () => {

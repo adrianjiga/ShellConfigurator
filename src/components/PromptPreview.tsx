@@ -133,17 +133,18 @@ function RealPromptFrame({ text }: { text: string }) {
   );
 }
 
-/** A small local approximation of the sample path used by the static preview. */
+/**
+ * A small local approximation of the sample path used by the static preview.
+ * Like starship, substitutions replace matching text anywhere in the path, and
+ * truncation keeps the last folders with no marker (the default symbol is empty).
+ */
 function previewDirectory(state: WizardState): string {
-  const substitutions = new Map(
-    state.directorySubstitutions.map(({ from, to }) => [from, to] as const)
-  );
-  const path = ['~', 'projects', 'myapp']
-    .map((part) => substitutions.get(part) ?? part)
-    .filter(Boolean);
+  let full = '~/projects/myapp';
+  for (const { from, to } of state.directorySubstitutions) full = full.split(from).join(to);
+  const parts = full.split('/').filter(Boolean);
   const length = state.directoryTruncationLength;
   const renderedPath =
-    length === 0 || path.length <= length ? path.join('/') : `…/${path.slice(-length).join('/')}`;
+    length === 0 || parts.length <= length ? parts.join('/') : parts.slice(-length).join('/');
   return `${state.hasNerdFont ? NERD_FONT_SYMBOLS.directory : ''}${renderedPath}`;
 }
 
