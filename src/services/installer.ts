@@ -326,7 +326,13 @@ export async function installNerdFont(fontId: string): Promise<string | undefine
   await installFontFiles(font.zipName, buffer);
 
   // Pin the verified archive so a later run reuses it without re-downloading.
-  cacheFont(fontId, buffer);
+  // A cache that cannot be written (no space, read-only ~/.cache) must not undo
+  // a font that is already installed on disk.
+  try {
+    cacheFont(fontId, buffer);
+  } catch {
+    // Best-effort only.
+  }
   return undefined;
 }
 

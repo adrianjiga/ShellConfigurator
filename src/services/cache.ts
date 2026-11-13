@@ -53,9 +53,8 @@ function isMissingFile(err: unknown): boolean {
 export function pinnedDigest(fontId: string): string | null {
   try {
     return fs.readFileSync(pinFilePath(fontId), 'utf8').trim() || null;
-  } catch (err) {
-    if (isMissingFile(err)) return null;
-    throw err;
+  } catch {
+    return null;
   }
 }
 
@@ -88,9 +87,8 @@ export function cachedFont(fontId: string): CachedFont | null {
   let buffer: Buffer;
   try {
     buffer = fs.readFileSync(file);
-  } catch (err) {
-    if (isMissingFile(err)) return null;
-    throw err;
+  } catch {
+    return null;
   }
   if (sha256Digest(buffer) !== digest) return null;
 

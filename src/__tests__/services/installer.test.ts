@@ -455,6 +455,19 @@ describe('installNerdFont', () => {
     }
   });
 
+  it('still succeeds when the cache cannot be written', async () => {
+    respondWithZip({ 'FiraCodeNerdFont-Regular.ttf': 'font' });
+    mockWriteFileSync.mockImplementation((file: unknown) => {
+      if (String(file).endsWith('.sha256')) throw new Error('ENOSPC');
+    });
+
+    await expect(installNerdFont('FiraCode')).resolves.toBeUndefined();
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('FiraCodeNerdFont-Regular.ttf'),
+      expect.anything()
+    );
+  });
+
   it('pins a freshly verified archive into the font cache', async () => {
     const zip = zipWith({ 'FiraCodeNerdFont-Regular.ttf': 'font' });
     stubFontFetch(() => okResponse({ arrayBuffer: async () => zip }), hexDigest(zip));
