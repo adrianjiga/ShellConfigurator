@@ -340,7 +340,8 @@ await check('writeShellConfig backs up and restoreConfigBackups restores', () =>
   assert.ok(backup, 'expected a shared-config backup');
   writeFileSync(shared, '# shared-v2\n');
 
-  const restored = restoreConfigBackups();
+  const { restored, failed } = restoreConfigBackups();
+  assert.deepEqual(failed, [], 'some backups failed to restore');
   assert.ok(
     restored.some((r) => r.what === 'bash'),
     'no per-shell config restored'
