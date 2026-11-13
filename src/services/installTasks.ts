@@ -23,7 +23,7 @@ import {
 import { recordStarshipVersion } from './cache.ts';
 import { detectInstalledShellsAsync, isStarshipInstalledAsync } from './detector.ts';
 import { errorMessage } from './errors.ts';
-import { runCapture } from './exec.ts';
+import { runCapture, runCaptureBoth } from './exec.ts';
 import {
   fontLabel,
   getFontFamily,
@@ -96,7 +96,8 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
     // A `script` install drops the binary in a dir the current process PATH may
     // not include yet; prepend it so verification resolves Starship regardless.
     if (pathDir) env.PATH = `${pathDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`;
-    await runCapture('starship', ['print-config'], { env });
+    const { stderr } = await runCaptureBoth('starship', ['print-config'], { env });
+    if (stderr) throw new Error(stderr);
   },
   wireTerminalFont,
 };

@@ -18,7 +18,7 @@ import {
   isStarshipInstalledAsync,
 } from './detector.ts';
 import { errorMessage } from './errors.ts';
-import { runCapture } from './exec.ts';
+import { runCapture, runCaptureBoth } from './exec.ts';
 import {
   fontLabel,
   getFontFamily,
@@ -54,7 +54,7 @@ export interface DoctorDeps {
   isStarshipInstalled: typeof isStarshipInstalledAsync;
   /** The script-install bin dir when starship is there but not on PATH, or null. */
   getMissingStarshipPathDir: () => string | null;
-  /** Runs `starship --version` with the script install dir on PATH. */
+  /** Runs `starship -V` with the script install dir on PATH. */
   readStarshipVersion: (pathDir: string) => Promise<string | null>;
   detectCurrentShell: typeof detectCurrentShellAsync;
   /** The starship version the last install/apply recorded, or null. */
@@ -89,7 +89,9 @@ export const DEFAULT_DOCTOR_DEPS: DoctorDeps = {
       STARSHIP_CONFIG: configPath,
     };
     if (pathDir) env.PATH = withPathDir(pathDir);
-    return runCapture('starship', ['print-config'], { env }).then(() => undefined);
+    return runCaptureBoth('starship', ['print-config'], { env }).then(({ stderr }) => {
+      if (stderr) throw new Error(stderr);
+    });
   },
   readFile: (path) => fs.readFileSync(path, 'utf8'),
   exists: (path) => fs.existsSync(path),
@@ -118,7 +120,7 @@ function withPathDir(dir: string): string {
 
 async function readStarshipVersion(pathDir: string): Promise<string | null> {
   try {
-    return await runCapture('starship', ['--version'], {
+    return await runCapture('starship', ['-V'], {
       env: { ...process.env, PATH: withPathDir(pathDir) },
     });
   } catch {

@@ -102,7 +102,7 @@ function starshipVersionFilePath(): string {
 
 /**
  * The starship version the last apply recorded, or null when none was recorded.
- * Doctor compares this against what `starship --version` reports to flag drift
+ * Doctor compares this against what `starship -V` reports to flag drift
  * (a newer PM install, or a downgrade) that the rc stamp cannot see.
  */
 export function cachedStarshipVersion(): string | null {

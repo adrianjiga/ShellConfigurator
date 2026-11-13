@@ -133,6 +133,24 @@ describe('doctor health check via the real deps', () => {
     expect(report.findings.every((f) => f.status !== 'fail')).toBe(true);
   });
 
+  it('fails the config check when print-config exits 0 but warns on stderr', async () => {
+    mockExecFile.mockImplementation(
+      (cmd: string, args: string[], options: unknown, cb: (...rest: unknown[]) => void) => {
+        if (cmd === 'starship' && args[0] === 'print-config') {
+          cb(null, '{\n}\n', '[WARN] unknown field `starship`\n');
+          return;
+        }
+        execFileFailsOrSucceeds(cmd, args, options, cb);
+      }
+    );
+
+    const report = await runDoctor(null, DEFAULT_DOCTOR_DEPS);
+    const config = report.findings.find((f) => f.id === 'config');
+
+    expect(config?.status).toBe('fail');
+    expect(config?.detail).toContain('unknown field');
+  });
+
   it('flags a mismatch between the recorded and installed starship version', async () => {
     mockReadFileSync.mockImplementation((p: string) => {
       if (p === versionFile) return 'starship 1.19.0\n';

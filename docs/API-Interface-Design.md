@@ -339,7 +339,7 @@ function detectPackageManagerAsync(): Promise<PackageManager>;
 // Returns detected package manager or 'script' fallback
 
 function isStarshipInstalledAsync(): Promise<{ installed: boolean; version?: string }>;
-// Checks `starship --version`
+// Checks `starship -V`
 
 function detectInstalledShellsAsync(): Promise<ShellId[]>;
 // Returns shells found on PATH, one binary check per SHELLS entry

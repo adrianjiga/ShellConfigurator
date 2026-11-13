@@ -65,7 +65,7 @@ async function readStarshipVersion(pathDir: string | null): Promise<string | nul
   const env: Record<string, string | undefined> = { ...process.env };
   if (pathDir) env.PATH = `${pathDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`;
   try {
-    return await runCapture('starship', ['--version'], { env });
+    return await runCapture('starship', ['-V'], { env });
   } catch {
     return null;
   }

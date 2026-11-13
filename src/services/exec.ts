@@ -52,6 +52,23 @@ export async function runCapture(
   return stdout.trim();
 }
 
+/**
+ * Like `runCapture`, but keeps stderr as well. Starship's `print-config`
+ * exits 0 even when the TOML produces parse warnings, so the exit status alone
+ * cannot tell a clean config from a broken one.
+ */
+export async function runCaptureBoth(
+  cmd: string,
+  args: string[],
+  options: { env?: NodeJS.ProcessEnv } = {}
+): Promise<{ stdout: string; stderr: string }> {
+  const { stdout, stderr } = await execFileP(cmd, args, {
+    encoding: 'utf8',
+    ...(options.env ? { env: options.env } : {}),
+  });
+  return { stdout: stdout.trim(), stderr: stderr.trim() };
+}
+
 export function commandPath(cmd: string): string | null {
   return probe(cmd);
 }

@@ -374,7 +374,7 @@ Returns an array of `ShellId` values for shells found in PATH.
 
 ### Starship Detection
 
-`isStarshipInstalledAsync()` runs `starship --version`:
+`isStarshipInstalledAsync()` runs `starship -V`:
 
 - Success: returns `{ installed: true, version: "starship 1.x.x" }`
 - Failure: returns `{ installed: false }`
