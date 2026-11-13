@@ -173,7 +173,7 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
                 {isActive && shell.manualNote && (
                   <Box marginLeft={4}>
                     <Text color={uiColor('yellow')} italic>
-                      ⚠ Manual setup required — Starship will show a setup command after
+                      ⚠ Manual setup required — the wizard shows the setup command after
                       installation.
                     </Text>
                   </Box>
