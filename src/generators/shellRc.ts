@@ -377,6 +377,13 @@ function isBlockMarkerLine(line: string): boolean {
   return t === BLOCK_MARKER || t === ADOPT_MARKER;
 }
 
+function isPathLine(shell: ShellDef, line: string): boolean {
+  const t = line.trim();
+  return shell.id === 'fish'
+    ? t.startsWith('fish_add_path ')
+    : t.startsWith('export PATH=') && (t.endsWith(':$PATH"') || t.endsWith(':"$PATH"'));
+}
+
 /**
  * The lines a managed block may contain: anything else (a blank line, a user
  * line) ends the block.
@@ -388,13 +395,11 @@ function isManagedLine(shell: ShellDef, line: string): boolean {
     return (
       t.startsWith('set -gx STARSHIP_CONFIG ') ||
       t === 'set -e STARSHIP_CONFIG' ||
-      t.startsWith('fish_add_path ')
+      isPathLine(shell, t)
     );
   }
   return (
-    t.startsWith('export STARSHIP_CONFIG=') ||
-    t === 'unset STARSHIP_CONFIG' ||
-    (t.startsWith('export PATH=') && (t.endsWith(':$PATH"') || t.endsWith(':"$PATH"')))
+    t.startsWith('export STARSHIP_CONFIG=') || t === 'unset STARSHIP_CONFIG' || isPathLine(shell, t)
   );
 }
 
@@ -420,7 +425,8 @@ function isConfigExport(shell: ShellDef): LineNeedle {
 function removeShellConfiguratorBlocks(
   content: string,
   shell: ShellDef,
-  needles: LineNeedle[]
+  needles: LineNeedle[],
+  removedPathLines: string[] = []
 ): string {
   const lines = content.split('\n');
   const out: string[] = [];
@@ -436,7 +442,9 @@ function removeShellConfiguratorBlocks(
         j++;
       }
       if (needles.some((n) => block.some((blockLine) => lineMatches(blockLine, n)))) {
-        // Drop the stale block (and the blank line that follows it).
+        // Drop the stale block (and the blank line that follows it), keeping
+        // note of its PATH line: without it starship may not be found at all.
+        removedPathLines.push(...block.filter((l) => isPathLine(shell, l)).map((l) => l.trim()));
         i = j;
         if (i < lines.length && lines[i].trim() === '') i++;
         continue;
@@ -583,13 +591,19 @@ export function applyShellConfig(
     // An export an earlier run wrote for a different config path is stale too.
     cleanNeedles.push((t) => lineMatches(t, isConfigExport(shell)) && t !== configLine);
   }
-  const cleaned = removeShellConfiguratorBlocks(existing, shell, cleanNeedles);
+  const carriedPathLines: string[] = [];
+  const cleaned = removeShellConfiguratorBlocks(existing, shell, cleanNeedles, carriedPathLines);
 
   const initPresent =
     hasStarshipInit(cleaned, shell.id) ||
     (shell.id === 'fish' && fs.existsSync(fishInitFile(rcPath)));
 
-  const { lines, pathLine } = buildAdditionLines(shell, cleaned, options, initPresent);
+  const added = buildAdditionLines(shell, cleaned, options, initPresent);
+  const carried = [...new Set(carriedPathLines)].filter(
+    (line) => line !== added.pathLine && !hasLine(cleaned, line)
+  );
+  const lines = [...carried, ...added.lines];
+  const { pathLine } = added;
   if (lines.length === 0) {
     // An already-configured rc may still carry a stale opposite-mode block;
     // write the cleaned file so the modes stay mutually exclusive.

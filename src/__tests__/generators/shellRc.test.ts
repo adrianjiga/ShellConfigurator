@@ -397,6 +397,20 @@ describe('applyShellConfig', () => {
     expect(lastWrittenContent()).toContain(`fish_add_path '/Users/J Doe/$bin/it'\\''s'`);
   });
 
+  it('keeps the PATH line of a per-shell block when switching to adopt mode', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () =>
+        `# Added by ShellConfigurator\nexport PATH='/home/u/.local/bin':"$PATH"\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`
+    );
+
+    applyShellConfig('zsh', { pointAtSharedConfig: true });
+
+    expect(lastWrittenContent()).toBe(
+      `\n# Added by ShellConfigurator (shared config)\nexport PATH='/home/u/.local/bin':"$PATH"\neval "$(starship init zsh)"\n`
+    );
+  });
+
   it('uses fish syntax for the STARSHIP_CONFIG line', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() => '');
