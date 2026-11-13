@@ -86,15 +86,47 @@ function spawnOutcome(outcome: SpawnOutcome) {
   mockSpawn.mockImplementation(() => childFor(outcome));
 }
 
+/** Builds a one-chunk body; a consumer reading in a loop sees EOF on the second read. */
+function bodyOf(bytes: ArrayBuffer) {
+  let sent = false;
+  return {
+    getReader: () => ({
+      read: async () => {
+        if (sent) return { done: true, value: undefined };
+        sent = true;
+        return { done: false, value: new Uint8Array(bytes) };
+      },
+      cancel: async () => undefined,
+    }),
+  };
+}
+
 /** Minimal stand-in for the parts of Response that installNerdFont actually uses. */
 function okResponse(overrides: Partial<Response> = {}): Response {
-  return {
+  const arrayBuffer = overrides.arrayBuffer ?? (async () => new ArrayBuffer(0));
+  const response: Record<string, unknown> = {
     ok: true,
     status: 200,
     headers: { get: () => null } as unknown as Headers,
-    arrayBuffer: async () => new ArrayBuffer(0),
     ...overrides,
-  } as unknown as Response;
+    arrayBuffer,
+  };
+  if (response.body == null) {
+    response.body = {
+      getReader: () => {
+        let done = false;
+        return {
+          read: async () => {
+            if (done) return { done: true, value: undefined };
+            done = true;
+            return { done: false, value: new Uint8Array(await arrayBuffer()) };
+          },
+          cancel: async () => undefined,
+        };
+      },
+    };
+  }
+  return response as unknown as Response;
 }
 
 /** sha256 hex of a byte array, matching the digest GitHub publishes for an asset. */
@@ -117,9 +149,20 @@ function zipWith(files: Record<string, string>): ArrayBuffer {
 
 /** A GitHub /releases/latest body, optionally carrying a digest for FiraCode.zip. */
 function releaseResponse(digestHex?: string): Response {
-  const assets = digestHex ? [{ name: 'FiraCode.zip', digest: `sha256:${digestHex}` }] : [];
+  const assets = digestHex
+    ? [
+        {
+          name: 'FiraCode.zip',
+          digest: `sha256:${digestHex}`,
+          browser_download_url: RELEASE_ASSET_URL,
+        },
+      ]
+    : [];
   return okResponse({ json: async () => ({ assets }) }) as Response;
 }
+
+const RELEASE_ASSET_URL =
+  'https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/FiraCode.zip';
 
 /**
  * Routes fetch by URL so installNerdFont sees the checksum API first and the
@@ -574,6 +617,44 @@ describe('installNerdFont checksum verification', () => {
 
     await expect(installNerdFont('FiraCode')).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it('downloads the exact asset whose digest the release lookup returned', async () => {
+    const fetchMock = respondWithZip({ 'FiraCodeNerdFont-Regular.ttf': 'font' });
+
+    await installNerdFont('FiraCode');
+
+    expect(fetchMock).toHaveBeenCalledWith(RELEASE_ASSET_URL, expect.anything());
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('releases/latest/download'),
+      expect.anything()
+    );
+  });
+
+  it('stops reading a chunked archive that exceeds the size cap', async () => {
+    const cancel = vi.fn(async () => undefined);
+    const oversize = new Uint8Array(200 * 1024 * 1024 + 1);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('api.github.com/repos/ryanoasis/nerd-fonts/releases/latest')) {
+          return releaseResponse('a'.repeat(64));
+        }
+        return okResponse({
+          body: {
+            getReader: () => ({
+              read: async () => ({ done: false, value: oversize }),
+              cancel,
+            }),
+          } as unknown as ReadableStream,
+        });
+      })
+    );
+
+    await expect(installNerdFont('FiraCode')).rejects.toThrow('larger than');
+    expect(cancel).toHaveBeenCalled();
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
   it('refuses an archive whose checksum does not match the publication', async () => {

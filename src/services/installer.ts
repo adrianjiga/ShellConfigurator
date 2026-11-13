@@ -83,8 +83,8 @@ const NERD_FONTS_BASE_URL = 'https://github.com/ryanoasis/nerd-fonts/releases/la
 /** GitHub REST endpoint whose asset digests are the checksums we verify against. */
 const NERD_FONTS_API_URL = 'https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest';
 
-/** Cap on how long the font download may hang before it is aborted. */
-const FONT_DOWNLOAD_TIMEOUT_MS = 60_000;
+/** Font archives are 100 MB+, so a slow link must still be able to finish. */
+const FONT_DOWNLOAD_TIMEOUT_MS = 5 * 60_000;
 
 /**
  * The same idea for the checksum lookup: a stuck metadata fetch must not wedge the install.
@@ -206,15 +206,22 @@ export function getNerdFontsDir(): string {
   return path.join(base, 'fonts');
 }
 
+interface FontAsset {
+  url: string;
+  digest: string;
+}
+
 /**
- * The SHA-256 GitHub publishes for a release asset, as a bare hex string.
+ * The download URL and SHA-256 GitHub publishes for a release asset.
  *
  * GitHub's releases API returns `assets[].digest` (a "sha256:<hex>" string) for
  * every uploaded file. Total verification without a second trust domain: the
  * digest comes from GitHub's API over the same HTTPS channel the download uses,
  * so a MITM that swapped the archive would have to rewrite the API metadata too.
+ * The asset URL is taken from the same response, so a release published between
+ * the lookup and the download cannot hand us a different archive.
  */
-async function fetchAssetChecksum(assetName: string, signal: AbortSignal): Promise<string> {
+async function resolveFontAsset(assetName: string, signal: AbortSignal): Promise<FontAsset> {
   const response = await fetch(NERD_FONTS_API_URL, {
     headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'shell-configurator' },
     signal,
@@ -224,15 +231,19 @@ async function fetchAssetChecksum(assetName: string, signal: AbortSignal): Promi
   }
 
   const release = (await response.json()) as {
-    assets?: Array<{ name?: string; digest?: string }>;
+    assets?: Array<{ name?: string; digest?: string; browser_download_url?: string }>;
   };
-  const digest = release.assets?.find((asset) => asset.name === assetName)?.digest;
+  const asset = release.assets?.find((entry) => entry.name === assetName);
+  const digest = asset?.digest;
   if (!digest?.startsWith('sha256:')) {
     throw new Error(
       `No sha256 digest published for ${assetName}; refusing to install an unverified archive.`
     );
   }
-  return digest.slice('sha256:'.length);
+  return {
+    url: asset?.browser_download_url ?? `${NERD_FONTS_BASE_URL}/${assetName}`,
+    digest: digest.slice('sha256:'.length),
+  };
 }
 
 /** A user cancel and the download timeout share one signal; only the former is "Cancelled". */
@@ -241,9 +252,7 @@ function downloadSignal(signal: AbortSignal | undefined, timeoutMs: number): Abo
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
-async function downloadFont(zipName: string, signal?: AbortSignal): Promise<Buffer> {
-  const url = `${NERD_FONTS_BASE_URL}/${zipName}`;
-
+async function downloadFont(zipName: string, url: string, signal?: AbortSignal): Promise<Buffer> {
   let response: Response;
   try {
     // A hung connection would otherwise block the install phase with no way to cancel.
@@ -262,13 +271,32 @@ async function downloadFont(zipName: string, signal?: AbortSignal): Promise<Buff
     );
   }
 
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.byteLength > MAX_FONT_ARCHIVE_BYTES) {
-    throw new Error(
-      `Refusing to install ${zipName}: archive is larger than ` + `${MAX_FONT_ARCHIVE_BYTES} bytes.`
-    );
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error(`Failed to download font: empty body for ${zipName}`);
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      // Enforced while reading: content-length is absent on chunked responses,
+      // and reading 200 MB before rejecting wastes the user's bandwidth.
+      if (total > MAX_FONT_ARCHIVE_BYTES) {
+        await reader.cancel();
+        throw new Error(
+          `Refusing to install ${zipName}: archive is larger than ` +
+            `${MAX_FONT_ARCHIVE_BYTES} bytes.`
+        );
+      }
+      chunks.push(value);
+    }
+  } catch (err) {
+    if (signal?.aborted) throw new CommandCancelledError(`download ${zipName}`);
+    throw err;
   }
-  return buffer;
+  return Buffer.concat(chunks);
 }
 
 function verifyChecksum(zipName: string, buffer: Buffer, expectedDigest: string): void {
@@ -336,18 +364,16 @@ export async function installNerdFont(
     return `installed ${font.label} from cache`;
   }
 
-  const buffer = await downloadFont(font.zipName, signal);
-  let expectedDigest: string;
+  let asset: FontAsset;
   try {
-    expectedDigest = await fetchAssetChecksum(
-      font.zipName,
-      downloadSignal(signal, FONT_CHECKSUM_TIMEOUT_MS)
-    );
+    asset = await resolveFontAsset(font.zipName, downloadSignal(signal, FONT_CHECKSUM_TIMEOUT_MS));
   } catch (err) {
     if (signal?.aborted) throw new CommandCancelledError(`look up ${font.zipName} checksum`);
     throw err;
   }
-  verifyChecksum(font.zipName, buffer, expectedDigest);
+
+  const buffer = await downloadFont(font.zipName, asset.url, signal);
+  verifyChecksum(font.zipName, buffer, asset.digest);
   await installFontFiles(font.zipName, buffer, signal);
 
   // Pin the verified archive so a later run reuses it without re-downloading.
