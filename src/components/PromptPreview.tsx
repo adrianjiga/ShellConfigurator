@@ -29,12 +29,11 @@ interface PromptPreviewProps {
  */
 function previewSignature(state: WizardState): string {
   return JSON.stringify([
-    state.keepExistingConfig,
-    state.sharedConfigToml,
+    // The preset decides bracketed and text-only output.
+    state.preset,
     state.palette,
     state.powerline,
     state.characterSymbol,
-    state.continuationPrompt,
     state.addNewline,
     state.vimMode,
     state.directoryTruncationLength,

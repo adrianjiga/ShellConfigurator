@@ -215,3 +215,32 @@ describe('bracketed preset', () => {
     expect(lastFrame()).toContain('[main]');
   });
 });
+
+describe('PromptPreview signature', () => {
+  it('re-renders for a preset change but not for the wrapped-line marker', async () => {
+    vi.useFakeTimers();
+    const renderer = vi.fn(async () => ({
+      mode: 'static' as const,
+      reason: 'starship-missing' as const,
+    }));
+    const base = { ...DEFAULT_STATE };
+    const ui = render(<PromptPreview state={base} renderPreview={renderer} />);
+    await settleRenderer();
+
+    ui.rerender(
+      <PromptPreview state={{ ...base, continuationPrompt: 'none' }} renderPreview={renderer} />
+    );
+    await settleRenderer();
+    expect(renderer).toHaveBeenCalledTimes(1);
+
+    ui.rerender(
+      <PromptPreview
+        state={{ ...base, continuationPrompt: 'none', preset: 'bracketed-segments' }}
+        renderPreview={renderer}
+      />
+    );
+    await settleRenderer();
+    expect(renderer).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+});
