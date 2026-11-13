@@ -208,9 +208,11 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
       return;
     }
 
-    // Everything printable narrows the list. Control and meta combos are not text.
-    if (char && !key.ctrl && !key.meta) {
-      setFilter((f) => f + char);
+    // Everything printable narrows the list. Control and meta combos are not text,
+    // and a pasted line break is dropped.
+    const text = char.replace(/[\r\n]/g, '');
+    if (text && !key.ctrl && !key.meta) {
+      setFilter((f) => f + text);
     }
   });
 

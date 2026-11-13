@@ -274,6 +274,13 @@ describe('SegmentsScreen filter', () => {
     expect(instance.lastFrame()).toMatch(/›.*Directory/);
   });
 
+  it('drops line breaks from pasted text', async () => {
+    const { instance } = setup();
+    await flush();
+    await press(instance, 'no\nde');
+    expect(instance.lastFrame()).toContain('Filter: node');
+  });
+
   it('does not leave the screen on ← while a filter is typed', async () => {
     const { instance, onBack } = setup();
     await flush();
