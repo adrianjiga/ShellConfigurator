@@ -289,3 +289,16 @@ describe('SegmentsScreen filter', () => {
     expect(instance.lastFrame()).toContain('Filter: g');
   });
 });
+
+describe('SegmentsScreen key bursts', () => {
+  it('applies every key in a burst that arrives as one chunk', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+    instance.stdin.write(`${DOWN}${DOWN} `);
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      leftModules: ['directory', 'git_branch', 'username', 'character'],
+      rightModules: [],
+    });
+  });
+});

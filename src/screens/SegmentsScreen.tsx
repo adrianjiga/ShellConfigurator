@@ -20,6 +20,12 @@ interface SegmentsScreenProps {
   onBack: () => void;
 }
 
+interface SegmentsView {
+  selected: ConfigurableModuleId[];
+  filter: string;
+  cursor: number;
+}
+
 interface Row {
   id: ConfigurableModuleId;
   selected: boolean;
@@ -72,29 +78,41 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
   // A module already on the left cannot also go on the right — it would render twice.
   const takenByLeft = new Set<string>(side === 'right' ? state.leftModules : []);
 
-  const [selected, setSelected] = useState<ConfigurableModuleId[]>(() =>
-    currentModules.filter((id): id is ConfigurableModuleId => id !== 'character')
-  );
-  const [filter, setFilter] = useState('');
-  const [cursor, setCursor] = useState(0);
+  // Ink can deliver several keys from one input chunk before re-rendering, so the
+  // handlers read and write this ref, which is always current, not the render's copy.
+  const [view, setView] = useState<SegmentsView>(() => ({
+    selected: currentModules.filter((id): id is ConfigurableModuleId => id !== 'character'),
+    filter: '',
+    cursor: 0,
+  }));
+  const viewRef = useRef(view);
   const isInitialMount = useRef(true);
+  const { selected, filter, cursor } = view;
 
   const rows = buildRows(selected, filter, takenByLeft);
 
+  function update(next: Partial<SegmentsView>) {
+    viewRef.current = { ...viewRef.current, ...next };
+    setView(viewRef.current);
+  }
+
+  const currentRows = () =>
+    buildRows(viewRef.current.selected, viewRef.current.filter, takenByLeft);
+
   const applyModules = (commit: (update: Partial<WizardState>) => void, modules: ModuleId[]) => {
     // A module moved to the left leaves the right, so it never renders twice.
-    const update =
+    const changes =
       side === 'left'
         ? {
             leftModules: modules,
             rightModules: state.rightModules.filter((id) => !modules.includes(id)),
           }
         : { rightModules: modules };
-    commit(update);
+    commit(changes);
   };
 
-  const orderedForSide = (): ModuleId[] =>
-    side === 'left' ? [...selected, 'character'] : selected;
+  const orderedForSide = (modules: ConfigurableModuleId[]): ModuleId[] =>
+    side === 'left' ? [...modules, 'character'] : modules;
 
   // Push live updates to parent state so preview stays in sync (skip initial mount)
   // onUpdate is a fresh closure each parent render; including it would loop on every state push.
@@ -104,70 +122,63 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
       isInitialMount.current = false;
       return;
     }
-    applyModules(onUpdate, orderedForSide());
+    applyModules(onUpdate, orderedForSide(selected));
   }, [selected, side]);
 
-  // A new filter starts on its first match; otherwise keep the cursor in the list.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only a filter change resets the cursor.
-  useEffect(() => {
-    setCursor(0);
-  }, [filter]);
-  useEffect(() => {
-    setCursor((c) => Math.min(c, Math.max(0, rows.length - 1)));
-  }, [rows.length]);
-
   function saveAndProceed() {
-    applyModules(onNext, orderedForSide());
+    applyModules(onNext, orderedForSide(viewRef.current.selected));
+  }
+
+  /** A new filter starts on its first match. */
+  function setFilter(next: string) {
+    update({ filter: next, cursor: 0 });
   }
 
   function moveCursor(delta: number) {
-    setCursor((c) => Math.min(Math.max(0, c + delta), Math.max(0, rows.length - 1)));
+    const last = Math.max(0, currentRows().length - 1);
+    update({ cursor: Math.min(Math.max(0, viewRef.current.cursor + delta), last) });
+  }
+
+  /** Follow a row into its new position instead of leaving the cursor behind. */
+  function commitSelected(nextSelected: ConfigurableModuleId[], followId: ConfigurableModuleId) {
+    const nextRows = buildRows(nextSelected, viewRef.current.filter, takenByLeft);
+    update({
+      selected: nextSelected,
+      cursor: Math.max(
+        0,
+        nextRows.findIndex((r) => r.id === followId)
+      ),
+    });
   }
 
   function toggleRow() {
-    const row = rows[cursor];
+    const { selected: current, cursor: at } = viewRef.current;
+    const row = currentRows()[at];
     if (!row || row.taken) return;
-
-    const nextSelected = row.selected
-      ? selected.filter((id) => id !== row.id)
-      : [...selected, row.id];
-    setSelected(nextSelected);
-
-    // Follow the row into its new group instead of leaving the cursor behind.
-    const nextRows = buildRows(nextSelected, filter, takenByLeft);
-    setCursor(
-      Math.max(
-        0,
-        nextRows.findIndex((r) => r.id === row.id)
-      )
+    commitSelected(
+      row.selected ? current.filter((id) => id !== row.id) : [...current, row.id],
+      row.id
     );
   }
 
   function reorderRow(delta: -1 | 1) {
-    const row = rows[cursor];
+    const { selected: current, cursor: at } = viewRef.current;
+    const row = currentRows()[at];
     if (!row?.selected) return;
 
-    const from = selected.indexOf(row.id);
+    const from = current.indexOf(row.id);
     const to = from + delta;
-    if (from < 0 || to < 0 || to >= selected.length) return;
+    if (from < 0 || to < 0 || to >= current.length) return;
 
-    const nextSelected = [...selected];
+    const nextSelected = [...current];
     [nextSelected[from], nextSelected[to]] = [nextSelected[to]!, nextSelected[from]!];
-    setSelected(nextSelected);
-
-    const nextRows = buildRows(nextSelected, filter, takenByLeft);
-    setCursor(
-      Math.max(
-        0,
-        nextRows.findIndex((r) => r.id === row.id)
-      )
-    );
+    commitSelected(nextSelected, row.id);
   }
 
   useInput((char, key) => {
     if (key.escape) {
       // First Escape clears a search; a second one leaves the screen.
-      if (filter) {
+      if (viewRef.current.filter) {
         setFilter('');
         return;
       }
@@ -177,7 +188,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
 
     // While a filter is typed, ← stays on the screen rather than dropping it.
     if (key.leftArrow) {
-      if (!filter) onBack();
+      if (!viewRef.current.filter) onBack();
       return;
     }
 
@@ -194,7 +205,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
     }
 
     if (key.backspace || key.delete) {
-      setFilter((f) => f.slice(0, -1));
+      setFilter(viewRef.current.filter.slice(0, -1));
       return;
     }
 
@@ -212,7 +223,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
     // and a pasted line break is dropped.
     const text = char.replace(/[\r\n]/g, '');
     if (text && !key.ctrl && !key.meta) {
-      setFilter((f) => f + text);
+      setFilter(viewRef.current.filter + text);
     }
   });
 
