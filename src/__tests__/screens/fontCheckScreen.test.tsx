@@ -83,3 +83,17 @@ describe('FontCheckScreen', () => {
     expect(onBack).toHaveBeenCalled();
   });
 });
+
+describe('FontCheckScreen in a container', () => {
+  it('does not offer to install a font, which the container would skip', () => {
+    const { lastFrame } = render(
+      <FontCheckScreen
+        state={{ ...DEFAULT_STATE, container: true }}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    expect(lastFrame()).not.toContain('install one for me');
+    expect(lastFrame()).toContain('use text symbols only');
+  });
+});
