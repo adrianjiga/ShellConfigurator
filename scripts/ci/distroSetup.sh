@@ -43,17 +43,27 @@ if [ "$node_major" -lt 24 ]; then
   tarball="node-${node_version}-linux-${node_arch}.tar.gz"
 
   # Download once into the cache dir when provided (GitHub caches it across
-  # runs); otherwise fetch into a throwaway temp file. curl+extract is a single
-  # path either way.
+  # runs); otherwise fetch into a throwaway temp file. Either way the tarball
+  # must match the checksum nodejs.org publishes, or it is fetched again.
   if [ -n "${NODE_TARBALL_DIR:-}" ]; then
     mkdir -p "$NODE_TARBALL_DIR"
     tarball_path="$NODE_TARBALL_DIR/$tarball"
-    if [ ! -f "$tarball_path" ]; then
-      curl --max-time 300 -fsSL "https://nodejs.org/dist/${node_version}/${tarball}" -o "$tarball_path"
-    fi
   else
     tarball_path="/tmp/$tarball"
+  fi
+  expected="$(curl --max-time 60 -fsSL "https://nodejs.org/dist/${node_version}/SHASUMS256.txt" |
+    awk -v name="$tarball" '$2 == name { print $1 }')"
+  if [ -z "$expected" ]; then
+    echo "No published checksum for $tarball" >&2
+    exit 1
+  fi
+  if [ ! -f "$tarball_path" ] || [ "$(sha256sum "$tarball_path" | cut -d' ' -f1)" != "$expected" ]; then
     curl --max-time 300 -fsSL "https://nodejs.org/dist/${node_version}/${tarball}" -o "$tarball_path"
+  fi
+  if [ "$(sha256sum "$tarball_path" | cut -d' ' -f1)" != "$expected" ]; then
+    echo "Checksum mismatch for $tarball" >&2
+    rm -f "$tarball_path"
+    exit 1
   fi
 
   tar -xzf "$tarball_path" -C /usr/local --strip-components=1
