@@ -1,7 +1,7 @@
 import { Box, Text, useStdout } from 'ink';
 import type React from 'react';
 import { uiColor } from '../config/colors.ts';
-import { STEP_ORDER, type WizardState, type WizardStep } from '../types.ts';
+import { STEP_ORDER, shouldVisitFontSelect, type WizardState, type WizardStep } from '../types.ts';
 import { PromptPreview } from './PromptPreview.tsx';
 
 const STEP_LABELS: Record<WizardStep, string> = {
@@ -29,7 +29,13 @@ const PREVIEW_MIN_COLUMNS = 100;
 
 export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps) {
   const { stdout } = useStdout();
-  const currentIndex = Math.max(0, STEP_ORDER.indexOf(state.step));
+  // Only the steps this run visits: font_select and installing can be skipped.
+  const steps = STEP_ORDER.filter(
+    (step) =>
+      !(step === 'font_select' && !shouldVisitFontSelect(state.nerdFontToInstall)) &&
+      !(step === 'installing' && state.dryRun)
+  );
+  const currentIndex = Math.max(0, steps.indexOf(state.step));
   const showPreview =
     !hidePreview && (stdout?.columns ?? PREVIEW_MIN_COLUMNS) >= PREVIEW_MIN_COLUMNS;
 
@@ -46,7 +52,7 @@ export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps
 
       {/* Progress bar */}
       <Box marginBottom={1} flexDirection="row" gap={1}>
-        {STEP_ORDER.map((step, i) => {
+        {steps.map((step, i) => {
           const isActive = i === currentIndex;
           const isDone = i < currentIndex;
           return (
