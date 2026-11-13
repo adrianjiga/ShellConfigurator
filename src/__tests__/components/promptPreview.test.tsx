@@ -316,3 +316,17 @@ describe('PromptPreview without colour', () => {
     }
   });
 });
+
+describe('PromptPreview width', () => {
+  it('asks the renderer for a prompt as wide as the panel', async () => {
+    vi.useFakeTimers();
+    const renderer = vi.fn(async () => ({
+      mode: 'static' as const,
+      reason: 'starship-missing' as const,
+    }));
+    render(<PromptPreview state={DEFAULT_STATE} renderPreview={renderer} width={50} />);
+    await settleRenderer();
+    expect(renderer).toHaveBeenCalledWith(DEFAULT_STATE, 50);
+    vi.useRealTimers();
+  });
+});
