@@ -67,7 +67,9 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
         <Text color={uiColor('gray')}>
           {state.dryRun
             ? 'Running with --dry-run: nothing below will actually be installed or written.'
-            : 'Everything below will be installed and written. Use Esc to go back and change things.'}
+            : state.skipStarshipInstall
+              ? 'Starship is skipped: the config below is written, but no shell is wired until Starship is installed. Use Esc to go back.'
+              : 'Everything below will be installed and written. Use Esc to go back and change things.'}
         </Text>
 
         <Box flexDirection="column" marginTop={1} gap={0}>
@@ -119,22 +121,28 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
 
         <Box flexDirection="column" marginTop={1} gap={1}>
           <Text bold>Shell wiring</Text>
-          {state.selectedShells.map((shellId) => {
-            const shell = getShell(shellId);
-            return (
-              <Box key={shellId} flexDirection="column" marginLeft={1}>
-                <Text color={uiColor('cyan')}>
-                  {shell?.label ?? shellId}
-                  {shell?.rcFile ? ` — ${shell.rcFile}` : ''}
-                </Text>
-                {rcSnippet(shellId, state.keepExistingConfig).map((line) => (
-                  <Box key={line} marginLeft={2}>
-                    <Text color={uiColor('yellow')}>{line}</Text>
-                  </Box>
-                ))}
-              </Box>
-            );
-          })}
+          {state.skipStarshipInstall && (
+            <Text color={uiColor('gray')}>
+              No rc file is changed until Starship is installed and the wizard is run again.
+            </Text>
+          )}
+          {!state.skipStarshipInstall &&
+            state.selectedShells.map((shellId) => {
+              const shell = getShell(shellId);
+              return (
+                <Box key={shellId} flexDirection="column" marginLeft={1}>
+                  <Text color={uiColor('cyan')}>
+                    {shell?.label ?? shellId}
+                    {shell?.rcFile ? ` — ${shell.rcFile}` : ''}
+                  </Text>
+                  {rcSnippet(shellId, state.keepExistingConfig).map((line) => (
+                    <Box key={line} marginLeft={2}>
+                      <Text color={uiColor('yellow')}>{line}</Text>
+                    </Box>
+                  ))}
+                </Box>
+              );
+            })}
         </Box>
 
         {fontId && (

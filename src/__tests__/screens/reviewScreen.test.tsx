@@ -174,3 +174,14 @@ describe('ReviewScreen with several shells', () => {
     expect(frame).toContain('starship init bash');
   });
 });
+
+describe('ReviewScreen without Starship', () => {
+  it('does not promise rc changes that the skipped install will not make', async () => {
+    const { instance } = setup({ skipStarshipInstall: true });
+    await flush();
+    const frame = (instance.lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(frame).toContain('Starship is skipped');
+    expect(frame).not.toContain('Everything below will be installed');
+    expect(frame).not.toContain('eval "$(starship init zsh)"');
+  });
+});
