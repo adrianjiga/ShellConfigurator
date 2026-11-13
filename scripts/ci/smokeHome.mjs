@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import * as nodePath from 'node:path';
 
@@ -41,4 +42,28 @@ export function requireScratchHome() {
         : nodePath.join(homeDir, fallback);
   }
   return homeDir;
+}
+
+const entry = nodePath.resolve('dist/index.js');
+
+/** Runs the built CLI; a failure carries the CLI's own output so CI shows why. */
+export function runCli(args) {
+  try {
+    return execFileSync(process.execPath, [entry, ...args], { encoding: 'utf8' });
+  } catch (err) {
+    throw new Error(
+      `shell-configurator ${args.join(' ')} exited ${err.status}:\n${err.stdout ?? ''}${err.stderr ?? ''}`
+    );
+  }
+}
+
+/** Runs one smoke and exits non-zero with its message when an assertion fails. */
+export async function runSmoke(name, body) {
+  try {
+    await body();
+    console.log(`\n${name} passed.`);
+  } catch (err) {
+    console.error(`FAIL ${name}: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
 }
