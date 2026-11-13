@@ -67,7 +67,7 @@ describe('PresetScreen', () => {
 
     const frame = instance.lastFrame();
     // The notice wraps mid-sentence in the 100-col frame.
-    expect(frame).toContain('hidden (no Nerd Font detected)');
+    expect(frame).toContain('hidden (you chose text symbols)');
     expect(frame).not.toContain('Nerd Font Symbols');
     expect(frame).not.toContain('★');
   });
@@ -214,5 +214,18 @@ describe('PresetScreen', () => {
     } finally {
       PRESETS.push(...saved);
     }
+  });
+});
+
+describe('PresetScreen scrolling hint', () => {
+  it('says how many presets there are when some are below the fold', () => {
+    const { lastFrame } = render(
+      <PresetScreen
+        state={{ ...DEFAULT_STATE, hasNerdFont: true }}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    expect(lastFrame()).toContain(`${PRESETS.length} presets`);
   });
 });

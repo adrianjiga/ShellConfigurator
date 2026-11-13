@@ -13,6 +13,8 @@ interface PresetScreenProps {
   onBack: () => void;
 }
 
+const PRESET_ROWS = 8;
+
 export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
   const compatible = PRESETS.filter((p) => !p.requiresNerdFont || state.hasNerdFont);
   const presetIndex = Math.max(
@@ -68,7 +70,7 @@ export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
           Select a preset theme to start from.{' '}
           {state.hasNerdFont && <Text color={uiColor('gray')}>★ = requires Nerd Font</Text>}
           {!state.hasNerdFont && (
-            <Text color={uiColor('yellow')}>Nerd Font presets hidden (no Nerd Font detected)</Text>
+            <Text color={uiColor('yellow')}>Nerd Font presets hidden (you chose text symbols)</Text>
           )}
         </Text>
 
@@ -79,8 +81,13 @@ export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
             isFocused={!confirmingPreset}
             onSelect={handleSelect}
             onHighlight={(item) => setHighlightedId(item.value)}
-            limit={8}
+            limit={PRESET_ROWS}
           />
+          {items.length > PRESET_ROWS && (
+            <Text color={uiColor('gray')} italic>
+              {`${items.length} presets — ↑↓ scrolls to the rest`}
+            </Text>
+          )}
         </Box>
 
         <Box marginTop={1}>
