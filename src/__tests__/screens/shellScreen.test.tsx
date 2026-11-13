@@ -256,3 +256,25 @@ describe('selection order', () => {
     expect(selected).toEqual(['zsh', 'fish']);
   });
 });
+
+describe('ShellScreen in a container', () => {
+  it('does not offer a login shell, which a container never changes', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh']);
+    vi.mocked(detectCurrentShellAsync).mockResolvedValue(null);
+    const instance = render(
+      <ShellScreen
+        state={{ ...DEFAULT_STATE, container: true }}
+        onNext={vi.fn()}
+        onUpdate={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    await flush();
+    instance.stdin.write(' ');
+    await flush();
+    instance.stdin.write('d');
+    await flush();
+    expect(instance.lastFrame()).not.toContain('will set as login shell');
+    expect(instance.lastFrame()).toContain('left to the image');
+  });
+});

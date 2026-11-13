@@ -100,7 +100,8 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
       return;
     }
 
-    if (char === 'd' || char === 'D') {
+    // A container's login shell belongs to the image, so chsh is never run there.
+    if ((char === 'd' || char === 'D') && !state.container) {
       const shellId = SHELLS[cursor]!.id;
       if (selectedRef.current.has(shellId)) {
         setDefaultShell((prev) => (prev === shellId ? null : shellId));
@@ -122,10 +123,16 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
       <Box flexDirection="column" gap={1}>
         <Text bold>Select your shell(s)</Text>
         <Text color={uiColor('gray')}>Which shells should be configured to use Starship?</Text>
-        <Text color={uiColor('gray')}>
-          Press <Text color={uiColor('cyan')}>D</Text> on any selected shell to make it your login
-          shell (runs <Text color={uiColor('cyan')}>chsh</Text>). Optional.
-        </Text>
+        {state.container ? (
+          <Text color={uiColor('gray')}>
+            Inside a container the login shell is left to the image, so none is set here.
+          </Text>
+        ) : (
+          <Text color={uiColor('gray')}>
+            Press <Text color={uiColor('cyan')}>D</Text> on any selected shell to make it your login
+            shell (runs <Text color={uiColor('cyan')}>chsh</Text>). Optional.
+          </Text>
+        )}
 
         <Box flexDirection="column" marginTop={1}>
           {SHELLS.map((shell, i) => {
@@ -187,7 +194,7 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
         hints={[
           { key: '↑↓', label: 'navigate' },
           { key: 'Space', label: 'toggle' },
-          { key: 'D', label: 'set as login shell' },
+          ...(state.container ? [] : [{ key: 'D', label: 'set as login shell' }]),
           {
             key: 'Enter',
             label:
