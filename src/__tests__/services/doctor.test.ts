@@ -33,7 +33,8 @@ function makeDeps(
     verifyConfig: vi.fn().mockResolvedValue(undefined),
     readFile: vi.fn((p: string) => files.get(p) ?? ''),
     exists: vi.fn((p: string) => files.has(p)),
-    hasFontFiles: vi.fn().mockReturnValue(true),
+    hasNerdFonts: vi.fn().mockReturnValue(true),
+    isContainer: vi.fn().mockResolvedValue(false),
     env: { LANG: 'en_US.UTF-8' },
     ...overrides,
   };
@@ -170,8 +171,36 @@ describe('runDoctor', () => {
     expect(find(report, 'config').status).toBe('warn');
   });
 
+  it('passes the font checks when the setup chose no Nerd Font', async () => {
+    const report = await runDoctor(
+      baseState({ nerdFontToInstall: { kind: 'none' }, hasNerdFont: false }),
+      makeDeps(wired(new Map()), { hasNerdFonts: vi.fn().mockReturnValue(false) })
+    );
+    expect(find(report, 'font-installed').status).toBe('pass');
+    expect(find(report, 'font-selected').status).toBe('pass');
+  });
+
+  it('skips font checks in a container', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      hasNerdFonts: vi.fn().mockReturnValue(false),
+      isContainer: vi.fn().mockResolvedValue(true),
+    });
+    const report = await runDoctor(baseState(), deps);
+    expect(find(report, 'font-installed')).toMatchObject({ status: 'pass' });
+    expect(find(report, 'font-selected')).toMatchObject({ status: 'pass' });
+    expect(find(report, 'font-installed').fix).toBeUndefined();
+  });
+
+  it('accepts a width variant of the selected family', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      readFontFamily: vi.fn().mockReturnValue('JetBrainsMono Nerd Font Mono'),
+    });
+    const report = await runDoctor(baseState(), deps);
+    expect(find(report, 'font-selected')).toMatchObject({ status: 'pass' });
+  });
+
   it('warns and offers a reinstall when the selected font is not present', async () => {
-    const deps = makeDeps(wired(new Map()), { hasFontFiles: vi.fn().mockReturnValue(false) });
+    const deps = makeDeps(wired(new Map()), { hasNerdFonts: vi.fn().mockReturnValue(false) });
     const report = await runDoctor(baseState(), deps);
     expect(find(report, 'font-installed')).toMatchObject({
       status: 'warn',

@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { getShell } from '../config/shells.ts';
 import {
   fishInitFile,
@@ -11,6 +12,7 @@ import {
 import { fontIdToInstall, type ShellId, type TerminalId, type WizardState } from '../types.ts';
 import { cachedStarshipVersion } from './cache.ts';
 import {
+  detectContainerAsync,
   detectCurrentShellAsync,
   detectInstalledShellsAsync,
   detectTerminalAsync,
@@ -54,7 +56,8 @@ export interface DoctorDeps {
   verifyConfig: (configPath: string) => Promise<void>;
   readFile: (path: string) => string;
   exists: (path: string) => boolean;
-  hasFontFiles: (dir: string) => boolean;
+  hasNerdFonts: () => boolean;
+  isContainer: () => Promise<boolean>;
   env: NodeJS.ProcessEnv;
 }
 
@@ -71,15 +74,35 @@ export const DEFAULT_DOCTOR_DEPS: DoctorDeps = {
     }).then(() => undefined),
   readFile: (path) => fs.readFileSync(path, 'utf8'),
   exists: (path) => fs.existsSync(path),
-  hasFontFiles: (dir) => {
-    try {
-      return fs.readdirSync(dir).some((name) => /\.(ttf|otf)$/i.test(name));
-    } catch {
-      return false;
-    }
-  },
+  hasNerdFonts: () => fontDirs().some((dir) => hasNerdFontFiles(dir)),
+  isContainer: detectContainerAsync,
   env: process.env,
 };
+
+const NERD_FONT_FILE = /nerd ?font/i;
+
+function fontDirs(): string[] {
+  return process.platform === 'darwin'
+    ? [getNerdFontsDir(), '/Library/Fonts']
+    : [getNerdFontsDir(), '/usr/share/fonts', '/usr/local/share/fonts'];
+}
+
+/** Any font file under `dir` whose name says Nerd Font, at any nesting depth. */
+function hasNerdFontFiles(dir: string, depth = 3): boolean {
+  let entries: Array<fs.Dirent | string>;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  return entries.some((entry) => {
+    const name = typeof entry === 'string' ? entry : entry.name;
+    if (typeof entry !== 'string' && entry.isDirectory()) {
+      return depth > 0 && hasNerdFontFiles(path.join(dir, name), depth - 1);
+    }
+    return NERD_FONT_FILE.test(name);
+  });
+}
 
 /**
  * Wiring mode inferred from the rc when no state card is given: our per-shell
@@ -382,32 +405,74 @@ async function checkConfigs(wiring: ShellWiring[], deps: DoctorDeps): Promise<Do
   };
 }
 
-function checkFontInstalled(state: WizardState | null, deps: DoctorDeps): DoctorFinding {
+async function checkFontInstalled(
+  state: WizardState | null,
+  deps: DoctorDeps
+): Promise<DoctorFinding> {
   const dir = getNerdFontsDir();
-  if (deps.hasFontFiles(dir)) {
+  const fontId = state ? fontIdToInstall(state.nerdFontToInstall) : null;
+  if (await deps.isContainer()) {
     return {
       id: 'font-installed',
       title: 'Nerd Font',
       status: 'pass',
-      detail: `fonts present in ${dir}`,
+      detail: 'containers skip font installs',
     };
   }
-  const fontId = state ? fontIdToInstall(state.nerdFontToInstall) : null;
+  if (!fontId && state) {
+    return {
+      id: 'font-installed',
+      title: 'Nerd Font',
+      status: 'pass',
+      detail: 'no Nerd Font requested',
+    };
+  }
+  if (deps.hasNerdFonts()) {
+    return {
+      id: 'font-installed',
+      title: 'Nerd Font',
+      status: 'pass',
+      detail: `Nerd Font files found for ${dir}`,
+    };
+  }
   return {
     id: 'font-installed',
     title: 'Nerd Font',
     status: 'warn',
-    detail: fontId
-      ? `${fontLabel(fontId)} is not installed in ${dir}`
-      : `no Nerd Font found in ${dir}`,
+    detail: fontId ? `${fontLabel(fontId)} is not installed in ${dir}` : `no Nerd Font found`,
     ...(fontId ? { fix: { kind: 'reinstall-font' as const, fontId } } : {}),
   };
+}
+
+/** Accepts a variant of the family (e.g. the "Mono" width) as a match. */
+function familyMatches(actual: string, expected: string): boolean {
+  const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
+  const a = normalize(actual);
+  const b = normalize(expected);
+  return a === b || a.startsWith(b) || b.startsWith(a);
 }
 
 async function checkFontSelected(
   state: WizardState | null,
   deps: DoctorDeps
 ): Promise<DoctorFinding> {
+  const fontId = state ? fontIdToInstall(state.nerdFontToInstall) : null;
+  if (state && !fontId) {
+    return {
+      id: 'font-selected',
+      title: 'Terminal font',
+      status: 'pass',
+      detail: 'no Nerd Font selected — nothing to verify',
+    };
+  }
+  if (await deps.isContainer()) {
+    return {
+      id: 'font-selected',
+      title: 'Terminal font',
+      status: 'pass',
+      detail: 'containers skip terminal font wiring',
+    };
+  }
   const terminalId = await deps.detectTerminal();
   if (!terminalId) {
     return {
@@ -419,7 +484,6 @@ async function checkFontSelected(
   }
 
   const label = terminalLabel(terminalId);
-  const fontId = state ? fontIdToInstall(state.nerdFontToInstall) : null;
   const expectedFamily = fontId ? getFontFamily(fontId) : null;
   const wireFix: DoctorFix | undefined = expectedFamily
     ? { kind: 'wire-font', terminalId, family: expectedFamily }
@@ -445,7 +509,7 @@ async function checkFontSelected(
       ...(wireFix ? { fix: wireFix } : {}),
     };
   }
-  if (expectedFamily && family !== expectedFamily) {
+  if (expectedFamily && !familyMatches(family, expectedFamily)) {
     return {
       id: 'font-selected',
       title: 'Terminal font',
@@ -492,7 +556,7 @@ export async function runDoctor(
     checkLocale(deps),
     ...wiring.map((w) => checkShellWiring(w.id, w.pointAtShared, state !== null, deps)),
     await checkConfigs(wiring, deps),
-    checkFontInstalled(state, deps),
+    await checkFontInstalled(state, deps),
     await checkFontSelected(state, deps),
     await checkVersionDrift(deps),
     await checkRunningShell(shellIds, deps),
