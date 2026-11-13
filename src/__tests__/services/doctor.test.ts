@@ -381,6 +381,23 @@ describe('runDoctor', () => {
     expect(report.ok).toBe(true);
   });
 
+  it('accepts an export written under a different XDG_CONFIG_HOME', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `${ZSH_INIT}\nexport STARSHIP_CONFIG="/custom/config/zsh.toml"\n`);
+    files.set('/custom/config/zsh.toml', 'x\n');
+    const report = await runDoctor(baseState(), makeDeps(files));
+    expect(find(report, 'shell:zsh')).toMatchObject({ status: 'pass' });
+    expect(find(report, 'config').status).toBe('pass');
+  });
+
+  it('does not repair an export pointing at a missing non-default config', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `${ZSH_INIT}\nexport STARSHIP_CONFIG="/custom/config/zsh.toml"\n`);
+    const report = await runDoctor(baseState(), makeDeps(files));
+    expect(find(report, 'shell:zsh')).toMatchObject({ status: 'warn' });
+    expect(find(report, 'shell:zsh').fix).toBeUndefined();
+  });
+
   it('passes version drift when nothing was recorded yet', async () => {
     const deps = makeDeps(wired(new Map()));
     const report = await runDoctor(baseState(), deps);

@@ -7,7 +7,6 @@ import {
   getShellConfigPath,
   hasStarshipInit,
   manualSetupAppliedWith,
-  starshipConfigLine,
 } from '../generators/shellRc.ts';
 import { fontIdToInstall, type ShellId, type TerminalId, type WizardState } from '../types.ts';
 import { cachedStarshipVersion } from './cache.ts';
@@ -143,11 +142,23 @@ export function shellPointsAtShared(
   shellId: ShellId,
   deps: Pick<DoctorDeps, 'exists' | 'readFile'> = DEFAULT_DOCTOR_DEPS
 ): boolean {
-  const configLine = starshipConfigLine(shellId);
   const rcFile = getShell(shellId)?.rcFile;
-  if (!configLine || !rcFile) return false;
+  if (!rcFile) return false;
   const content = deps.exists(rcFile) ? deps.readFile(rcFile) : '';
-  return !content.includes(configLine);
+  return exportedConfigPath(content, shellId) === null;
+}
+
+/**
+ * Reads the STARSHIP_CONFIG path an rc exports, whatever XDG_CONFIG_HOME was at
+ * install time — so running the doctor under a different env is not a failure.
+ */
+function exportedConfigPath(content: string, shellId: ShellId): string | null {
+  const match =
+    shellId === 'fish'
+      ? /set\s+-gx\s+STARSHIP_CONFIG\s+(?:"([^"]+)"|(\S+))/.exec(content)
+      : /export\s+STARSHIP_CONFIG=(?:"([^"]+)"|'([^']+)'|(\S+))/.exec(content);
+  if (!match) return null;
+  return match.slice(1).find((value) => value !== undefined) ?? null;
 }
 
 function setsOwnConfig(content: string): boolean {
@@ -352,10 +363,11 @@ function checkShellWiring(
   }
 
   const content = deps.exists(shell.rcFile) ? deps.readFile(shell.rcFile) : '';
-  const configPath = pointAtShared ? getSharedConfigPath() : getShellConfigPath(shellId);
-  const configLine = pointAtShared ? null : starshipConfigLine(shellId);
+  const expectedPath = getShellConfigPath(shellId);
+  const exportedPath = pointAtShared ? null : exportedConfigPath(content, shellId);
+  const configPath = pointAtShared ? getSharedConfigPath() : (exportedPath ?? expectedPath);
+  const hasConfig = pointAtShared || exportedPath !== null;
   const hasInit = shellHasInit(shellId, shell.rcFile, content, deps);
-  const hasConfig = configLine ? content.includes(configLine) : true;
 
   if (!hasInit) {
     return {
@@ -366,7 +378,7 @@ function checkShellWiring(
       fix,
     };
   }
-  if (configLine && !hasConfig) {
+  if (!hasConfig) {
     return {
       id: `shell:${shellId}`,
       title: shell.label,
@@ -407,6 +419,22 @@ function checkShellWiring(
             detail: `no shared config at ${configPath} — Starship uses its defaults`,
           };
     }
+    if (configPath.includes('$')) {
+      return {
+        id: `shell:${shellId}`,
+        title: shell.label,
+        status: 'pass',
+        detail: `sets its own STARSHIP_CONFIG (${configPath})`,
+      };
+    }
+    if (configPath !== expectedPath) {
+      return {
+        id: `shell:${shellId}`,
+        title: shell.label,
+        status: 'warn',
+        detail: `points at ${configPath}, which does not exist — update or remove that export`,
+      };
+    }
     return {
       id: `shell:${shellId}`,
       title: shell.label,
@@ -430,7 +458,12 @@ async function checkConfigs(
 ): Promise<DoctorFinding> {
   const paths = [
     ...new Set(
-      wiring.map((w) => (w.pointAtShared ? getSharedConfigPath() : getShellConfigPath(w.id)))
+      wiring.map((w) => {
+        if (w.pointAtShared) return getSharedConfigPath();
+        const rcFile = getShell(w.id)?.rcFile;
+        const content = rcFile && deps.exists(rcFile) ? deps.readFile(rcFile) : '';
+        return exportedConfigPath(content, w.id) ?? getShellConfigPath(w.id);
+      })
     ),
   ];
   const existing = paths.filter((p) => deps.exists(p));
