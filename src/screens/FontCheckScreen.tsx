@@ -33,6 +33,13 @@ const items: Item<FontChoice>[] = [
 export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps) {
   // Fonts belong to the host terminal, so a container never installs one.
   const choices = state.container ? items.filter((item) => item.value !== 'install') : items;
+  // Coming back after asking for an install, keep that answer highlighted.
+  const initialIndex = Math.max(
+    0,
+    choices.findIndex(
+      (item) => item.value === (state.nerdFontToInstall.kind === 'none' ? 'have' : 'install')
+    )
+  );
   useInput((_, key) => {
     if (key.escape) onBack();
   });
@@ -87,7 +94,7 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
         </Box>
 
         <Box marginTop={1}>
-          <AppSelectInput items={choices} onSelect={handleSelect} />
+          <AppSelectInput items={choices} initialIndex={initialIndex} onSelect={handleSelect} />
         </Box>
       </Box>
 

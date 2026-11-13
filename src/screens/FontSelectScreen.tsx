@@ -18,6 +18,14 @@ export function FontSelectScreen({ state, onNext, onBack }: FontSelectScreenProp
   });
 
   const items = NERD_FONTS.map((f) => ({ label: f.label, value: f.id }));
+  const chosen = state.nerdFontToInstall;
+  const initialIndex =
+    chosen.kind === 'install'
+      ? Math.max(
+          0,
+          items.findIndex((i) => i.value === chosen.id)
+        )
+      : 0;
 
   return (
     <WizardLayout state={state}>
@@ -34,6 +42,7 @@ export function FontSelectScreen({ state, onNext, onBack }: FontSelectScreenProp
         <Box marginTop={1}>
           <AppSelectInput
             items={items}
+            initialIndex={initialIndex}
             onSelect={(item) =>
               onNext({ nerdFontToInstall: { kind: 'install', id: item.value }, hasNerdFont: true })
             }

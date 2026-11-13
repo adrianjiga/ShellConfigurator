@@ -97,3 +97,16 @@ describe('FontCheckScreen in a container', () => {
     expect(lastFrame()).toContain('use text symbols only');
   });
 });
+
+describe('FontCheckScreen going back', () => {
+  it('keeps the install answer highlighted', () => {
+    const { lastFrame } = render(
+      <FontCheckScreen
+        state={{ ...DEFAULT_STATE, hasNerdFont: true, nerdFontToInstall: { kind: 'select' } }}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    expect(lastFrame()).toMatch(/›\s*No, install one for me/);
+  });
+});

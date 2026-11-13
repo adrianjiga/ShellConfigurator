@@ -59,3 +59,16 @@ describe('FontSelectScreen', () => {
     expect(onBack).toHaveBeenCalled();
   });
 });
+
+describe('FontSelectScreen going back', () => {
+  it('highlights the font chosen before', () => {
+    const { lastFrame } = render(
+      <FontSelectScreen
+        state={{ ...DEFAULT_STATE, nerdFontToInstall: { kind: 'install', id: 'FiraCode' } }}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    expect(lastFrame()).toMatch(/›\s*Fira Code/);
+  });
+});
