@@ -45,6 +45,8 @@ export interface CliFlags {
   json?: boolean;
   /** Apply the repairs the doctor can perform (--fix). */
   fix?: boolean;
+  /** Let repair also apply the fixes warnings carry (--include-warnings). */
+  includeWarnings?: boolean;
   // Global flags, kept for parity with index.tsx's existing surface.
   help: boolean;
   version: boolean;
@@ -101,6 +103,9 @@ const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> 
   },
   '--fix': (r, v) => {
     r.fix = v;
+  },
+  '--include-warnings': (r, v) => {
+    r.includeWarnings = v;
   },
 };
 

@@ -125,11 +125,14 @@ apply options (a headless install from a state card):
 doctor options (checks the setup; exits non-zero when a check fails):
   --state <file>       Check the setup described by a saved state card
   --json               Print the report as JSON instead of the text summary
-  --fix                Apply the available repairs, then re-check (like 'repair')
+  --fix                Apply the repairs for failing checks, then re-check (like 'repair')
+  --include-warnings   With --fix, also apply the repairs warnings suggest
 
 repair options (fixes the failing checks; exits non-zero when one still fails):
   --state <file>       Repair the setup described by a saved state card
   --dry-run            Print the fixes it would apply; change nothing
+  --include-warnings   Also apply the fixes warnings suggest (e.g. the terminal font);
+                       a warning may describe a choice you made on purpose
   --json               Print the report as JSON instead of the text summary
 `);
 }
@@ -240,7 +243,10 @@ export async function runDoctorCommand(flags: CliFlags): Promise<void> {
 export async function runRepairCommand(flags: CliFlags): Promise<void> {
   warnIgnoredFlags(flags, 'repair');
   const state = flags.stateFile ? stateFromFlags(flags) : null;
-  const report = await runRepair(state, undefined, { dryRun: flags.dryRun });
+  const report = await runRepair(state, undefined, {
+    dryRun: flags.dryRun,
+    includeWarnings: flags.includeWarnings,
+  });
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {
@@ -257,6 +263,10 @@ export async function runRepairCommand(flags: CliFlags): Promise<void> {
  * reproducibility.
  */
 export async function runHeadlessCommand(flags: CliFlags, command: string): Promise<boolean> {
+  const repairs = flags.subcommand === 'repair' || (flags.subcommand === 'doctor' && flags.fix);
+  if (flags.includeWarnings && !repairs) {
+    throw new CliUsageError('--include-warnings only applies to repair (or doctor --fix).');
+  }
   if (flags.subcommand === 'generate') {
     runGenerate(flags);
     return true;

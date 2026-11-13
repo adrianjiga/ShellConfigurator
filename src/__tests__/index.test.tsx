@@ -573,8 +573,30 @@ describe('index headless routing', () => {
     const routed = await route(['repair', '--dry-run']);
 
     expect(routed).toBe(true);
-    expect(mockRunRepair).toHaveBeenCalledWith(null, undefined, { dryRun: true });
+    expect(mockRunRepair).toHaveBeenCalledWith(null, undefined, {
+      dryRun: true,
+      includeWarnings: undefined,
+    });
     expect(stdoutWrite).toHaveBeenCalledWith('PLANNED\n');
+  });
+
+  it('passes --include-warnings through to repair and doctor --fix', async () => {
+    mockRunRepair.mockResolvedValue({ ok: true, actions: [], dryRun: false });
+    mockFormatRepairReport.mockReturnValue('');
+
+    await route(['repair', '--include-warnings']);
+    await route(['doctor', '--fix', '--include-warnings']);
+
+    for (const call of mockRunRepair.mock.calls) {
+      expect(call[2]).toMatchObject({ includeWarnings: true });
+    }
+    expect(mockRunRepair).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects --include-warnings outside a repair', async () => {
+    await expect(route(['doctor', '--include-warnings'])).rejects.toThrow(
+      '--include-warnings only applies to repair'
+    );
   });
 
   it('sets a non-zero exit code when a repair still fails a check', async () => {
