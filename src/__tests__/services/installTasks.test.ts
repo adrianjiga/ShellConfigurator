@@ -618,6 +618,30 @@ describe('runInstallTasks', () => {
     expect(results.find((t) => t.id === 'rc_bash')?.status).toBe('failed');
   });
 
+  it('still wires the shells whose config was written when another shell fails', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: true, version: 'starship 1.20' }),
+      writeShellConfig: vi.fn((_toml: string, shellId: string) => {
+        if (shellId === 'bash') throw new Error('permission denied');
+        return { path: `/home/u/.config/starship/${shellId}.toml` };
+      }),
+    });
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh', 'bash'] }),
+      deps,
+      vi.fn()
+    );
+
+    const config = results.find((t) => t.id === 'config');
+    expect(config?.status).toBe('failed');
+    expect(config?.error).toBe('bash: permission denied');
+    expect(results.find((t) => t.id === 'rc_zsh')?.status).toBe('done');
+    expect(results.find((t) => t.id === 'rc_bash')?.status).toBe('failed');
+    expect(deps.applyShellConfig).toHaveBeenCalledTimes(1);
+    expect(deps.verifyConfig).toHaveBeenCalledTimes(1);
+    expect(deps.verifyConfig).toHaveBeenCalledWith(expect.stringContaining('zsh.toml'));
+  });
+
   it('still applies rc files after a successful config write', async () => {
     const deps = fakeDeps();
     const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());

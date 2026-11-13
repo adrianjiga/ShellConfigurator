@@ -339,6 +339,7 @@ export async function runInstallTasks(
   }
 
   // --- Config: write per-shell starship configs, or adopt an existing one ---
+  const configWritten = new Set<ShellId>();
   const configStatus = await runTask(TASK_IDS.config, async () => {
     if (state.selectedShells.length === 0) {
       throw new Error('No shells selected — nothing to configure');
@@ -388,12 +389,19 @@ export async function runInstallTasks(
       // Non-fatal — the install still proceeds with whatever protection exists.
     }
 
+    const writeErrors: string[] = [];
     for (const shellId of state.selectedShells) {
-      const written = deps.writeShellConfig(toml, shellId);
-      if (written?.backedUpTo) {
-        notes.push(`${shellId}: previous config saved to ${written.backedUpTo}`);
+      try {
+        const written = deps.writeShellConfig(toml, shellId);
+        configWritten.add(shellId);
+        if (written?.backedUpTo) {
+          notes.push(`${shellId}: previous config saved to ${written.backedUpTo}`);
+        }
+      } catch (err) {
+        writeErrors.push(`${shellId}: ${errorMessage(err)}`);
       }
     }
+    if (writeErrors.length > 0) throw new Error(writeErrors.join('; '));
     if (fontInstallFailed) notes.push('written without Nerd Font glyphs — the font install failed');
 
     return {
@@ -437,7 +445,7 @@ export async function runInstallTasks(
     // The rc lines point at a per-shell config that was never written: wiring
     // the shell up anyway would init Starship against a config that does not
     // exist. Fail the rc step with the config error instead of running it.
-    if (configStatus === 'failed') {
+    if (configStatus === 'failed' && !configWritten.has(shellId)) {
       const configTask = tasks.find((t) => t.id === TASK_IDS.config);
       update(taskId, {
         status: 'failed',
@@ -468,7 +476,7 @@ export async function runInstallTasks(
   // verification" is the last thing that happens to the configs.
   if (!state.skipStarshipInstall) {
     await runTask(TASK_IDS.verify, async () => {
-      if (configStatus === 'failed') {
+      if (configStatus === 'failed' && configWritten.size === 0) {
         return { status: 'skipped', patch: { note: 'no config was written' } };
       }
       const onPath = await deps.isStarshipInstalled();
@@ -483,7 +491,9 @@ export async function runInstallTasks(
       if (state.keepExistingConfig) {
         configPaths = state.sharedConfigToml != null ? [getSharedConfigPath()] : [];
       } else {
-        configPaths = state.selectedShells.map((shellId) => getShellConfigPath(shellId));
+        configPaths = state.selectedShells
+          .filter((shellId) => configWritten.has(shellId))
+          .map((shellId) => getShellConfigPath(shellId));
       }
       if (configPaths.length === 0) {
         return { status: 'skipped', patch: { note: 'nothing written to verify' } };
