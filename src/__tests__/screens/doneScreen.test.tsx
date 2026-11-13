@@ -331,3 +331,31 @@ describe('DoneScreen in a container', () => {
     expect(frame).not.toContain('Nerd Font not installed');
   });
 });
+
+describe('DoneScreen task rows', () => {
+  it('shows why Starship, Verify and the terminal font ended as they did', () => {
+    const { lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          selectedShells: ['zsh'],
+          installedShells: ['zsh'],
+          installResults: [
+            { id: 'starship', label: 'Starship', status: 'failed', error: 'curl: timed out' },
+            {
+              id: 'terminal',
+              label: 'Set kitty font',
+              status: 'skipped',
+              note: 'font already set',
+            },
+            { id: 'verify', label: 'Verify config', status: 'done', note: 'verified 1 config(s)' },
+          ],
+        }}
+      />
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('curl: timed out');
+    expect(frame).toContain('font already set');
+    expect(frame).toContain('verified 1 config(s)');
+  });
+});

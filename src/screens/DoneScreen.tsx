@@ -28,6 +28,25 @@ function StatusMark({ status }: { status: ReportedStatus }) {
   return <Text color={uiColor(color)}>{icon}</Text>;
 }
 
+/** A task's outcome as one row, with its error or note beneath it. */
+function TaskRow({ task: result }: { task: InstallTask }) {
+  return (
+    <Box flexDirection="column">
+      <Box flexDirection="row" gap={1}>
+        <StatusMark status={result.status} />
+        <Text>{result.label}</Text>
+      </Box>
+      {(result.error || result.note) && (
+        <Box marginLeft={3}>
+          <Text color={uiColor(result.error ? 'red' : 'gray')} italic>
+            {result.error ?? result.note}
+          </Text>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 export function DoneScreen({ state }: DoneScreenProps) {
   const { exit } = useApp();
   const fontId = fontIdToInstall(state.nerdFontToInstall);
@@ -51,6 +70,8 @@ export function DoneScreen({ state }: DoneScreenProps) {
     }
   });
 
+  const starshipTask = task(state, TASK_IDS.starship);
+  const verifyTask = task(state, TASK_IDS.verify);
   const configTask = task(state, TASK_IDS.config);
   const fontTask = task(state, TASK_IDS.font);
   const terminalTask = task(state, TASK_IDS.terminal);
@@ -113,6 +134,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
 
         {!state.dryRun && (
           <Box flexDirection="column" marginTop={1} gap={1}>
+            {starshipTask && <TaskRow task={starshipTask} />}
             <Box flexDirection="column">
               <Box flexDirection="row" gap={1}>
                 <StatusMark status={configTask?.status ?? 'unknown'} />
@@ -245,6 +267,8 @@ export function DoneScreen({ state }: DoneScreenProps) {
               );
             })}
 
+            {terminalTask && <TaskRow task={terminalTask} />}
+            {verifyTask && <TaskRow task={verifyTask} />}
             {state.setDefaultShell && state.container && (
               <Box flexDirection="row" gap={1}>
                 <StatusMark status="skipped" />
