@@ -325,7 +325,13 @@ async function main(): Promise<void> {
   if (handled) return;
 
   const app = render(
-    <ErrorBoundary onError={(err) => reportFatal('ShellConfigurator hit a render error', err)}>
+    <ErrorBoundary
+      onError={(err) => {
+        reportFatal('ShellConfigurator hit a render error', err);
+        // Leave the message on screen and exit instead of waiting for Ctrl+C.
+        setImmediate(() => app.unmount());
+      }}
+    >
       <App dryRun={flags.dryRun ?? false} onInstallOutcome={recordInstallOutcome} />
     </ErrorBoundary>,
     // Ctrl+C during the install must cancel it, not leave it running unseen.
