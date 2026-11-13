@@ -127,3 +127,15 @@ describe('terminal steps', () => {
     expect(getPrevStep(state).step).toBe('installing');
   });
 });
+
+describe('getNextStep at the end', () => {
+  it('stays on done instead of wrapping around', () => {
+    const state = { ...DEFAULT_STATE, step: 'done' as const };
+    expect(getNextStep(state).step).toBe('done');
+  });
+
+  it('does not restart the wizard from an unknown step', () => {
+    const state = { ...DEFAULT_STATE, step: 'bogus' as never };
+    expect(getNextStep(state).step).toBe('bogus');
+  });
+});
