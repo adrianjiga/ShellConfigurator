@@ -46,8 +46,13 @@ try {
     },
   });
   const files = [];
+  const seen = new Set();
   for (const name of Object.keys(entries)) {
-    files.push({ name: path.basename(name), bytes: entries[name] });
+    const base = path.basename(name);
+    // A hidden, NUL-bearing or repeated name cannot be written safely; the first wins.
+    if (base.startsWith('.') || base.includes('\\0') || seen.has(base)) continue;
+    seen.add(base);
+    files.push({ name: base, bytes: entries[name] });
   }
   parentPort.postMessage({ ok: true, files });
 } catch (error) {

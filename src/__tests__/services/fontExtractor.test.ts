@@ -113,6 +113,19 @@ describe('extractFontFiles', () => {
     await expect(extractFontFiles(zipBytes(zip))).rejects.toThrow('Huge.ttf expands past');
   });
 
+  it('keeps the first of two same-named fonts and drops unsafe names', async () => {
+    const zip = zipSync({
+      'a/Font-Regular.ttf': encode('first'),
+      'b/Font-Regular.ttf': encode('second'),
+      'dir/.ttf': encode('hidden'),
+    });
+
+    const files = await extractFontFiles(zipBytes(zip));
+
+    expect(files.map((f) => f.name)).toEqual(['Font-Regular.ttf']);
+    expect(new TextDecoder().decode(files[0]!.bytes)).toBe('first');
+  });
+
   it('returns an empty list when the archive holds no font files', async () => {
     const zip = zipSync({ 'README.md': encode('nothing') });
 
