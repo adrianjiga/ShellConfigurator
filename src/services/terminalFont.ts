@@ -220,7 +220,12 @@ export function readTerminalFontFamily(id: TerminalId): string | null {
   const filePath = resolveTerminalConfigPath(id);
   if (!fs.existsSync(filePath)) return null;
 
-  const content = fs.readFileSync(filePath, 'utf8');
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return null;
+  }
   let match: RegExpMatchArray | null;
   switch (id) {
     case 'alacritty':

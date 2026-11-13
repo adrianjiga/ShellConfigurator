@@ -32,6 +32,7 @@ function makeDeps(
     detectInstalledShells: vi.fn().mockResolvedValue(['zsh']),
     detectTerminal: vi.fn().mockResolvedValue('kitty'),
     readFontFamily: vi.fn().mockReturnValue('JetBrainsMono Nerd Font'),
+    hasBundledNerdFonts: vi.fn().mockResolvedValue(false),
     verifyConfig: vi.fn().mockResolvedValue(undefined),
     readFile: vi.fn((p: string) => files.get(p) ?? ''),
     exists: vi.fn((p: string) => files.has(p)),
@@ -239,6 +240,27 @@ describe('runDoctor', () => {
     expect(find(report, 'font-installed')).toMatchObject({ status: 'pass' });
     expect(find(report, 'font-selected')).toMatchObject({ status: 'pass' });
     expect(find(report, 'font-installed').fix).toBeUndefined();
+  });
+
+  it('passes a terminal that draws Nerd Font symbols itself', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      detectTerminal: vi.fn().mockResolvedValue('ghostty'),
+      readFontFamily: vi.fn().mockReturnValue(null),
+      hasBundledNerdFonts: vi.fn().mockResolvedValue(true),
+    });
+    const report = await runDoctor(baseState(), deps);
+    expect(find(report, 'font-selected')).toMatchObject({ status: 'pass' });
+    expect(find(report, 'font-selected').fix).toBeUndefined();
+  });
+
+  it('still warns for a terminal without the bundled symbols', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      detectTerminal: vi.fn().mockResolvedValue('kitty'),
+      readFontFamily: vi.fn().mockReturnValue(null),
+      hasBundledNerdFonts: vi.fn().mockResolvedValue(false),
+    });
+    const report = await runDoctor(baseState(), deps);
+    expect(find(report, 'font-selected')).toMatchObject({ status: 'warn' });
   });
 
   it('accepts a width variant of the selected family', async () => {

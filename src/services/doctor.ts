@@ -62,6 +62,8 @@ export interface DoctorDeps {
   detectInstalledShells: typeof detectInstalledShellsAsync;
   detectTerminal: typeof detectTerminalAsync;
   readFontFamily: typeof readTerminalFontFamily;
+  /** Terminals that render Nerd Font symbols without one installed. */
+  hasBundledNerdFonts: (terminalId: TerminalId) => Promise<boolean>;
   verifyConfig: (configPath: string) => Promise<void>;
   readFile: (path: string) => string;
   exists: (path: string) => boolean;
@@ -79,6 +81,7 @@ export const DEFAULT_DOCTOR_DEPS: DoctorDeps = {
   detectInstalledShells: detectInstalledShellsAsync,
   detectTerminal: detectTerminalAsync,
   readFontFamily: readTerminalFontFamily,
+  hasBundledNerdFonts: hasBundledNerdFonts,
   verifyConfig: (configPath) => {
     const pathDir = getMissingStarshipPathDir();
     const env: Record<string, string | undefined> = {
@@ -94,6 +97,20 @@ export const DEFAULT_DOCTOR_DEPS: DoctorDeps = {
   isContainer: detectContainerAsync,
   env: process.env,
 };
+
+/** Ghostty always ships the symbols; kitty gained them in 0.36. */
+async function hasBundledNerdFonts(terminalId: TerminalId): Promise<boolean> {
+  if (terminalId === 'ghostty') return true;
+  if (terminalId !== 'kitty') return false;
+  try {
+    const output = await runCapture('kitty', ['--version']);
+    const match = /(\d+)\.(\d+)/.exec(output);
+    if (!match) return false;
+    return Number(match[1]) > 0 || Number(match[2]) >= 36;
+  } catch {
+    return false;
+  }
+}
 
 function withPathDir(dir: string): string {
   return `${dir}${process.env.PATH ? `:${process.env.PATH}` : ''}`;
@@ -595,6 +612,15 @@ async function checkFontSelected(
       title: 'Terminal font',
       status: 'warn',
       detail: `WezTerm's config is Lua — check it selects ${expectedFamily ?? 'a Nerd Font'}`,
+    };
+  }
+
+  if (await deps.hasBundledNerdFonts(terminalId)) {
+    return {
+      id: 'font-selected',
+      title: 'Terminal font',
+      status: 'pass',
+      detail: `${label} draws Nerd Font symbols itself`,
     };
   }
 
