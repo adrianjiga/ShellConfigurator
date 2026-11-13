@@ -62,6 +62,12 @@ export function writeFileAtomic(filePath: string, content: string): void {
 export function backupSharedConfig(): string | null {
   const shared = getSharedConfigPath();
   if (!fs.existsSync(shared)) return null;
+  try {
+    const previous = newestBackup(path.dirname(shared), path.basename(shared));
+    if (previous && fs.readFileSync(previous).equals(fs.readFileSync(shared))) return previous;
+  } catch {
+    // Fall through to a fresh copy.
+  }
   const backup = `${shared}.bak-${backupStamp()}`;
   try {
     fs.copyFileSync(shared, backup);

@@ -849,6 +849,36 @@ describe('backupSharedConfig', () => {
     expect(fs.copyFileSync).toHaveBeenCalledWith(getSharedConfigPath(), backup);
   });
 
+  it('reuses the newest backup instead of copying an unchanged shared config again', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readdirSync).mockReturnValue([
+      'starship.toml.bak-2026-01-01T00-00-00-000Z',
+    ] as unknown as ReturnType<typeof fs.readdirSync>);
+    vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('format = "$all"\n'));
+
+    const backup = backupSharedConfig();
+
+    expect(backup).toBe(
+      path.join(path.dirname(getSharedConfigPath()), 'starship.toml.bak-2026-01-01T00-00-00-000Z')
+    );
+    expect(fs.copyFileSync).not.toHaveBeenCalled();
+  });
+
+  it('makes a fresh backup once the shared config has changed', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readdirSync).mockReturnValue([
+      'starship.toml.bak-2026-01-01T00-00-00-000Z',
+    ] as unknown as ReturnType<typeof fs.readdirSync>);
+    vi.mocked(fs.readFileSync)
+      .mockReturnValueOnce(Buffer.from('old\n'))
+      .mockReturnValueOnce(Buffer.from('new\n'));
+
+    const backup = backupSharedConfig();
+
+    expect(backup).not.toContain('2026-01-01');
+    expect(fs.copyFileSync).toHaveBeenCalledWith(getSharedConfigPath(), backup);
+  });
+
   it('honours XDG_CONFIG_HOME for the shared config', () => {
     process.env.XDG_CONFIG_HOME = '/home/u/.dotfiles/config';
     vi.mocked(fs.existsSync).mockReturnValue(true);
