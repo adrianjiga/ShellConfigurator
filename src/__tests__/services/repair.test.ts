@@ -25,6 +25,11 @@ function makeDeps(
     installNerdFont: vi.fn().mockResolvedValue(undefined),
     wireTerminalFont: vi.fn().mockReturnValue({ applied: true } as TerminalFontResult),
     detectPackageManager: vi.fn().mockResolvedValue('apt'),
+    generateToml: vi.fn().mockReturnValue('add_newline = true\n'),
+    writeShellConfig: vi.fn().mockReturnValue({ path: '/home/u/.config/starship/zsh.toml' }),
+    recordStarshipVersion: vi.fn(),
+    getMissingStarshipPathDir: vi.fn().mockReturnValue(null),
+    readStarshipVersion: vi.fn().mockResolvedValue('starship 1.20.0'),
     ...overrides,
   };
 }
@@ -118,6 +123,30 @@ describe('runRepair', () => {
     expect(result.actions[0]).toMatchObject({ status: 'fixed' });
   });
 
+  it('records the fresh version and looks in the script install dir', async () => {
+    const deps = makeDeps(report([finding({ kind: 'reinstall-starship' })]), undefined, {
+      getMissingStarshipPathDir: vi.fn().mockReturnValue('/home/u/.local/bin'),
+    });
+    await runRepair(null, deps);
+    expect(deps.readStarshipVersion).toHaveBeenCalledWith('/home/u/.local/bin');
+    expect(deps.recordStarshipVersion).toHaveBeenCalledWith('starship 1.20.0');
+  });
+
+  it('regenerates a missing config from the state card', async () => {
+    const deps = makeDeps(report([finding({ kind: 'write-config', shellId: 'zsh' })]));
+    const result = await runRepair(state({ selectedShells: ['zsh'] }), deps);
+    expect(deps.generateToml).toHaveBeenCalledWith(state({ selectedShells: ['zsh'] }));
+    expect(deps.writeShellConfig).toHaveBeenCalledWith('add_newline = true\n', 'zsh');
+    expect(result.actions[0]).toMatchObject({ status: 'fixed' });
+  });
+
+  it('skips a regenerate fix without a state card', async () => {
+    const deps = makeDeps(report([finding({ kind: 'write-config', shellId: 'zsh' })]));
+    const result = await runRepair(null, deps);
+    expect(deps.writeShellConfig).not.toHaveBeenCalled();
+    expect(result.actions[0]).toMatchObject({ status: 'skipped' });
+  });
+
   it('fails cleanly when no package manager is detected', async () => {
     const deps = makeDeps(report([finding({ kind: 'reinstall-starship' })]), undefined, {
       detectPackageManager: vi.fn().mockResolvedValue(null),
@@ -176,6 +205,7 @@ describe('runRepair', () => {
     expect(result.actions.map((a) => a.status)).toEqual(['failed', 'fixed']);
     expect(result.actions[0].detail).toMatch(/sudo denied/);
     expect(deps.installNerdFont).toHaveBeenCalledOnce();
+    expect(result.ok).toBe(false);
   });
 
   it('reports failure when the checks still fail afterwards', async () => {

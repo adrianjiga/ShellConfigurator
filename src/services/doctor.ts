@@ -29,6 +29,7 @@ export type DoctorStatus = 'pass' | 'warn' | 'fail';
 export type DoctorFix =
   | { kind: 'reinstall-starship' }
   | { kind: 'configure-shell'; shellId: ShellId }
+  | { kind: 'write-config'; shellId: ShellId }
   | { kind: 'reinstall-font'; fontId: string }
   | { kind: 'wire-font'; terminalId: TerminalId; family: string };
 
@@ -359,7 +360,7 @@ function checkShellWiring(
       title: shell.label,
       status: 'fail',
       detail: `points at ${configPath}, which does not exist`,
-      fix,
+      fix: fromState ? { kind: 'write-config', shellId } : fix,
     };
   }
   return {

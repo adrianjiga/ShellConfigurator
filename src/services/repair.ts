@@ -1,5 +1,7 @@
-import { applyShellConfig } from '../generators/shellRc.ts';
+import { applyShellConfig, writeShellConfig } from '../generators/shellRc.ts';
+import { generateToml } from '../generators/starship.ts';
 import type { PackageManager, ShellId, TerminalId, WizardState } from '../types.ts';
+import { recordStarshipVersion } from './cache.ts';
 import { detectPackageManagerAsync } from './detector.ts';
 import {
   type DoctorFix,
@@ -9,7 +11,13 @@ import {
   shellPointsAtShared,
 } from './doctor.ts';
 import { errorMessage } from './errors.ts';
-import { fontLabel, installNerdFont, installStarship } from './installer.ts';
+import { runCapture } from './exec.ts';
+import {
+  fontLabel,
+  getMissingStarshipPathDir,
+  installNerdFont,
+  installStarship,
+} from './installer.ts';
 import { type TerminalFontResult, terminalLabel, wireTerminalFont } from './terminalFont.ts';
 
 export type RepairStatus = 'fixed' | 'failed' | 'skipped' | 'planned';
@@ -45,6 +53,22 @@ export interface RepairDeps {
   installNerdFont: (fontId: string) => Promise<string | undefined>;
   wireTerminalFont: (terminalId: TerminalId, family: string) => TerminalFontResult;
   detectPackageManager: () => Promise<PackageManager | null>;
+  generateToml: (state: WizardState) => string;
+  writeShellConfig: (toml: string, shellId: ShellId) => { path: string };
+  recordStarshipVersion: (version: string) => void;
+  getMissingStarshipPathDir: () => string | null;
+  readStarshipVersion: (pathDir: string | null) => Promise<string | null>;
+}
+
+/** Resolves the freshly installed binary even when its dir is not on PATH yet. */
+async function readStarshipVersion(pathDir: string | null): Promise<string | null> {
+  const env: Record<string, string | undefined> = { ...process.env };
+  if (pathDir) env.PATH = `${pathDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`;
+  try {
+    return await runCapture('starship', ['--version'], { env });
+  } catch {
+    return null;
+  }
 }
 
 export const DEFAULT_REPAIR_DEPS: RepairDeps = {
@@ -55,6 +79,11 @@ export const DEFAULT_REPAIR_DEPS: RepairDeps = {
   installStarship,
   wireTerminalFont,
   detectPackageManager: () => detectPackageManagerAsync(),
+  generateToml,
+  writeShellConfig,
+  recordStarshipVersion,
+  getMissingStarshipPathDir,
+  readStarshipVersion,
 };
 
 /** The dry-run counterpart of applying a fix. */
@@ -64,6 +93,8 @@ function describeFix(fix: DoctorFix): string {
       return 'reinstall Starship via the detected package manager';
     case 'configure-shell':
       return `add the starship init line to ${fix.shellId}`;
+    case 'write-config':
+      return `write the Starship config for ${fix.shellId}`;
     case 'reinstall-font':
       return `reinstall ${fontLabel(fix.fontId)}`;
     case 'wire-font':
@@ -74,6 +105,7 @@ function describeFix(fix: DoctorFix): string {
 async function applyFix(
   fix: DoctorFix,
   pointAtShared: boolean | null,
+  state: WizardState | null,
   deps: RepairDeps
 ): Promise<{ detail: string; status: RepairStatus }> {
   switch (fix.kind) {
@@ -81,7 +113,14 @@ async function applyFix(
       const pm = await deps.detectPackageManager();
       if (!pm) throw new Error('no supported package manager detected');
       await deps.installStarship(pm);
+      const version = await deps.readStarshipVersion(deps.getMissingStarshipPathDir());
+      if (version) deps.recordStarshipVersion(version);
       return { detail: `reinstalled Starship via ${pm}`, status: 'fixed' };
+    }
+    case 'write-config': {
+      if (!state) return { detail: 'no state card to regenerate from', status: 'skipped' };
+      const { path } = deps.writeShellConfig(deps.generateToml(state), fix.shellId);
+      return { detail: `wrote ${path}`, status: 'fixed' };
     }
     case 'configure-shell': {
       const shared = pointAtShared ?? deps.shellPointsAtShared(fix.shellId);
@@ -132,7 +171,7 @@ export async function runRepair(
       continue;
     }
     try {
-      const { detail, status } = await applyFix(finding.fix, pointAtShared, deps);
+      const { detail, status } = await applyFix(finding.fix, pointAtShared, state, deps);
       actions.push({ findingId: finding.id, title: finding.title, status, detail });
     } catch (err) {
       actions.push({
@@ -145,7 +184,8 @@ export async function runRepair(
   }
 
   const after = options.dryRun ? before : await deps.runDoctor(state);
-  return { before, after, actions, ok: after.ok, dryRun: options.dryRun ?? false };
+  const ok = after.ok && actions.every((action) => action.status !== 'failed');
+  return { before, after, actions, ok, dryRun: options.dryRun ?? false };
 }
 
 /** Human-readable repair report; `--json` serializes the report directly. */
