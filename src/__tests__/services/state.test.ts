@@ -99,23 +99,41 @@ describe('parseState', () => {
     expect(restored.installResults).toEqual([]);
   });
 
-  it('defaults present-but-malformed choices instead of crashing', () => {
+  it.each([
+    ['leftModules', [42], /leftModules must be an array of module ids/],
+    ['palette', 7, /palette '7' is not one of/],
+    ['palette', 'gruvbx', /palette 'gruvbx' is not one of/],
+    ['characterSymbol', 'twirl', /characterSymbol 'twirl' is not one of/],
+    ['continuationPrompt', 'wave', /continuationPrompt 'wave' is not one of/],
+    ['preset', 'not-a-preset', /preset 'not-a-preset' is not one of/],
+    ['setDefaultShell', 'csh', /setDefaultShell 'csh' is not one of/],
+    ['directoryTruncationLength', '3', /directoryTruncationLength must be a number/],
+  ])('rejects a card whose %s is %j instead of defaulting it', (field, value, message) => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
-    card.wizard.leftModules = [42] as never;
-    card.wizard.palette = 7 as never;
-    card.wizard.characterSymbol = 'twirl' as never;
-    const restored = parseState(JSON.stringify(card));
-    expect(restored.leftModules).toEqual(['directory', 'git_branch', 'git_status', 'character']);
-    expect(restored.characterSymbol).toBe('arrow');
+    (card.wizard as unknown as Record<string, unknown>)[field] = value;
+    expect(() => parseState(JSON.stringify(card))).toThrow(message);
   });
 
-  it('drops an unknown preset and default shell instead of keeping raw strings', () => {
+  it('defaults choices that are absent from the card', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
-    card.wizard.preset = 'not-a-preset';
-    card.wizard.setDefaultShell = 'csh' as never;
+    const wizard = card.wizard as unknown as Record<string, unknown>;
+    for (const field of [
+      'preset',
+      'palette',
+      'characterSymbol',
+      'continuationPrompt',
+      'setDefaultShell',
+      'directoryTruncationLength',
+    ]) {
+      delete wizard[field];
+    }
     const restored = parseState(JSON.stringify(card));
     expect(restored.preset).toBeNull();
+    expect(restored.palette).toBe('default');
+    expect(restored.characterSymbol).toBe('arrow');
+    expect(restored.continuationPrompt).toBe('dot');
     expect(restored.setDefaultShell).toBeNull();
+    expect(restored.directoryTruncationLength).toBe(3);
   });
 
   it('rejects an unknown shell id in selectedShells', () => {
@@ -160,12 +178,6 @@ describe('parseState', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
     card.wizard.directoryTruncationLength = 99;
     expect(parseState(JSON.stringify(card)).directoryTruncationLength).toBe(5);
-  });
-
-  it('defaults an unknown palette in a hand-edited card', () => {
-    const card = JSON.parse(serializeState(sampleState)) as StateCard;
-    card.wizard.palette = 'not-a-palette' as never;
-    expect(parseState(JSON.stringify(card)).palette).toBe('default');
   });
 
   it('rejects an unknown module id in a hand-edited card', () => {

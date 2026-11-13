@@ -127,6 +127,29 @@ function parseBoolean(value: unknown, field: string, fallback: boolean): boolean
   return value;
 }
 
+/** Null when absent; otherwise the value must be one of `allowed`. */
+function parseOptionalChoice<T extends string>(
+  value: unknown,
+  field: string,
+  allowed: readonly T[]
+): T | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || !allowed.includes(value as T)) {
+    throw new CliUsageError(
+      `Invalid state card: ${field} '${String(value)}' is not one of ${allowed.join(', ')}`
+    );
+  }
+  return value as T;
+}
+
+function parseTruncationLength(value: unknown): number {
+  if (value === undefined) return DEFAULT_TRUNCATION_LENGTH;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new CliUsageError('Invalid state card: directoryTruncationLength must be a number');
+  }
+  return clampTruncationLength(value);
+}
+
 function parseShellList(value: unknown): ShellId[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) {
@@ -148,7 +171,10 @@ function parseShellList(value: unknown): ShellId[] {
 }
 
 function parseModuleList(value: unknown, slot: 'left' | 'right'): ModuleId[] | null {
-  if (!isStringArray(value)) return null;
+  if (value === undefined || value === null) return null;
+  if (!isStringArray(value)) {
+    throw new CliUsageError(`Invalid state card: ${slot}Modules must be an array of module ids`);
+  }
 
   const parsed = new Set<ModuleId>();
   for (const id of value) {
@@ -257,40 +283,42 @@ export function parseState(json: string): WizardState {
 
   return {
     ...runtimeDefaults(),
-    preset:
-      typeof wizard.preset === 'string' && PRESETS.some((preset) => preset.id === wizard.preset)
-        ? wizard.preset
-        : null,
+    preset: parseOptionalChoice(
+      wizard.preset,
+      'preset',
+      PRESETS.map((preset) => preset.id)
+    ),
     leftModules,
     rightModules,
     characterSymbol:
-      wizard.characterSymbol === 'lambda' || wizard.characterSymbol === 'dollar'
-        ? wizard.characterSymbol
-        : 'arrow',
+      parseOptionalChoice<CharacterSymbol>(wizard.characterSymbol, 'characterSymbol', [
+        'arrow',
+        'lambda',
+        'dollar',
+      ]) ?? 'arrow',
     palette:
-      typeof wizard.palette === 'string' &&
-      PALETTES.some((palette) => palette.id === wizard.palette)
-        ? (wizard.palette as PaletteId)
-        : 'default',
+      parseOptionalChoice<PaletteId>(
+        wizard.palette,
+        'palette',
+        PALETTES.map((palette) => palette.id)
+      ) ?? 'default',
     powerline: parseBoolean(wizard.powerline, 'powerline', false),
     continuationPrompt:
-      wizard.continuationPrompt === 'arrow' || wizard.continuationPrompt === 'none'
-        ? wizard.continuationPrompt
-        : 'dot',
+      parseOptionalChoice<ContinuationPrompt>(wizard.continuationPrompt, 'continuationPrompt', [
+        'dot',
+        'arrow',
+        'none',
+      ]) ?? 'dot',
     // Absent means "the starship default", which is on.
     addNewline: parseBoolean(wizard.addNewline, 'addNewline', true),
     vimMode: parseBoolean(wizard.vimMode, 'vimMode', false),
-    directoryTruncationLength:
-      typeof wizard.directoryTruncationLength === 'number'
-        ? clampTruncationLength(wizard.directoryTruncationLength)
-        : DEFAULT_TRUNCATION_LENGTH,
+    directoryTruncationLength: parseTruncationLength(wizard.directoryTruncationLength),
     directorySubstitutions: parseSubstitutionList(wizard.directorySubstitutions),
     selectedShells,
     nerdFontToInstall: parseNerdFontChoice(wizard.nerdFontToInstall),
-    setDefaultShell:
-      typeof wizard.setDefaultShell === 'string' && SHELL_IDS.has(wizard.setDefaultShell)
-        ? (wizard.setDefaultShell as ShellId)
-        : null,
+    setDefaultShell: parseOptionalChoice(wizard.setDefaultShell, 'setDefaultShell', [
+      ...SHELL_IDS,
+    ] as ShellId[]),
     skipStarshipInstall: parseBoolean(wizard.skipStarshipInstall, 'skipStarshipInstall', false),
     keepExistingConfig: parseBoolean(wizard.keepExistingConfig, 'keepExistingConfig', false),
     hasNerdFont: parseBoolean(wizard.hasNerdFont, 'hasNerdFont', false),
