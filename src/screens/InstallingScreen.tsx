@@ -101,6 +101,8 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   // the keystrokes belong to that child, not to Ink.
   useInput(
     (char, key) => {
+      // Nothing is left to cancel once every step has finished.
+      if (allDoneRef.current) return;
       if (char === 'c' || char === 'C' || (key.ctrl && char === 'c')) {
         setCancelling(true);
         abortRef.current?.abort();
@@ -112,6 +114,8 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const allDone = tasks.every(
     (t) => t.status === 'done' || t.status === 'skipped' || t.status === 'failed'
   );
+  const allDoneRef = useRef(allDone);
+  allDoneRef.current = allDone;
 
   // The child process is drawing to this terminal — stay out of its way.
   if (uiSuspended) return null;

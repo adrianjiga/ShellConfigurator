@@ -302,3 +302,19 @@ describe('InstallingScreen finish line', () => {
     setAdvanceDelayForTests(0);
   });
 });
+
+describe('InstallingScreen after the run', () => {
+  it('ignores c once every step has finished', async () => {
+    setAdvanceDelayForTests(10_000);
+    const done: InstallTask[] = [{ id: 'starship', label: 'Starship', status: 'done' }];
+    mocks.buildTaskList.mockReturnValue(done);
+    mocks.runInstallTasks.mockResolvedValue(done);
+    const { instance } = setup();
+    await flush();
+    await flush();
+    instance.stdin.write('c');
+    await flush();
+    expect(instance.lastFrame()).not.toContain('Cancelling');
+    setAdvanceDelayForTests(0);
+  });
+});
