@@ -117,11 +117,13 @@ function setTomlFont(content: string, family: string): string {
 
   if (!fontNormal) return appendBlock(content, `[font.normal]\n${line}`);
 
+  const head = content.slice(0, fontNormal.start);
+  const separator = head.endsWith('\n') ? '' : '\n';
   const body = content.slice(fontNormal.start, fontNormal.end);
   const newBody = /^\s*family\s*=/m.test(body)
     ? body.replace(/^\s*family\s*=.*$/m, line)
     : `${line}\n${body}`;
-  return content.slice(0, fontNormal.start) + newBody + content.slice(fontNormal.end);
+  return head + separator + newBody + content.slice(fontNormal.end);
 }
 
 /** Sets `font=` under `[main]`, preserving any `:size=` suffix already there. */

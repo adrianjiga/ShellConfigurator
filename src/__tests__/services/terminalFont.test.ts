@@ -156,6 +156,16 @@ describe('wireTerminalFont', () => {
     );
   });
 
+  it('starts a new line when the file ends on the [font.normal] header', () => {
+    write('alacritty/alacritty.toml', '[font]\nsize = 12\n[font.normal]');
+
+    wireTerminalFont('alacritty', 'Hack Nerd Font');
+
+    expect(read('alacritty/alacritty.toml')).toBe(
+      '[font]\nsize = 12\n[font.normal]\nfamily = "Hack Nerd Font"\n'
+    );
+  });
+
   it('accepts the top-level inline font.normal form', () => {
     write('alacritty/alacritty.toml', 'font.normal = { family = "Old" }\n');
 
