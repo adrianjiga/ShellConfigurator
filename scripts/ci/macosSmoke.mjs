@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 import { parse } from '@iarna/toml';
 import { requireScratchHome } from './smokeHome.mjs';
@@ -40,12 +40,13 @@ try {
   assert.equal(typeof parsed.format, 'string', 'written TOML unparseable');
 
   // apply --dry-run --adopt: the keep-config plan prints, no installs happen.
+  const sharedConfig = nodePath.join(homeDir, '.config', 'starship.toml');
+  mkdirSync(nodePath.dirname(sharedConfig), { recursive: true });
+  writeFileSync(sharedConfig, 'format = "$all"\n');
   const plan = run(['apply', '--adopt', '--shells', 'zsh', '--dry-run']);
-  assert.ok(plan.includes('Config to keep'), 'apply --adopt dry-run lost the keep-plan');
-  assert.ok(
-    plan.includes('no per-shell TOML is generated'),
-    'apply --adopt reused the per-shell TOML'
-  );
+  assert.ok(plan.includes('Config to keep:'), 'apply --adopt dry-run lost the keep-plan');
+  assert.ok(!plan.includes('Generated starship.toml'), 'apply --adopt generated a TOML');
+  rmSync(sharedConfig);
   assert.ok(!plan.includes('installed'), 'dry run claims an install happened');
 
   // Real headless apply: installs Starship (brew), writes the zsh config and rc
