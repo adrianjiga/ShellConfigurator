@@ -352,8 +352,9 @@ export function DoneScreen({ state }: DoneScreenProps) {
       {!state.dryRun && (
         <Box marginTop={1}>
           <Text color={uiColor('gray')}>
-            Press <Text color={uiColor('cyan')}>r</Text> to undo with the newest backups (the{' '}
-            <Text color={uiColor('cyan')}>--restore</Text> CLI action).
+            Press <Text color={uiColor('cyan')}>r</Text> to put the Starship configs back from their
+            newest backups (the <Text color={uiColor('cyan')}>--restore</Text> CLI action). Shell rc
+            edits stay as they are.
           </Text>
         </Box>
       )}
