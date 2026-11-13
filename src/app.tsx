@@ -1,5 +1,5 @@
 import { useApp, useInput } from 'ink';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { DoneScreen } from './screens/DoneScreen.tsx';
 import { FontCheckScreen } from './screens/FontCheckScreen.tsx';
 import { FontSelectScreen } from './screens/FontSelectScreen.tsx';
@@ -28,6 +28,9 @@ interface AppProps {
 
 export function App({ dryRun = false, onInstallOutcome }: AppProps) {
   const [state, setState] = useState<WizardState>(() => ({ ...DEFAULT_STATE, dryRun }));
+  // The latest state, for callbacks that outlive the render that created them.
+  const latest = useRef(state);
+  latest.current = state;
 
   function updateState(update: Partial<WizardState>) {
     setState((prev) => ({ ...prev, ...update }));
@@ -38,7 +41,7 @@ export function App({ dryRun = false, onInstallOutcome }: AppProps) {
   }
 
   function finishInstall(update?: Partial<WizardState>) {
-    const finalState: WizardState = { ...state, ...update, step: 'done' };
+    const finalState: WizardState = { ...latest.current, ...update, step: 'done' };
     onInstallOutcome?.(finalState.installResults, finalState);
     advanceTo('done', update);
   }
