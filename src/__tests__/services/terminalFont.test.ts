@@ -73,6 +73,32 @@ describe('wireTerminalFont', () => {
     expect(read('foot/foot.ini')).toBe('[main]\nfont=FiraCode Nerd Font:size=11\n');
   });
 
+  it("edits foot's [main] font, never the [csd] title-bar font", () => {
+    write('foot/foot.ini', '[csd]\nfont=Title Font\n\n[main] # primary\nfont=Old:size=11\n');
+
+    wireTerminalFont('foot', 'Hack Nerd Font');
+
+    expect(read('foot/foot.ini')).toBe(
+      '[csd]\nfont=Title Font\n\n[main] # primary\nfont=Hack Nerd Font:size=11\n'
+    );
+  });
+
+  it('keeps foot fallbacks and does not expand $ patterns from the old value', () => {
+    write('foot/foot.ini', '[main]\nfont=Old:size=11,Emoji $&:size=11\n');
+
+    wireTerminalFont('foot', 'Hack Nerd Font');
+
+    expect(read('foot/foot.ini')).toBe('[main]\nfont=Hack Nerd Font:size=11,Emoji $&:size=11\n');
+  });
+
+  it('starts a new line when foot.ini ends on the [main] header', () => {
+    write('foot/foot.ini', '[main]');
+
+    wireTerminalFont('foot', 'Hack Nerd Font');
+
+    expect(read('foot/foot.ini')).toBe('[main]\nfont=Hack Nerd Font\n');
+  });
+
   it('creates a foot [main] section when missing', () => {
     wireTerminalFont('foot', 'Hack Nerd Font');
 

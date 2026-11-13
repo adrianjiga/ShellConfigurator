@@ -126,21 +126,30 @@ function setTomlFont(content: string, family: string): string {
   return head + separator + newBody + content.slice(fontNormal.end);
 }
 
-/** Sets `font=` under `[main]`, preserving any `:size=` suffix already there. */
+/**
+ * Sets the primary `font=` under foot's `[main]` (or the keys before any
+ * header, which foot also reads as `[main]`). The first entry's `:size=`
+ * options and any comma-separated fallbacks are kept.
+ */
 function setFootFont(content: string, family: string): string {
-  const keyRe = /^(\s*)font\s*=\s*(.*)$/m;
-  const match = keyRe.exec(content);
-  if (match) {
-    const size = match[2].includes(':') ? match[2].slice(match[2].indexOf(':')) : '';
-    return content.replace(keyRe, `${match[1]}font=${family}${size}`);
-  }
+  const sections = tomlSections(content);
+  const main = sections.find((s) => s.name === 'main');
+  const top = sections.find((s) => s.name === null);
+  const keyRe = /^([ \t]*)font[ \t]*=[ \t]*(.*)$/m;
+  const replace = (_m: string, indent: string, value: string) => {
+    const [primary = '', ...fallbacks] = value.split(',');
+    const options = primary.includes(':') ? primary.slice(primary.indexOf(':')) : '';
+    return `${indent}font=${[`${family}${options}`, ...fallbacks].join(',')}`;
+  };
 
-  const headerRe = /^\[main\]\s*$/m;
-  if (!headerRe.test(content)) return appendBlock(content, `[main]\nfont=${family}`);
+  const edited =
+    editSection(content, top, keyRe, replace) ?? editSection(content, main, keyRe, replace);
+  if (edited !== null) return edited;
+  if (!main) return appendBlock(content, `[main]\nfont=${family}`);
 
-  const headerEnd = content.indexOf('\n', content.search(headerRe));
-  if (headerEnd === -1) return `${content}font=${family}\n`;
-  return `${content.slice(0, headerEnd + 1)}font=${family}\n${content.slice(headerEnd + 1)}`;
+  const head = content.slice(0, main.start);
+  const separator = head.endsWith('\n') ? '' : '\n';
+  return `${head}${separator}font=${family}\n${content.slice(main.start)}`;
 }
 
 function alacrittyTomlPath(): string {
