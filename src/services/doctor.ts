@@ -454,17 +454,19 @@ function checkShellWiring(
 async function checkConfigs(
   wiring: ShellWiring[],
   probe: StarshipProbe,
-  deps: DoctorDeps
+  deps: DoctorDeps,
+  includeShared: boolean
 ): Promise<DoctorFinding> {
   const paths = [
-    ...new Set(
-      wiring.map((w) => {
+    ...new Set([
+      ...wiring.map((w) => {
         if (w.pointAtShared) return getSharedConfigPath();
         const rcFile = getShell(w.id)?.rcFile;
         const content = rcFile && deps.exists(rcFile) ? deps.readFile(rcFile) : '';
         return exportedConfigPath(content, w.id) ?? getShellConfigPath(w.id);
-      })
-    ),
+      }),
+      ...(includeShared ? [getSharedConfigPath()] : []),
+    ]),
   ];
   const existing = paths.filter((p) => deps.exists(p));
   if (existing.length === 0) {
@@ -654,7 +656,7 @@ export async function runDoctor(
     checkStarship(probe, state),
     checkLocale(deps),
     ...wiring.map((w) => checkShellWiring(w.id, w.pointAtShared, state !== null, deps)),
-    await checkConfigs(wiring, probe, deps),
+    await checkConfigs(wiring, probe, deps, state === null),
     await checkFontInstalled(state, deps),
     await checkFontSelected(state, deps),
     checkVersionDrift(probe, deps),

@@ -398,6 +398,14 @@ describe('runDoctor', () => {
     expect(find(report, 'shell:zsh').fix).toBeUndefined();
   });
 
+  it('finds a shared config even when the rc names a per-shell one', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `${ZSH_INIT}\n${ZSH_CONFIG_LINE}\n`);
+    files.set(getSharedConfigPath(), 'x\n');
+    const report = await runDoctor(null, makeDeps(files));
+    expect(find(report, 'config').status).toBe('pass');
+  });
+
   it('passes version drift when nothing was recorded yet', async () => {
     const deps = makeDeps(wired(new Map()));
     const report = await runDoctor(baseState(), deps);
