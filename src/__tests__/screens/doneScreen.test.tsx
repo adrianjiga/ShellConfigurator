@@ -395,3 +395,23 @@ describe('DoneScreen font reminder', () => {
     expect((lastFrame() ?? '').replace(/\s+/g, ' ')).toContain('CaskaydiaCove Nerd Font');
   });
 });
+
+describe('DoneScreen restore failure', () => {
+  it('shows a restore that throws instead of crashing', async () => {
+    mocks.restoreConfigBackups.mockImplementationOnce(() => {
+      throw new Error('EACCES: permission denied');
+    });
+    const { stdin, lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          selectedShells: ['zsh'],
+          installResults: [{ id: 'config', label: 'Write config files', status: 'done' }],
+        }}
+      />
+    );
+    stdin.write('r');
+    await flush();
+    expect(lastFrame()).toContain('EACCES: permission denied');
+  });
+});

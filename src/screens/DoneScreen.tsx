@@ -10,6 +10,7 @@ import {
   restoreConfigBackups,
 } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
+import { errorMessage } from '../services/errors.ts';
 import { fontLabel, getFontFamily } from '../services/installer.ts';
 import { buildTaskList, plannedResetShells, rcTaskId, TASK_IDS } from '../services/installTasks.ts';
 import { fontIdToInstall, type InstallTask, type WizardState } from '../types.ts';
@@ -66,7 +67,14 @@ export function DoneScreen({ state }: DoneScreenProps) {
     }
     // No backups were made in a dry run, so restoring would clobber real files.
     if (char.toLowerCase() === 'r' && outcome === null && !state.dryRun) {
-      setOutcome(restoreConfigBackups(state.selectedShells));
+      try {
+        setOutcome(restoreConfigBackups(state.selectedShells));
+      } catch (err) {
+        setOutcome({
+          restored: [],
+          failed: [{ what: 'shared', restoredFrom: 'the backups', error: errorMessage(err) }],
+        });
+      }
     }
   });
 
