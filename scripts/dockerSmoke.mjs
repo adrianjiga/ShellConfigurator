@@ -25,7 +25,7 @@ import { commandExistsAsync } from '../dist/services/exec.js';
 import {
   getMissingStarshipPathDir,
   installStarship,
-  SCRIPT_INSTALL_BIN_DIR,
+  scriptInstallBinDir,
 } from '../dist/services/installer.js';
 import { DEFAULT_STATE } from '../dist/types.js';
 import { die, requireScratchHome } from './ci/smokeHome.mjs';
@@ -295,8 +295,8 @@ await check('getMissingStarshipPathDir flags ~/.local/bin when starship is unrea
   process.env.PATH = '/usr/bin:/bin';
   try {
     assert.equal(getMissingStarshipPathDir(), null, 'no fix expected without the binary');
-    mkdirSync(SCRIPT_INSTALL_BIN_DIR, { recursive: true });
-    writeFileSync(nodePath.join(SCRIPT_INSTALL_BIN_DIR, 'starship'), '#!/bin/sh\nexit 0\n', {
+    mkdirSync(scriptInstallBinDir(), { recursive: true });
+    writeFileSync(nodePath.join(scriptInstallBinDir(), 'starship'), '#!/bin/sh\nexit 0\n', {
       mode: 0o755,
     });
     try {
@@ -304,7 +304,7 @@ await check('getMissingStarshipPathDir flags ~/.local/bin when starship is unrea
       assert.ok(dir, 'expected the PATH fix-up directory');
       assert.ok(dir.endsWith(nodePath.join('.local', 'bin')), `unexpected dir: ${dir}`);
     } finally {
-      rmSync(SCRIPT_INSTALL_BIN_DIR, { recursive: true, force: true });
+      rmSync(scriptInstallBinDir(), { recursive: true, force: true });
     }
   } finally {
     process.env.PATH = prevPath;
@@ -364,11 +364,11 @@ await check('installStarship downloads and runs a working binary', async () => {
   assert.equal((await isStarshipInstalledAsync()).installed, false, 'container must start clean');
   await withRetry(() => installStarship('script'));
 
-  const binary = nodePath.join(SCRIPT_INSTALL_BIN_DIR, 'starship');
+  const binary = nodePath.join(scriptInstallBinDir(), 'starship');
   assert.ok(existsSync(binary), 'no binary after install');
 
   const prevPath = process.env.PATH;
-  process.env.PATH = `${SCRIPT_INSTALL_BIN_DIR}${nodePath.delimiter}${prevPath ?? ''}`;
+  process.env.PATH = `${scriptInstallBinDir()}${nodePath.delimiter}${prevPath ?? ''}`;
   try {
     const detected = await isStarshipInstalledAsync();
     assert.equal(detected.installed, true, 'installed binary not detected');
