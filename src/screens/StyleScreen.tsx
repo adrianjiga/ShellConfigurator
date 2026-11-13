@@ -320,7 +320,7 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
             color={uiColor(focus === 'continuation' ? 'cyan' : 'gray')}
             bold={focus === 'continuation'}
           >
-            Wrapped-line marker
+            Wrapped-line marker (fish has none)
           </Text>
           {CONTINUATION_OPTIONS.map((opt, i) => (
             <PickerRow
