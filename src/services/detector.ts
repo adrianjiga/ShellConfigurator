@@ -57,7 +57,9 @@ export async function isStarshipInstalledAsync(): Promise<{
   version?: string;
 }> {
   try {
-    return { installed: true, version: await runCapture('starship', ['--version']) };
+    // -V prints only the version line; --version adds branch/commit/build time,
+    // which made the task label multi-line and drift compare build stamps.
+    return { installed: true, version: await runCapture('starship', ['-V']) };
   } catch {
     return { installed: false };
   }

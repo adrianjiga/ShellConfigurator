@@ -85,7 +85,7 @@ function execFileFailsOrSucceeds(
   }
   if (cmd === 'starship') {
     const sub = args[0];
-    cb(null, sub === '--version' ? 'starship 1.21.0\n' : '{\n}\n', '');
+    cb(null, sub === '-V' ? 'starship 1.21.0\n' : '{\n}\n', '');
     return;
   }
   cb(new Error(`unexpected command: ${cmd}`), '', '');

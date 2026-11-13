@@ -59,6 +59,8 @@ export interface InstallTaskDeps {
   /** Shells that run Starship and could inherit a leaked STARSHIP_CONFIG. */
   getShellsUsingStarship: () => Promise<ShellId[]>;
   getMissingStarshipPathDir: () => string | null;
+  /** Reads the version of a script install that PATH does not have yet. */
+  readStarshipVersion: (pathDir: string) => Promise<string | null>;
   /** Rejects when starship cannot load the config at `configPath`. */
   verifyConfig: (configPath: string, pathDir?: string | null) => Promise<void>;
   /** Points the detected terminal at the installed Nerd Font family. */
@@ -80,6 +82,15 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   resetSharedShellConfig,
   getShellsUsingStarship: detectInstalledShellsAsync,
   getMissingStarshipPathDir,
+  readStarshipVersion: async (pathDir) => {
+    const env: Record<string, string | undefined> = { ...process.env };
+    env.PATH = `${pathDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`;
+    try {
+      return await runCapture('starship', ['-V'], { env });
+    } catch {
+      return null;
+    }
+  },
   verifyConfig: async (configPath, pathDir) => {
     const env: Record<string, string | undefined> = { ...process.env, STARSHIP_CONFIG: configPath };
     // A `script` install drops the binary in a dir the current process PATH may
@@ -248,7 +259,17 @@ export async function runInstallTasks(
       // Record what the fresh install produced, so the doctor can flag drift
       // when a later package-manager update moves starship under its nose.
       const after = await deps.isStarshipInstalled();
-      if (after.version) deps.recordStarshipVersion(after.version);
+      const scriptDir = after.version ? null : deps.getMissingStarshipPathDir();
+      const version =
+        after.version ?? (scriptDir ? await deps.readStarshipVersion(scriptDir) : null);
+      if (version) {
+        // A read-only cache must not turn a successful install into a failure.
+        try {
+          deps.recordStarshipVersion(version);
+        } catch {
+          // Best-effort drift tracking.
+        }
+      }
     });
     starshipInstallFailed = status === 'failed';
   }

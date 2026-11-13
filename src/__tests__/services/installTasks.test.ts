@@ -48,6 +48,32 @@ describe('runInstallTasks', () => {
     expect(deps.recordStarshipVersion).toHaveBeenCalledWith('starship 1.21.0');
   });
 
+  it('records the version of a script install that PATH cannot see yet', async () => {
+    const deps = fakeDeps({
+      getMissingStarshipPathDir: vi.fn(() => '/home/u/.local/bin'),
+      readStarshipVersion: vi.fn().mockResolvedValue('starship 1.21.0'),
+    });
+    await runInstallTasks(state(), deps, vi.fn());
+
+    expect(deps.readStarshipVersion).toHaveBeenCalledWith('/home/u/.local/bin');
+    expect(deps.recordStarshipVersion).toHaveBeenCalledWith('starship 1.21.0');
+  });
+
+  it('does not fail the install when the version cache cannot be written', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi
+        .fn()
+        .mockResolvedValueOnce({ installed: false })
+        .mockResolvedValue({ installed: true, version: 'starship 1.21.0' }),
+      recordStarshipVersion: vi.fn(() => {
+        throw new Error('EACCES');
+      }),
+    });
+    const results = await runInstallTasks(state(), deps, vi.fn());
+
+    expect(results.find((t) => t.id === 'starship')?.status).toBe('done');
+  });
+
   it('does not record a version when the fresh install cannot report one', async () => {
     const deps = fakeDeps({
       isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
