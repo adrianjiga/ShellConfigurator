@@ -26,6 +26,7 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
   defaultShellRef.current = defaultShell;
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  const touched = useRef(false);
 
   // Shell detection runs once on mount; onUpdate is a fresh closure each render
   // and would re-trigger it.
@@ -46,13 +47,12 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
     if (selectedRef.current.size === 0) {
       (async () => {
         const current = await detectCurrentShellAsync();
-        if (!cancelled && current) {
-          setSelected((prev) => {
-            if (prev.has(current)) return prev;
-            const next = new Set(prev);
-            next.add(current);
-            return next;
-          });
+        // A choice the user made while detection ran wins over the guess.
+        if (!cancelled && current && !touched.current && !selectedRef.current.has(current)) {
+          const next = new Set(selectedRef.current);
+          next.add(current);
+          selectedRef.current = next;
+          setSelected(next);
         }
       })();
     }
@@ -80,6 +80,7 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
 
     if (char === ' ') {
       const shellId = SHELLS[cursor]!.id;
+      touched.current = true;
       const next = new Set(selectedRef.current);
       if (next.has(shellId)) {
         next.delete(shellId);

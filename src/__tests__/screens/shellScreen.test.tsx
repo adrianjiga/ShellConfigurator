@@ -156,6 +156,28 @@ describe('ShellScreen', () => {
     expect(instance.lastFrame()).toContain('[✓] Bash');
   });
 
+  it('does not re-add a shell the user deselected before detection finished', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh', 'bash']);
+    let answer: (shell: ShellId) => void = () => {};
+    vi.mocked(detectCurrentShellAsync).mockReturnValue(
+      new Promise<ShellId | null>((resolve) => {
+        answer = resolve;
+      })
+    );
+    const { instance } = setup();
+    await flush();
+    instance.stdin.write(' '); // zsh on
+    await flush();
+    instance.stdin.write(' '); // zsh off again
+    await flush();
+
+    answer('zsh');
+    await flush();
+    await flush();
+
+    expect(instance.lastFrame()).toContain('[ ] Zsh');
+  });
+
   it('does not clobber an existing selection with detection', async () => {
     vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh', 'bash']);
     vi.mocked(detectCurrentShellAsync).mockResolvedValue('bash');
