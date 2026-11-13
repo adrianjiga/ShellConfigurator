@@ -36,7 +36,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run ${{ matrix.check }}
 
   # Aggregates the quality checks into one required check so the master ruleset
@@ -71,7 +71,6 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
       - run: npm ci
-      - run: npm run build
       - name: macOS headless smoke
         run: HOME=/tmp/macos-smoke-home node scripts/ci/macosSmoke.mjs
 
