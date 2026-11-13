@@ -55,6 +55,24 @@ jobs:
           fi
           echo "All quality checks passed."
 
+  ci-lint:
+    name: Shell and workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: shellcheck
+        run: shellcheck scripts/install.sh scripts/releaseNotes.sh scripts/ci/*.sh
+      - name: actionlint
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash \
+            | bash -s -- 1.7.7 "$RUNNER_TEMP"
+          "$RUNNER_TEMP/actionlint" -color
+      - name: zizmor
+        run: pipx run zizmor==1.11.0 --min-severity medium .github/workflows
+
   # macOS cannot run the Linux Docker matrix, so it gets a native sibling job in
   # the same smoke group: same build + scratch-HOME smoke entrypoint, including a
   # real headless apply (brew installs Starship; rc/config writes stay in /tmp).
