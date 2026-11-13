@@ -5,6 +5,7 @@ import {
   getSharedConfigPath,
   getShellConfigPath,
   hasStarshipInit,
+  manualSetupAppliedWith,
   starshipConfigLine,
 } from '../generators/shellRc.ts';
 import { fontIdToInstall, type ShellId, type TerminalId, type WizardState } from '../types.ts';
@@ -173,8 +174,23 @@ async function checkRunningShell(shellIds: ShellId[], deps: DoctorDeps): Promise
     };
   }
   const rcFile = shell.rcFile;
-  const content = rcFile && deps.exists(rcFile) ? deps.readFile(rcFile) : '';
-  if (!rcFile || !shellHasInit(current, rcFile, content, deps)) {
+  if (!rcFile) {
+    return manualSetupAppliedWith(shell, deps)
+      ? {
+          id: 'current-shell',
+          title: 'Current shell',
+          status: 'pass',
+          detail: `${shell.label} has Starship set up (restart it to apply now)`,
+        }
+      : {
+          id: 'current-shell',
+          title: 'Current shell',
+          status: 'warn',
+          detail: `${shell.label} is configured, but its manual setup has not been applied yet`,
+        };
+  }
+  const content = deps.exists(rcFile) ? deps.readFile(rcFile) : '';
+  if (!shellHasInit(current, rcFile, content, deps)) {
     return {
       id: 'current-shell',
       title: 'Current shell',
@@ -243,7 +259,7 @@ function checkShellWiring(
   const fix: DoctorFix = { kind: 'configure-shell', shellId };
 
   if (!shell.rcFile) {
-    return deps.exists(shell.initPath ?? '')
+    return manualSetupAppliedWith(shell, deps)
       ? {
           id: `shell:${shellId}`,
           title: shell.label,

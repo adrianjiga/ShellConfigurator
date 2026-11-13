@@ -199,6 +199,38 @@ describe('runDoctor', () => {
     });
   });
 
+  it('does not pass a manual setup whose init was never applied', async () => {
+    const shell = getShell('nushell')!;
+    const files = new Map<string, string>();
+    files.set(shell.initPath!, '');
+    const report = await runDoctor(
+      baseState({ selectedShells: ['nushell'] }),
+      makeDeps(files, { detectCurrentShell: vi.fn().mockResolvedValue(null) })
+    );
+    expect(find(report, 'shell:nushell')).toMatchObject({ status: 'warn' });
+  });
+
+  it('passes a manual setup once every init file exists', async () => {
+    const shell = getShell('nushell')!;
+    const files = new Map<string, string>();
+    files.set(shell.initPath!, '');
+    for (const initPath of shell.additionalInitPaths ?? []) files.set(initPath, '');
+    const report = await runDoctor(
+      baseState({ selectedShells: ['nushell'] }),
+      makeDeps(files, { detectCurrentShell: vi.fn().mockResolvedValue('nushell') })
+    );
+    expect(find(report, 'shell:nushell').status).toBe('pass');
+    expect(find(report, 'current-shell').status).toBe('pass');
+  });
+
+  it('warns for a running manual shell that is not set up yet', async () => {
+    const report = await runDoctor(
+      baseState({ selectedShells: ['nushell'] }),
+      makeDeps(new Map(), { detectCurrentShell: vi.fn().mockResolvedValue('nushell') })
+    );
+    expect(find(report, 'current-shell')).toMatchObject({ status: 'warn' });
+  });
+
   it('treats WezTerm as manual (its config is Lua)', async () => {
     const readFontFamily = vi.fn();
     const deps = makeDeps(wired(new Map()), {

@@ -184,16 +184,28 @@ export function fishInitFile(rcFile: string): string {
  * nushell's autoload file exists (written by the documented one-liner), or
  * powershell's $PROFILE contains the init line.
  */
-export function manualSetupApplied(shell: ShellDef): boolean {
-  if (!shell.initPath || !fs.existsSync(shell.initPath)) return false;
+export interface ManualSetupIo {
+  exists: (path: string) => boolean;
+  readFile: (path: string) => string;
+}
+
+export function manualSetupAppliedWith(shell: ShellDef, io: ManualSetupIo): boolean {
+  if (!shell.initPath || !io.exists(shell.initPath)) return false;
   if (shell.id === 'powershell') {
     try {
-      return hasStarshipInit(fs.readFileSync(shell.initPath, 'utf8'), shell.id);
+      return hasStarshipInit(io.readFile(shell.initPath), shell.id);
     } catch {
       return false;
     }
   }
-  return (shell.additionalInitPaths ?? []).every((filePath) => fs.existsSync(filePath));
+  return (shell.additionalInitPaths ?? []).every((filePath) => io.exists(filePath));
+}
+
+export function manualSetupApplied(shell: ShellDef): boolean {
+  return manualSetupAppliedWith(shell, {
+    exists: (filePath) => fs.existsSync(filePath),
+    readFile: (filePath) => fs.readFileSync(filePath, 'utf8'),
+  });
 }
 
 /**
