@@ -45,32 +45,56 @@ case "$(uname -s)" in
 esac
 bin_dir="$HOME/.local/bin"
 
-# Resolve the tarball asset attached to the latest GitHub release. The release
-# workflow uploads shell-configurator-<version>.tgz via `npm pack`.
-echo "Resolving latest release..."
-asset_url="$(
-  curl -fsSL "$API_LATEST" \
-    | grep -Eo '"browser_download_url": *"[^"]+\.tgz"' \
-    | head -n1 \
-    | sed -E 's/^"browser_download_url": *"([^"]+)"/\1/'
-)"
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT
 
-if [ -z "$asset_url" ]; then
+# Resolve the tarball asset attached to the latest GitHub release, with the
+# SHA-256 digest GitHub publishes for it. The release workflow uploads
+# shell-configurator-<version>.tgz via `npm pack`.
+echo "Resolving latest release..."
+if ! curl -fsSL ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
+  "$API_LATEST" -o "$tmp_dir/release.json"; then
+  echo "Could not read the latest release from GitHub (rate-limited? set GITHUB_TOKEN)." >&2
+  exit 1
+fi
+asset="$(node -e '
+  const release = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  const asset = (release.assets || []).find((a) => a.name.endsWith(".tgz"));
+  if (asset) console.log(`${asset.browser_download_url} ${asset.digest || ""}`);
+' "$tmp_dir/release.json")"
+asset_url="${asset%% *}"
+digest="${asset#* }"
+
+if [ -z "$asset" ]; then
   echo "No tarball asset found in the latest release." >&2
   exit 1
 fi
+case "$digest" in
+  sha256:*) ;;
+  *)
+    echo "The release publishes no sha256 digest for its tarball; refusing to install it." >&2
+    exit 1
+    ;;
+esac
 
 mkdir -p "$data_dir" "$bin_dir"
-tmp_dir="$(mktemp -d)"
 
 echo "Downloading $asset_url"
 curl -fsSL "$asset_url" -o "$tmp_dir/package.tgz"
+actual="$(node -e '
+  const hash = require("crypto").createHash("sha256");
+  hash.update(require("fs").readFileSync(process.argv[1]));
+  console.log(hash.digest("hex"));
+' "$tmp_dir/package.tgz")"
+if [ "sha256:$actual" != "$digest" ]; then
+  echo "Checksum mismatch: expected $digest, got sha256:$actual. Refusing to install." >&2
+  exit 1
+fi
 tar -xzf "$tmp_dir/package.tgz" -C "$tmp_dir"
 
 # Clear any previous install so a stale extract never shadows a new one.
 rm -rf "${data_dir:?}"/*
 cp -rf "$tmp_dir/package/." "$data_dir/"
-rm -rf "$tmp_dir"
 
 chmod +x "$data_dir/dist/index.js"
 ln -sf "$data_dir/dist/index.js" "$bin_dir/shell-configurator"
