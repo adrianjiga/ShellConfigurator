@@ -4,7 +4,6 @@
   "description": "Interactive terminal wizard for configuring Starship prompt",
   "license": "MIT",
   "type": "module",
-  "sideEffects": false,
   "bin": {
     "shell-configurator": "dist/index.js"
   },
