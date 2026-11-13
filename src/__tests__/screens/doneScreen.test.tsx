@@ -309,3 +309,25 @@ describe('DoneScreen dry run', () => {
     expect(frame).not.toContain('print-config');
   });
 });
+
+describe('DoneScreen in a container', () => {
+  it('says why the font and default shell were skipped', () => {
+    const { lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          container: true,
+          selectedShells: ['zsh'],
+          installedShells: ['zsh'],
+          setDefaultShell: 'zsh',
+          nerdFontToInstall: { kind: 'install', id: 'Hack' },
+          installResults: [{ id: 'config', label: 'Write config files', status: 'done' }],
+        }}
+      />
+    );
+    const frame = (lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(frame).toContain('fonts belong to the host terminal');
+    expect(frame).toContain('left to the container image');
+    expect(frame).not.toContain('Nerd Font not installed');
+  });
+});

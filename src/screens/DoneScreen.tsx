@@ -145,7 +145,15 @@ export function DoneScreen({ state }: DoneScreenProps) {
               )}
             </Box>
 
-            {fontId && (
+            {fontId && state.container && (
+              <Box flexDirection="row" gap={1}>
+                <StatusMark status="skipped" />
+                <Text>
+                  Nerd Font skipped — inside a container fonts belong to the host terminal
+                </Text>
+              </Box>
+            )}
+            {fontId && !state.container && (
               <Box flexDirection="column">
                 <Box flexDirection="row" gap={1}>
                   <StatusMark status={fontTask?.status ?? 'unknown'} />
@@ -237,7 +245,13 @@ export function DoneScreen({ state }: DoneScreenProps) {
               );
             })}
 
-            {state.setDefaultShell && (
+            {state.setDefaultShell && state.container && (
+              <Box flexDirection="row" gap={1}>
+                <StatusMark status="skipped" />
+                <Text>Default shell left to the container image</Text>
+              </Box>
+            )}
+            {state.setDefaultShell && !state.container && (
               <Box flexDirection="row" gap={1}>
                 <StatusMark status={chshTask?.status ?? 'unknown'} />
                 <Text>
