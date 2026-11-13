@@ -27,7 +27,7 @@
     "build": "tsc",
     "typecheck": "tsc -p tsconfig.test.json",
     "start": "node dist/index.js",
-    "lint": "biome check src",
+    "lint": "biome check src scripts vitest.config.ts",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "test": "vitest run",
