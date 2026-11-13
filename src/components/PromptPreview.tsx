@@ -149,7 +149,9 @@ function previewDirectory(state: WizardState): string {
 
 function StaticPromptFrame({ state: chosen }: { state: WizardState }) {
   const state = { ...chosen, hasNerdFont: rendersGlyphs(chosen) };
-  const { leftModules, rightModules, hasNerdFont, characterSymbol } = state;
+  const { leftModules, hasNerdFont, characterSymbol } = state;
+  // As in the generator: a module on both sides renders once, on the left.
+  const rightModules = state.rightModules.filter((id) => !leftModules.includes(id));
   const palette = getPalette(state.palette);
   // Mirrors the generator: separators are Nerd Font glyphs, so without one the
   // preview must show the plain prompt that will actually be written.

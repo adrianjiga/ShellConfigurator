@@ -274,3 +274,15 @@ describe('PromptPreview across screens', () => {
     vi.useRealTimers();
   });
 });
+
+describe('PromptPreview duplicates', () => {
+  it('draws a module picked on both sides only once, on the left', () => {
+    const { lastFrame } = render(
+      <PromptPreview
+        state={{ ...DEFAULT_STATE, leftModules: ['time', 'character'], rightModules: ['time'] }}
+        renderPreview={async () => ({ mode: 'static', reason: 'starship-missing' })}
+      />
+    );
+    expect(lastFrame()?.match(/12:34/g)).toHaveLength(1);
+  });
+});
