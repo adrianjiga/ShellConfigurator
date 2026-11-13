@@ -110,7 +110,7 @@ export function PromptPreview({
         Preview
       </Text>
       {realPrompt !== null ? (
-        <RealPromptFrame text={realPrompt} />
+        <RealPromptFrame text={realPrompt} addNewline={state.addNewline} />
       ) : (
         <StaticPromptFrame state={state} />
       )}
@@ -129,7 +129,7 @@ export function PromptPreview({
   );
 }
 
-function RealPromptFrame({ text }: { text: string }) {
+function RealPromptFrame({ text, addNewline }: { text: string; addNewline: boolean }) {
   return (
     <Box
       borderStyle="round"
@@ -141,7 +141,8 @@ function RealPromptFrame({ text }: { text: string }) {
       {/* Simulated previous command output, as in the static frame */}
       <Text color={uiColor('gray')}>$ some-command</Text>
       <Text color={uiColor('gray')}>output line...</Text>
-      <Box height={1} />
+      {/* The captured output is trimmed, so add_newline's blank line is drawn here. */}
+      {addNewline && <Box height={1} />}
       <Text wrap="wrap">{text}</Text>
     </Box>
   );

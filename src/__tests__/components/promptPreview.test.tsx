@@ -330,3 +330,22 @@ describe('PromptPreview width', () => {
     vi.useRealTimers();
   });
 });
+
+describe('PromptPreview blank line', () => {
+  it('draws the blank line before a real prompt only when add_newline is on', async () => {
+    vi.useFakeTimers();
+    const renderer = vi.fn(async () => ({ mode: 'real' as const, text: 'REAL' }));
+    const on = render(<PromptPreview state={DEFAULT_STATE} renderPreview={renderer} />);
+    await settleRenderer();
+    expect(on.lastFrame()).toMatch(/output line\.\.\.\s*│\n│\s*│\n│ REAL/);
+    on.unmount();
+    resetPreviewCacheForTests();
+
+    const off = render(
+      <PromptPreview state={{ ...DEFAULT_STATE, addNewline: false }} renderPreview={renderer} />
+    );
+    await settleRenderer();
+    expect(off.lastFrame()).toMatch(/output line\.\.\.\s*│\n│ REAL/);
+    vi.useRealTimers();
+  });
+});
