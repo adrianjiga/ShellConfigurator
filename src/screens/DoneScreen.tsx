@@ -344,8 +344,10 @@ export function DoneScreen({ state }: DoneScreenProps) {
       <Box marginTop={1}>
         <Text color={uiColor('gray')}>Press </Text>
         <Text color={uiColor('cyan')}>q</Text>
-        <Text color={uiColor('gray')}> or </Text>
+        <Text color={uiColor('gray')}>, </Text>
         <Text color={uiColor('cyan')}>Enter</Text>
+        <Text color={uiColor('gray')}> or </Text>
+        <Text color={uiColor('cyan')}>Esc</Text>
         <Text color={uiColor('gray')}> to exit.</Text>
       </Box>
 
