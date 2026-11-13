@@ -61,6 +61,7 @@ import {
   installShell,
   installStarship,
   NERD_FONTS,
+  plannedPathDir,
   scriptInstallBinDir,
   setDefaultShell,
   shellInstallSupported,
@@ -881,5 +882,40 @@ describe('shellInstallSupported', () => {
   it('cannot auto-install any shell under the script fallback', () => {
     expect(shellInstallSupported('zsh', 'script')).toBe(false);
     expect(shellInstallSupported('bash', 'script')).toBe(false);
+  });
+});
+
+describe('plannedPathDir', () => {
+  function starshipMissing() {
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error('not found');
+    });
+    mockExistsSync.mockReturnValue(false);
+  }
+
+  it('is null when starship is already reachable', () => {
+    mockExecFileSync.mockReturnValue('/usr/bin/starship\n');
+    expect(plannedPathDir('apt')).toBeNull();
+  });
+
+  it('names the script bin dir when a script install will land off PATH', () => {
+    starshipMissing();
+    vi.stubEnv('PATH', '/usr/bin:/bin');
+    try {
+      expect(plannedPathDir('apt')).toBe(scriptInstallBinDir());
+      expect(plannedPathDir('brew')).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('is null when PATH already includes the script bin dir', () => {
+    starshipMissing();
+    vi.stubEnv('PATH', `${scriptInstallBinDir()}:/usr/bin`);
+    try {
+      expect(plannedPathDir('script')).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
