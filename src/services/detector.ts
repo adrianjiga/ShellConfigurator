@@ -12,16 +12,30 @@ const APT_DISTROS = ['ubuntu', 'debian', 'linuxmint', 'pop', 'elementary'];
 const DNF_DISTROS = ['fedora', 'rhel', 'centos', 'rocky', 'almalinux'];
 const PACMAN_DISTROS = ['arch', 'manjaro', 'endeavouros', 'cachyos', 'garuda'];
 
-/** Reads the distro id from /etc/os-release, e.g. "ubuntu" or "fedora". */
-async function readOsReleaseIdAsync(): Promise<string | null> {
-  try {
-    const content = await readFileP('/etc/os-release', 'utf8');
-    const match = content.match(/^ID=(.+)$/m);
-    if (!match) return null;
-    return match[1]!.replace(/["']/g, '').toLowerCase().trim();
-  } catch {
-    return null;
+const OS_RELEASE_FILES = ['/etc/os-release', '/usr/lib/os-release'];
+
+function osReleaseValue(content: string, key: string): string | null {
+  const match = content.match(new RegExp(`^${key}=(.+)$`, 'm'));
+  return match ? match[1]!.replace(/["']/g, '').toLowerCase().trim() : null;
+}
+
+/**
+ * The distro id followed by its ID_LIKE parents (e.g. ["kali", "debian"]), so
+ * a derivative maps to its parent's package manager.
+ */
+async function readOsReleaseIdsAsync(): Promise<string[]> {
+  for (const file of OS_RELEASE_FILES) {
+    let content: string;
+    try {
+      content = await readFileP(file, 'utf8');
+    } catch {
+      continue;
+    }
+    const id = osReleaseValue(content, 'ID');
+    const like = osReleaseValue(content, 'ID_LIKE')?.split(/\s+/) ?? [];
+    return [...(id ? [id] : []), ...like].filter(Boolean);
   }
+  return [];
 }
 
 function packageManagerForDistro(id: string): PackageManager | null {
@@ -40,8 +54,8 @@ export async function detectPackageManagerAsync(): Promise<PackageManager> {
   if (hasBrew) return 'brew';
   if (hasPacman) return 'pacman';
 
-  const [id, hasApt, hasDnf, hasApk] = await Promise.all([
-    readOsReleaseIdAsync(),
+  const [ids, hasApt, hasDnf, hasApk] = await Promise.all([
+    readOsReleaseIdsAsync(),
     commandExistsAsync('apt-get'),
     commandExistsAsync('dnf'),
     commandExistsAsync('apk'),
@@ -57,8 +71,10 @@ export async function detectPackageManagerAsync(): Promise<PackageManager> {
 
   // The distro id breaks a tie between several package managers, but is only
   // trusted when its binary is really there (CentOS 7 has yum, not dnf).
-  const distroPm = id ? packageManagerForDistro(id) : null;
-  if (distroPm && present[distroPm]) return distroPm;
+  for (const id of ids) {
+    const distroPm = packageManagerForDistro(id);
+    if (distroPm && present[distroPm]) return distroPm;
+  }
 
   if (hasApt) return 'apt';
   if (hasDnf) return 'dnf';

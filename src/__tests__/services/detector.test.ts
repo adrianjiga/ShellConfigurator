@@ -110,6 +110,22 @@ describe('detectPackageManagerAsync', () => {
     expect(await detectPackageManagerAsync()).toBe('dnf');
   });
 
+  it('maps a derivative through ID_LIKE', async () => {
+    execFileByArg((arg) => arg === 'apt-get' || arg === 'dnf');
+    readFileAsyncReturns('ID=kali\nID_LIKE=debian');
+    expect(await detectPackageManagerAsync()).toBe('apt');
+  });
+
+  it('falls back to /usr/lib/os-release when /etc/os-release is missing', async () => {
+    execFileByArg((arg) => arg === 'apt-get' || arg === 'dnf');
+    mockReadFile.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
+      if (args[0] === '/usr/lib/os-release') cb(null, 'ID=fedora');
+      else cb(new Error('ENOENT'));
+    });
+    expect(await detectPackageManagerAsync()).toBe('dnf');
+  });
+
   it('lets the distro id choose between several package managers', async () => {
     execFileByArg((arg) => arg === 'apt-get' || arg === 'dnf');
     readFileAsyncReturns('ID=fedora\nNAME="Fedora"');
