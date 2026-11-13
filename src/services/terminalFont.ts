@@ -342,6 +342,9 @@ export function wireTerminalFont(
   }
 
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  // A read-only config (e.g. a Nix-managed link) would fail the write below;
+  // checking first keeps it from collecting a backup on every run.
+  if (fs.existsSync(filePath)) fs.accessSync(filePath, fs.constants.W_OK);
   const backedUpTo = backupIfExists(filePath);
   fs.writeFileSync(filePath, updated, 'utf8');
   return { applied: true, path: filePath, backedUpTo };

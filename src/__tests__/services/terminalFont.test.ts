@@ -43,6 +43,15 @@ function write(rel: string, content: string): void {
 }
 
 describe('wireTerminalFont', () => {
+  it('fails a read-only config without leaving a backup behind', () => {
+    if (process.getuid?.() === 0) return;
+    write('kitty/kitty.conf', 'font_family Old\n');
+    fs.chmodSync(path.join(tmp, 'kitty', 'kitty.conf'), 0o444);
+
+    expect(() => wireTerminalFont('kitty', 'Hack Nerd Font')).toThrow();
+    expect(fs.readdirSync(path.join(tmp, 'kitty'))).toEqual(['kitty.conf']);
+  });
+
   it('creates a kitty config with the font family', () => {
     const result = wireTerminalFont('kitty', 'JetBrainsMono Nerd Font');
 
