@@ -44,13 +44,13 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
   const fontName = fontId ? fontLabel(fontId) : null;
   const [tasks] = useState(() => buildTaskList(state, plannedResetShells(state)));
 
-  useInput((char, key) => {
+  useInput((_char, key) => {
     if (key.escape) {
       onBack();
       return;
     }
-    // Space/Tab/Enter all confirm; there is nothing else to pick here.
-    if (key.return || key.tab || char === ' ') {
+    // Only Enter starts the run: a stray Space or Tab must not.
+    if (key.return) {
       onNext();
       return;
     }
@@ -143,7 +143,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
 
       <NavHints
         hints={[
-          { key: 'Enter / Space', label: 'install' },
+          { key: 'Enter', label: 'install' },
           { key: 'Esc', label: 'back' },
         ]}
       />

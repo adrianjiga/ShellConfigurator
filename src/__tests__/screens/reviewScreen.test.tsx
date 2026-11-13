@@ -115,13 +115,14 @@ describe('ReviewScreen', () => {
     expect(onNext).toHaveBeenCalled();
   });
 
-  it('confirms with Space as well', async () => {
+  it('does not start the run on a stray Space or Tab', async () => {
     const { instance, onNext } = setup();
     await flush();
 
     instance.stdin.write(' ');
+    instance.stdin.write('\t');
     await flush();
-    expect(onNext).toHaveBeenCalled();
+    expect(onNext).not.toHaveBeenCalled();
   });
 
   it('goes back with Esc', async () => {
