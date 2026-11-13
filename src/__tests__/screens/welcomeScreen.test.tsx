@@ -81,6 +81,23 @@ describe('WelcomeScreen', () => {
     expect(instance.lastFrame()).not.toContain('Install automatically');
   });
 
+  it('says Starship is still missing after a re-check and keeps the manual options', async () => {
+    const { instance } = setup();
+    await flush();
+    await flush();
+
+    instance.stdin.write(DOWN); // → "I'll install it manually"
+    await flush();
+    instance.stdin.write(ENTER);
+    await flush();
+    instance.stdin.write(ENTER); // → "Re-check (I installed it)"
+    await flush();
+    await flush();
+
+    expect(instance.lastFrame()).toContain('Still not found');
+    expect(instance.lastFrame()).toContain('Re-check (I installed it)');
+  });
+
   it('installs automatically when Starship is missing', async () => {
     const { instance, onNext } = setup();
     await flush();

@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from 'ink';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppSelectInput } from '../components/AppSelectInput.tsx';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
@@ -42,15 +42,30 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
   const [detection, setDetection] = useState<Detection | null>(null);
   const [showManualHelp, setShowManualHelp] = useState(false);
 
-  const runDetection = useCallback(async (shouldDrop: () => boolean = () => false) => {
-    const [pm, starship, terminal, container] = await Promise.all([
-      detectPackageManagerAsync(),
-      findStarshipAsync(),
-      detectTerminalAsync(),
-      detectContainerAsync(),
-    ]);
-    if (!shouldDrop()) setDetection({ pm, starship, terminal, container });
-  }, []);
+  const [stillMissing, setStillMissing] = useState(false);
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    []
+  );
+
+  const runDetection = useCallback(
+    async (shouldDrop: () => boolean = () => false): Promise<Detection | null> => {
+      const [pm, starship, terminal, container] = await Promise.all([
+        detectPackageManagerAsync(),
+        findStarshipAsync(),
+        detectTerminalAsync(),
+        detectContainerAsync(),
+      ]);
+      if (shouldDrop()) return null;
+      const found = { pm, starship, terminal, container };
+      setDetection(found);
+      return found;
+    },
+    []
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -99,11 +114,14 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
   async function handleManualChoice(item: Item<ManualChoice>) {
     if (!detection) return;
     switch (item.value) {
-      case 'recheck':
-        setShowManualHelp(false);
+      case 'recheck': {
+        setStillMissing(false);
         setDetection(null);
-        await runDetection();
+        const found = await runDetection(() => !mounted.current);
+        // Stay on the manual-install options rather than jumping back to "Install".
+        if (found && !found.starship.installed) setStillMissing(true);
         break;
+      }
       case 'continue':
         proceed(detection, true);
         break;
@@ -168,6 +186,11 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
                   <Text color={uiColor('yellow')}>✗ Starship is not installed</Text>
                   {showManualHelp ? (
                     <Box flexDirection="column" gap={1}>
+                      {stillMissing && (
+                        <Text color={uiColor('yellow')}>
+                          Still not found. Install it in another terminal, then re-check.
+                        </Text>
+                      )}
                       <Text color={uiColor('gray')}>
                         Install Starship:{' '}
                         <Text color={uiColor('cyan')}>
