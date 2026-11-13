@@ -557,7 +557,9 @@ async function checkFontInstalled(
   return {
     id: 'font-installed',
     title: 'Nerd Font',
-    status: 'warn',
+    // A font the state card asked for and that is missing is a broken setup;
+    // without a card nothing says one was wanted.
+    status: fontId ? 'fail' : 'warn',
     detail: fontId ? `${fontLabel(fontId)} is not installed in ${dir}` : `no Nerd Font found`,
     ...(fontId ? { fix: { kind: 'reinstall-font' as const, fontId } } : {}),
   };

@@ -271,11 +271,12 @@ describe('runDoctor', () => {
     expect(find(report, 'font-selected')).toMatchObject({ status: 'pass' });
   });
 
-  it('warns and offers a reinstall when the selected font is not present', async () => {
+  it('fails and offers a reinstall when the font the card asked for is not present', async () => {
     const deps = makeDeps(wired(new Map()), { hasNerdFonts: vi.fn().mockReturnValue(false) });
     const report = await runDoctor(baseState(), deps);
+    expect(report.ok).toBe(false);
     expect(find(report, 'font-installed')).toMatchObject({
-      status: 'warn',
+      status: 'fail',
       fix: { kind: 'reinstall-font', fontId: 'JetBrainsMono' },
     });
   });
