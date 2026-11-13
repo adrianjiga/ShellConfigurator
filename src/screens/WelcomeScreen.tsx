@@ -33,7 +33,7 @@ const PM_LABELS: Record<PackageManager, string> = {
   pacman: 'pacman (Arch)',
   apt: 'apt (Debian/Ubuntu)',
   dnf: 'dnf (Fedora)',
-  brew: 'Homebrew (macOS)',
+  brew: 'Homebrew',
   apk: 'apk (Alpine)',
   script: 'install script (no package manager detected)',
 };
