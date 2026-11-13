@@ -174,7 +174,7 @@ export function shellPointsAtShared(
 function exportedConfigPath(content: string, shellId: ShellId): string | null {
   const match =
     shellId === 'fish'
-      ? /set\s+-gx\s+STARSHIP_CONFIG\s+(?:"([^"]+)"|(\S+))/.exec(content)
+      ? /set\s+-gx\s+STARSHIP_CONFIG\s+(?:"([^"]+)"|'([^']+)'|(\S+))/.exec(content)
       : /export\s+STARSHIP_CONFIG=(?:"([^"]+)"|'([^']+)'|(\S+))/.exec(content);
   if (!match) return null;
   return match.slice(1).find((value) => value !== undefined) ?? null;

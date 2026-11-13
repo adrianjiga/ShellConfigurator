@@ -37,7 +37,7 @@ export const SHELLS: ShellDef[] = [
       return path.join(zdotdir && path.isAbsolute(zdotdir) ? zdotdir : homeDir(), '.zshrc');
     },
     initLine: 'eval "$(starship init zsh)"',
-    pathLine: (dir) => `export PATH="${dir}:$PATH"`,
+    pathLine: (dir) => `export PATH=${posixShellQuote(dir)}:"$PATH"`,
   },
   {
     id: 'bash',
@@ -47,7 +47,7 @@ export const SHELLS: ShellDef[] = [
       return path.join(homeDir(), '.bashrc');
     },
     initLine: 'eval "$(starship init bash)"',
-    pathLine: (dir) => `export PATH="${dir}:$PATH"`,
+    pathLine: (dir) => `export PATH=${posixShellQuote(dir)}:"$PATH"`,
   },
   {
     id: 'fish',
@@ -57,7 +57,7 @@ export const SHELLS: ShellDef[] = [
       return path.join(configHome(), 'fish', 'config.fish');
     },
     initLine: 'starship init fish | source',
-    pathLine: (dir) => `fish_add_path ${dir}`,
+    pathLine: (dir) => `fish_add_path ${posixShellQuote(dir)}`,
   },
   {
     id: 'nushell',
@@ -120,7 +120,7 @@ function nushellDataDir(): string {
   return path.join(xdgBaseDir('XDG_DATA_HOME', path.join(homeDir(), '.local', 'share')), 'nushell');
 }
 
-function posixShellQuote(value: string): string {
+export function posixShellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 

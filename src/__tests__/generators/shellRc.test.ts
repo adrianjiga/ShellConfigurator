@@ -331,7 +331,7 @@ describe('applyShellConfig', () => {
 
     expect(result.applied).toBe(true);
     const finalContent = lastWrittenContent();
-    const expected = `export STARSHIP_CONFIG="${expectedConfigPath}"`;
+    const expected = `export STARSHIP_CONFIG='${expectedConfigPath}'`;
     expect(finalContent).toContain(expected);
     // The env must be set before `starship init` runs.
     expect(finalContent.indexOf(expected)).toBeLessThan(finalContent.indexOf('starship init'));
@@ -360,7 +360,7 @@ describe('applyShellConfig', () => {
     expect(result.applied).toBe(true);
     const content = lastWrittenContent();
     expect(content).not.toContain('/old/xdg/');
-    expect(content).toContain(`export STARSHIP_CONFIG="${expectedConfigPath}"`);
+    expect(content).toContain(`export STARSHIP_CONFIG='${expectedConfigPath}'`);
     expect(content.match(/starship init zsh/g)).toHaveLength(1);
   });
 
@@ -374,6 +374,29 @@ describe('applyShellConfig', () => {
     expect(lastWrittenContent().startsWith(own)).toBe(true);
   });
 
+  it("moves an earlier run's double-quoted export to the quoted form", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () =>
+        `# Added by ShellConfigurator\nexport STARSHIP_CONFIG="${expectedConfigPath}"\neval "$(starship init zsh)"\n`
+    );
+
+    expect(applyShellConfig('zsh').applied).toBe(true);
+    const content = lastWrittenContent();
+    expect(content).not.toContain(`STARSHIP_CONFIG="`);
+    expect(content).toContain(`export STARSHIP_CONFIG='${expectedConfigPath}'`);
+    expect(content.match(/starship init zsh/g)).toHaveLength(1);
+  });
+
+  it('quotes a path with spaces and dollar signs so the shell takes it literally', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => '');
+
+    applyShellConfig('fish', { ensurePathDir: "/Users/J Doe/$bin/it's" });
+
+    expect(lastWrittenContent()).toContain(`fish_add_path '/Users/J Doe/$bin/it'\\''s'`);
+  });
+
   it('uses fish syntax for the STARSHIP_CONFIG line', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() => '');
@@ -381,7 +404,7 @@ describe('applyShellConfig', () => {
     applyShellConfig('fish');
 
     const finalContent = lastWrittenContent();
-    const expected = `set -gx STARSHIP_CONFIG ${path.join(os.homedir(), '.config', 'starship', 'fish.toml')}`;
+    const expected = `set -gx STARSHIP_CONFIG '${path.join(os.homedir(), '.config', 'starship', 'fish.toml')}'`;
     expect(finalContent).toContain(expected);
   });
 
@@ -413,7 +436,7 @@ describe('applyShellConfig', () => {
     vi.mocked(fs.readFileSync).mockImplementation(() =>
       [
         '# Added by ShellConfigurator',
-        `export STARSHIP_CONFIG="${expectedConfigPath}"`,
+        `export STARSHIP_CONFIG='${expectedConfigPath}'`,
         'eval "$(starship init zsh)"',
       ].join('\n')
     );
@@ -478,7 +501,7 @@ describe('applyShellConfig', () => {
     vi.mocked(fs.readFileSync).mockImplementation(() =>
       [
         '# Added by ShellConfigurator',
-        `export STARSHIP_CONFIG="${expectedConfigPath}"`,
+        `export STARSHIP_CONFIG='${expectedConfigPath}'`,
         'eval "$(starship init zsh)"',
         'export EDITOR=vim',
       ].join('\n')
@@ -496,13 +519,13 @@ describe('applyShellConfig', () => {
   it('puts a needed PATH line above a user init line, not after it', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(
-      () => `# mine\nexport STARSHIP_CONFIG="${expectedConfigPath}"\neval "$(starship init zsh)"\n`
+      () => `# mine\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`
     );
 
     applyShellConfig('zsh', { ensurePathDir: '/home/u/.local/bin' });
 
     const content = lastWrittenContent();
-    expect(content.indexOf('export PATH="/home/u/.local/bin:$PATH"')).toBeLessThan(
+    expect(content.indexOf(`export PATH='/home/u/.local/bin':"$PATH"`)).toBeLessThan(
       content.indexOf('starship init zsh')
     );
   });
@@ -516,7 +539,7 @@ describe('applyShellConfig', () => {
     applyShellConfig('zsh');
 
     expect(lastWrittenContent()).toBe(
-      `# Added by ShellConfigurator\nexport STARSHIP_CONFIG="${expectedConfigPath}"\neval "$(starship init zsh)"\n`
+      `# Added by ShellConfigurator\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`
     );
   });
 
@@ -537,7 +560,7 @@ describe('applyShellConfig', () => {
   it('is idempotent — skips when the STARSHIP_CONFIG line is already present', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(
-      () => `export STARSHIP_CONFIG="${expectedConfigPath}"\neval "$(starship init zsh)"`
+      () => `export STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"`
     );
 
     const result = applyShellConfig('zsh');
@@ -556,12 +579,12 @@ describe('applyShellConfig', () => {
 
     expect(result.applied).toBe(true);
     const finalContent = lastWrittenContent();
-    expect(finalContent).toContain(`export STARSHIP_CONFIG="${expectedConfigPath}"`);
+    expect(finalContent).toContain(`export STARSHIP_CONFIG='${expectedConfigPath}'`);
     // The init line was already in the rc and must not be added a second time.
     expect(finalContent.match(/starship init zsh/g)).toHaveLength(1);
     // Above the user's init line, closed by a blank line so that line stays theirs.
     expect(finalContent).toBe(
-      `# Added by ShellConfigurator\nexport STARSHIP_CONFIG="${expectedConfigPath}"\n\neval "$(starship init zsh)"`
+      `# Added by ShellConfigurator\nexport STARSHIP_CONFIG='${expectedConfigPath}'\n\neval "$(starship init zsh)"`
     );
   });
 
@@ -598,7 +621,7 @@ describe('applyShellConfig', () => {
   it('adds back an init line that was removed after an earlier run', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(
-      () => `# Added by ShellConfigurator\nexport STARSHIP_CONFIG="${expectedConfigPath}"\n`
+      () => `# Added by ShellConfigurator\nexport STARSHIP_CONFIG='${expectedConfigPath}'\n`
     );
 
     const result = applyShellConfig('zsh');
@@ -610,7 +633,7 @@ describe('applyShellConfig', () => {
   it('does not count a commented-out export as present', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(
-      () => `# export STARSHIP_CONFIG="${expectedConfigPath}"\neval "$(starship init zsh)"\n`
+      () => `# export STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`
     );
 
     const result = applyShellConfig('zsh');
@@ -621,7 +644,9 @@ describe('applyShellConfig', () => {
 
   it('only notes the PATH change when the PATH line was really added', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockImplementation(() => 'export PATH="/home/u/.local/bin:$PATH"\n');
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () => `export PATH='/home/u/.local/bin':"$PATH"\n`
+    );
 
     const result = applyShellConfig('zsh', { ensurePathDir: '/home/u/.local/bin' });
 
@@ -779,7 +804,7 @@ describe('applyShellConfig', () => {
     const result = applyShellConfig('zsh', { ensurePathDir: '/home/u/.local/bin' });
 
     const finalContent = lastWrittenContent();
-    expect(finalContent).toContain('export PATH="/home/u/.local/bin:$PATH"');
+    expect(finalContent).toContain(`export PATH='/home/u/.local/bin':"$PATH"`);
     // Order matters: `starship init` cannot resolve before PATH is set.
     expect(finalContent.indexOf('export PATH')).toBeLessThan(finalContent.indexOf('starship init'));
     expect(result.note).toContain('/home/u/.local/bin');
@@ -792,7 +817,7 @@ describe('applyShellConfig', () => {
     applyShellConfig('fish', { ensurePathDir: '/home/u/.local/bin' });
 
     const finalContent = lastWrittenContent();
-    expect(finalContent).toContain('fish_add_path /home/u/.local/bin');
+    expect(finalContent).toContain("fish_add_path '/home/u/.local/bin'");
     expect(finalContent).not.toContain('export PATH');
   });
 
@@ -808,13 +833,13 @@ describe('applyShellConfig', () => {
 
   it('does not duplicate a PATH line that is already present', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockImplementation(() => 'export PATH="/home/u/.local/bin:$PATH"');
+    vi.mocked(fs.readFileSync).mockImplementation(() => `export PATH='/home/u/.local/bin':"$PATH"`);
 
     applyShellConfig('zsh', { ensurePathDir: '/home/u/.local/bin' });
 
     const finalContent = lastWrittenContent();
     // The PATH line was already in the rc; a rewrite must not duplicate it.
-    expect(finalContent.match(/export PATH="\/home\/u\/\.local\/bin:\$PATH"/g)).toHaveLength(1);
+    expect(finalContent.match(/export PATH='\/home\/u\/\.local\/bin':"\$PATH"/g)).toHaveLength(1);
     expect(finalContent).toContain('starship init zsh');
   });
 
@@ -822,7 +847,7 @@ describe('applyShellConfig', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(
       () =>
-        `set -gx STARSHIP_CONFIG ${path.join(os.homedir(), '.config', 'starship', 'fish.toml')}\nstarship init fish | source`
+        `set -gx STARSHIP_CONFIG '${path.join(os.homedir(), '.config', 'starship', 'fish.toml')}'\nstarship init fish | source`
     );
 
     const result = applyShellConfig('fish');
@@ -839,7 +864,7 @@ describe('applyShellConfig', () => {
     // that stomps on the per-shell wiring added earlier.
     vi.mocked(fs.readFileSync).mockImplementation(
       () =>
-        `\n# Added by ShellConfigurator\nset -gx STARSHIP_CONFIG ${fishConfig}\nstarship init fish | source\n\n# Added by ShellConfigurator\nset -e STARSHIP_CONFIG\n`
+        `\n# Added by ShellConfigurator\nset -gx STARSHIP_CONFIG '${fishConfig}'\nstarship init fish | source\n\n# Added by ShellConfigurator\nset -e STARSHIP_CONFIG\n`
     );
 
     const result = applyShellConfig('fish');
@@ -847,7 +872,7 @@ describe('applyShellConfig', () => {
     expect(result.applied).toBe(false);
     expect(result.note).toBe('already configured');
     const written = lastWrittenContent();
-    expect(written).toContain(`set -gx STARSHIP_CONFIG ${fishConfig}`);
+    expect(written).toContain(`set -gx STARSHIP_CONFIG '${fishConfig}'`);
     expect(written).toContain('starship init fish | source');
     expect(written).not.toContain('set -e STARSHIP_CONFIG');
   });
@@ -872,7 +897,7 @@ describe('applyShellConfig', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(
       () =>
-        `\n# Added by ShellConfigurator\neval "$(starship init zsh)"\n\n# Added by ShellConfigurator\nexport STARSHIP_CONFIG="${expectedConfigPath}"\n\n# Added by ShellConfigurator\nunset STARSHIP_CONFIG\n`
+        `\n# Added by ShellConfigurator\neval "$(starship init zsh)"\n\n# Added by ShellConfigurator\nexport STARSHIP_CONFIG='${expectedConfigPath}'\n\n# Added by ShellConfigurator\nunset STARSHIP_CONFIG\n`
     );
 
     const result = applyShellConfig('zsh');
@@ -880,7 +905,7 @@ describe('applyShellConfig', () => {
     expect(result.applied).toBe(false);
     const written = lastWrittenContent();
     expect(written).toContain('eval "$(starship init zsh)"');
-    expect(written).toContain(`export STARSHIP_CONFIG="${expectedConfigPath}"`);
+    expect(written).toContain(`export STARSHIP_CONFIG='${expectedConfigPath}'`);
     expect(written).not.toContain('unset STARSHIP_CONFIG');
   });
 });
@@ -929,7 +954,7 @@ describe('resetSharedShellConfig', () => {
   });
 
   it('leaves a shell wired to its own per-shell config by an earlier run alone', () => {
-    const original = `# Existing content\n# Added by ShellConfigurator\nexport STARSHIP_CONFIG="${expectedConfigPath}"\neval "$(starship init zsh)"\n`;
+    const original = `# Existing content\n# Added by ShellConfigurator\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`;
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() => original);
 
@@ -958,14 +983,14 @@ describe('resetSharedShellConfig', () => {
     const fishConfig = path.join(os.homedir(), '.config', 'starship', 'fish.toml');
     vi.mocked(fs.readFileSync).mockImplementation(
       () =>
-        `\n# Added by ShellConfigurator\nset -gx STARSHIP_CONFIG ${fishConfig}\nstarship init fish | source\n\n# Added by ShellConfigurator\nset -e STARSHIP_CONFIG\n`
+        `\n# Added by ShellConfigurator\nset -gx STARSHIP_CONFIG '${fishConfig}'\nstarship init fish | source\n\n# Added by ShellConfigurator\nset -e STARSHIP_CONFIG\n`
     );
 
     const result = resetSharedShellConfig('fish');
 
     expect(result.applied).toBe(false);
     const written = lastWrittenContent();
-    expect(written).toContain(`set -gx STARSHIP_CONFIG ${fishConfig}`);
+    expect(written).toContain(`set -gx STARSHIP_CONFIG '${fishConfig}'`);
     expect(written).toContain('starship init fish | source');
     expect(written).not.toContain('set -e STARSHIP_CONFIG');
   });

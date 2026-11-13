@@ -82,7 +82,7 @@ try {
   assert.ok(rcLines.includes('export STARSHIP_CONFIG='), '.bashrc missing STARSHIP_CONFIG');
   assert.ok(rcLines.includes('eval "$(starship init bash)"'), '.bashrc missing init line');
   assert.ok(
-    rcLines.includes(`export PATH="${nodePath.join(homeDir, '.local', 'bin')}:$PATH"`),
+    rcLines.includes(`export PATH='${nodePath.join(homeDir, '.local', 'bin')}':"$PATH"`),
     `.bashrc missing PATH fix-up\nPATH=${process.env.PATH}\n` +
       `getMissingStarshipPathDir()=${getMissingStarshipPathDir()}\nrcLines:\n${rcLines}`
   );

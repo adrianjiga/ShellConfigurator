@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getShell, isShellId, type ShellDef } from '../config/shells.ts';
+import { getShell, isShellId, posixShellQuote, type ShellDef } from '../config/shells.ts';
 import { configHome, homeDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 
@@ -394,7 +394,7 @@ function isManagedLine(shell: ShellDef, line: string): boolean {
   return (
     t.startsWith('export STARSHIP_CONFIG=') ||
     t === 'unset STARSHIP_CONFIG' ||
-    (t.startsWith('export PATH="') && t.endsWith(':$PATH"'))
+    (t.startsWith('export PATH=') && (t.endsWith(':$PATH"') || t.endsWith(':"$PATH"')))
   );
 }
 
@@ -472,9 +472,9 @@ export function starshipConfigLine(shellId: ShellId): string | null {
   if (!shell?.rcFile) return null;
   const configPath = getShellConfigPath(shellId);
   if (shellId === 'fish') {
-    return `set -gx STARSHIP_CONFIG ${configPath}`;
+    return `set -gx STARSHIP_CONFIG ${posixShellQuote(configPath)}`;
   }
-  return `export STARSHIP_CONFIG="${configPath}"`;
+  return `export STARSHIP_CONFIG=${posixShellQuote(configPath)}`;
 }
 
 /** Creates the rc file's parent directory (important for fish) when missing. */

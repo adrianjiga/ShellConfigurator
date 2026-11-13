@@ -39,7 +39,7 @@ describe('ReviewScreen', () => {
     // The per-shell config path, the rc export, and the generated TOML. Assert on
     // space-free tokens because ink wraps long lines at the narrow test terminal.
     expect(frame).toContain('starship/zsh.toml (Zsh)');
-    expect(frame).toContain('STARSHIP_CONFIG="');
+    expect(frame).toContain("STARSHIP_CONFIG='");
     expect(frame).toContain('eval "$(starship init zsh)"');
     expect(frame).toContain('$directory$git_branch$git_status');
   });
