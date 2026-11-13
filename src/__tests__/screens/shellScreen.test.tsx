@@ -278,3 +278,23 @@ describe('ShellScreen in a container', () => {
     expect(instance.lastFrame()).toContain('left to the image');
   });
 });
+
+describe('ShellScreen install tags', () => {
+  it('says a shell the package manager cannot install must be installed by hand', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue([]);
+    vi.mocked(detectCurrentShellAsync).mockResolvedValue(null);
+    const instance = render(
+      <ShellScreen
+        state={{ ...DEFAULT_STATE, packageManager: 'script' }}
+        onNext={vi.fn()}
+        onUpdate={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    await flush();
+    instance.stdin.write(' ');
+    await flush();
+    expect(instance.lastFrame()).toContain('[install it yourself]');
+    expect(instance.lastFrame()).not.toContain('[will install]');
+  });
+});

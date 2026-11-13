@@ -5,6 +5,7 @@ import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { SHELLS } from '../config/shells.ts';
 import { detectCurrentShellAsync, detectInstalledShellsAsync } from '../services/detector.ts';
+import { shellInstallSupported } from '../services/installer.ts';
 import type { ShellId, WizardState } from '../types.ts';
 
 interface ShellScreenProps {
@@ -153,7 +154,11 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
                   </Text>
                   {isChecked && (
                     <Text color={uiColor(isInstalled ? 'green' : 'yellow')}>
-                      {isInstalled ? '[installed]' : '[will install]'}
+                      {isInstalled
+                        ? '[installed]'
+                        : shellInstallSupported(shell.id, state.packageManager)
+                          ? '[will install]'
+                          : '[install it yourself]'}
                     </Text>
                   )}
                   {isDefault && <Text color={uiColor('cyan')}>[will set as login shell]</Text>}
