@@ -114,6 +114,15 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const allDone = tasks.every(
     (t) => t.status === 'done' || t.status === 'skipped' || t.status === 'failed'
   );
+  // chsh asks for the password itself; distro package installs go through sudo.
+  const viaSudo = ['pacman', 'apk'].includes(state.packageManager);
+  const viaSudoForShells = viaSudo || ['apt', 'dnf'].includes(state.packageManager);
+  const mayPrompt = tasks.some(
+    (t) =>
+      t.id === 'chsh' ||
+      (t.id.startsWith('shell_') && viaSudoForShells) ||
+      (t.id === 'starship' && viaSudo)
+  );
   const allDoneRef = useRef(allDone);
   allDoneRef.current = allDone;
 
@@ -125,7 +134,8 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
       <Box flexDirection="column" gap={1}>
         <Text bold>Installing</Text>
         <Text color={uiColor('gray')}>
-          This may take a moment. sudo prompts will appear in the terminal.
+          This may take a moment.
+          {mayPrompt ? ' Password prompts (sudo, chsh) will appear in the terminal.' : ''}
         </Text>
         {cancelling ? (
           <Text color={uiColor('yellow')}>

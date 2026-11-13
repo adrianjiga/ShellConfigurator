@@ -318,3 +318,21 @@ describe('InstallingScreen after the run', () => {
     setAdvanceDelayForTests(0);
   });
 });
+
+describe('InstallingScreen prompt notice', () => {
+  it('only mentions password prompts when a step can ask for one', async () => {
+    mocks.buildTaskList.mockReturnValue([
+      { id: 'config', label: 'Write config files', status: 'pending' },
+    ]);
+    mocks.runInstallTasks.mockReturnValue(new Promise<InstallTask[]>(() => {}));
+    const quiet = setup();
+    await flush();
+    expect(quiet.instance.lastFrame()).not.toContain('Password prompts');
+    cleanup();
+
+    mocks.buildTaskList.mockReturnValue([{ id: 'chsh', label: 'Set zsh', status: 'pending' }]);
+    const loud = setup();
+    await flush();
+    expect(loud.instance.lastFrame()).toContain('Password prompts');
+  });
+});
