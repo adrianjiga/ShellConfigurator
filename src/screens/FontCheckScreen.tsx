@@ -92,7 +92,7 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
       <NavHints
         hints={[
           { key: '↑↓', label: 'navigate' },
-          { key: 'Enter', label: 'select' },
+          { key: 'Enter/1-9', label: 'select' },
           { key: 'Esc', label: 'back' },
         ]}
       />

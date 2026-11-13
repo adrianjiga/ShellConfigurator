@@ -105,7 +105,7 @@ export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
               ]
             : [
                 { key: '↑↓', label: 'navigate' },
-                { key: 'Enter', label: 'select' },
+                { key: 'Enter/1-9', label: 'select' },
                 { key: 'Esc', label: 'back' },
               ]
         }

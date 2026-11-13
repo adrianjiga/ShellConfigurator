@@ -216,6 +216,14 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
       </Box>
 
       {detection?.starship.installed && <NavHints hints={[{ key: 'Enter', label: 'continue' }]} />}
+      {detection && !detection.starship.installed && (
+        <NavHints
+          hints={[
+            { key: '↑↓', label: 'navigate' },
+            { key: 'Enter/1-9', label: 'select' },
+          ]}
+        />
+      )}
     </WizardLayout>
   );
 }
