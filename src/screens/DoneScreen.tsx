@@ -313,7 +313,8 @@ export function DoneScreen({ state }: DoneScreenProps) {
           </Text>
           {outcome.restored.map((r) => (
             <Text key={r.what} color={uiColor('gray')} dimColor>
-              {r.what}: {r.restoredTo} (from {r.restoredFrom})
+              {r.what}: {r.restoredTo} (from {r.restoredFrom}
+              {r.previousSavedTo ? `; previous saved to ${r.previousSavedTo}` : ''})
             </Text>
           ))}
           {outcome.failed.map((f) => (

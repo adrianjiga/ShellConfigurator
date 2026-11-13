@@ -111,6 +111,8 @@ export interface RestoredConfig {
   what: 'shared' | ShellId;
   restoredTo: string;
   restoredFrom: string;
+  /** Where the file it replaced was saved, so a restore can itself be undone. */
+  previousSavedTo?: string;
 }
 
 export interface RestoreFailure {
@@ -144,8 +146,18 @@ function restoreOne(
   outcome: RestoreOutcome
 ): void {
   try {
+    let previousSavedTo: string | undefined;
+    if (fs.existsSync(target)) {
+      previousSavedTo = `${target}.pre-restore-${backupStamp()}`;
+      fs.copyFileSync(target, previousSavedTo);
+    }
     fs.copyFileSync(backup, target);
-    outcome.restored.push({ what, restoredTo: target, restoredFrom: backup });
+    outcome.restored.push({
+      what,
+      restoredTo: target,
+      restoredFrom: backup,
+      ...(previousSavedTo ? { previousSavedTo } : {}),
+    });
   } catch (err) {
     outcome.failed.push({
       what,

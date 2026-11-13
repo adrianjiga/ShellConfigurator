@@ -144,7 +144,8 @@ export function runRestore(): void {
   if (restored.length > 0) {
     process.stdout.write('Restored configs from their newest backups:\n');
     for (const r of restored) {
-      process.stdout.write(`  ${r.what}: ${r.restoredTo} (from ${r.restoredFrom})\n`);
+      const saved = r.previousSavedTo ? `; previous saved to ${r.previousSavedTo}` : '';
+      process.stdout.write(`  ${r.what}: ${r.restoredTo} (from ${r.restoredFrom}${saved})\n`);
     }
   }
   if (failed.length > 0) {

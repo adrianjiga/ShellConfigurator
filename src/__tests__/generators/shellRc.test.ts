@@ -1098,6 +1098,21 @@ describe('restoreConfigBackups', () => {
     expect(fs.copyFileSync).toHaveBeenCalledWith(restored[0]?.restoredFrom, getSharedConfigPath());
   });
 
+  it('saves the live file before restoring over it', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    readdirSyncMock.mockImplementation((dir) =>
+      dir === base ? ['starship.toml.bak-2026-09-09T09-30-00-000Z'] : []
+    );
+
+    const { restored } = restoreConfigBackups();
+
+    const saved = restored[0]?.previousSavedTo;
+    expect(saved).toMatch(/starship\.toml\.pre-restore-/);
+    const calls = vi.mocked(fs.copyFileSync).mock.calls;
+    expect(calls[0]).toEqual([getSharedConfigPath(), saved]);
+    expect(calls[1]).toEqual([restored[0]?.restoredFrom, getSharedConfigPath()]);
+  });
+
   it('restores the newest backup for every per-shell config that has one', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     readdirSyncMock.mockImplementation((dir) => {
@@ -1118,7 +1133,8 @@ describe('restoreConfigBackups', () => {
     const zsh = restored.find((r) => r.what === 'zsh');
     expect(zsh?.restoredFrom).toContain('2026-09-09T09-30-00-000Z');
     expect(zsh?.restoredTo).toBe(getShellConfigPath('zsh'));
-    expect(fs.copyFileSync).toHaveBeenCalledTimes(2);
+    // Each live file is saved aside, then the backup copied over it.
+    expect(fs.copyFileSync).toHaveBeenCalledTimes(4);
   });
 
   it('reports a failing copy and still restores the rest', () => {
