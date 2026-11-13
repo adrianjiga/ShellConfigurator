@@ -8,11 +8,14 @@ let tmp: string;
 const originalXdg = process.env.XDG_CONFIG_HOME;
 const originalHome = process.env.HOME;
 const originalKittyDir = process.env.KITTY_CONFIG_DIRECTORY;
+const originalPath = process.env.PATH;
 
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sc-terminal-'));
   process.env.XDG_CONFIG_HOME = tmp;
   process.env.HOME = tmp;
+  // No real alacritty binary is probed for its version.
+  process.env.PATH = tmp;
 });
 
 afterEach(() => {
@@ -22,6 +25,7 @@ afterEach(() => {
   else process.env.HOME = originalHome;
   if (originalKittyDir === undefined) delete process.env.KITTY_CONFIG_DIRECTORY;
   else process.env.KITTY_CONFIG_DIRECTORY = originalKittyDir;
+  process.env.PATH = originalPath;
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -146,6 +150,16 @@ describe('wireTerminalFont', () => {
     wireTerminalFont('foot', 'Hack Nerd Font');
 
     expect(read('foot/foot.ini')).toBe('[main]\nfont=Hack Nerd Font\n');
+  });
+
+  it('advises a YAML edit instead of creating a toml that Alacritty 0.12 would ignore', () => {
+    const result = wireTerminalFont('alacritty', 'Hack Nerd Font', {
+      alacrittyVersion: () => [0, 11],
+    });
+
+    expect(result.applied).toBe(false);
+    expect(result.note).toContain('reads only YAML');
+    expect(fs.existsSync(path.join(tmp, 'alacritty', 'alacritty.toml'))).toBe(false);
   });
 
   it('creates an alacritty toml font table', () => {

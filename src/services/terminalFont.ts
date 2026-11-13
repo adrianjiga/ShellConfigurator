@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -248,7 +249,30 @@ function backupIfExists(filePath: string): string | undefined {
  * idempotently and backing up any existing file first. WezTerm's Lua config is
  * never edited — the exact line to add is returned as a note instead.
  */
-export function wireTerminalFont(id: TerminalId, family: string): TerminalFontResult {
+/** `alacritty --version` as [major, minor], or null when it cannot be run. */
+export function installedAlacrittyVersion(): [number, number] | null {
+  try {
+    const output = execFileSync('alacritty', ['--version'], {
+      encoding: 'utf8',
+      stdio: 'pipe',
+      timeout: 5000,
+    });
+    const match = /(\d+)\.(\d+)/.exec(output);
+    return match ? [Number(match[1]), Number(match[2])] : null;
+  } catch {
+    return null;
+  }
+}
+
+export interface WireTerminalFontOptions {
+  alacrittyVersion?: () => [number, number] | null;
+}
+
+export function wireTerminalFont(
+  id: TerminalId,
+  family: string,
+  options: WireTerminalFontOptions = {}
+): TerminalFontResult {
   if (id === 'wezterm') {
     const configPath = terminalConfigPath('wezterm');
     return {
@@ -267,6 +291,20 @@ export function wireTerminalFont(id: TerminalId, family: string): TerminalFontRe
         `${filePath} is YAML, which Alacritty 0.13+ ignores: run \`alacritty migrate\` and ` +
         `re-run, or on an older Alacritty set font.normal.family to "${family}" there`,
     };
+  }
+
+  // Alacritty before 0.13 reads only YAML, so a new alacritty.toml would be ignored.
+  if (id === 'alacritty' && !fs.existsSync(filePath)) {
+    const version = (options.alacrittyVersion ?? installedAlacrittyVersion)();
+    if (version && version[0] === 0 && version[1] < 13) {
+      return {
+        applied: false,
+        path: alacrittyYmlPath(),
+        note:
+          `Alacritty ${version.join('.')} reads only YAML — add font.normal.family: ` +
+          `"${family}" to ${alacrittyYmlPath()}`,
+      };
+    }
   }
 
   const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
