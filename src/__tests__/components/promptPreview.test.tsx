@@ -299,3 +299,20 @@ describe('PromptPreview duplicates', () => {
     expect(lastFrame()?.match(/12:34/g)).toHaveLength(1);
   });
 });
+
+describe('PromptPreview without colour', () => {
+  it('draws the plain layout instead of bare powerline arrows', () => {
+    vi.stubEnv('NO_COLOR', '1');
+    try {
+      const { lastFrame } = render(
+        <PromptPreview
+          state={{ ...DEFAULT_STATE, hasNerdFont: true, powerline: true }}
+          renderPreview={async () => ({ mode: 'static', reason: 'starship-missing' })}
+        />
+      );
+      expect(lastFrame()).not.toContain('\ue0b0');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});

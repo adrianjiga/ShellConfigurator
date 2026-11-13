@@ -1,6 +1,6 @@
 import { Box, Text } from 'ink';
 import { useEffect, useState } from 'react';
-import { uiColor } from '../config/colors.ts';
+import { colorsEnabled, uiColor } from '../config/colors.ts';
 import { getModule, isConfigurableModule, type ModuleId } from '../config/modules.ts';
 import { getPalette, inkColor, type PaletteColorName } from '../config/palettes.ts';
 import { bracketsSegments, rendersGlyphs } from '../config/presets.ts';
@@ -156,7 +156,8 @@ function StaticPromptFrame({ state: chosen }: { state: WizardState }) {
   const palette = getPalette(state.palette);
   // Mirrors the generator: separators are Nerd Font glyphs, so without one the
   // preview must show the plain prompt that will actually be written.
-  const powerline = state.powerline && hasNerdFont;
+  // Without colour there are no blocks to interlock, only bare arrows.
+  const powerline = state.powerline && hasNerdFont && colorsEnabled();
   const bracketed = bracketsSegments(state);
 
   const color = (name: PaletteColorName) => inkColor(palette.colors[name]);
