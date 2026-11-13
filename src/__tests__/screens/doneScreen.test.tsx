@@ -415,3 +415,21 @@ describe('DoneScreen restore failure', () => {
     expect(lastFrame()).toContain('EACCES: permission denied');
   });
 });
+
+describe('DoneScreen after a failed config write', () => {
+  it('does not promise a new prompt after a restart', () => {
+    const { lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          selectedShells: ['zsh'],
+          installedShells: ['zsh'],
+          installResults: [
+            { id: 'config', label: 'Write config files', status: 'failed', error: 'EACCES' },
+          ],
+        }}
+      />
+    );
+    expect(lastFrame()).not.toContain('Restart your terminal');
+  });
+});

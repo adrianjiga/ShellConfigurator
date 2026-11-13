@@ -311,7 +311,9 @@ export function DoneScreen({ state }: DoneScreenProps) {
             </Text>
           ) : (
             <>
-              <Text color={uiColor('gray')}>Restart your terminal to see the new prompt.</Text>
+              {configTask?.status === 'done' && (
+                <Text color={uiColor('gray')}>Restart your terminal to see the new prompt.</Text>
+              )}
               {state.skipStarshipInstall && (
                 <Text color={uiColor('yellow')}>
                   Starship is not installed, so shell init lines were not added. Install it (e.g.{' '}
