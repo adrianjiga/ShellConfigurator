@@ -1,5 +1,6 @@
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getShellConfigPath } from '../../generators/shellRc.ts';
 import { DoneScreen } from '../../screens/DoneScreen.tsx';
 import { type InstallTaskDeps, runInstallTasks } from '../../services/installTasks.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
@@ -67,13 +68,15 @@ describe('DoneScreen over real install results', () => {
     expect(row).not.toContain('init line added');
     expect(frame).toContain('Run the above command once in Nushell');
     // The command the user has to run must be on screen, not just described.
-    expect(frame).toContain('starship init nu');
+    // Whitespace is dropped so the narrow test frame's wrapping does not matter.
+    const flat = frame.replace(/\s+/g, '');
+    expect(flat).toContain('starshipinitnu');
     // It must create the autoload directory first, or save -f fails on a fresh install.
-    expect(frame).toContain('mkdir ($nu.data-dir');
+    expect(flat).toContain('mkdir$d');
     // ...and pin STARSHIP_CONFIG to the per-shell config, or nu falls back to
     // the shared ~/.config/starship.toml (no rc file to export it).
-    expect(frame).toContain('starship-config.nu');
-    expect(frame).toContain('path join starship nushell.toml');
+    expect(flat).toContain('starship-config.nu');
+    expect(flat).toContain(getShellConfigPath('nushell').replace(/\s+/g, ''));
   });
 
   it('shows a manual-setup shell as already configured when its init was applied', async () => {

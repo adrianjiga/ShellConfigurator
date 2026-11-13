@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { configHome, homeDir } from '../services/paths.ts';
+import { configHome, homeDir, xdgBaseDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 
 export interface ShellDef {
@@ -55,34 +55,27 @@ export const SHELLS: ShellDef[] = [
     pathLine: (dir) => `fish_add_path ${dir}`,
   },
   {
-    // Executable from Bash: quote the Nushell program as a single argument to
-    // `nu -c`, escaping any embedded apostrophes for POSIX shells.
     id: 'nushell',
     binary: 'nu',
     label: 'Nushell',
     rcFile: null,
-    initLine: `nu -c ${posixShellQuote(`mkdir ($nu.data-dir | path join "vendor/autoload"); $"export-env { $env.STARSHIP_CONFIG = '($nu.default-config-dir | path dirname | path join starship nushell.toml)' }" | save -f ($nu.data-dir | path join "vendor/autoload/starship-config.nu"); starship init nu | save -f ($nu.data-dir | path join "vendor/autoload/starship.nu")`)}`,
+    // Run from Bash: the Nushell program is one POSIX-quoted argument to `nu -c`.
+    // The config path is written in literally, so it is the file the wizard wrote.
+    get initLine() {
+      const pin = `export-env { $env.STARSHIP_CONFIG = "${perShellConfigPath('nushell')}" }`;
+      return `nu -c ${posixShellQuote(
+        `let d = ($nu.data-dir | path join vendor/autoload); mkdir $d; ` +
+          `starship init nu | save -f ($d | path join starship.nu); ` +
+          `'${pin}' | save -f ($d | path join starship-config.nu)`
+      )}`;
+    },
     manualNote: 'Run the command above from Bash (it invokes Nushell to write its autoload files).',
-    initPath: path.join(
-      homeDir(),
-      '.local',
-      'share',
-      'nushell',
-      'vendor',
-      'autoload',
-      'starship.nu'
-    ),
-    additionalInitPaths: [
-      path.join(
-        homeDir(),
-        '.local',
-        'share',
-        'nushell',
-        'vendor',
-        'autoload',
-        'starship-config.nu'
-      ),
-    ],
+    get initPath() {
+      return path.join(nushellDataDir(), 'vendor', 'autoload', 'starship.nu');
+    },
+    get additionalInitPaths() {
+      return [path.join(nushellDataDir(), 'vendor', 'autoload', 'starship-config.nu')];
+    },
   },
   {
     id: 'powershell',
@@ -90,14 +83,29 @@ export const SHELLS: ShellDef[] = [
     label: 'PowerShell',
     rcFile: null,
     // Must be set before init, or PowerShell reads the shared starship.toml.
-    initLine:
-      '$env:STARSHIP_CONFIG = Join-Path $HOME ".config/starship/powershell.toml"; Invoke-Expression (&starship init powershell)',
+    get initLine() {
+      const configPath = perShellConfigPath('powershell').replaceAll("'", "''");
+      return `$env:STARSHIP_CONFIG = '${configPath}'; Invoke-Expression (&starship init powershell)`;
+    },
     manualNote: 'Add the above line to your $PROFILE file in PowerShell.',
     get initPath() {
       return path.join(configHome(), 'powershell', 'Microsoft.PowerShell_profile.ps1');
     },
   },
 ];
+
+/** The per-shell config the wizard writes; mirrors getShellConfigPath in shellRc.ts. */
+function perShellConfigPath(id: ShellId): string {
+  return path.join(configHome(), 'starship', `${id}.toml`);
+}
+
+/** Nushell's `$nu.data-dir`. */
+function nushellDataDir(): string {
+  if (process.platform === 'darwin') {
+    return path.join(homeDir(), 'Library', 'Application Support', 'nushell');
+  }
+  return path.join(xdgBaseDir('XDG_DATA_HOME', path.join(homeDir(), '.local', 'share')), 'nushell');
+}
 
 function posixShellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
