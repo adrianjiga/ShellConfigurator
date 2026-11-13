@@ -233,6 +233,16 @@ function configLookupPaths(id: TerminalId): string[] {
   return [terminalConfigPath(id)];
 }
 
+/** The Lua file WezTerm loads, defaulting to its recommended ~/.wezterm.lua. */
+function weztermConfigPath(): string {
+  const candidates = [
+    process.env.WEZTERM_CONFIG_FILE?.trim(),
+    terminalConfigPath('wezterm'),
+    path.join(os.homedir(), '.wezterm.lua'),
+  ].filter((p): p is string => Boolean(p));
+  return candidates.find((p) => fs.existsSync(p)) ?? path.join(os.homedir(), '.wezterm.lua');
+}
+
 function resolveTerminalConfigPath(id: TerminalId): string {
   return configLookupPaths(id).find((p) => fs.existsSync(p)) ?? terminalConfigPath(id);
 }
@@ -274,7 +284,7 @@ export function wireTerminalFont(
   options: WireTerminalFontOptions = {}
 ): TerminalFontResult {
   if (id === 'wezterm') {
-    const configPath = terminalConfigPath('wezterm');
+    const configPath = weztermConfigPath();
     return {
       applied: false,
       path: configPath,

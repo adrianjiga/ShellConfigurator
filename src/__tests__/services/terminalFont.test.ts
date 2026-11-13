@@ -9,6 +9,7 @@ const originalXdg = process.env.XDG_CONFIG_HOME;
 const originalHome = process.env.HOME;
 const originalKittyDir = process.env.KITTY_CONFIG_DIRECTORY;
 const originalPath = process.env.PATH;
+const originalWezterm = process.env.WEZTERM_CONFIG_FILE;
 
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sc-terminal-'));
@@ -16,6 +17,7 @@ beforeEach(() => {
   process.env.HOME = tmp;
   // No real alacritty binary is probed for its version.
   process.env.PATH = tmp;
+  delete process.env.WEZTERM_CONFIG_FILE;
 });
 
 afterEach(() => {
@@ -26,6 +28,7 @@ afterEach(() => {
   if (originalKittyDir === undefined) delete process.env.KITTY_CONFIG_DIRECTORY;
   else process.env.KITTY_CONFIG_DIRECTORY = originalKittyDir;
   process.env.PATH = originalPath;
+  if (originalWezterm !== undefined) process.env.WEZTERM_CONFIG_FILE = originalWezterm;
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -338,6 +341,15 @@ describe('wireTerminalFont', () => {
     expect(read('.alacritty.toml')).toBe('[font.normal]\nfamily = "FiraCode Nerd Font"\n');
     expect(fs.existsSync(path.join(tmp, 'alacritty', 'alacritty.toml'))).toBe(false);
     expect(readTerminalFontFamily('alacritty')).toBe('FiraCode Nerd Font');
+  });
+
+  it('names the wezterm config that exists, else ~/.wezterm.lua', () => {
+    expect(wireTerminalFont('wezterm', 'Hack Nerd Font').path).toBe(path.join(tmp, '.wezterm.lua'));
+
+    write('wezterm/wezterm.lua', 'return {}\n');
+    expect(wireTerminalFont('wezterm', 'Hack Nerd Font').path).toBe(
+      path.join(tmp, 'wezterm', 'wezterm.lua')
+    );
   });
 
   it('never edits wezterm and returns the snippet instead', () => {
