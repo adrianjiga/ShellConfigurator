@@ -124,6 +124,55 @@ describe('runInstallTasks', () => {
     expect(results.find((t) => t.id === 'shell_fish')?.status).toBe('done');
   });
 
+  it('does not write rc files when the Starship install failed', async () => {
+    const deps = fakeDeps({
+      installStarship: vi.fn().mockRejectedValue(new Error('no route to host')),
+    });
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    expect(deps.applyShellConfig).not.toHaveBeenCalled();
+    expect(results.find((t) => t.id === 'rc_zsh')).toMatchObject({
+      status: 'failed',
+      error: 'Starship was not installed',
+    });
+  });
+
+  it('does not write the rc file of a shell whose install failed', async () => {
+    const deps = fakeDeps({
+      installShell: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('no package'))
+        .mockResolvedValue(undefined),
+    });
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh', 'fish'], installedShells: [] }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.applyShellConfig).toHaveBeenCalledTimes(1);
+    expect(deps.applyShellConfig).toHaveBeenCalledWith('fish', expect.anything());
+    expect(results.find((t) => t.id === 'rc_zsh')).toMatchObject({
+      status: 'failed',
+      error: 'Install of zsh failed',
+    });
+  });
+
+  it('does not run chsh for a shell whose install failed', async () => {
+    const deps = fakeDeps({
+      installShell: vi.fn().mockRejectedValue(new Error('no package')),
+    });
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh'], installedShells: [], setDefaultShell: 'zsh' }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.setDefaultShell).not.toHaveBeenCalled();
+    expect(results.find((t) => t.id === 'chsh')).toMatchObject({ status: 'failed' });
+    expect(results.find((t) => t.id === 'chsh')?.error).toMatch(/its install failed/);
+  });
+
   it('sets the default shell and records its failure', async () => {
     const failing = fakeDeps({
       setDefaultShell: vi.fn().mockRejectedValue(new Error('chsh denied')),

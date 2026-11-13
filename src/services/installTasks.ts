@@ -234,8 +234,9 @@ export async function runInstallTasks(
   }
 
   // --- Starship (task omitted entirely when skipStarshipInstall) ---
+  let starshipInstallFailed = false;
   if (!state.skipStarshipInstall) {
-    await runTask(TASK_IDS.starship, async () => {
+    const status = await runTask(TASK_IDS.starship, async () => {
       const check = await deps.isStarshipInstalled();
       if (check.installed) {
         return {
@@ -249,6 +250,7 @@ export async function runInstallTasks(
       const after = await deps.isStarshipInstalled();
       if (after.version) deps.recordStarshipVersion(after.version);
     });
+    starshipInstallFailed = status === 'failed';
   }
 
   // --- Nerd Font (only when a concrete font was chosen; skipped in containers) ---
@@ -285,17 +287,22 @@ export async function runInstallTasks(
   }
 
   // --- Missing shells ---
+  const shellInstallFailures = new Set<ShellId>();
   for (const shellId of state.selectedShells) {
     if (state.installedShells.includes(shellId)) continue;
-    await runTask(shellTaskId(shellId), async () => {
+    const status = await runTask(shellTaskId(shellId), async () => {
       await deps.installShell(shellId, state.packageManager);
     });
+    if (status === 'failed') shellInstallFailures.add(shellId);
   }
 
   // --- chsh (skipped in containers, where the login shell is the image's) ---
   const defaultShell = state.setDefaultShell;
   if (defaultShell && !state.container) {
     await runTask(TASK_IDS.chsh, async () => {
+      if (shellInstallFailures.has(defaultShell)) {
+        throw new Error(`Cannot set ${defaultShell} as the default shell — its install failed`);
+      }
       await deps.setDefaultShell(defaultShell);
     });
   }
@@ -368,6 +375,10 @@ export async function runInstallTasks(
   const ensurePathDir = state.skipStarshipInstall ? null : deps.getMissingStarshipPathDir();
 
   for (const shellId of state.selectedShells) {
+    if (cancelled()) {
+      markRemainingCancelled();
+      break;
+    }
     const taskId = rcTaskId(shellId);
 
     if (state.skipStarshipInstall) {
@@ -375,6 +386,18 @@ export async function runInstallTasks(
         status: 'skipped',
         label: `Configure ${shellId} (skipped — install Starship first)`,
       });
+      continue;
+    }
+
+    // Starship is not there to run, so wiring shells would produce
+    // "command not found: starship" on every new terminal.
+    if (starshipInstallFailed) {
+      update(taskId, { status: 'failed', error: 'Starship was not installed' });
+      continue;
+    }
+
+    if (shellInstallFailures.has(shellId)) {
+      update(taskId, { status: 'failed', error: `Install of ${shellId} failed` });
       continue;
     }
 
