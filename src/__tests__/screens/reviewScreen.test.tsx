@@ -139,3 +139,12 @@ describe('ReviewScreen', () => {
     expect(instance.lastFrame()).toContain('--dry-run');
   });
 });
+
+describe('ReviewScreen manual shells', () => {
+  it('shows the setup command before the note that refers to it', async () => {
+    const { instance } = setup({ selectedShells: ['powershell'], installedShells: ['powershell'] });
+    await flush();
+    const frame = instance.lastFrame() ?? '';
+    expect(frame.indexOf('starship init powershell')).toBeLessThan(frame.indexOf('$PROFILE'));
+  });
+});

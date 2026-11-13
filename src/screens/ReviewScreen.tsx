@@ -35,7 +35,8 @@ function rcSnippet(shellId: ShellId, pointAtSharedConfig: boolean): string[] {
   // Manual-only shells (nushell, powershell): the note plus the command to run,
   // or adopt mode where the shared config needs no export.
   const command = setupCommand(shell, pointAtSharedConfig);
-  return shell.manualNote ? [shell.manualNote, command] : [command];
+  // The note refers to "the command above", so it follows the command.
+  return shell.manualNote ? [command, shell.manualNote] : [command];
 }
 
 export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
