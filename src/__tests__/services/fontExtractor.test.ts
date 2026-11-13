@@ -126,6 +126,17 @@ describe('extractFontFiles', () => {
     expect(new TextDecoder().decode(files[0]!.bytes)).toBe('first');
   });
 
+  it('returns stored (uncompressed) entries intact', async () => {
+    const zip = zipSync({ 'A.ttf': encode('aaa'), 'B.otf': encode('bbb') }, { level: 0 });
+
+    const files = await extractFontFiles(zipBytes(zip));
+
+    expect(files.map((f) => [f.name, new TextDecoder().decode(f.bytes)])).toEqual([
+      ['A.ttf', 'aaa'],
+      ['B.otf', 'bbb'],
+    ]);
+  });
+
   it('returns an empty list when the archive holds no font files', async () => {
     const zip = zipSync({ 'README.md': encode('nothing') });
 

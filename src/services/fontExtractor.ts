@@ -54,7 +54,8 @@ try {
     seen.add(base);
     files.push({ name: base, bytes: entries[name] });
   }
-  parentPort.postMessage({ ok: true, files });
+  const buffers = [...new Set(files.map((file) => file.bytes.buffer))];
+  parentPort.postMessage({ ok: true, files }, buffers);
 } catch (error) {
   parentPort.postMessage({
     ok: false,
@@ -64,8 +65,8 @@ try {
 `;
 
 export async function extractFontFiles(zipBytes: Uint8Array): Promise<ExtractedFontFile[]> {
-  // Own, non-pooled copy so the structured clone seen by the worker covers
-  // exactly the archive's bytes, not a shared Buffer pool segment.
+  // Own copy, so transferring it to the worker detaches neither the caller's
+  // buffer nor a shared Buffer pool segment.
   const bytes = new Uint8Array(zipBytes);
 
   return new Promise((resolve, reject) => {
@@ -77,6 +78,7 @@ export async function extractFontFiles(zipBytes: Uint8Array): Promise<ExtractedF
         maxEntryBytes: MAX_FONT_FILE_BYTES,
         maxTotalBytes: MAX_EXTRACTED_BYTES,
       },
+      transferList: [bytes.buffer],
     });
 
     const timer = setTimeout(() => {
