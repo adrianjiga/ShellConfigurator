@@ -24,7 +24,12 @@ import {
 import { CliRunError, CliUsageError, errorMessage } from './errors.ts';
 import { recordRun } from './history.ts';
 import { NERD_FONTS } from './installer.ts';
-import { buildTaskList, DEFAULT_INSTALL_TASK_DEPS, runInstallTasks } from './installTasks.ts';
+import {
+  buildTaskList,
+  DEFAULT_INSTALL_TASK_DEPS,
+  plannedResetShells,
+  runInstallTasks,
+} from './installTasks.ts';
 import { parseState, serializeState } from './state.ts';
 
 const SHELL_IDS = new Set<string>(SHELLS.map((s) => s.id));
@@ -412,7 +417,7 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
 export async function runApply(flags: CliFlags, command?: string): Promise<void> {
   const state = await prepareApplyState(flags);
 
-  const tasks = buildTaskList(state);
+  const tasks = buildTaskList(state, plannedResetShells(state));
 
   if (flags.dryRun) {
     process.stdout.write('shell-configurator apply (dry run) — nothing will be changed.\n\n');

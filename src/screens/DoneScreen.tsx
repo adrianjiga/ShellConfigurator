@@ -11,7 +11,7 @@ import {
 } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import { fontLabel } from '../services/installer.ts';
-import { buildTaskList, rcTaskId, TASK_IDS } from '../services/installTasks.ts';
+import { buildTaskList, plannedResetShells, rcTaskId, TASK_IDS } from '../services/installTasks.ts';
 import { fontIdToInstall, type InstallTask, type WizardState } from '../types.ts';
 
 interface DoneScreenProps {
@@ -88,7 +88,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
 
             <Box marginTop={1} flexDirection="column" gap={1}>
               <Text bold>Tasks that would run</Text>
-              {buildTaskList(state).map((task) => (
+              {buildTaskList(state, plannedResetShells(state)).map((task) => (
                 <Box key={task.id} flexDirection="row" gap={1}>
                   <Text color={uiColor('gray')}>would-run</Text>
                   <Text color={uiColor('gray')}>{task.label}</Text>

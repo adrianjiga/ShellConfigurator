@@ -43,6 +43,7 @@ vi.mock('../generators/shellRc.ts', () => ({
   applyShellConfig: mockApplyShellConfig,
   resetSharedShellConfig: mockResetSharedConfig,
   backupSharedConfig: vi.fn(() => null),
+  shellsWithStarshipInit: () => [],
   getShellConfigPath: () => '/tmp/starship.toml',
   starshipConfigLine: () => 'export STARSHIP_CONFIG="/tmp/starship.toml"',
 }));

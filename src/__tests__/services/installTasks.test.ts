@@ -851,6 +851,46 @@ describe('runInstallTasks', () => {
     expect(results.find((t) => t.id === 'reset_fish')?.status).toBe('done');
   });
 
+  it('puts the reset rows in the plan before any task runs', async () => {
+    const onUpdate = vi.fn();
+    const deps = fakeDeps({ getShellsUsingStarship: vi.fn().mockResolvedValue(['bash', 'zsh']) });
+
+    await runInstallTasks(
+      state({ selectedShells: ['zsh'], installedShells: ['zsh', 'bash'] }),
+      deps,
+      onUpdate
+    );
+
+    expect(onUpdate.mock.calls[0]).toEqual([
+      'reset_bash',
+      { label: 'Clear old STARSHIP_CONFIG in bash', status: 'pending' },
+    ]);
+    expect(deps.resetSharedShellConfig).toHaveBeenCalledTimes(1);
+    expect(deps.resetSharedShellConfig).toHaveBeenCalledWith('bash');
+  });
+
+  it('marks planned reset rows cancelled when the run is aborted before them', async () => {
+    const controller = new AbortController();
+    const deps = fakeDeps({
+      getShellsUsingStarship: vi.fn().mockResolvedValue(['bash']),
+      installStarship: vi.fn(async () => {
+        controller.abort();
+      }),
+    });
+
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh'], installedShells: ['zsh', 'bash'] }),
+      deps,
+      vi.fn(),
+      controller.signal
+    );
+
+    const reset = results.find((t) => t.id === 'reset_bash');
+    expect(reset?.status).toBe('failed');
+    expect(reset?.error).toBe('Cancelled');
+    expect(deps.resetSharedShellConfig).not.toHaveBeenCalled();
+  });
+
   it('does not probe reset shells after the run was cancelled', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -882,6 +922,21 @@ describe('runInstallTasks', () => {
 });
 
 describe('buildTaskList', () => {
+  it('lists a reset row after verify for each unselected shell to clear', () => {
+    const tasks = buildTaskList(state({ selectedShells: ['zsh'] }), ['bash', 'zsh']);
+
+    expect(tasks.map((t) => t.id).slice(-2)).toEqual(['verify', 'reset_bash']);
+    expect(tasks.at(-1)?.label).toBe('Clear old STARSHIP_CONFIG in bash');
+  });
+
+  it('plans no reset rows when Starship is skipped', () => {
+    const tasks = buildTaskList(state({ skipStarshipInstall: true, selectedShells: ['zsh'] }), [
+      'bash',
+    ]);
+
+    expect(tasks.some((t) => t.id === 'reset_bash')).toBe(false);
+  });
+
   it('adds an install task with a plain label when the package manager has the shell', () => {
     const tasks = buildTaskList(
       state({ packageManager: 'apt', selectedShells: ['zsh'], installedShells: [] })

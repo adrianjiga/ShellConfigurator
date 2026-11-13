@@ -131,7 +131,26 @@ export function shellTaskId(shellId: ShellId): `shell_${ShellId}` {
   return `shell_${shellId}`;
 }
 
-export function buildTaskList(state: WizardState): InstallTask[] {
+function resetLabel(shellId: ShellId): string {
+  return `Clear old STARSHIP_CONFIG in ${shellId}`;
+}
+
+/**
+ * Installed shells outside the selection whose rc already loads Starship: the
+ * run adds an unset guard to each so a configured parent's STARSHIP_CONFIG
+ * cannot leak into them.
+ */
+export function plannedResetShells(state: WizardState): ShellId[] {
+  if (state.skipStarshipInstall) return [];
+  return shellsWithStarshipInit(
+    state.installedShells.filter((shellId) => !state.selectedShells.includes(shellId))
+  );
+}
+
+export function buildTaskList(
+  state: WizardState,
+  resetShells: readonly ShellId[] = []
+): InstallTask[] {
   const tasks: InstallTask[] = [];
 
   // Starship (skipped when the user chose "Continue without Starship")
@@ -193,6 +212,10 @@ export function buildTaskList(state: WizardState): InstallTask[] {
   // Post-install verification, skipped when starship was never installed.
   if (!state.skipStarshipInstall) {
     tasks.push({ id: TASK_IDS.verify, label: 'Verify config', status: 'pending' });
+    for (const shellId of resetShells) {
+      if (state.selectedShells.includes(shellId)) continue;
+      tasks.push({ id: resetTaskId(shellId), label: resetLabel(shellId), status: 'pending' });
+    }
   }
 
   return tasks;
@@ -210,7 +233,20 @@ export async function runInstallTasks(
   onUpdate: (id: string, patch: Partial<InstallTask>) => void,
   signal?: AbortSignal
 ): Promise<InstallTask[]> {
-  let tasks = buildTaskList(state);
+  let resetShells: ShellId[] = [];
+  if (!state.skipStarshipInstall && !signal?.aborted) {
+    try {
+      resetShells = (await deps.getShellsUsingStarship()).filter(
+        (shellId) => !state.selectedShells.includes(shellId)
+      );
+    } catch {
+      // Detection is best-effort; a failure must not fail the whole run.
+    }
+  }
+  let tasks = buildTaskList(state, resetShells);
+  for (const shellId of resetShells) {
+    onUpdate(resetTaskId(shellId), { label: resetLabel(shellId), status: 'pending' });
+  }
 
   function update(id: string, patch: Partial<InstallTask>) {
     tasks = tasks.map((t) => (t.id === id ? { ...t, ...patch } : t));
@@ -519,32 +555,13 @@ export async function runInstallTasks(
   // --- Reset leaked STARSHIP_CONFIG for shells not given their own config ---
   // Their rc must clear the variable at startup or they'd show a parent shell's
   // prompt. Each row is its own task so one unreadable rc cannot hide the rest.
-  if (!state.skipStarshipInstall) {
-    if (cancelled()) {
-      markRemainingCancelled();
-      return tasks;
-    }
-    let starshipShells: ShellId[] = [];
-    try {
-      starshipShells = await deps.getShellsUsingStarship();
-    } catch {
-      // Detection is best-effort; a failure must not fail the whole run.
-    }
-    for (const shellId of starshipShells) {
-      if (state.selectedShells.includes(shellId)) continue;
-      const taskId = resetTaskId(shellId);
-      tasks = [
-        ...tasks,
-        { id: taskId, label: `Clear old STARSHIP_CONFIG in ${shellId}`, status: 'pending' },
-      ];
-      onUpdate(taskId, { label: `Clear old STARSHIP_CONFIG in ${shellId}`, status: 'pending' });
-      await runTask(taskId, async () => {
-        const result = deps.resetSharedShellConfig(shellId);
-        if (result.applied) return { status: 'done', patch: { note: result.note } };
-        if (result.note) return { status: 'skipped', patch: { note: result.note } };
-        return undefined;
-      });
-    }
+  for (const shellId of resetShells) {
+    await runTask(resetTaskId(shellId), async () => {
+      const result = deps.resetSharedShellConfig(shellId);
+      if (result.applied) return { status: 'done', patch: { note: result.note } };
+      if (result.note) return { status: 'skipped', patch: { note: result.note } };
+      return undefined;
+    });
   }
 
   return tasks;

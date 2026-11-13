@@ -1,4 +1,5 @@
 import { Box, Text, useInput } from 'ink';
+import { useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
@@ -11,7 +12,7 @@ import {
 } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import { fontLabel } from '../services/installer.ts';
-import { buildTaskList, TASK_IDS } from '../services/installTasks.ts';
+import { buildTaskList, plannedResetShells, TASK_IDS } from '../services/installTasks.ts';
 import { fontIdToInstall, type ShellId, type WizardState } from '../types.ts';
 
 interface ReviewScreenProps {
@@ -39,7 +40,7 @@ function rcSnippet(shellId: ShellId, pointAtSharedConfig: boolean): string[] {
 export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
   const fontId = fontIdToInstall(state.nerdFontToInstall);
   const fontName = fontId ? fontLabel(fontId) : null;
-  const tasks = buildTaskList(state);
+  const [tasks] = useState(() => buildTaskList(state, plannedResetShells(state)));
 
   useInput((char, key) => {
     if (key.escape) {
