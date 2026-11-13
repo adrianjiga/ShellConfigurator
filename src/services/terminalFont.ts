@@ -36,49 +36,92 @@ function setLine(content: string, pattern: RegExp, line: string): string {
   return `${base}${line}\n`;
 }
 
+interface TomlSection {
+  /** The table name, or null for the keys before the first header. */
+  name: string | null;
+  /** Offsets of the section's body, after its header line. */
+  start: number;
+  end: number;
+}
+
+const TOML_HEADER = /^[ \t]*\[([^[\]\n]+)\][ \t]*(?:#.*)?$/gm;
+
+/** Splits a TOML file into its top-level keys and `[table]` sections. */
+function tomlSections(content: string): TomlSection[] {
+  const sections: TomlSection[] = [];
+  let current: TomlSection = { name: null, start: 0, end: content.length };
+  for (const match of content.matchAll(TOML_HEADER)) {
+    current.end = match.index;
+    sections.push(current);
+    const lineEnd = match.index + match[0].length;
+    current = {
+      name: match[1]!.trim(),
+      start: Math.min(lineEnd + 1, content.length),
+      end: content.length,
+    };
+  }
+  sections.push(current);
+  return sections;
+}
+
+/** Rewrites the first `pattern` match inside one section; null when it does not match. */
+function editSection(
+  content: string,
+  section: TomlSection | undefined,
+  pattern: RegExp,
+  replacer: (...groups: string[]) => string
+): string | null {
+  if (!section) return null;
+  const body = content.slice(section.start, section.end);
+  if (!pattern.test(body)) return null;
+  const edited = body.replace(pattern, (...args: string[]) => replacer(...args));
+  return content.slice(0, section.start) + edited + content.slice(section.end);
+}
+
 /**
- * Sets `family` in Alacritty's `[font.normal]` table. Handles the inline
- * `normal = { … }` shape, dotted `normal.family`/`font.normal.family` keys and
- * the `[font.normal]` header (with optional spacing or trailing comment); a
- * missing table is appended, never duplicated.
+ * Sets `family` in Alacritty's `[font.normal]` table. Only the font tables are
+ * edited: the inline `normal = { … }` under `[font]` (or `font.normal = { … }`
+ * at the top), dotted `normal.family`/`font.normal.family` keys, and the
+ * `[font.normal]` table itself; a missing table is appended, never duplicated.
  */
 function setTomlFont(content: string, family: string): string {
   const line = `family = "${family}"`;
+  const sections = tomlSections(content);
+  const top = sections.find((s) => s.name === null);
+  const font = sections.find((s) => s.name === 'font');
+  const fontNormal = sections.find((s) => s.name === 'font.normal');
 
-  const inlineRe = /^([ \t]*)normal\s*=\s*\{([^}]*)\}([ \t]*(?:#.*)?)$/m;
-  const inlineMatch = inlineRe.exec(content);
-  if (inlineMatch) {
-    const [, indent, inner, trailing] = inlineMatch;
-    const body = /family\s*=/.test(inner)
+  const inlineBody = (inner: string) =>
+    /family\s*=/.test(inner)
       ? inner.replace(/family\s*=\s*"[^"]*"/, line)
       : inner.trim() === ''
         ? ` ${line} `
         : ` ${line},${inner}`;
-    return content.replace(inlineRe, () => `${indent}normal = {${body}}${trailing}`);
-  }
+  const inline = (key: string) =>
+    new RegExp(`^([ \\t]*${key}\\s*=\\s*)\\{([^}]*)\\}([ \\t]*(?:#.*)?)$`, 'm');
+  const dotted = (key: string) =>
+    new RegExp(`^([ \\t]*${key})[ \\t]*=[ \\t]*"[^"]*"[ \\t]*(?:#.*)?$`, 'm');
 
-  const dottedRe = /^([ \t]*(?:font\.)?normal\.family)[ \t]*=[ \t]*"[^"]*"[ \t]*(?:#.*)?$/m;
-  if (dottedRe.test(content)) {
-    return content.replace(dottedRe, (_m, prefix: string) => `${prefix} = "${family}"`);
-  }
+  const edited =
+    editSection(content, font, inline('normal'), (_m, head, inner, tail) => {
+      return `${head}{${inlineBody(inner)}}${tail}`;
+    }) ??
+    editSection(content, top, inline('font\\.normal'), (_m, head, inner, tail) => {
+      return `${head}{${inlineBody(inner)}}${tail}`;
+    }) ??
+    editSection(content, font, dotted('normal\\.family'), (_m, key) => `${key} = "${family}"`) ??
+    editSection(content, top, dotted('font\\.normal\\.family'), (_m, key) => {
+      return `${key} = "${family}"`;
+    });
+  if (edited !== null) return edited;
 
-  const headerRe = /^[ \t]*\[[ \t]*font\.normal[ \t]*\][ \t]*(?:#.*)?$/m;
-  const headerMatch = headerRe.exec(content);
-  if (!headerMatch || headerMatch.index === undefined) {
-    return appendBlock(content, `[font.normal]\n${line}`);
-  }
+  if (!fontNormal) return appendBlock(content, `[font.normal]\n${line}`);
 
-  const headerEnd = content.indexOf('\n', headerMatch.index);
-  if (headerEnd === -1) return `${content}${line}\n`;
-
-  const rest = content.slice(headerEnd + 1);
-  const nextRel = rest.search(/^\[/m);
-  const body = nextRel === -1 ? rest : rest.slice(0, nextRel);
-  const tail = nextRel === -1 ? '' : rest.slice(nextRel);
+  const body = content.slice(fontNormal.start, fontNormal.end);
   const newBody = /^\s*family\s*=/m.test(body)
     ? body.replace(/^\s*family\s*=.*$/m, line)
     : `${line}\n${body}`;
-  return content.slice(0, headerEnd + 1) + newBody + tail;
+  return content.slice(0, fontNormal.start) + newBody + content.slice(fontNormal.end);
 }
 
 /** Sets `font=` under `[main]`, preserving any `:size=` suffix already there. */

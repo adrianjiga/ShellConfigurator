@@ -145,6 +145,25 @@ describe('wireTerminalFont', () => {
     }
   );
 
+  it('leaves an inline normal table outside the font tables alone', () => {
+    const colors = '[colors]\nnormal = { black = "#000000", red = "#ff0000" }\n';
+    write('alacritty/alacritty.toml', colors);
+
+    wireTerminalFont('alacritty', 'Hack Nerd Font');
+
+    expect(read('alacritty/alacritty.toml')).toBe(
+      `${colors}\n[font.normal]\nfamily = "Hack Nerd Font"\n`
+    );
+  });
+
+  it('accepts the top-level inline font.normal form', () => {
+    write('alacritty/alacritty.toml', 'font.normal = { family = "Old" }\n');
+
+    wireTerminalFont('alacritty', 'Hack Nerd Font');
+
+    expect(read('alacritty/alacritty.toml')).toBe('font.normal = { family = "Hack Nerd Font" }\n');
+  });
+
   it('adds a [font.normal] table when only [font] exists', () => {
     write('alacritty/alacritty.toml', '[font]\nsize = 12\n');
 
