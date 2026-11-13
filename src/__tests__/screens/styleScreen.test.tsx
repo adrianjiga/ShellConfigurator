@@ -641,3 +641,29 @@ describe('StyleScreen section order', () => {
     );
   });
 });
+
+describe('StyleScreen substitution editor', () => {
+  async function openEditor(instance: ReturnType<typeof setup>['instance']) {
+    instance.stdin.write('\u001B[Z'); // back to the directory section
+    await flush();
+    instance.stdin.write('\u001B[B'); // substitutions row
+    await flush();
+    instance.stdin.write('\r');
+    await flush();
+  }
+
+  it('clears the error once the user edits the text again', async () => {
+    const { instance } = setup();
+    await flush();
+    await openEditor(instance);
+    instance.stdin.write('x');
+    await flush();
+    instance.stdin.write('\r'); // "x" has no '=' → error
+    await flush();
+    expect(instance.lastFrame()).toContain("Missing '='");
+
+    instance.stdin.write('=');
+    await flush();
+    expect(instance.lastFrame()).not.toContain("Missing '='");
+  });
+});

@@ -191,12 +191,15 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
         commitSubs();
         return;
       }
+      // Editing the draft clears the error the last attempt left.
       if (key.backspace || key.delete) {
         setSubsDraft((d) => d.slice(0, -1));
+        setSubsError(null);
         return;
       }
       if (char && !key.ctrl && !key.meta) {
         setSubsDraft((d) => d + char);
+        setSubsError(null);
       }
       return;
     }
