@@ -22,7 +22,7 @@ import {
   detectTerminalAsync,
 } from './detector.ts';
 import { CliRunError, CliUsageError, errorMessage } from './errors.ts';
-import { appendHistory } from './history.ts';
+import { recordRun } from './history.ts';
 import { NERD_FONTS } from './installer.ts';
 import { buildTaskList, DEFAULT_INSTALL_TASK_DEPS, runInstallTasks } from './installTasks.ts';
 import { parseState, serializeState } from './state.ts';
@@ -450,10 +450,9 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
   // The ledger is best-effort: a run that just installed must not die because
   // the history file could not be written.
   try {
-    appendHistory({
-      version: 1,
-      timestamp: new Date().toISOString(),
+    recordRun({
       kind: 'apply',
+      state,
       command,
       results,
       exitCode: failed ? 1 : 0,

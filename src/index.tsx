@@ -9,7 +9,7 @@ import { parseCliArgs, quoteArgv } from './services/args.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
 import { CliRunError, CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags } from './services/headless.ts';
-import { appendHistory, writeSnapshot } from './services/history.ts';
+import { recordRun } from './services/history.ts';
 import { formatRepairReport, runRepair } from './services/repair.ts';
 import { restoreTty } from './services/tty.ts';
 import type { InstallTask, WizardState } from './types.ts';
@@ -35,14 +35,10 @@ export function recordInstallOutcome(
  * resolves later.
  */
 function recordWizardInstall(results: InstallTask[], state: WizardState): void {
-  const timestamp = new Date().toISOString();
   try {
-    const snapshotId = writeSnapshot(state, timestamp);
-    appendHistory({
-      version: 1,
-      timestamp,
+    recordRun({
       kind: 'install',
-      snapshotId,
+      state,
       results,
       exitCode: results.some((t) => t.status === 'failed') ? 1 : 0,
     });

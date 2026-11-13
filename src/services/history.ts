@@ -36,6 +36,33 @@ export function historyFilePath(): string {
   return path.join(stateDir(), 'history.jsonl');
 }
 
+export interface RecordRunOptions {
+  kind: HistoryKind;
+  /** Snapshot the applied state as the rollback handle. */
+  state?: WizardState;
+  results?: InstallTask[];
+  command?: string;
+  exitCode?: number;
+}
+
+/**
+ * Snapshots the run's state and appends it to the ledger. Throws on I/O failure;
+ * callers decide whether that is fatal.
+ */
+export function recordRun(options: RecordRunOptions): void {
+  const timestamp = new Date().toISOString();
+  const snapshotId = options.state ? writeSnapshot(options.state, timestamp) : undefined;
+  appendHistory({
+    version: 1,
+    timestamp,
+    kind: options.kind,
+    ...(snapshotId ? { snapshotId } : {}),
+    ...(options.results ? { results: options.results } : {}),
+    ...(options.command ? { command: options.command } : {}),
+    ...(options.exitCode !== undefined ? { exitCode: options.exitCode } : {}),
+  });
+}
+
 /**
  * Records one run by appending a single JSON line. Append-only because a run is
  * immutable history; ordering — and therefore `--list-runs` — falls out of file

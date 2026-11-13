@@ -9,14 +9,14 @@ const {
   mockDetectContainer,
   mockDetectTerminal,
   mockRunInstallTasks,
-  mockAppendHistory,
+  mockRecordRun,
 } = vi.hoisted(() => ({
   mockDetectInstalledShells: vi.fn(),
   mockDetectPackageManager: vi.fn(),
   mockDetectContainer: vi.fn(),
   mockDetectTerminal: vi.fn(),
   mockRunInstallTasks: vi.fn(),
-  mockAppendHistory: vi.fn(),
+  mockRecordRun: vi.fn(),
 }));
 
 vi.mock('../../services/detector.ts', async () => {
@@ -43,7 +43,7 @@ vi.mock('../../services/installTasks.ts', async () => {
 });
 
 vi.mock('../../services/history.ts', () => ({
-  appendHistory: mockAppendHistory,
+  recordRun: mockRecordRun,
 }));
 
 import type { ModuleId } from '../../config/modules.ts';
@@ -488,7 +488,7 @@ describe('runApply', () => {
     mockDetectPackageManager.mockResolvedValue('apt');
     mockDetectContainer.mockResolvedValue(false);
     mockDetectTerminal.mockResolvedValue(null);
-    mockAppendHistory.mockReturnValue(undefined);
+    mockRecordRun.mockReturnValue(undefined);
     process.exitCode = undefined;
   });
 
@@ -501,7 +501,7 @@ describe('runApply', () => {
     await runApply(flags({ subcommand: 'apply', shells: ['bash'], dryRun: true }));
 
     expect(mockRunInstallTasks).not.toHaveBeenCalled();
-    expect(mockAppendHistory).not.toHaveBeenCalled();
+    expect(mockRecordRun).not.toHaveBeenCalled();
     const output = stdoutWrite.mock.calls
       .map((call: [string, ...unknown[]]) => String(call[0]))
       .join('');
@@ -567,9 +567,10 @@ describe('runApply', () => {
     await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }), 'apply --shells zsh');
 
     expect(mockRunInstallTasks).toHaveBeenCalled();
-    expect(mockAppendHistory).toHaveBeenCalledWith(
+    expect(mockRecordRun).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'apply',
+        state: expect.objectContaining({ selectedShells: ['zsh'] }),
         command: 'apply --shells zsh',
         results: doneTasks,
         exitCode: 0,
@@ -589,7 +590,7 @@ describe('runApply', () => {
     mockRunInstallTasks.mockResolvedValue(failedTasks as never);
     await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }));
 
-    expect(mockAppendHistory).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 1 }));
+    expect(mockRecordRun).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 1 }));
     expect(process.exitCode).toBe(1);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Install Starship'));
   });
@@ -598,7 +599,7 @@ describe('runApply', () => {
     await expect(runApply(flags({ subcommand: 'apply' }))).rejects.toThrow(/at least one shell/);
 
     expect(mockRunInstallTasks).not.toHaveBeenCalled();
-    expect(mockAppendHistory).not.toHaveBeenCalled();
+    expect(mockRecordRun).not.toHaveBeenCalled();
     expect(process.exitCode).toBeUndefined();
   });
 
@@ -628,7 +629,7 @@ describe('runApply', () => {
 
   it('survives a history write failure', async () => {
     mockRunInstallTasks.mockResolvedValue(doneTasks as never);
-    mockAppendHistory.mockImplementation(() => {
+    mockRecordRun.mockImplementation(() => {
       throw new Error('ENOSPC');
     });
     await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }));

@@ -18,9 +18,8 @@ const { mockRestoreConfigBackups } = vi.hoisted(() => ({
   mockRestoreConfigBackups: vi.fn(),
 }));
 
-const { mockAppendHistory, mockWriteSnapshot } = vi.hoisted(() => ({
-  mockAppendHistory: vi.fn(),
-  mockWriteSnapshot: vi.fn<(state: WizardState, timestamp: string) => string>(() => 'snap-abc123'),
+const { mockRecordRun } = vi.hoisted(() => ({
+  mockRecordRun: vi.fn(),
 }));
 
 vi.mock('../services/detector.ts', async () => {
@@ -50,8 +49,7 @@ vi.mock('../services/history.ts', async () => {
     await vi.importActual<typeof import('../services/history.ts')>('../services/history.ts');
   return {
     ...actual,
-    appendHistory: mockAppendHistory,
-    writeSnapshot: mockWriteSnapshot,
+    recordRun: mockRecordRun,
   };
 });
 
@@ -87,7 +85,7 @@ import {
 } from '../index.tsx';
 import { parseCliArgs } from '../services/args.ts';
 import { CliRunError, CliUsageError } from '../services/errors.ts';
-import { DEFAULT_STATE, type InstallTask, type WizardState } from '../types.ts';
+import { DEFAULT_STATE, type InstallTask } from '../types.ts';
 
 describe('index CLI handling', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
@@ -322,8 +320,7 @@ describe('index wizard history recording', () => {
   const done = [{ id: 'config', label: 'Copy config', status: 'done' } as InstallTask];
 
   afterEach(() => {
-    mockAppendHistory.mockReset();
-    mockWriteSnapshot.mockReset();
+    mockRecordRun.mockReset();
     // Reset installFailed so later exit-code assertions are not poisoned.
     recordInstallOutcome(undefined);
   });
@@ -335,16 +332,10 @@ describe('index wizard history recording', () => {
       selectedShells: ['zsh'],
     });
 
-    expect(mockWriteSnapshot).toHaveBeenCalledTimes(1);
-    expect(mockWriteSnapshot.mock.calls.at(-1)?.[0]).toMatchObject({
-      preset: 'pure-prompt',
-      selectedShells: ['zsh'],
-    });
-    expect(mockAppendHistory).toHaveBeenCalledWith(
+    expect(mockRecordRun).toHaveBeenCalledWith(
       expect.objectContaining({
-        version: 1,
         kind: 'install',
-        snapshotId: 'snap-abc123',
+        state: expect.objectContaining({ preset: 'pure-prompt', selectedShells: ['zsh'] }),
         exitCode: 0,
         results: done,
       })
@@ -361,18 +352,17 @@ describe('index wizard history recording', () => {
       }
     );
 
-    expect(mockAppendHistory).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 1 }));
+    expect(mockRecordRun).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 1 }));
   });
 
   it('does not record history without a final state', () => {
     recordInstallOutcome(done);
 
-    expect(mockWriteSnapshot).not.toHaveBeenCalled();
-    expect(mockAppendHistory).not.toHaveBeenCalled();
+    expect(mockRecordRun).not.toHaveBeenCalled();
   });
 
   it('warns instead of dying when the history write fails', () => {
-    mockWriteSnapshot.mockImplementation(() => {
+    mockRecordRun.mockImplementation(() => {
       throw new Error('disk full');
     });
     const warn = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
@@ -428,7 +418,7 @@ describe('index headless routing', () => {
 
   beforeEach(() => {
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
-    mockAppendHistory.mockReset();
+    mockRecordRun.mockReset();
   });
 
   afterEach(() => {
@@ -476,7 +466,7 @@ describe('index headless routing', () => {
 
   it('refuses a bare apply before it ever installs', async () => {
     await expect(route(['apply'])).rejects.toThrow(/at least one shell/);
-    expect(mockAppendHistory).not.toHaveBeenCalled();
+    expect(mockRecordRun).not.toHaveBeenCalled();
   });
 
   it('runs an apply dry-run through the router and prints the plan', async () => {
@@ -485,7 +475,7 @@ describe('index headless routing', () => {
     expect(routed).toBe(true);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('dry run'));
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Targets: zsh'));
-    expect(mockAppendHistory).not.toHaveBeenCalled();
+    expect(mockRecordRun).not.toHaveBeenCalled();
   });
 
   it('accepts equals-syntax through the router', async () => {

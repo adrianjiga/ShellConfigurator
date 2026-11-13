@@ -7,6 +7,7 @@ import {
   type HistoryRecord,
   historyFilePath,
   readHistory,
+  recordRun,
   snapshotDir,
   snapshotPath,
   writeSnapshot,
@@ -99,6 +100,32 @@ describe('appendHistory / readHistory', () => {
     fs.writeFileSync(file, `${good}\n\n{"version":1,"kind":"install","timestamp":"torn\n`, 'utf8');
 
     expect(readHistory()).toEqual([record('apply', { exitCode: 0 })]);
+  });
+});
+
+describe('recordRun', () => {
+  const state: WizardState = { ...DEFAULT_STATE, selectedShells: ['zsh'] };
+
+  it('snapshots the state and links the snapshot from the ledger record', () => {
+    recordRun({
+      kind: 'apply',
+      state,
+      command: 'apply --shells zsh',
+      results: [{ id: 'starship', label: 'Install Starship', status: 'done' }],
+      exitCode: 0,
+    });
+
+    const [run] = readHistory();
+    expect(run.snapshotId).toBeDefined();
+    expect(fs.existsSync(snapshotPath(run.snapshotId ?? ''))).toBe(true);
+    expect(run).toMatchObject({ kind: 'apply', command: 'apply --shells zsh', exitCode: 0 });
+  });
+
+  it('records no snapshot when the run has no state', () => {
+    recordRun({ kind: 'uninstall' });
+
+    expect(readHistory()[0]?.snapshotId).toBeUndefined();
+    expect(fs.existsSync(snapshotDir())).toBe(false);
   });
 });
 
