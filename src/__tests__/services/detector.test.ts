@@ -104,6 +104,12 @@ describe('detectPackageManagerAsync', () => {
     expect(await detectPackageManagerAsync()).toBe('dnf');
   });
 
+  it('maps AlmaLinux, whose os-release id is almalinux, to dnf', async () => {
+    execFileByArg((arg) => arg === 'apt-get' || arg === 'dnf');
+    readFileAsyncReturns('ID="almalinux"\nID_LIKE="rhel centos fedora"');
+    expect(await detectPackageManagerAsync()).toBe('dnf');
+  });
+
   it('lets the distro id choose between several package managers', async () => {
     execFileByArg((arg) => arg === 'apt-get' || arg === 'dnf');
     readFileAsyncReturns('ID=fedora\nNAME="Fedora"');

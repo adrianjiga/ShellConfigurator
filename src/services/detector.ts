@@ -9,7 +9,7 @@ const readFileP = promisify(fs.readFile);
 // Async throughout: these run during the Ink render loop and must not block it.
 
 const APT_DISTROS = ['ubuntu', 'debian', 'linuxmint', 'pop', 'elementary'];
-const DNF_DISTROS = ['fedora', 'rhel', 'centos', 'rocky', 'alma'];
+const DNF_DISTROS = ['fedora', 'rhel', 'centos', 'rocky', 'almalinux'];
 const PACMAN_DISTROS = ['arch', 'manjaro', 'endeavouros', 'cachyos', 'garuda'];
 
 /** Reads the distro id from /etc/os-release, e.g. "ubuntu" or "fedora". */
