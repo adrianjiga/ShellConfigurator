@@ -266,6 +266,14 @@ describe('SegmentsScreen', () => {
 });
 
 describe('SegmentsScreen filter', () => {
+  it('moves the cursor to the first match when the filter changes', async () => {
+    const { instance } = setup();
+    await flush();
+    // Many modules match "o", so a clamped cursor would stay on the fourth row.
+    await press(instance, DOWN, DOWN, DOWN, 'o');
+    expect(instance.lastFrame()).toMatch(/›.*Directory/);
+  });
+
   it('does not leave the screen on ← while a filter is typed', async () => {
     const { instance, onBack } = setup();
     await flush();

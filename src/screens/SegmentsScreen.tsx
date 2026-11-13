@@ -107,7 +107,11 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
     applyModules(onUpdate, orderedForSide());
   }, [selected, side]);
 
-  // The list shrinks as the filter narrows, so keep the cursor inside it.
+  // A new filter starts on its first match; otherwise keep the cursor in the list.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only a filter change resets the cursor.
+  useEffect(() => {
+    setCursor(0);
+  }, [filter]);
   useEffect(() => {
     setCursor((c) => Math.min(c, Math.max(0, rows.length - 1)));
   }, [rows.length]);
