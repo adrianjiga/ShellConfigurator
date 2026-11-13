@@ -1,4 +1,4 @@
-import { execFile, execFileSync, spawn } from 'node:child_process';
+import { type ChildProcess, execFile, execFileSync, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resumeUi, suspendUi } from './tty.ts';
 
@@ -105,7 +105,14 @@ export function runCommand(args: string[], options: { signal?: AbortSignal } = {
 
   return new Promise<void>((resolve, reject) => {
     suspendUi();
-    const child = spawn(cmd, rest, { stdio: 'inherit' });
+    let child: ChildProcess;
+    try {
+      child = spawn(cmd, rest, { stdio: 'inherit' });
+    } catch (err) {
+      resumeUi();
+      reject(err);
+      return;
+    }
 
     let cancelled = false;
     let escalationTimer: NodeJS.Timeout | undefined;

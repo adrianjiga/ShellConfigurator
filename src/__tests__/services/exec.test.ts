@@ -167,6 +167,15 @@ describe('runCommand', () => {
     }
   });
 
+  it('resumes the UI when spawn throws before a child exists', async () => {
+    mockSpawn.mockImplementationOnce(() => {
+      throw new TypeError('invalid argument');
+    });
+
+    await expect(runCommand(['bad'])).rejects.toThrow('invalid argument');
+    expect(isUiSuspended()).toBe(false);
+  });
+
   it('re-arms raw mode even when the child fails', async () => {
     const setRawMode = vi.fn();
     const realStdin = process.stdin;
