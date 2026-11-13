@@ -269,7 +269,7 @@ function checkShellWiring(
     return {
       id: `shell:${shellId}`,
       title: shell.label,
-      status: 'warn',
+      status: 'fail',
       detail: `${shell.rcFile} has no starship init line`,
       fix,
     };
@@ -278,25 +278,41 @@ function checkShellWiring(
     return {
       id: `shell:${shellId}`,
       title: shell.label,
-      status: 'fail',
+      status: 'warn',
       detail: `${shell.rcFile} has the init line but no STARSHIP_CONFIG export`,
       fix,
     };
   }
+  if (fromState && pointAtShared && setsOwnConfig(content)) {
+    return {
+      id: `shell:${shellId}`,
+      title: shell.label,
+      status: 'warn',
+      detail: `${shell.rcFile} still sets its own STARSHIP_CONFIG, which overrides the shared config`,
+      fix,
+    };
+  }
   if (!deps.exists(configPath)) {
-    if (!fromState && pointAtShared) {
-      return setsOwnConfig(content)
-        ? {
-            id: `shell:${shellId}`,
-            title: shell.label,
-            status: 'pass',
-            detail: `sets its own STARSHIP_CONFIG instead of ${configPath}`,
-          }
+    if (pointAtShared) {
+      return !fromState
+        ? setsOwnConfig(content)
+          ? {
+              id: `shell:${shellId}`,
+              title: shell.label,
+              status: 'pass',
+              detail: `sets its own STARSHIP_CONFIG instead of ${configPath}`,
+            }
+          : {
+              id: `shell:${shellId}`,
+              title: shell.label,
+              status: 'warn',
+              detail: `no shared config at ${configPath} — Starship runs on its defaults`,
+            }
         : {
             id: `shell:${shellId}`,
             title: shell.label,
-            status: 'warn',
-            detail: `no shared config at ${configPath} — Starship runs on its defaults`,
+            status: 'pass',
+            detail: `no shared config at ${configPath} — Starship uses its defaults`,
           };
     }
     return {

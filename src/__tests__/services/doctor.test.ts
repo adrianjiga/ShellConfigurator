@@ -100,13 +100,13 @@ describe('runDoctor', () => {
     files.set(ZSH_RC, `# ${ZSH_INIT}\n${ZSH_CONFIG_LINE}\n`);
     files.set(ZSH_CONFIG, 'x\n');
     const report = await runDoctor(baseState(), makeDeps(files));
-    expect(find(report, 'shell:zsh')).toMatchObject({ status: 'warn' });
+    expect(find(report, 'shell:zsh')).toMatchObject({ status: 'fail' });
   });
 
-  it('warns when a shell rc has no init line', async () => {
+  it('fails when a shell rc has no init line', async () => {
     const report = await runDoctor(baseState(), makeDeps(new Map()));
     expect(find(report, 'shell:zsh')).toMatchObject({
-      status: 'warn',
+      status: 'fail',
       fix: { kind: 'configure-shell', shellId: 'zsh' },
     });
   });
@@ -119,13 +119,31 @@ describe('runDoctor', () => {
     expect(find(report, 'shell:zsh').detail).toContain(ZSH_CONFIG);
   });
 
-  it('fails when the init line has no STARSHIP_CONFIG export', async () => {
+  it('warns when the init line has no STARSHIP_CONFIG export', async () => {
     const files = new Map<string, string>();
     files.set(ZSH_RC, `${ZSH_INIT}\n`);
     files.set(ZSH_CONFIG, 'x\n');
     const report = await runDoctor(baseState(), makeDeps(files));
-    expect(find(report, 'shell:zsh')).toMatchObject({ status: 'fail' });
+    expect(find(report, 'shell:zsh')).toMatchObject({ status: 'warn' });
     expect(find(report, 'shell:zsh').detail).toMatch(/STARSHIP_CONFIG/);
+  });
+
+  it('does not fail an adopt-mode setup that relies on the shared defaults', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `${ZSH_INIT}\n`);
+    const report = await runDoctor(baseState({ keepExistingConfig: true }), makeDeps(files));
+    expect(find(report, 'shell:zsh').status).toBe('pass');
+  });
+
+  it('flags a leftover per-shell export in adopt mode', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `${ZSH_INIT}\n${ZSH_CONFIG_LINE}\n`);
+    files.set(getSharedConfigPath(), 'x\n');
+    const report = await runDoctor(baseState({ keepExistingConfig: true }), makeDeps(files));
+    expect(find(report, 'shell:zsh')).toMatchObject({
+      status: 'warn',
+      fix: { kind: 'configure-shell', shellId: 'zsh' },
+    });
   });
 
   it('passes a shell that points at the shared config in adopt mode', async () => {
