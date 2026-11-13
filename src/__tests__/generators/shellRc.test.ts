@@ -445,6 +445,33 @@ describe('applyShellConfig', () => {
     expect(finalContent.match(/starship init zsh/g)).toHaveLength(1);
   });
 
+  it('puts a needed PATH line above a user init line, not after it', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () => `# mine\nexport STARSHIP_CONFIG="${expectedConfigPath}"\neval "$(starship init zsh)"\n`
+    );
+
+    applyShellConfig('zsh', { ensurePathDir: '/home/u/.local/bin' });
+
+    const content = lastWrittenContent();
+    expect(content.indexOf('export PATH="/home/u/.local/bin:$PATH"')).toBeLessThan(
+      content.indexOf('starship init zsh')
+    );
+  });
+
+  it('adds a missing export inside its own managed block, above the init line', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () => '# Added by ShellConfigurator\neval "$(starship init zsh)"\n'
+    );
+
+    applyShellConfig('zsh');
+
+    expect(lastWrittenContent()).toBe(
+      `# Added by ShellConfigurator\nexport STARSHIP_CONFIG="${expectedConfigPath}"\neval "$(starship init zsh)"\n`
+    );
+  });
+
   it('keeps user lines glued under the unset block a per-shell run removes', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() =>
@@ -484,6 +511,10 @@ describe('applyShellConfig', () => {
     expect(finalContent).toContain(`export STARSHIP_CONFIG="${expectedConfigPath}"`);
     // The init line was already in the rc and must not be added a second time.
     expect(finalContent.match(/starship init zsh/g)).toHaveLength(1);
+    // Above the user's init line, closed by a blank line so that line stays theirs.
+    expect(finalContent).toBe(
+      `# Added by ShellConfigurator\nexport STARSHIP_CONFIG="${expectedConfigPath}"\n\neval "$(starship init zsh)"`
+    );
   });
 
   it('works for bash', () => {

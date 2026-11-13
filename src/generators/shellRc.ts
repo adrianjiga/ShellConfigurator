@@ -446,6 +446,33 @@ function buildAdditionLines(
   };
 }
 
+/**
+ * Puts `lines` just above the first init line: PATH must be set before
+ * `starship init` runs, and zsh/bash read the config at init time for the
+ * continuation prompt. Inside a managed block the lines join it; above a user's
+ * own init line they form a block of their own, closed by a blank line so the
+ * user's line never becomes part of it. Null when no init line is in the file.
+ */
+function insertBeforeInit(
+  content: string,
+  shell: ShellDef,
+  marker: string,
+  lines: string[]
+): string | null {
+  const all = content.split('\n');
+  const command = INIT_COMMAND[shell.id];
+  const index = all.findIndex((l) => !l.trimStart().startsWith('#') && l.includes(command));
+  if (index === -1) return null;
+
+  let above = index - 1;
+  while (above >= 0 && !isBlockMarkerLine(all[above]) && isManagedLine(shell, all[above])) {
+    above--;
+  }
+  const inBlock = above >= 0 && isBlockMarkerLine(all[above]);
+  all.splice(index, 0, ...(inBlock ? lines : [marker, ...lines, '']));
+  return all.join('\n');
+}
+
 export function applyShellConfig(
   shellId: ShellId,
   options: ApplyShellConfigOptions = {}
@@ -496,8 +523,8 @@ export function applyShellConfig(
   }
 
   const marker = options.pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
-  const addition = `\n${marker}\n${lines.join('\n')}\n`;
-  writeFileAtomic(rcPath, cleaned + addition);
+  const inserted = initPresent ? insertBeforeInit(cleaned, shell, marker, lines) : null;
+  writeFileAtomic(rcPath, inserted ?? `${cleaned}\n${marker}\n${lines.join('\n')}\n`);
 
   return {
     applied: true,
