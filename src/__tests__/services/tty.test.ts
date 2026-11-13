@@ -49,7 +49,7 @@ describe('suspendUi / resumeUi', () => {
     const realStdin = process.stdin;
     Object.defineProperty(process, 'stdin', {
       configurable: true,
-      value: { isTTY: true, setRawMode },
+      value: { isTTY: true, isRaw: true, setRawMode },
     });
 
     try {
@@ -69,6 +69,24 @@ describe('suspendUi / resumeUi', () => {
       expect(isUiSuspended()).toBe(false);
       expect(notified).toEqual([true, false]);
       expect(setRawMode).toHaveBeenLastCalledWith(true);
+    } finally {
+      Object.defineProperty(process, 'stdin', { configurable: true, value: realStdin });
+    }
+  });
+
+  it('leaves a terminal that was not in raw mode out of it after resuming', () => {
+    const setRawMode = vi.fn();
+    const realStdin = process.stdin;
+    Object.defineProperty(process, 'stdin', {
+      configurable: true,
+      value: { isTTY: true, isRaw: false, setRawMode },
+    });
+
+    try {
+      suspendUi();
+      resumeUi();
+
+      expect(setRawMode).not.toHaveBeenCalledWith(true);
     } finally {
       Object.defineProperty(process, 'stdin', { configurable: true, value: realStdin });
     }

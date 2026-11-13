@@ -148,7 +148,7 @@ describe('runCommand', () => {
     const realStdin = process.stdin;
     Object.defineProperty(process, 'stdin', {
       configurable: true,
-      value: { isTTY: true, setRawMode },
+      value: { isTTY: true, isRaw: true, setRawMode },
     });
 
     try {
@@ -172,7 +172,7 @@ describe('runCommand', () => {
     const realStdin = process.stdin;
     Object.defineProperty(process, 'stdin', {
       configurable: true,
-      value: { isTTY: true, setRawMode },
+      value: { isTTY: true, isRaw: true, setRawMode },
     });
 
     try {
