@@ -364,10 +364,10 @@ async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> 
 }
 
 /**
- * Installs a Nerd Font (or confirms it is on the machine). A verified archive in
- * the font cache (P1.1) skips the download entirely — so re-runs, repair (#20)
- * and rollback survive offline / rate-limit situations. Returns a note when the
- * font came from cache, so the task list can explain why there was no download.
+ * Installs a Nerd Font. A verified archive in the font cache skips the download
+ * when it matches the latest release or the release cannot be looked up. Returns
+ * a note when the font came from cache, so the task list can explain why there
+ * was no download.
  */
 export async function installNerdFont(
   fontId: string,
@@ -377,17 +377,21 @@ export async function installNerdFont(
   if (!font) throw new Error(`Unknown font: ${fontId}`);
 
   const cached = cachedFont(fontId);
-  if (cached) {
-    await installFontFiles(font.zipName, cached.buffer);
-    return `installed ${font.label} from cache`;
-  }
 
+  // The cache is reused while it still matches the latest release, and when the
+  // lookup fails, so an offline or rate-limited re-run keeps working.
   let asset: FontAsset;
   try {
     asset = await resolveFontAsset(font.zipName, downloadSignal(signal, FONT_CHECKSUM_TIMEOUT_MS));
   } catch (err) {
     if (signal?.aborted) throw new CommandCancelledError(`look up ${font.zipName} checksum`);
-    throw err;
+    if (!cached) throw err;
+    await installFontFiles(font.zipName, cached.buffer);
+    return `installed ${font.label} from cache`;
+  }
+  if (cached && cached.digest === asset.digest) {
+    await installFontFiles(font.zipName, cached.buffer);
+    return `installed ${font.label} from cache`;
   }
 
   const buffer = await downloadFont(font.zipName, asset.url, signal);

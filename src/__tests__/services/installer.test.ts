@@ -554,26 +554,54 @@ describe('installNerdFont', () => {
     expect(pinCall?.[1]).toBe(`${hexDigest(zip)}\n`);
   });
 
-  it('reuses a verified cache entry instead of downloading', async () => {
-    const zip = zipWith({ 'FiraCodeNerdFont-Regular.ttf': 'from-cache' });
-    const digest = hexDigest(zip);
-    // The pin says we have this exact archive; cachedFont() trusts it offline.
+  /** Serves FiraCode.zip from the cache with a pin matching its bytes. */
+  function cacheHolds(zip: ArrayBuffer) {
     mockReadFileSync.mockImplementation((file: string) => {
-      if (String(file).endsWith('FiraCode.sha256')) return `${digest}\n`;
+      if (String(file).endsWith('FiraCode.sha256')) return `${hexDigest(zip)}\n`;
       if (String(file).endsWith('FiraCode.zip')) return Buffer.from(zip);
       const err = new Error('ENOENT') as Error & { code?: string };
       err.code = 'ENOENT';
       throw err;
     });
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+  }
+
+  it('reuses a cache entry that matches the latest release instead of downloading', async () => {
+    const zip = zipWith({ 'FiraCodeNerdFont-Regular.ttf': 'from-cache' });
+    cacheHolds(zip);
+    const download = vi.fn(() => okResponse({ arrayBuffer: async () => zip }));
+    stubFontFetch(download, hexDigest(zip));
 
     const note = await installNerdFont('FiraCode');
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(download).not.toHaveBeenCalled();
     expect(note).toBe('installed Fira Code from cache');
     const written = mockWriteFileSync.mock.calls.map((c) => c[0] as string);
     expect(written).toContain(path.join(getNerdFontsDir(), 'FiraCodeNerdFont-Regular.ttf'));
+  });
+
+  it('falls back to the cache when the release lookup fails', async () => {
+    const zip = zipWith({ 'FiraCodeNerdFont-Regular.ttf': 'from-cache' });
+    cacheHolds(zip);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('fetch failed');
+      })
+    );
+
+    await expect(installNerdFont('FiraCode')).resolves.toBe('installed Fira Code from cache');
+  });
+
+  it('downloads the newer release when the cache holds an older archive', async () => {
+    cacheHolds(zipWith({ 'FiraCodeNerdFont-Regular.ttf': 'old-release' }));
+    const fresh = zipWith({ 'FiraCodeNerdFont-Regular.ttf': 'new-release' });
+    const download = vi.fn(() => okResponse({ arrayBuffer: async () => fresh }));
+    stubFontFetch(download, hexDigest(fresh));
+
+    const note = await installNerdFont('FiraCode');
+
+    expect(download).toHaveBeenCalled();
+    expect(note).toBeUndefined();
   });
 
   it('re-downloads when the cached archive fails its pinned digest', async () => {
