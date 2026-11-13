@@ -183,7 +183,7 @@ function terminalConfigPath(id: TerminalId): string {
   }
 }
 
-// kitty and alacritty look in more places than the XDG default; editing a new
+// kitty, alacritty and ghostty look in more places than the XDG default; editing a new
 // file in the primary location would shadow the user's real config there.
 function configLookupPaths(id: TerminalId): string[] {
   if (id === 'kitty') {
@@ -206,6 +206,13 @@ function configLookupPaths(id: TerminalId): string[] {
       path.join(os.homedir(), '.alacritty.toml'),
       path.join(os.homedir(), '.alacritty.yml'),
     ];
+  }
+  if (id === 'ghostty') {
+    const dirs = [path.join(configHome(), 'ghostty')];
+    if (process.platform === 'darwin') {
+      dirs.push(path.join(os.homedir(), 'Library', 'Application Support', 'com.mitchellh.ghostty'));
+    }
+    return dirs.flatMap((dir) => [path.join(dir, 'config.ghostty'), path.join(dir, 'config')]);
   }
   return [terminalConfigPath(id)];
 }

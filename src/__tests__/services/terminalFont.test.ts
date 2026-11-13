@@ -68,6 +68,16 @@ describe('wireTerminalFont', () => {
     expect(readTerminalFontFamily('kitty')).toBe('Hack Nerd Font');
   });
 
+  it("edits ghostty's config.ghostty when it exists", () => {
+    write('ghostty/config.ghostty', 'theme = dark\n');
+
+    const result = wireTerminalFont('ghostty', 'Hack Nerd Font');
+
+    expect(result.path).toBe(path.join(tmp, 'ghostty', 'config.ghostty'));
+    expect(read('ghostty/config.ghostty')).toBe('theme = dark\nfont-family = Hack Nerd Font\n');
+    expect(fs.existsSync(path.join(tmp, 'ghostty', 'config'))).toBe(false);
+  });
+
   it('writes the ghostty font-family key', () => {
     const result = wireTerminalFont('ghostty', 'Hack Nerd Font');
 
