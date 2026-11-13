@@ -301,6 +301,18 @@ export async function runInstallTasks(
           patch: { label: `Starship (${check.version ?? 'installed'})` },
         };
       }
+      // An earlier script install off PATH still counts; the rc PATH line reaches it.
+      const existingDir = deps.getMissingStarshipPathDir();
+      if (existingDir) {
+        const version = await deps.readStarshipVersion(existingDir);
+        return {
+          status: 'skipped',
+          patch: {
+            label: `Starship (${version ?? 'installed'})`,
+            note: `already in ${existingDir}`,
+          },
+        };
+      }
       await deps.installStarship(state.packageManager, signal);
       // Record what the fresh install produced, so the doctor can flag drift
       // when a later package-manager update moves starship under its nose.

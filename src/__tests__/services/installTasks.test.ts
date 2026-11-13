@@ -70,7 +70,11 @@ describe('runInstallTasks', () => {
 
   it('records the version of a script install that PATH cannot see yet', async () => {
     const deps = fakeDeps({
-      getMissingStarshipPathDir: vi.fn(() => '/home/u/.local/bin'),
+      // Nothing is there before the install; the script then lands it off PATH.
+      getMissingStarshipPathDir: vi
+        .fn<() => string | null>()
+        .mockReturnValueOnce(null)
+        .mockReturnValue('/home/u/.local/bin'),
       readStarshipVersion: vi.fn().mockResolvedValue('starship 1.21.0'),
     });
     await runInstallTasks(state(), deps, vi.fn());
@@ -918,6 +922,24 @@ describe('runInstallTasks', () => {
     );
 
     expect(deps.resetSharedShellConfig).not.toHaveBeenCalled();
+  });
+});
+
+describe('existing script install', () => {
+  it('does not install Starship again when it sits off PATH in the script bin dir', async () => {
+    const deps = fakeDeps({
+      getMissingStarshipPathDir: vi.fn(() => '/home/u/.local/bin'),
+      readStarshipVersion: vi.fn().mockResolvedValue('starship 1.27.0'),
+    });
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    expect(deps.installStarship).not.toHaveBeenCalled();
+    const task = results.find((t) => t.id === 'starship');
+    expect(task).toMatchObject({ status: 'skipped', label: 'Starship (starship 1.27.0)' });
+    expect(deps.applyShellConfig).toHaveBeenCalledWith(
+      'zsh',
+      expect.objectContaining({ ensurePathDir: '/home/u/.local/bin' })
+    );
   });
 });
 
