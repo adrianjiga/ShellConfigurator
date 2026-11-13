@@ -32,6 +32,19 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const ran = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
+  // While a child owns the terminal it is in cooked mode, so Ctrl+C arrives as
+  // SIGINT instead of a key. Cancel the run then instead of dying mid-install.
+  useEffect(() => {
+    const onSigint = () => {
+      setCancelling(true);
+      abortRef.current?.abort();
+    };
+    process.on('SIGINT', onSigint);
+    return () => {
+      process.off('SIGINT', onSigint);
+    };
+  }, []);
+
   // While an interactive child (sudo, chsh) owns the terminal this screen renders
   // nothing, so Ink's next frame cannot paint over its password prompt.
   useEffect(() => subscribeToUiSuspension(setUiSuspended), []);

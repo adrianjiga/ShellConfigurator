@@ -1,3 +1,4 @@
+import { useApp, useInput } from 'ink';
 import { useState } from 'react';
 import { DoneScreen } from './screens/DoneScreen.tsx';
 import { FontCheckScreen } from './screens/FontCheckScreen.tsx';
@@ -49,6 +50,13 @@ export function App({ dryRun = false, onInstallOutcome }: AppProps) {
   function goBack() {
     setState((prev) => getPrevStep(prev));
   }
+
+  // Ink's own Ctrl+C exit is off (see index.tsx) so the install can cancel
+  // cleanly instead; every other step still exits on it.
+  const { exit } = useApp();
+  useInput((char, key) => {
+    if (key.ctrl && char === 'c' && state.step !== 'installing') exit();
+  });
 
   switch (state.step) {
     case 'welcome':

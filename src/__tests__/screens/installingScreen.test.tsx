@@ -224,3 +224,30 @@ describe('InstallingScreen', () => {
     expect(mocks.subscribeToUiSuspension).toHaveBeenCalled();
   });
 });
+
+describe('InstallingScreen SIGINT', () => {
+  it('cancels the run when Ctrl+C reaches the process as SIGINT', async () => {
+    mocks.buildTaskList.mockReturnValue(statusFixture());
+    const signal = captureSignal();
+    setup();
+    await flush();
+
+    process.emit('SIGINT');
+    await flush();
+
+    expect(signal.current?.aborted).toBe(true);
+  });
+
+  it('stops listening for SIGINT once the screen is gone', async () => {
+    mocks.buildTaskList.mockReturnValue(statusFixture());
+    captureSignal();
+    const ours = () =>
+      process.listeners('SIGINT').filter((l) => l.toString().includes('setCancelling'));
+    const { instance } = setup();
+    await flush();
+    expect(ours()).toHaveLength(1);
+    instance.unmount();
+    await flush();
+    expect(ours()).toHaveLength(0);
+  });
+});

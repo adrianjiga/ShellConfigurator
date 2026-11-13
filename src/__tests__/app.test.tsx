@@ -16,6 +16,12 @@ vi.mock('../services/detector.ts', () => ({
   detectContainerAsync: vi.fn().mockResolvedValue(false),
 }));
 
+const mocks = vi.hoisted(() => ({ exit: vi.fn() }));
+vi.mock('ink', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('ink')>()),
+  useApp: () => ({ exit: mocks.exit }),
+}));
+
 import { App } from '../app.tsx';
 
 const ENTER = '\r';
@@ -99,5 +105,15 @@ describe('App wizard routing', () => {
     expect(instance.lastFrame()).toContain('Left prompt segments');
     // The preview pane renders alongside the picker.
     expect(instance.lastFrame()).toContain('Preview');
+  });
+});
+
+describe('App Ctrl+C', () => {
+  it('exits on Ctrl+C outside the install step', async () => {
+    const instance = render(<App />);
+    await flush();
+    instance.stdin.write('\u0003');
+    await flush();
+    expect(mocks.exit).toHaveBeenCalled();
   });
 });

@@ -327,7 +327,9 @@ async function main(): Promise<void> {
   const app = render(
     <ErrorBoundary onError={(err) => reportFatal('ShellConfigurator hit a render error', err)}>
       <App dryRun={flags.dryRun ?? false} onInstallOutcome={recordInstallOutcome} />
-    </ErrorBoundary>
+    </ErrorBoundary>,
+    // Ctrl+C during the install must cancel it, not leave it running unseen.
+    { exitOnCtrlC: false }
   );
 
   await app.waitUntilExit();
