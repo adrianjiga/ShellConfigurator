@@ -411,6 +411,25 @@ describe('applyShellConfig', () => {
     );
   });
 
+  it('keeps the closing fi of a user if-block wrapped around a removed block', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() =>
+      [
+        'if command -v starship >/dev/null; then',
+        '# Added by ShellConfigurator',
+        'unset STARSHIP_CONFIG',
+        'fi',
+        '',
+      ].join('\n')
+    );
+
+    applyShellConfig('zsh');
+
+    const content = lastWrittenContent();
+    expect(content).not.toContain('unset STARSHIP_CONFIG');
+    expect(content).toMatch(/then\nfi\n/);
+  });
+
   it('uses fish syntax for the STARSHIP_CONFIG line', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() => '');
