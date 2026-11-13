@@ -6,7 +6,6 @@ import {
   appendHistory,
   type HistoryRecord,
   historyFilePath,
-  readHistory,
   recordRun,
   snapshotDir,
   snapshotPath,
@@ -33,13 +32,21 @@ function record(
   return { version: 1, timestamp: '2026-01-02T03:04:05.000Z', kind, ...overrides };
 }
 
+function readLedger(): HistoryRecord[] {
+  return fs
+    .readFileSync(historyFilePath(), 'utf8')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => JSON.parse(line) as HistoryRecord);
+}
+
 describe('historyFilePath', () => {
   it('places history.jsonl inside the app state dir', () => {
     expect(historyFilePath()).toBe(path.join(tmpDir, 'shell-configurator', 'history.jsonl'));
   });
 });
 
-describe('appendHistory / readHistory', () => {
+describe('appendHistory', () => {
   it('creates the state dir and appends a single JSON line', () => {
     appendHistory(record('install'));
 
@@ -63,8 +70,7 @@ describe('appendHistory / readHistory', () => {
     appendHistory(record('apply', { command: 'apply --state one.json', exitCode: 0 }));
     appendHistory(record('apply', { command: 'apply --state two.json', exitCode: 1 }));
 
-    const runs = readHistory();
-    expect(runs.map((r) => r.command)).toEqual([
+    expect(readLedger().map((r) => r.command)).toEqual([
       'apply --state one.json',
       'apply --state two.json',
     ]);
@@ -83,7 +89,7 @@ describe('appendHistory / readHistory', () => {
       })
     );
 
-    expect(readHistory()).toEqual([
+    expect(readLedger()).toEqual([
       record('install', {
         command: 'shell-configurator',
         snapshotId: 'snap-abc123',
@@ -108,18 +114,6 @@ describe('appendHistory / readHistory', () => {
     expect(JSON.parse(lines[1])).toMatchObject({ kind: 'install', exitCode: 0 });
   });
 
-  it('returns an empty list when no history exists yet', () => {
-    expect(readHistory()).toEqual([]);
-  });
-
-  it('skips blank and torn lines instead of failing the read', () => {
-    const file = historyFilePath();
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const good = JSON.stringify(record('apply', { exitCode: 0 }));
-    fs.writeFileSync(file, `${good}\n\n{"version":1,"kind":"install","timestamp":"torn\n`, 'utf8');
-
-    expect(readHistory()).toEqual([record('apply', { exitCode: 0 })]);
-  });
 });
 
 describe('recordRun', () => {
@@ -134,7 +128,7 @@ describe('recordRun', () => {
       exitCode: 0,
     });
 
-    const [run] = readHistory();
+    const [run] = readLedger();
     expect(run.snapshotId).toBeDefined();
     expect(fs.existsSync(snapshotPath(run.snapshotId ?? ''))).toBe(true);
     expect(run).toMatchObject({ kind: 'apply', command: 'apply --shells zsh', exitCode: 0 });
@@ -143,7 +137,7 @@ describe('recordRun', () => {
   it('records no snapshot when the run has no state', () => {
     recordRun({ kind: 'uninstall' });
 
-    expect(readHistory()[0]?.snapshotId).toBeUndefined();
+    expect(readLedger()[0]?.snapshotId).toBeUndefined();
     expect(fs.existsSync(snapshotDir())).toBe(false);
   });
 });

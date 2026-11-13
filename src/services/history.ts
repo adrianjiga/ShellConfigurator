@@ -13,8 +13,7 @@ export type HistoryKind = 'install' | 'apply' | 'uninstall' | 'rollback';
 
 /**
  * One entry in history.jsonl: a single JSON object per line. The version field
- * drives future migrations in readHistory; fields are additive so old records
- * stay readable.
+ * drives future migrations; fields are additive so old records stay readable.
  */
 export interface HistoryRecord {
   /** Schema version of this record. */
@@ -66,8 +65,8 @@ export function recordRun(options: RecordRunOptions): void {
 
 /**
  * Records one run by appending a single JSON line. Append-only because a run is
- * immutable history; ordering — and therefore `--list-runs` — falls out of file
- * order. Throws on I/O failure; callers decide whether that is fatal.
+ * immutable history; ordering falls out of file order. Throws on I/O failure;
+ * callers decide whether that is fatal.
  */
 export function appendHistory(record: HistoryRecord): void {
   const file = historyFilePath();
@@ -132,31 +131,4 @@ export function writeSnapshot(state: WizardState, timestamp?: string): string {
   for (let n = 2; fs.existsSync(snapshotPath(id)); n++) id = `${base}-${n}`;
   writeFileAtomic(snapshotPath(id), serializeState(state));
   return id;
-}
-
-/**
- * Reads every recorded run in file (chronological) order. A missing history is
- * "no runs yet", and a torn trailing line from a crash mid-append is skipped
- * rather than failing the whole read.
- */
-export function readHistory(): HistoryRecord[] {
-  const file = historyFilePath();
-  let content: string;
-  try {
-    content = fs.readFileSync(file, 'utf8');
-  } catch (err) {
-    if (isMissingFile(err)) return [];
-    throw err;
-  }
-
-  const records: HistoryRecord[] = [];
-  for (const line of content.split('\n')) {
-    if (line.trim() === '') continue;
-    try {
-      records.push(JSON.parse(line) as HistoryRecord);
-    } catch {
-      // Unparseable line: likely a torn append; skip it and keep the rest.
-    }
-  }
-  return records;
 }
