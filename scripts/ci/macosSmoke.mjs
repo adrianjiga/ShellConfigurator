@@ -29,7 +29,7 @@ await runSmoke('macOS headless smoke', () => {
   runCli(['generate', '--preset', 'pastel-powerline', '-o', tomlPath, '--export', cardPath]);
   assert.ok(existsSync(tomlPath), 'generate -o did not write the TOML');
   assert.ok(existsSync(cardPath), 'generate --export did not write the card');
-  const parsed = parse(readFileSync(tomlPath, 'utf8'));
+  const parsed = /** @type {any} */ (parse(readFileSync(tomlPath, 'utf8')));
   assert.equal(typeof parsed.format, 'string', 'written TOML unparseable');
 
   // apply --dry-run --adopt: the keep-config plan prints, no installs happen.

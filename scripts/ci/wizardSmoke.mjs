@@ -88,7 +88,7 @@ try {
   );
 
   const perShellConfig = nodePath.join(homeDir, '.config', 'starship', 'bash.toml');
-  const toml = parse(readFileSync(perShellConfig, 'utf8'));
+  const toml = /** @type {any} */ (parse(readFileSync(perShellConfig, 'utf8')));
   assert.equal(typeof toml.format, 'string', 'bash config unparseable');
   assert.ok(toml.format.includes('$character'), 'bash config missing $character');
 

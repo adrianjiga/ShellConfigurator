@@ -110,12 +110,13 @@ await check(
   'generateToml: every preset parses, wires $fill (not right_format), and covers its modules',
   () => {
     for (const preset of PRESETS) {
+      /** @type {import('../dist/types.js').WizardState} */
       const state = {
         ...DEFAULT_STATE,
         preset: preset.id,
         hasNerdFont: preset.requiresNerdFont,
-        leftModules: preset.leftModules ?? [],
-        rightModules: preset.rightModules ?? [],
+        leftModules: [...preset.leftModules],
+        rightModules: [...preset.rightModules],
         characterSymbol: 'lambda',
         palette: preset.palette,
         powerline: preset.powerline,
@@ -126,14 +127,14 @@ await check(
         !toml.includes('right_format'),
         `preset ${preset.id} uses right_format instead of $fill`
       );
-      const parsed = parse(toml);
+      const parsed = /** @type {any} */ (parse(toml));
       assert.equal(typeof parsed.format, 'string', `preset ${preset.id} format not parseable`);
       assert.equal(parsed.palette, preset.palette, `preset ${preset.id} palette mismatch`);
       assert.ok(
         parsed.format.includes('$character'),
         `preset ${preset.id} format missing $character`
       );
-      for (const moduleId of [...(preset.leftModules ?? []), ...(preset.rightModules ?? [])]) {
+      for (const moduleId of [...preset.leftModules, ...preset.rightModules]) {
         assert.ok(
           parsed[moduleId] !== undefined,
           `preset ${preset.id} missing [${moduleId}] block`
@@ -169,7 +170,7 @@ await check('generateToml emits the expanded prompt and directory options', () =
     directoryTruncationLength: 1,
     directorySubstitutions: [{ from: 'projects', to: 'code' }],
   });
-  const parsed = parse(toml);
+  const parsed = /** @type {any} */ (parse(toml));
 
   assert.equal(parsed.palette, 'vivid');
   assert.equal(parsed.add_newline, false);

@@ -26,6 +26,7 @@
     "dev": "tsx src/index.tsx",
     "build": "tsc",
     "typecheck": "tsc -p tsconfig.test.json",
+    "typecheck:scripts": "npm run build && tsc -p tsconfig.scripts.json",
     "start": "node dist/index.js",
     "lint": "biome check src scripts vitest.config.ts",
     "format": "biome format --write .",
