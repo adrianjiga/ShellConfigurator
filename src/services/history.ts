@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { InstallTask, WizardState } from '../types.ts';
+import { writeFileAtomic } from '../generators/shellRc.ts';
 import { stateDir } from './paths.ts';
 import { serializeState } from './state.ts';
 
@@ -95,13 +96,16 @@ export function snapshotPath(snapshotId: string): string {
 
 /**
  * Snapshot the user choices of a run as a versioned card file and return its id.
- * The id is a slugged ISO timestamp — printable, sortable, and unique at the
- * frequency runs happen. Best-effort callers let a failure become a warning.
+ * The id is a slugged ISO timestamp — printable and sortable — with a suffix
+ * added when a second run lands in the same millisecond. Best-effort callers
+ * let a failure become a warning.
  */
 export function writeSnapshot(state: WizardState, timestamp?: string): string {
-  const id = (timestamp ?? new Date().toISOString()).replaceAll(':', '-');
+  const base = (timestamp ?? new Date().toISOString()).replaceAll(':', '-');
   fs.mkdirSync(snapshotDir(), { recursive: true });
-  fs.writeFileSync(snapshotPath(id), serializeState(state), 'utf8');
+  let id = base;
+  for (let n = 2; fs.existsSync(snapshotPath(id)); n++) id = `${base}-${n}`;
+  writeFileAtomic(snapshotPath(id), serializeState(state));
   return id;
 }
 

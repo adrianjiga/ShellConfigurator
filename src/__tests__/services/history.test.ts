@@ -155,13 +155,13 @@ describe('snapshotDir / snapshotPath / writeSnapshot', () => {
     expect(card.wizard.selectedShells).toEqual(['zsh']);
   });
 
-  it('is unique per timestamp and re-writable for an id', () => {
+  it('is unique per timestamp and suffixes a same-millisecond run', () => {
     const first = writeSnapshot(DEFAULT_STATE, '2026-01-02T03:04:05.000Z');
     const second = writeSnapshot(DEFAULT_STATE, '2026-01-02T03:04:06.000Z');
+    const sameMillisecond = writeSnapshot(DEFAULT_STATE, '2026-01-02T03:04:05.000Z');
 
     expect(first).not.toBe(second);
-    // Same id overwrites the same card — idempotent snapshots.
-    expect(writeSnapshot(DEFAULT_STATE, '2026-01-02T03:04:05.000Z')).toBe(first);
-    expect(fs.readdirSync(snapshotDir())).toHaveLength(2);
+    expect(sameMillisecond).toBe(`${first}-2`);
+    expect(fs.readdirSync(snapshotDir())).toHaveLength(3);
   });
 });
