@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { MODULES } from '../../config/modules.ts';
+import { isConfigurableModule, MODULES } from '../../config/modules.ts';
+import { getPalette } from '../../config/palettes.ts';
 import { PRESETS } from '../../config/presets.ts';
 
 describe('PRESETS', () => {
@@ -53,4 +54,21 @@ describe('PRESETS', () => {
       }
     }
   });
+});
+
+describe('powerline presets', () => {
+  it.each(PRESETS.filter((p) => p.powerline).map((p) => [p.id, p] as const))(
+    '%s never puts two same-coloured segments next to each other',
+    (_id, preset) => {
+      const colors = getPalette(preset.palette).colors;
+      for (const side of [preset.leftModules ?? [], preset.rightModules ?? []]) {
+        const segments = side.filter(isConfigurableModule);
+        for (let i = 1; i < segments.length; i++) {
+          expect(colors[segments[i]!], `${segments[i - 1]} → ${segments[i]}`).not.toBe(
+            colors[segments[i - 1]!]
+          );
+        }
+      }
+    }
+  );
 });
