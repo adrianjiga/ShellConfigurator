@@ -77,7 +77,7 @@ case "$digest" in
     ;;
 esac
 
-mkdir -p "$data_dir" "$bin_dir"
+mkdir -p "$(dirname "$data_dir")" "$bin_dir"
 
 echo "Downloading $asset_url"
 curl -fsSL "$asset_url" -o "$tmp_dir/package.tgz"
@@ -92,20 +92,23 @@ if [ "sha256:$actual" != "$digest" ]; then
 fi
 tar -xzf "$tmp_dir/package.tgz" -C "$tmp_dir"
 
-# Clear any previous install so a stale extract never shadows a new one.
-rm -rf "${data_dir:?}"/*
-cp -rf "$tmp_dir/package/." "$data_dir/"
+staged="$tmp_dir/package"
+chmod +x "$staged/dist/index.js"
 
-chmod +x "$data_dir/dist/index.js"
-ln -sf "$data_dir/dist/index.js" "$bin_dir/shell-configurator"
-
-# Boot the freshly installed binary so a broken release never "installs" silently.
-if "$bin_dir/shell-configurator" --version >/dev/null 2>&1; then
-  echo "Verified the install by launching \`shell-configurator --version\`."
-else
-  echo "The installed binary failed to start. See '$data_dir' for details." >&2
+# Boot the new release before touching the current install, so a broken one
+# never replaces a working one.
+if ! boot_error="$(node "$staged/dist/index.js" --version 2>&1 >/dev/null)"; then
+  echo "The downloaded release failed to start; your current install is unchanged:" >&2
+  printf '%s\n' "$boot_error" >&2
   exit 1
 fi
+echo "Verified the release by launching \`shell-configurator --version\`."
+
+rm -rf "$data_dir.old"
+if [ -e "$data_dir" ]; then mv "$data_dir" "$data_dir.old"; fi
+mv "$staged" "$data_dir"
+rm -rf "$data_dir.old"
+ln -sf "$data_dir/dist/index.js" "$bin_dir/shell-configurator"
 
 cat <<EOF
 
