@@ -281,7 +281,16 @@ describe('installStarship', () => {
     // masked by the exit status of the shell reading from the pipe.
     expect(mockSpawn).toHaveBeenCalledWith(
       'curl',
-      ['-fsS', '-o', expect.stringContaining('install.sh'), 'https://starship.rs/install.sh'],
+      [
+        '-fsS',
+        '--connect-timeout',
+        '15',
+        '--max-time',
+        '120',
+        '-o',
+        expect.stringContaining('install.sh'),
+        'https://starship.rs/install.sh',
+      ],
       { stdio: 'inherit' }
     );
     expect(mockSpawn).toHaveBeenCalledWith(

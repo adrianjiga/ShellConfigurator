@@ -129,7 +129,20 @@ async function installStarshipViaScript(signal?: AbortSignal): Promise<void> {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-starship-'));
   const scriptPath = path.join(tmpDir, 'install.sh');
   try {
-    await runCommand(['curl', '-fsS', '-o', scriptPath, STARSHIP_INSTALL_URL], { signal });
+    await runCommand(
+      [
+        'curl',
+        '-fsS',
+        '--connect-timeout',
+        '15',
+        '--max-time',
+        '120',
+        '-o',
+        scriptPath,
+        STARSHIP_INSTALL_URL,
+      ],
+      { signal }
+    );
     if (!fs.existsSync(scriptPath) || fs.statSync(scriptPath).size === 0) {
       throw new Error(`Downloaded an empty install script from ${STARSHIP_INSTALL_URL}`);
     }
