@@ -72,3 +72,17 @@ describe('FontSelectScreen going back', () => {
     expect(lastFrame()).toMatch(/›\s*Fira Code/);
   });
 });
+
+describe('FontSelectScreen terminal note', () => {
+  it('says the font will be selected in a detected terminal', () => {
+    const { lastFrame } = render(
+      <FontSelectScreen
+        state={{ ...DEFAULT_STATE, terminal: 'kitty' }}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    expect(lastFrame()).toContain('selected in kitty for you');
+    expect(lastFrame()).not.toContain("You'll need to set this font");
+  });
+});
