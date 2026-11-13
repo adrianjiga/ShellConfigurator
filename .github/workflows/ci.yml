@@ -86,33 +86,33 @@ jobs:
             package-manager: apt
             setup: true
             finalize: true
-            wizard-check: true
+            wizard-check: HOME=/tmp/smoke-home node scripts/ci/headlessGenerateSmoke.mjs && HOME=/tmp/smoke-home node scripts/ci/headlessApplySmoke.mjs
           - image: debian:bookworm-slim
             package-manager: apt
             setup: true
             finalize: true
-            wizard-check: true
+            wizard-check: HOME=/tmp/smoke-home node scripts/ci/headlessGenerateSmoke.mjs && HOME=/tmp/smoke-home node scripts/ci/headlessApplySmoke.mjs
           - image: fedora:44
             package-manager: dnf
             setup: true
             finalize: true
-            wizard-check: true
+            wizard-check: HOME=/tmp/smoke-home node scripts/ci/headlessGenerateSmoke.mjs && HOME=/tmp/smoke-home node scripts/ci/headlessApplySmoke.mjs
           - image: archlinux:latest
             package-manager: pacman
             setup: true
             finalize: true
-            wizard-check: true
+            wizard-check: HOME=/tmp/smoke-home node scripts/ci/headlessGenerateSmoke.mjs && HOME=/tmp/smoke-home node scripts/ci/headlessApplySmoke.mjs
           - image: alpine:latest
             package-manager: apk
             # Alpine ships no bash; install it before the harness starts.
             setup: apk add --no-cache bash
             finalize: true
-            wizard-check: true
+            wizard-check: HOME=/tmp/smoke-home node scripts/ci/headlessGenerateSmoke.mjs && HOME=/tmp/smoke-home node scripts/ci/headlessApplySmoke.mjs
           - image: debian:bookworm-slim
             package-manager: brew
             setup: mkdir -p /usr/local/bin && printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/brew && chmod +x /usr/local/bin/brew
             finalize: true
-            wizard-check: true
+            wizard-check: HOME=/tmp/smoke-home node scripts/ci/headlessGenerateSmoke.mjs
           - image: debian:bookworm-slim
             package-manager: script
             setup: true
