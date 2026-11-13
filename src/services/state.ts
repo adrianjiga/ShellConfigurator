@@ -210,7 +210,7 @@ function parseNerdFontChoice(value: unknown): NerdFontChoice {
 export function parseState(json: string): WizardState {
   let card: unknown;
   try {
-    card = JSON.parse(json);
+    card = JSON.parse(json.replace(/^\uFEFF/, ''));
   } catch {
     throw new CliUsageError('Invalid state card: not valid JSON');
   }

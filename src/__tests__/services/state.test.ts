@@ -56,6 +56,11 @@ describe('parseState', () => {
     expect(() => parseState('{nope')).toThrow(/Invalid state card/);
   });
 
+  it('reads a card that starts with a UTF-8 BOM', () => {
+    const restored = parseState(`\uFEFF${serializeState(sampleState)}`);
+    expect(restored.selectedShells).toEqual(['zsh', 'fish']);
+  });
+
   it('rejects an unknown version', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
     card.version = 2;
