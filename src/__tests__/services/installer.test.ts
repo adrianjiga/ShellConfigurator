@@ -740,6 +740,24 @@ describe('setDefaultShell', () => {
     await expect(setDefaultShell('zsh')).rejects.toThrow('/etc/shells');
     await expect(setDefaultShell('zsh')).rejects.toThrow('sudo tee -a /etc/shells');
   });
+
+  it('reports a listed shell failure without the /etc/shells hint', async () => {
+    mockExecFileSync.mockReturnValue('/bin/zsh\n');
+    mockReadFileSync.mockReturnValue('/bin/zsh\n');
+    spawnOutcome({ status: 1 });
+
+    const error = await setDefaultShell('zsh').catch((err: Error) => err);
+
+    expect(String(error)).toContain('Command failed with exit code 1');
+    expect(String(error)).not.toContain('/etc/shells');
+  });
+
+  it('says chsh is missing instead of blaming /etc/shells', async () => {
+    mockExecFileSync.mockReturnValue('/bin/zsh\n');
+    spawnOutcome({ error: Object.assign(new Error('spawn chsh ENOENT'), { code: 'ENOENT' }) });
+
+    await expect(setDefaultShell('zsh')).rejects.toThrow('chsh is not installed');
+  });
 });
 
 describe('getNerdFontsDir', () => {

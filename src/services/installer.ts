@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { getShellBinary } from '../config/shells.ts';
 import type { PackageManager, ShellId } from '../types.ts';
 import { cachedFont, cacheFont, sha256Digest } from './cache.ts';
+import { errorMessage } from './errors.ts';
 import {
   CommandCancelledError,
   commandExists,
@@ -422,19 +423,28 @@ export async function setDefaultShell(shellId: ShellId, signal?: AbortSignal): P
   if (!onPath) {
     throw new Error(`${binary} not found in PATH`);
   }
-  const { path: shellPath } = loginShellPath(binary, onPath);
+  const { path: shellPath, listed } = loginShellPath(binary, onPath);
 
   // chsh prompts for current user's password itself — run with stdio: 'inherit'
   try {
     await runCommand(['chsh', '-s', shellPath], { signal });
   } catch (err) {
     if (err instanceof CommandCancelledError) throw err;
-    // Brew-installed shells usually aren't listed in /etc/shells, so chsh rejects
-    // them. Surface an actionable hint instead of the raw chsh error.
+    if ((err as { code?: string }).code === 'ENOENT') {
+      throw new Error(
+        'Could not set the default shell: chsh is not installed ' +
+          '(Fedora ships it in util-linux-user, Alpine in shadow).',
+        { cause: err }
+      );
+    }
+    const reason = errorMessage(err);
+    if (listed) {
+      throw new Error(`Could not set ${binary} as the default shell: ${reason}`, { cause: err });
+    }
     throw new Error(
-      `Could not set ${binary} as the default shell. If ${shellPath} isn't listed in ` +
-        `/etc/shells, add it first (e.g. 'echo ${shellPath} | sudo tee -a /etc/shells'). ` +
-        `${err instanceof Error ? err.message : err}`,
+      `Could not set ${binary} as the default shell: ${shellPath} is not listed in ` +
+        `/etc/shells. Add it first (e.g. 'echo ${shellPath} | sudo tee -a /etc/shells'). ` +
+        reason,
       { cause: err }
     );
   }
