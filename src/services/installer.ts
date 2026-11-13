@@ -18,14 +18,29 @@ const SHELL_PACKAGES: Record<ShellId, Partial<Record<PackageManager, string>>> =
   powershell: { pacman: 'powershell', brew: 'powershell' },
 };
 
+/** Root (common in containers) has no sudo to call. */
+function needsSudo(): boolean {
+  return typeof process.getuid === 'function' && process.getuid() !== 0;
+}
+
 /** The scripted path is a separate code branch; omitting it here makes a stray lookup a type error. */
 const INSTALL_CMDS: Record<Exclude<PackageManager, 'script'>, (pkg: string) => string[]> = {
-  pacman: (pkg) => ['sudo', 'pacman', '-S', '--noconfirm', pkg],
-  apt: (pkg) => ['sudo', 'apt-get', 'install', '-y', pkg],
-  dnf: (pkg) => ['sudo', 'dnf', 'install', '-y', pkg],
+  pacman: (pkg) => [...sudo(), 'pacman', '-Sy', '--noconfirm', '--needed', pkg],
+  apt: (pkg) => [...sudo(), 'apt-get', 'install', '-y', pkg],
+  dnf: (pkg) => [...sudo(), 'dnf', 'install', '-y', pkg],
   brew: (pkg) => ['brew', 'install', pkg],
-  apk: (pkg) => ['sudo', 'apk', 'add', '--no-cache', pkg],
+  apk: (pkg) => [...sudo(), 'apk', 'add', '--no-cache', pkg],
 };
+
+function sudo(): string[] {
+  return needsSudo() ? ['sudo'] : [];
+}
+
+/** A fresh image has no package index, so the first apt install would 404. */
+async function refreshPackageIndex(pm: PackageManager): Promise<void> {
+  if (pm !== 'apt') return;
+  await runCommand([...sudo(), 'apt-get', 'update', '-qq']);
+}
 
 // Nerd Font definitions: id → GitHub release zip name. `family` is the font
 // family name the archive installs (nerd-fonts appends " Nerd Font").
@@ -181,6 +196,7 @@ export async function installShell(shellId: ShellId, pm: PackageManager): Promis
     );
   }
 
+  await refreshPackageIndex(pm);
   await runCommand(INSTALL_CMDS[pm](pkg));
 }
 

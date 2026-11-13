@@ -221,9 +221,11 @@ describe('installStarship', () => {
 
   it('installs via pacman', async () => {
     await installStarship('pacman');
-    expect(mockSpawn).toHaveBeenCalledWith('sudo', ['pacman', '-S', '--noconfirm', 'starship'], {
-      stdio: 'inherit',
-    });
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'sudo',
+      ['pacman', '-Sy', '--noconfirm', '--needed', 'starship'],
+      { stdio: 'inherit' }
+    );
   });
 
   it('installs via brew without sudo', async () => {
@@ -321,11 +323,27 @@ describe('installStarship', () => {
 });
 
 describe('installShell', () => {
-  it('installs zsh via apt', async () => {
+  it('refreshes the apt index once before installing', async () => {
     await installShell('zsh', 'apt');
+    expect(mockSpawn).toHaveBeenCalledWith('sudo', ['apt-get', 'update', '-qq'], {
+      stdio: 'inherit',
+    });
     expect(mockSpawn).toHaveBeenCalledWith('sudo', ['apt-get', 'install', '-y', 'zsh'], {
       stdio: 'inherit',
     });
+  });
+
+  it('drops sudo when already running as root', async () => {
+    const getuid = vi.spyOn(process, 'getuid').mockReturnValue(0);
+    try {
+      await installShell('zsh', 'apt');
+    } finally {
+      getuid.mockRestore();
+    }
+    expect(mockSpawn).toHaveBeenCalledWith('apt-get', ['install', '-y', 'zsh'], {
+      stdio: 'inherit',
+    });
+    expect(mockSpawn).not.toHaveBeenCalledWith('sudo', expect.anything(), expect.anything());
   });
 
   it('installs fish via brew', async () => {
