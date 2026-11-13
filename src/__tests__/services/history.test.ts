@@ -52,6 +52,13 @@ describe('appendHistory / readHistory', () => {
     expect(JSON.parse(lines[0])).toMatchObject({ version: 1, kind: 'install' });
   });
 
+  it('creates history.jsonl readable only by its owner', () => {
+    appendHistory(record('apply', { command: 'apply --import-url https://u:tok@example.com/x' }));
+
+    const mode = fs.statSync(historyFilePath()).mode & 0o777;
+    expect(mode).toBe(0o600);
+  });
+
   it('is append-only: later runs follow earlier ones in file order', () => {
     appendHistory(record('apply', { command: 'apply --state one.json', exitCode: 0 }));
     appendHistory(record('apply', { command: 'apply --state two.json', exitCode: 1 }));

@@ -72,7 +72,7 @@ export function recordRun(options: RecordRunOptions): void {
 export function appendHistory(record: HistoryRecord): void {
   const file = historyFilePath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(file, `${JSON.stringify(record)}\n`, 'utf8');
+  fs.appendFileSync(file, `${JSON.stringify(record)}\n`, { encoding: 'utf8', mode: 0o600 });
 }
 
 /** True when the failure is simply that the file does not exist yet. */
