@@ -13,11 +13,21 @@ set -eu
 REPO="adrianjiga/ShellConfigurator"
 API_LATEST="https://api.github.com/repos/${REPO}/releases/latest"
 
+for tool in curl tar; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "shell-configurator's installer needs $tool, which was not found." >&2
+    exit 1
+  fi
+done
+
 if command -v node >/dev/null 2>&1; then
   node_major="$(node --version | cut -d. -f1 | tr -d v)"
 else
   node_major=0
 fi
+case "$node_major" in
+  '' | *[!0-9]*) node_major=0 ;;
+esac
 
 if [ "$node_major" -lt 24 ]; then
   cat >&2 <<'EOF'
@@ -44,6 +54,17 @@ case "$(uname -s)" in
     ;;
 esac
 bin_dir="$HOME/.local/bin"
+link="$bin_dir/shell-configurator"
+
+if [ -e "$link" ] || [ -L "$link" ]; then
+  case "$(readlink "$link" 2>/dev/null)" in
+    "$data_dir"/*) ;;
+    *)
+      echo "$link already exists and was not made by this installer; move it away and re-run." >&2
+      exit 1
+      ;;
+  esac
+fi
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
@@ -108,7 +129,7 @@ rm -rf "$data_dir.old"
 if [ -e "$data_dir" ]; then mv "$data_dir" "$data_dir.old"; fi
 mv "$staged" "$data_dir"
 rm -rf "$data_dir.old"
-ln -sf "$data_dir/dist/index.js" "$bin_dir/shell-configurator"
+ln -sf "$data_dir/dist/index.js" "$link"
 
 cat <<EOF
 
@@ -120,8 +141,17 @@ if ! printf '%s' "$PATH" | tr ':' '\n' | grep -qFx "$bin_dir"; then
   cat <<EOF
 NOTE: $bin_dir is not on your PATH. Add it to your shell profile:
 
-  export PATH="\$HOME/.local/bin:\$PATH"
+  export PATH="\$HOME/.local/bin:\$PATH"     (bash, zsh)
+  fish_add_path ~/.local/bin                (fish)
 EOF
+else
+  found="$(command -v shell-configurator 2>/dev/null || true)"
+  if [ -n "$found" ] && [ "$found" != "$link" ]; then
+    cat <<EOF
+NOTE: another shell-configurator comes first on your PATH: $found
+(an npm -g install?). Remove it, or put $bin_dir earlier on PATH.
+EOF
+  fi
 fi
 
 echo
