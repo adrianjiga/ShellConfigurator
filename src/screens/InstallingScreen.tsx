@@ -30,7 +30,6 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const [tasks, setTasks] = useState<InstallTask[]>(() => buildTaskList(state));
   const [uiSuspended, setUiSuspended] = useState(() => isUiSuspended());
   const [cancelling, setCancelling] = useState(false);
-  const ran = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
   // While a child owns the terminal it is in cooked mode, so Ctrl+C arrives as
@@ -50,13 +49,10 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   // nothing, so Ink's next frame cannot paint over its password prompt.
   useEffect(() => subscribeToUiSuspension(setUiSuspended), []);
 
-  // Runs once on mount: re-running would restart every install. The `ran` ref
-  // guards double-invocation.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: mounts once; ran ref guards double-invocation.
+  // Runs on mount. A remount (React StrictMode runs effects twice) aborts the
+  // first run before any step starts and lets the second one finish.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the run starts once per mount.
   useEffect(() => {
-    if (ran.current) return;
-    ran.current = true;
-
     let unmounted = false;
     const controller = new AbortController();
     abortRef.current = controller;

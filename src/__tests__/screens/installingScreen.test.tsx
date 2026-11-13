@@ -1,4 +1,5 @@
 import { cleanup, render } from 'ink-testing-library';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstallingScreen, setAdvanceDelayForTests } from '../../screens/InstallingScreen.tsx';
 import type { InstallTaskDeps } from '../../services/installTasks.ts';
@@ -262,5 +263,24 @@ describe('InstallingScreen when the chain throws', () => {
     const results = onNext.mock.calls[0]![0].installResults as InstallTask[];
     expect(results.length).toBeGreaterThan(0);
     expect(results.every((t) => t.status === 'failed' && t.error === 'chain broke')).toBe(true);
+  });
+});
+
+describe('InstallingScreen under StrictMode', () => {
+  it('still finishes when React mounts the effect twice', async () => {
+    mocks.buildTaskList.mockReturnValue(statusFixture());
+    mocks.runInstallTasks.mockImplementation(async (_s, _d, _u, signal) =>
+      signal?.aborted ? [] : [{ id: 'starship', label: 'Starship', status: 'done' }]
+    );
+    const onNext = vi.fn();
+    render(
+      <StrictMode>
+        <InstallingScreen state={{ ...DEFAULT_STATE }} onNext={onNext} />
+      </StrictMode>
+    );
+    await waitFor(() => onNext.mock.calls.length > 0);
+    expect(onNext).toHaveBeenCalledWith({
+      installResults: [{ id: 'starship', label: 'Starship', status: 'done' }],
+    });
   });
 });
