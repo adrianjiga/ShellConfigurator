@@ -223,7 +223,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
         <Text color={uiColor('gray')}>
           {side === 'left'
             ? 'Choose which info appears on the left of your prompt.'
-            : 'Choose which info appears on the right (optional — press Enter to skip).'}
+            : 'Choose which info appears on the right (optional — Enter keeps the list as it is).'}
         </Text>
         {side === 'left' && (
           <Text color={uiColor('gray')} italic>
@@ -278,7 +278,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
           { key: '↑↓', label: 'navigate' },
           { key: 'Space', label: 'toggle' },
           { key: 'Shift+↑↓', label: 'reorder' },
-          { key: 'Enter/Tab/→', label: side === 'right' ? 'confirm / skip' : 'next' },
+          { key: 'Enter/Tab/→', label: 'next' },
           { key: 'Esc/←', label: 'back' },
         ]}
       />
