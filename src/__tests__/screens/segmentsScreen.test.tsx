@@ -264,3 +264,13 @@ describe('SegmentsScreen', () => {
     expect(frame.indexOf('1. Node.js')).toBeLessThan(frame.indexOf('2. Python'));
   });
 });
+
+describe('SegmentsScreen filter', () => {
+  it('does not leave the screen on ← while a filter is typed', async () => {
+    const { instance, onBack } = setup();
+    await flush();
+    await press(instance, 'g', '\u001B[D');
+    expect(onBack).not.toHaveBeenCalled();
+    expect(instance.lastFrame()).toContain('Filter: g');
+  });
+});

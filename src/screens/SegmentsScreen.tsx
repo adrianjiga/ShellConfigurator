@@ -171,8 +171,9 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
       return;
     }
 
+    // While a filter is typed, ← stays on the screen rather than dropping it.
     if (key.leftArrow) {
-      onBack();
+      if (!filter) onBack();
       return;
     }
 
