@@ -317,6 +317,21 @@ describe('runInstallTasks', () => {
     expect(deps.writeSharedConfig).not.toHaveBeenCalled();
   });
 
+  it('adopt mode says Starship falls back to its defaults when no shared config exists', async () => {
+    const deps = fakeDeps({ sharedConfigExists: vi.fn(() => false) });
+    const results = await runInstallTasks(
+      state({ keepExistingConfig: true, selectedShells: ['zsh'] }),
+      deps,
+      vi.fn()
+    );
+
+    const config = results.find((t) => t.id === 'config');
+    expect(config?.status).toBe('done');
+    expect(config?.note).toContain('Starship will use its defaults');
+    expect(config?.note).not.toContain('keeping the existing config untouched');
+    expect(deps.backupSharedConfig).not.toHaveBeenCalled();
+  });
+
   it('adopt mode wires shells to the shared config without a STARSHIP_CONFIG export', async () => {
     const deps = fakeDeps();
     await runInstallTasks(

@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import {
   type ApplyShellConfigOptions,
   applyShellConfig,
@@ -52,6 +53,7 @@ export interface InstallTaskDeps {
   writeSharedConfig: (toml: string) => WriteConfigResult;
   /** Snapshots the shared starship.toml before per-shell configs shadow it. Null when none exists. */
   backupSharedConfig: () => string | null;
+  sharedConfigExists: () => boolean;
   applyShellConfig: (
     shellId: ShellId,
     options?: ApplyShellConfigOptions
@@ -79,6 +81,7 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   writeShellConfig,
   writeSharedConfig,
   backupSharedConfig,
+  sharedConfigExists: () => fs.existsSync(getSharedConfigPath()),
   applyShellConfig,
   resetSharedShellConfig,
   getShellsUsingStarship: async () => shellsWithStarshipInit(await detectInstalledShellsAsync()),
@@ -352,6 +355,8 @@ export async function runInstallTasks(
             ? `shared config saved to ${written.backedUpTo}`
             : 'wrote the imported config'
         );
+      } else if (!deps.sharedConfigExists()) {
+        notes.push(`no shared config at ${getSharedConfigPath()} — Starship will use its defaults`);
       } else {
         // Point at what is already there; snapshot it so a re-run can restore it.
         try {
