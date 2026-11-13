@@ -87,6 +87,22 @@ describe('runDoctor', () => {
     expect(find(latin, 'locale').detail).toMatch(/not UTF-8/);
   });
 
+  it('accepts an init line spelled differently', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `source <(starship init zsh)\n${ZSH_CONFIG_LINE}\n`);
+    files.set(ZSH_CONFIG, 'x\n');
+    const report = await runDoctor(baseState(), makeDeps(files));
+    expect(find(report, 'shell:zsh')).toMatchObject({ status: 'pass' });
+  });
+
+  it('does not accept a commented-out init line', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `# ${ZSH_INIT}\n${ZSH_CONFIG_LINE}\n`);
+    files.set(ZSH_CONFIG, 'x\n');
+    const report = await runDoctor(baseState(), makeDeps(files));
+    expect(find(report, 'shell:zsh')).toMatchObject({ status: 'warn' });
+  });
+
   it('warns when a shell rc has no init line', async () => {
     const report = await runDoctor(baseState(), makeDeps(new Map()));
     expect(find(report, 'shell:zsh')).toMatchObject({

@@ -154,16 +154,41 @@ export function restoreConfigBackups(): RestoreOutcome {
   return outcome;
 }
 
+const INIT_COMMAND: Record<ShellId, string> = {
+  bash: 'starship init bash',
+  zsh: 'starship init zsh',
+  fish: 'starship init fish',
+  nushell: 'starship init nu',
+  powershell: 'starship init powershell',
+};
+
+/**
+ * True when a non-comment line runs the shell's init, in any spelling the shell
+ * accepts: the line we write, `source <(starship init zsh)`, an absolute binary
+ * path, or fish's conf.d file (checked by callers via `fishInitFile`).
+ */
+export function hasStarshipInit(content: string, shellId: ShellId): boolean {
+  const command = INIT_COMMAND[shellId];
+  return content
+    .split('\n')
+    .some((line) => !line.trimStart().startsWith('#') && line.includes(command));
+}
+
+/** Fish's drop-in init file, which `hasStarshipInit` cannot see from config.fish. */
+export function fishInitFile(rcFile: string): string {
+  return path.join(path.dirname(rcFile), 'conf.d', 'starship.fish');
+}
+
 /**
  * True when a manual-setup shell's init command has already been applied:
  * nushell's autoload file exists (written by the documented one-liner), or
  * powershell's $PROFILE contains the init line.
  */
-function manualSetupApplied(shell: ShellDef): boolean {
+export function manualSetupApplied(shell: ShellDef): boolean {
   if (!shell.initPath || !fs.existsSync(shell.initPath)) return false;
   if (shell.id === 'powershell') {
     try {
-      return fs.readFileSync(shell.initPath, 'utf8').includes(shell.initLine);
+      return hasStarshipInit(fs.readFileSync(shell.initPath, 'utf8'), shell.id);
     } catch {
       return false;
     }
@@ -344,7 +369,7 @@ function buildAdditionLines(
   return [
     ...(pathLine && !cleaned.includes(pathLine) ? [pathLine] : []),
     ...(configLine && !cleaned.includes(configLine) ? [configLine] : []),
-    ...(!cleaned.includes(shell.initLine) ? [shell.initLine] : []),
+    ...(!hasStarshipInit(cleaned, shell.id) ? [shell.initLine] : []),
   ];
 }
 
@@ -387,8 +412,12 @@ export function applyShellConfig(
   // `starship init` cannot resolve either the binary or its config.
   const configLine = options.pointAtSharedConfig ? null : starshipConfigLine(shellId);
 
+  const initPresent =
+    hasStarshipInit(cleaned, shell.id) ||
+    (shell.id === 'fish' && fs.existsSync(fishInitFile(rcPath)));
+
   // Idempotent: skip if already configured (check for the full block we'd add).
-  if (cleaned.includes(configLine ?? shell.initLine)) {
+  if (configLine ? cleaned.includes(configLine) : initPresent) {
     // An already-configured rc may still carry a stale opposite-mode block;
     // write the cleaned file so the modes stay mutually exclusive.
     if (cleaned !== existing) writeFileAtomic(rcPath, cleaned);

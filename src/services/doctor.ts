@@ -1,8 +1,10 @@
 import * as fs from 'node:fs';
 import { getShell } from '../config/shells.ts';
 import {
+  fishInitFile,
   getSharedConfigPath,
   getShellConfigPath,
+  hasStarshipInit,
   starshipConfigLine,
 } from '../generators/shellRc.ts';
 import { fontIdToInstall, type ShellId, type TerminalId, type WizardState } from '../types.ts';
@@ -172,7 +174,7 @@ async function checkRunningShell(shellIds: ShellId[], deps: DoctorDeps): Promise
   }
   const rcFile = shell.rcFile;
   const content = rcFile && deps.exists(rcFile) ? deps.readFile(rcFile) : '';
-  if (!rcFile || !content.includes(shell.initLine)) {
+  if (!rcFile || !shellHasInit(current, rcFile, content, deps)) {
     return {
       id: 'current-shell',
       title: 'Current shell',
@@ -186,6 +188,16 @@ async function checkRunningShell(shellIds: ShellId[], deps: DoctorDeps): Promise
     status: 'pass',
     detail: `${shell.label} will load Starship on the next prompt (restart it to apply now)`,
   };
+}
+
+function shellHasInit(
+  shellId: ShellId,
+  rcFile: string,
+  content: string,
+  deps: Pick<DoctorDeps, 'exists'>
+): boolean {
+  if (hasStarshipInit(content, shellId)) return true;
+  return shellId === 'fish' && deps.exists(fishInitFile(rcFile));
 }
 
 function checkLocale(deps: DoctorDeps): DoctorFinding {
@@ -250,7 +262,7 @@ function checkShellWiring(
   const content = deps.exists(shell.rcFile) ? deps.readFile(shell.rcFile) : '';
   const configPath = pointAtShared ? getSharedConfigPath() : getShellConfigPath(shellId);
   const configLine = pointAtShared ? null : starshipConfigLine(shellId);
-  const hasInit = content.includes(shell.initLine);
+  const hasInit = shellHasInit(shellId, shell.rcFile, content, deps);
   const hasConfig = configLine ? content.includes(configLine) : true;
 
   if (!hasInit) {
