@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { uiColor } from '../config/colors.ts';
 import { getModule, isConfigurableModule, type ModuleId } from '../config/modules.ts';
 import { getPalette, inkColor, type PaletteColorName } from '../config/palettes.ts';
-import { rendersGlyphs } from '../config/presets.ts';
+import { bracketsSegments, rendersGlyphs } from '../config/presets.ts';
 import {
   CHARACTER_SYMBOLS,
   NERD_FONT_SYMBOLS,
@@ -144,6 +144,7 @@ function StaticPromptFrame({ state: chosen }: { state: WizardState }) {
   // Mirrors the generator: separators are Nerd Font glyphs, so without one the
   // preview must show the plain prompt that will actually be written.
   const powerline = state.powerline && hasNerdFont;
+  const bracketed = bracketsSegments(state);
 
   const color = (name: PaletteColorName) => inkColor(palette.colors[name]);
 
@@ -169,9 +170,10 @@ function StaticPromptFrame({ state: chosen }: { state: WizardState }) {
 
       const text = def.previewSegment(hasNerdFont);
       if (!powerline) {
+        const shown = id === 'directory' ? previewDirectory(state) : text;
         return [
           <Text key={id} color={uiColor(color(def.id))}>
-            {id === 'directory' ? previewDirectory(state) : text}{' '}
+            {bracketed ? `[${shown}]` : shown}{' '}
           </Text>,
         ];
       }

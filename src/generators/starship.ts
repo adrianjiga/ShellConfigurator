@@ -5,7 +5,7 @@ import {
   type ModuleId,
 } from '../config/modules.ts';
 import { getPalette, type PaletteColorName } from '../config/palettes.ts';
-import { rendersGlyphs } from '../config/presets.ts';
+import { bracketsSegments, rendersGlyphs } from '../config/presets.ts';
 import {
   CHARACTER_SYMBOLS,
   CONTINUATION_PROMPTS,
@@ -60,12 +60,13 @@ function powerlineFormat(
 interface BlockContext {
   state: WizardState;
   powerline: boolean;
+  bracketed: boolean;
   separator: boolean;
   side: 'left' | 'right';
 }
 
 function moduleBlock(id: ModuleId, ctx: BlockContext): string {
-  const { state, powerline, separator, side } = ctx;
+  const { state, powerline, bracketed, separator, side } = ctx;
 
   // The character is not a placeable module, so it has no MODULES entry. It also
   // sits on its own line below the prompt, where there is nothing to interlock
@@ -101,17 +102,20 @@ disabled = false
   if (!def.stylesItself) {
     lines.push(`style  = "${tomlBasic(styleFor(def.id))}"`);
   }
+  const content =
+    id === 'directory' && state.hasNerdFont
+      ? `${NERD_FONT_SYMBOLS.directory}${def.content}`
+      : def.content;
   if (powerline) {
-    const content =
-      id === 'directory' && state.hasNerdFont
-        ? `${NERD_FONT_SYMBOLS.directory}${def.content}`
-        : def.content;
     lines.push(`format = "${tomlBasic(powerlineFormat(content, def.id, side, separator))}"`);
+  } else if (bracketed) {
+    lines.push(`format = "${tomlBasic(`(\\[[${content}]($style)\\] )`)}"`);
   }
 
   const settings = def.settings?.({
     hasNerdFont: state.hasNerdFont,
     powerline,
+    customFormat: powerline || bracketed,
     styleFor,
     directoryTruncationLength: state.directoryTruncationLength,
     directorySubstitutions: state.directorySubstitutions,
@@ -137,6 +141,7 @@ export function generateToml(chosen: WizardState): string {
   // Powerline separators are Nerd Font glyphs. Promising one without the font
   // would fill the prompt with tofu, so the plain layout is used instead.
   const powerline = state.powerline && state.hasNerdFont;
+  const bracketed = bracketsSegments(state);
 
   // A module chosen on both sides would otherwise be emitted twice in the format
   // string and render twice in the prompt. The left side wins.
@@ -166,11 +171,17 @@ export function generateToml(chosen: WizardState): string {
   // its separator.
   const blocksFor = (segments: ConfigurableModuleId[], at: 'left' | 'right') =>
     segments.map((id, i) =>
-      moduleBlock(id, { state, powerline, separator: at === 'right' || i > 0, side: at })
+      moduleBlock(id, {
+        state,
+        powerline,
+        bracketed,
+        separator: at === 'right' || i > 0,
+        side: at,
+      })
     );
 
   const characterBlock = leftModules.includes('character')
-    ? [moduleBlock('character', { state, powerline, separator: false, side: 'left' })]
+    ? [moduleBlock('character', { state, powerline, bracketed, separator: false, side: 'left' })]
     : [];
 
   const blocks = [

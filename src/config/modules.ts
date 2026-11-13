@@ -13,6 +13,8 @@ import { NERD_FONT_SYMBOLS } from './promptSymbols.ts';
 export interface ModuleTomlContext {
   hasNerdFont: boolean;
   powerline: boolean;
+  /** The generator writes this module's `format` itself (powerline or brackets). */
+  customFormat: boolean;
   /** Starship `directory.truncation_length`; `0` shows the full path. */
   directoryTruncationLength: number;
   /** Starship `directory.substitutions`, in insertion order. */
@@ -140,12 +142,17 @@ style_root  = "${tomlBasic(styleFor('err'))}"
     previewSegment: (hasNerdFont) =>
       `${hasNerdFont ? NERD_FONT_SYMBOLS.directory : ''}~/projects/myapp`,
     content: '$path$read_only',
-    settings: ({ hasNerdFont, powerline, directoryTruncationLength, directorySubstitutions }) => {
+    settings: ({
+      hasNerdFont,
+      customFormat,
+      directoryTruncationLength,
+      directorySubstitutions,
+    }) => {
       const lines = [
         `truncation_length = ${directoryTruncationLength}`,
         `truncate_to_repo  = true`,
       ];
-      if (hasNerdFont && !powerline) {
+      if (hasNerdFont && !customFormat) {
         lines.push(
           `format = "[${tomlBasic(NERD_FONT_SYMBOLS.directory)}]($style)[$path]($style)[$read_only]($read_only_style) "`
         );

@@ -197,3 +197,21 @@ describe('PromptPreview', () => {
     ui.unmount();
   });
 });
+
+describe('bracketed preset', () => {
+  it('draws each segment in brackets in the static frame', async () => {
+    const { lastFrame } = render(
+      <PromptPreview
+        state={{
+          ...DEFAULT_STATE,
+          preset: 'bracketed-segments',
+          leftModules: ['directory', 'git_branch', 'character'],
+        }}
+        renderPreview={async () => ({ mode: 'static', reason: 'starship-missing' })}
+      />
+    );
+
+    expect(lastFrame()).toContain('[~/projects/myapp]');
+    expect(lastFrame()).toContain('[on main]');
+  });
+});

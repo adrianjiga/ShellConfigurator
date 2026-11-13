@@ -17,6 +17,8 @@ export interface PresetDef {
   powerline: boolean;
   /** Text symbols only, even for a user whose terminal has a Nerd Font. */
   textOnly?: boolean;
+  /** Wraps each segment in square brackets, e.g. `[main]`. */
+  bracketed?: boolean;
 }
 
 export const PRESETS: PresetDef[] = [
@@ -71,6 +73,7 @@ export const PRESETS: PresetDef[] = [
     rightModules: ['time'],
     palette: 'muted',
     powerline: false,
+    bracketed: true,
   },
   {
     id: 'pure-prompt',
@@ -150,4 +153,9 @@ export const PRESETS: PresetDef[] = [
  */
 export function rendersGlyphs(state: { hasNerdFont: boolean; preset: string | null }): boolean {
   return state.hasNerdFont && !PRESETS.find((p) => p.id === state.preset)?.textOnly;
+}
+
+/** Whether segments are drawn as `[content]`: the bracketed preset, without powerline. */
+export function bracketsSegments(state: { preset: string | null; powerline: boolean }): boolean {
+  return !state.powerline && Boolean(PRESETS.find((p) => p.id === state.preset)?.bracketed);
 }
