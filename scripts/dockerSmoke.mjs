@@ -179,7 +179,7 @@ await check('generateToml emits the expanded prompt and directory options', () =
   assert.equal(parsed.palette, 'vivid');
   assert.equal(parsed.add_newline, false);
   assert.equal(parsed.continuation_prompt, '[❯](bright-black) ');
-  assert.equal(parsed.character?.vimcmd_symbol, '[❮](bold ok)');
+  assert.equal(parsed.character?.vimcmd_symbol, '[λ](bold inverted ok)');
   assert.equal(parsed.directory?.truncation_length, 1);
   assert.deepEqual(parsed.directory?.substitutions, { projects: 'code' });
 });
@@ -266,7 +266,7 @@ await check('applyShellConfig drops a stale fish unset guard and stays configure
     [
       '',
       '# Added by ShellConfigurator',
-      `set -gx STARSHIP_CONFIG ${fishConfig}`,
+      `set -gx STARSHIP_CONFIG '${fishConfig}'`,
       'starship init fish | source',
       '',
       '# Added by ShellConfigurator',
