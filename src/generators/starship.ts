@@ -18,11 +18,11 @@ import { tomlBasic, tomlLiteral } from './toml.ts';
 
 /**
  * Escapes a character symbol for starship's format string. The symbols are stored
- * as the user sees them, but `$` opens a module variable and `\` escapes the next
- * character, so both must be backslash-escaped in the generated config.
+ * as the user sees them, but `$` opens a module variable, `[ ] ( )` delimit text
+ * groups and `\` escapes the next character, so all of them are backslash-escaped.
  */
-function escapeFormatLiteral(symbol: string): string {
-  return symbol.replace(/[\\$]/g, (c) => `\\${c}`);
+export function escapeFormatLiteral(symbol: string): string {
+  return symbol.replace(/[\\$[\]()]/g, (c) => `\\${c}`);
 }
 
 /**

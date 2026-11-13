@@ -4,7 +4,7 @@ import { MODULES } from '../../config/modules.ts';
 import { PALETTES } from '../../config/palettes.ts';
 import { PRESETS } from '../../config/presets.ts';
 import { NERD_FONT_SYMBOLS, SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../../config/promptSymbols.ts';
-import { generateToml } from '../../generators/starship.ts';
+import { escapeFormatLiteral, generateToml } from '../../generators/starship.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
 const base: WizardState = {
@@ -466,5 +466,11 @@ describe('vim mode symbol', () => {
       generateToml({ ...DEFAULT_STATE, characterSymbol, vimMode: true })
     ) as { character: { vimcmd_symbol: string } };
     expect(parsed.character.vimcmd_symbol).toBe(expected);
+  });
+});
+
+describe('format escaping', () => {
+  it('escapes every starship format metacharacter in a symbol', () => {
+    expect(escapeFormatLiteral('$[x](y)\\')).toBe('\\$\\[x\\]\\(y\\)\\\\');
   });
 });
