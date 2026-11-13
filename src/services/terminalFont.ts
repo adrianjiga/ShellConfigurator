@@ -120,8 +120,8 @@ function setTomlFont(content: string, family: string): string {
   const head = content.slice(0, fontNormal.start);
   const separator = head.endsWith('\n') ? '' : '\n';
   const body = content.slice(fontNormal.start, fontNormal.end);
-  const newBody = /^\s*family\s*=/m.test(body)
-    ? body.replace(/^\s*family\s*=.*$/m, line)
+  const newBody = /^[ \t]*family[ \t]*=/m.test(body)
+    ? body.replace(/^([ \t]*)family[ \t]*=.*$/m, (_m, indent: string) => `${indent}${line}`)
     : `${line}\n${body}`;
   return head + separator + newBody + content.slice(fontNormal.end);
 }

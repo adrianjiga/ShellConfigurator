@@ -204,6 +204,16 @@ describe('wireTerminalFont', () => {
     }
   );
 
+  it('keeps blank lines and indentation before the family key', () => {
+    write('alacritty/alacritty.toml', '[font.normal]\nstyle = "Regular"\n\n  family = "Old"\n');
+
+    wireTerminalFont('alacritty', 'Hack Nerd Font');
+
+    expect(read('alacritty/alacritty.toml')).toBe(
+      '[font.normal]\nstyle = "Regular"\n\n  family = "Hack Nerd Font"\n'
+    );
+  });
+
   it('accepts the top-level inline font.normal form', () => {
     write('alacritty/alacritty.toml', 'font.normal = { family = "Old" }\n');
 
