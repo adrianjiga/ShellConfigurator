@@ -208,8 +208,9 @@ describe('InstallingScreen', () => {
     const { instance, onNext } = setup();
     await flush();
 
-    await waitFor(() => instance.lastFrame()?.includes('All done'));
-    expect(instance.lastFrame()).toContain('All done');
+    // One step failed, so the finish line must not claim success.
+    await waitFor(() => instance.lastFrame()?.includes('Finished with errors'));
+    expect(instance.lastFrame()).not.toContain('All done');
     expect(instance.lastFrame()).toContain('Unknown shell');
 
     await waitFor(() => onNext.mock.calls.length > 0);
@@ -282,5 +283,22 @@ describe('InstallingScreen under StrictMode', () => {
     expect(onNext).toHaveBeenCalledWith({
       installResults: [{ id: 'starship', label: 'Starship', status: 'done' }],
     });
+  });
+});
+
+describe('InstallingScreen finish line', () => {
+  it('does not say all done when a step failed', async () => {
+    setAdvanceDelayForTests(10_000);
+    mocks.buildTaskList.mockReturnValue([{ id: 'starship', label: 'Starship', status: 'pending' }]);
+    mocks.runInstallTasks.mockImplementation(async (_s, _d, onUpdate) => {
+      onUpdate('starship', { status: 'failed', error: 'boom' });
+      return [{ id: 'starship', label: 'Starship', status: 'failed', error: 'boom' }];
+    });
+    const { instance } = setup();
+    await flush();
+    await flush();
+    expect(instance.lastFrame()).toContain('Finished with errors');
+    expect(instance.lastFrame()).not.toContain('All done');
+    setAdvanceDelayForTests(0);
   });
 });

@@ -169,7 +169,13 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
         {allDone && (
           <Box marginTop={1}>
-            <Text color={uiColor('green')}>All done — continuing...</Text>
+            {tasks.some((t) => t.status === 'failed') ? (
+              <Text color={uiColor('yellow')}>
+                {cancelling ? 'Cancelled' : 'Finished with errors'} — continuing to the summary...
+              </Text>
+            ) : (
+              <Text color={uiColor('green')}>All done — continuing...</Text>
+            )}
           </Box>
         )}
       </Box>
