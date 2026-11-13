@@ -95,7 +95,9 @@ const FONT_CHECKSUM_TIMEOUT_MS = 30_000;
 const MAX_FONT_ARCHIVE_BYTES = 200 * 1024 * 1024;
 
 /** Where the official install script puts the binary when run without sudo. */
-export const SCRIPT_INSTALL_BIN_DIR = path.join(os.homedir(), '.local', 'bin');
+export function scriptInstallBinDir(): string {
+  return path.join(os.homedir(), '.local', 'bin');
+}
 
 const STARSHIP_INSTALL_URL = 'https://starship.rs/install.sh';
 
@@ -127,9 +129,9 @@ async function installStarshipViaScript(signal?: AbortSignal): Promise<void> {
     // --bin-dir pins the drop location: without it the script defaults to
     // /usr/local/bin, which is root-owned and would trigger a sudo prompt.
     // POSIXLY_CORRECT keeps the script happy on distros where /bin/sh is bash.
-    fs.mkdirSync(SCRIPT_INSTALL_BIN_DIR, { recursive: true });
+    fs.mkdirSync(scriptInstallBinDir(), { recursive: true });
     await runCommand(
-      ['env', 'POSIXLY_CORRECT=1', 'sh', scriptPath, '--yes', '--bin-dir', SCRIPT_INSTALL_BIN_DIR],
+      ['env', 'POSIXLY_CORRECT=1', 'sh', scriptPath, '--yes', '--bin-dir', scriptInstallBinDir()],
       { signal }
     );
   } finally {
@@ -157,9 +159,7 @@ export async function installStarship(pm: PackageManager, signal?: AbortSignal):
  */
 export function getMissingStarshipPathDir(): string | null {
   if (commandExists('starship')) return null;
-  return fs.existsSync(path.join(SCRIPT_INSTALL_BIN_DIR, 'starship'))
-    ? SCRIPT_INSTALL_BIN_DIR
-    : null;
+  return fs.existsSync(path.join(scriptInstallBinDir(), 'starship')) ? scriptInstallBinDir() : null;
 }
 
 /**
@@ -200,9 +200,10 @@ export async function installShell(
 }
 
 export function getNerdFontsDir(): string {
-  return process.platform === 'darwin'
-    ? path.join(os.homedir(), 'Library', 'Fonts')
-    : path.join(os.homedir(), '.local', 'share', 'fonts');
+  if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Fonts');
+  const dataHome = process.env.XDG_DATA_HOME?.trim();
+  const base = dataHome ? dataHome : path.join(os.homedir(), '.local', 'share');
+  return path.join(base, 'fonts');
 }
 
 /**

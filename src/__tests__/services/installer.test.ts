@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -58,7 +59,7 @@ import {
   installShell,
   installStarship,
   NERD_FONTS,
-  SCRIPT_INSTALL_BIN_DIR,
+  scriptInstallBinDir,
   setDefaultShell,
   shellInstallSupported,
 } from '../../services/installer.ts';
@@ -197,7 +198,7 @@ describe('installStarship', () => {
         expect.stringContaining('install.sh'),
         '--yes',
         '--bin-dir',
-        SCRIPT_INSTALL_BIN_DIR,
+        scriptInstallBinDir(),
       ],
       { stdio: 'inherit' }
     );
@@ -213,7 +214,7 @@ describe('installStarship', () => {
         expect.stringContaining('install.sh'),
         '--yes',
         '--bin-dir',
-        SCRIPT_INSTALL_BIN_DIR,
+        scriptInstallBinDir(),
       ],
       { stdio: 'inherit' }
     );
@@ -260,7 +261,7 @@ describe('installStarship', () => {
         expect.stringContaining('install.sh'),
         '--yes',
         '--bin-dir',
-        SCRIPT_INSTALL_BIN_DIR,
+        scriptInstallBinDir(),
       ],
       { stdio: 'inherit' }
     );
@@ -648,6 +649,28 @@ describe('setDefaultShell', () => {
   });
 });
 
+describe('getNerdFontsDir', () => {
+  it('honours XDG_DATA_HOME on linux', () => {
+    if (process.platform === 'darwin') return;
+    vi.stubEnv('XDG_DATA_HOME', '/custom/share');
+    try {
+      expect(getNerdFontsDir()).toBe(path.join('/custom/share', 'fonts'));
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('falls back to ~/.local/share/fonts when XDG_DATA_HOME is empty', () => {
+    if (process.platform === 'darwin') return;
+    vi.stubEnv('XDG_DATA_HOME', '');
+    try {
+      expect(getNerdFontsDir()).toBe(path.join(os.homedir(), '.local', 'share', 'fonts'));
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
+
 describe('getMissingStarshipPathDir', () => {
   it('returns null when starship is already on PATH', () => {
     mockExecFileSync.mockReturnValue('/usr/local/bin/starship\n');
@@ -661,7 +684,7 @@ describe('getMissingStarshipPathDir', () => {
     });
     mockExistsSync.mockReturnValue(true);
 
-    expect(getMissingStarshipPathDir()).toBe(SCRIPT_INSTALL_BIN_DIR);
+    expect(getMissingStarshipPathDir()).toBe(scriptInstallBinDir());
   });
 
   it('returns null when starship is neither on PATH nor in the script install dir', () => {
