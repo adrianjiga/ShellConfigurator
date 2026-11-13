@@ -318,7 +318,14 @@ describe('detectTerminalAsync', () => {
 });
 
 describe('detectContainerAsync', () => {
-  const CONTAINER_ENV = ['CODESPACES', 'REMOTE_CONTAINERS', 'DEVCONTAINER', 'CI'];
+  const CONTAINER_ENV = [
+    'CODESPACES',
+    'REMOTE_CONTAINERS',
+    'DEVCONTAINER',
+    'CI',
+    'KUBERNETES_SERVICE_HOST',
+    'container',
+  ];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -351,6 +358,15 @@ describe('detectContainerAsync', () => {
     mockReadFile.mockImplementation((filePath: string, ...args: unknown[]) => {
       const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
       if (filePath === '/.dockerenv') cb(null, '');
+      else cb(new Error('ENOENT'));
+    });
+    expect(await detectContainerAsync()).toBe(true);
+  });
+
+  it('returns true for the systemd container marker (nspawn, LXC)', async () => {
+    mockReadFile.mockImplementation((filePath: string, ...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
+      if (filePath === '/run/systemd/container') cb(null, 'lxc\n');
       else cb(new Error('ENOENT'));
     });
     expect(await detectContainerAsync()).toBe(true);

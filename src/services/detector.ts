@@ -123,7 +123,14 @@ export async function detectTerminalAsync(): Promise<TerminalId | null> {
 }
 
 /** Env vars that mean "this is a sandbox, not the user's own machine". */
-const CONTAINER_ENV_MARKERS = ['CODESPACES', 'REMOTE_CONTAINERS', 'DEVCONTAINER', 'CI'];
+const CONTAINER_ENV_MARKERS = [
+  'CODESPACES',
+  'REMOTE_CONTAINERS',
+  'DEVCONTAINER',
+  'CI',
+  'KUBERNETES_SERVICE_HOST',
+  'container',
+];
 
 /** An env flag counts as set unless it is empty or an explicit false/0/no. */
 function isTruthyEnv(value: string | undefined): boolean {
@@ -132,7 +139,7 @@ function isTruthyEnv(value: string | undefined): boolean {
 }
 
 /** Files the container runtimes drop at the filesystem root. */
-const CONTAINER_MARKER_FILES = ['/run/.containerenv', '/.dockerenv'];
+const CONTAINER_MARKER_FILES = ['/run/.containerenv', '/.dockerenv', '/run/systemd/container'];
 
 /**
  * Detects a container/CI sandbox: fonts are per-host and `chsh` is meaningless
