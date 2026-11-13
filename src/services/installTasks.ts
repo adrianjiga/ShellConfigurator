@@ -498,10 +498,16 @@ export async function runInstallTasks(
       if (configPaths.length === 0) {
         return { status: 'skipped', patch: { note: 'nothing written to verify' } };
       }
+      const failures: string[] = [];
       for (const configPath of configPaths) {
-        if (scriptDir) await deps.verifyConfig(configPath, scriptDir);
-        else await deps.verifyConfig(configPath);
+        try {
+          if (scriptDir) await deps.verifyConfig(configPath, scriptDir);
+          else await deps.verifyConfig(configPath);
+        } catch (err) {
+          failures.push(`${configPath}: ${errorMessage(err)}`);
+        }
       }
+      if (failures.length > 0) throw new Error(failures.join('; '));
       const suffix = scriptDir ? ` (via ${scriptDir})` : '';
       return {
         status: 'done',

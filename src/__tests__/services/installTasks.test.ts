@@ -595,6 +595,26 @@ describe('runInstallTasks', () => {
     expect(deps.generateToml).toHaveBeenCalledWith(expect.objectContaining({ hasNerdFont: true }));
   });
 
+  it('verifies every written config and names each one that fails', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: true, version: 'starship 1.20' }),
+      verifyConfig: vi.fn(async (configPath: string) => {
+        if (configPath.endsWith('zsh.toml')) throw new Error('unknown key');
+      }),
+    });
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh', 'bash'] }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.verifyConfig).toHaveBeenCalledTimes(2);
+    const verify = results.find((t) => t.id === 'verify');
+    expect(verify?.status).toBe('failed');
+    expect(verify?.error).toMatch(/zsh\.toml: unknown key$/);
+    expect(verify?.error).not.toContain('bash.toml');
+  });
+
   it('fails the rc steps instead of running them when the config write failed', async () => {
     const deps = fakeDeps({
       writeShellConfig: vi.fn(() => {
