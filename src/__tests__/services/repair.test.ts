@@ -208,6 +208,42 @@ describe('runRepair', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('does not wire a shell when the starship install failed', async () => {
+    const deps = makeDeps(
+      report([
+        {
+          id: 'starship',
+          title: 'Starship',
+          status: 'fail',
+          detail: 'x',
+          fix: { kind: 'reinstall-starship' },
+        },
+        finding({ kind: 'configure-shell', shellId: 'zsh' }),
+      ]),
+      undefined,
+      { installStarship: vi.fn().mockRejectedValue(new Error('sudo denied')) }
+    );
+    const result = await runRepair(null, deps);
+    expect(deps.applyShellConfig).not.toHaveBeenCalled();
+    expect(result.actions[1]).toMatchObject({ status: 'skipped' });
+    expect(result.actions[1].detail).toMatch(/would break new shells/);
+  });
+
+  it('does not point the terminal at a font that failed to install', async () => {
+    const deps = makeDeps(
+      report([
+        finding({ kind: 'reinstall-font', fontId: 'Hack' }),
+        finding({ kind: 'wire-font', terminalId: 'kitty', family: 'Hack Nerd Font' }),
+      ]),
+      undefined,
+      { installNerdFont: vi.fn().mockRejectedValue(new Error('no space')) }
+    );
+    const result = await runRepair(null, deps);
+    expect(deps.wireTerminalFont).not.toHaveBeenCalled();
+    expect(result.actions[1]).toMatchObject({ status: 'skipped' });
+    expect(result.actions[1].detail).toMatch(/left unchanged/);
+  });
+
   it('reports failure when the checks still fail afterwards', async () => {
     const stillBroken = report([
       { id: 'starship', title: 'Starship', status: 'fail', detail: 'x' },

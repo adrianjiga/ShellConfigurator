@@ -145,6 +145,23 @@ async function applyFix(
   }
 }
 
+/** A fix that must not run when the install it depends on just failed. */
+function blockedReason(
+  fix: DoctorFix,
+  failed: { starshipInstallFailed: boolean; fontInstallFailed: boolean }
+): string | null {
+  if (
+    (fix.kind === 'configure-shell' || fix.kind === 'write-config') &&
+    failed.starshipInstallFailed
+  ) {
+    return 'Starship itself failed to install, so wiring it would break new shells';
+  }
+  if (fix.kind === 'wire-font' && failed.fontInstallFailed) {
+    return 'the Nerd Font failed to install, so the terminal is left unchanged';
+  }
+  return null;
+}
+
 /**
  * Applies the fix for every failing check that carries one, then re-runs the
  * doctor. Warnings are left alone; fixes are attempted independently. With
@@ -158,6 +175,8 @@ export async function runRepair(
   const before = await deps.runDoctor(state);
   const pointAtShared = state?.keepExistingConfig ?? null;
   const actions: RepairAction[] = [];
+  let starshipInstallFailed = false;
+  let fontInstallFailed = false;
 
   for (const finding of before.findings) {
     if (finding.status !== 'fail' || !finding.fix) continue;
@@ -170,10 +189,22 @@ export async function runRepair(
       });
       continue;
     }
+    const blocked = blockedReason(finding.fix, { starshipInstallFailed, fontInstallFailed });
+    if (blocked) {
+      actions.push({
+        findingId: finding.id,
+        title: finding.title,
+        status: 'skipped',
+        detail: blocked,
+      });
+      continue;
+    }
     try {
       const { detail, status } = await applyFix(finding.fix, pointAtShared, state, deps);
       actions.push({ findingId: finding.id, title: finding.title, status, detail });
     } catch (err) {
+      if (finding.fix.kind === 'reinstall-starship') starshipInstallFailed = true;
+      if (finding.fix.kind === 'reinstall-font') fontInstallFailed = true;
       actions.push({
         findingId: finding.id,
         title: finding.title,
