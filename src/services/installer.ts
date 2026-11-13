@@ -356,7 +356,7 @@ async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> 
   // fc-cache may be absent on minimal systems.
   if (process.platform !== 'darwin') {
     try {
-      await runCapture('fc-cache', ['-f']);
+      await runCapture('fc-cache', ['-f', fontsDir]);
     } catch {
       // ignore
     }

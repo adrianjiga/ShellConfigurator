@@ -516,7 +516,11 @@ describe('installNerdFont', () => {
       mockRunCapture.mockRejectedValue(new Error('fc-cache missing'));
 
       await expect(installNerdFont('FiraCode')).resolves.toBeUndefined();
-      expect(mockRunCapture).toHaveBeenCalledWith('fc-cache', ['-f'], expect.anything());
+      expect(mockRunCapture).toHaveBeenCalledWith(
+        'fc-cache',
+        ['-f', getNerdFontsDir()],
+        expect.anything()
+      );
       expect(mockSpawn).not.toHaveBeenCalledWith('fc-cache', expect.anything(), expect.anything());
     } finally {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
