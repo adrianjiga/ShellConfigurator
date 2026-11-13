@@ -1,8 +1,10 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { SHELLS } from '../config/shells.ts';
 import type { PackageManager, ShellId, TerminalId } from '../types.ts';
 import { commandExistsAsync, commandPathAsync, runCapture } from './exec.ts';
+import { getMissingStarshipPathDir } from './installer.ts';
 
 const readFileP = promisify(fs.readFile);
 
@@ -95,6 +97,29 @@ export async function isStarshipInstalledAsync(): Promise<{
     return { installed: true, version: await runCapture('starship', ['-V']) };
   } catch {
     return { installed: false };
+  }
+}
+
+/**
+ * Starship on PATH, or else an earlier script install in its bin dir that PATH
+ * does not reach yet (`pathDir` says where).
+ */
+export async function findStarshipAsync(): Promise<{
+  installed: boolean;
+  version?: string;
+  pathDir?: string;
+}> {
+  const onPath = await isStarshipInstalledAsync();
+  if (onPath.installed) return onPath;
+  const pathDir = getMissingStarshipPathDir();
+  if (!pathDir) return onPath;
+  try {
+    const version = await runCapture('starship', ['-V'], {
+      env: { ...process.env, PATH: `${pathDir}${path.delimiter}${process.env.PATH ?? ''}` },
+    });
+    return { installed: true, version, pathDir };
+  } catch {
+    return onPath;
   }
 }
 

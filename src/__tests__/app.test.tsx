@@ -10,6 +10,7 @@ vi.mock('../services/detector.ts', () => ({
   isStarshipInstalledAsync: vi
     .fn()
     .mockResolvedValue({ installed: true, version: 'starship 1.20' }),
+  findStarshipAsync: vi.fn().mockResolvedValue({ installed: true, version: 'starship 1.20' }),
   detectInstalledShellsAsync: vi.fn().mockResolvedValue(['zsh', 'bash']),
   detectTerminalAsync: vi.fn().mockResolvedValue(null),
   detectContainerAsync: vi.fn().mockResolvedValue(false),

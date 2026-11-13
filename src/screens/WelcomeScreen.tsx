@@ -8,7 +8,7 @@ import {
   detectContainerAsync,
   detectPackageManagerAsync,
   detectTerminalAsync,
-  isStarshipInstalledAsync,
+  findStarshipAsync,
 } from '../services/detector.ts';
 import { TERMINAL_LABELS } from '../services/terminalFont.ts';
 import type { PackageManager, TerminalId, WizardState } from '../types.ts';
@@ -19,7 +19,7 @@ interface WelcomeScreenProps {
 }
 
 interface Detection {
-  starship: { installed: boolean; version?: string };
+  starship: { installed: boolean; version?: string; pathDir?: string };
   pm: PackageManager;
   terminal: TerminalId | null;
   container: boolean;
@@ -45,7 +45,7 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
   const runDetection = useCallback(async (shouldDrop: () => boolean = () => false) => {
     const [pm, starship, terminal, container] = await Promise.all([
       detectPackageManagerAsync(),
-      isStarshipInstalledAsync(),
+      findStarshipAsync(),
       detectTerminalAsync(),
       detectContainerAsync(),
     ]);
@@ -155,6 +155,12 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
                   <Text color={uiColor('green')}>✓ Starship is installed</Text>
                   {detection.starship.version && (
                     <Text color={uiColor('gray')}> {detection.starship.version}</Text>
+                  )}
+                  {detection.starship.pathDir && (
+                    <Text color={uiColor('gray')}>
+                      {' '}
+                      in {detection.starship.pathDir}, which the shells will add to PATH
+                    </Text>
                   )}
                 </Box>
               ) : (
