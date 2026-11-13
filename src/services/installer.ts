@@ -392,6 +392,10 @@ export async function installNerdFont(
   return undefined;
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
 function listedLoginShells(): string[] {
   try {
     return fs
@@ -443,7 +447,7 @@ export async function setDefaultShell(shellId: ShellId, signal?: AbortSignal): P
     }
     throw new Error(
       `Could not set ${binary} as the default shell: ${shellPath} is not listed in ` +
-        `/etc/shells. Add it first (e.g. 'echo ${shellPath} | sudo tee -a /etc/shells'). ` +
+        `/etc/shells. Add it first (e.g. echo ${shellQuote(shellPath)} | sudo tee -a /etc/shells). ` +
         reason,
       { cause: err }
     );

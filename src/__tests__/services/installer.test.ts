@@ -741,6 +741,15 @@ describe('setDefaultShell', () => {
     await expect(setDefaultShell('zsh')).rejects.toThrow('sudo tee -a /etc/shells');
   });
 
+  it('quotes the shell path in the suggested tee command', async () => {
+    mockExecFileSync.mockReturnValue("/opt/my shells/it's/zsh\n");
+    spawnOutcome({ status: 1 });
+
+    await expect(setDefaultShell('zsh')).rejects.toThrow(
+      `echo '/opt/my shells/it'\\''s/zsh' | sudo tee -a /etc/shells`
+    );
+  });
+
   it('reports a listed shell failure without the /etc/shells hint', async () => {
     mockExecFileSync.mockReturnValue('/bin/zsh\n');
     mockReadFileSync.mockReturnValue('/bin/zsh\n');
