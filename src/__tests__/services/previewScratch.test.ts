@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -29,5 +30,24 @@ describe('DEFAULT_PREVIEW_DEPS.createScratch', () => {
     expect(scratch.startsWith(`${path.join(tmp, 'shell-configurator')}${path.sep}`)).toBe(true);
 
     await DEFAULT_PREVIEW_DEPS.cleanup(scratch);
+  });
+});
+
+describe('DEFAULT_PREVIEW_DEPS.scaffoldProject', () => {
+  it("never commits into the user's repository when GIT_DIR is inherited", async () => {
+    const real = path.join(tmp, 'real');
+    fs.mkdirSync(real);
+    execFileSync('git', ['init', '-q'], { cwd: real });
+    const previous = process.env.GIT_DIR;
+    process.env.GIT_DIR = path.join(real, '.git');
+    try {
+      const project = await DEFAULT_PREVIEW_DEPS.scaffoldProject(path.join(tmp, 'scratch'));
+      expect(fs.existsSync(path.join(project, '.git'))).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.GIT_DIR;
+      else process.env.GIT_DIR = previous;
+    }
+    const commits = execFileSync('git', ['rev-list', '--all'], { cwd: real, encoding: 'utf8' });
+    expect(commits.trim()).toBe('');
   });
 });

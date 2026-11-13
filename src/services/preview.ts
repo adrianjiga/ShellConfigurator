@@ -73,9 +73,21 @@ export const DEFAULT_PREVIEW_DEPS: PreviewDeps = {
       ),
       writeFile(nodePath.join(project, 'src', 'index.ts'), '// sample source file\n', 'utf8'),
     ]);
+    // The sample repo must not touch the user's git: no inherited GIT_DIR (which
+    // would commit into their real repo), no global config, hooks or signing.
+    const gitEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      HOME: scratch,
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_CONFIG_GLOBAL: nodePath.join(scratch, 'no-gitconfig'),
+    };
+    for (const name of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CONFIG']) {
+      delete gitEnv[name];
+    }
+    const gitOptions = { cwd: project, env: gitEnv, timeout: 10_000 };
     try {
       // Best-effort: without git the branch/status modules just stay hidden.
-      await execFileP('git', ['init', '-q', '-b', 'main'], { cwd: project });
+      await execFileP('git', ['init', '-q', '-b', 'main'], gitOptions);
       await execFileP(
         'git',
         [
@@ -83,13 +95,17 @@ export const DEFAULT_PREVIEW_DEPS: PreviewDeps = {
           'user.name=ShellConfigurator',
           '-c',
           'user.email=preview@localhost',
+          '-c',
+          'commit.gpgsign=false',
+          '-c',
+          'core.hooksPath=/dev/null',
           'commit',
           '--allow-empty',
           '-q',
           '-m',
           'init',
         ],
-        { cwd: project }
+        gitOptions
       );
     } catch {
       // Non-fatal: the preview still renders everything git does not drive.
