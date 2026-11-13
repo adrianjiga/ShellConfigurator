@@ -1,7 +1,7 @@
 import { cleanup, render } from 'ink-testing-library';
 import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PromptPreview } from '../../components/PromptPreview.tsx';
+import { PromptPreview, resetPreviewCacheForTests } from '../../components/PromptPreview.tsx';
 import { PREVIEW_DEBOUNCE_MS } from '../../services/preview.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
@@ -16,6 +16,7 @@ const staticPreview = vi.fn(
 );
 
 afterEach(() => {
+  resetPreviewCacheForTests();
   cleanup();
   vi.useRealTimers();
 });
@@ -241,6 +242,35 @@ describe('PromptPreview signature', () => {
     );
     await settleRenderer();
     expect(renderer).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+});
+
+describe('PromptPreview across screens', () => {
+  it('starts a newly mounted preview from the last render instead of re-running starship', async () => {
+    vi.useFakeTimers();
+    const renderer = vi.fn(async () => ({ mode: 'real' as const, text: 'REAL PROMPT' }));
+    const first = render(<PromptPreview state={DEFAULT_STATE} renderPreview={renderer} />);
+    await settleRenderer();
+    expect(first.lastFrame()).toContain('REAL PROMPT');
+    first.unmount();
+
+    const second = render(<PromptPreview state={DEFAULT_STATE} renderPreview={renderer} />);
+    await settleRenderer();
+    expect(second.lastFrame()).toContain('REAL PROMPT');
+    expect(renderer).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('marks the shown prompt as updating while a new render is pending', async () => {
+    vi.useFakeTimers();
+    const renderer = vi.fn(async () => ({ mode: 'real' as const, text: 'REAL PROMPT' }));
+    const ui = render(<PromptPreview state={DEFAULT_STATE} renderPreview={renderer} />);
+    await settleRenderer();
+    ui.rerender(
+      <PromptPreview state={{ ...DEFAULT_STATE, palette: 'vivid' }} renderPreview={renderer} />
+    );
+    expect(ui.lastFrame()).toContain('updating…');
     vi.useRealTimers();
   });
 });

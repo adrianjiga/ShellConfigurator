@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { uiColor } from '../config/colors.ts';
 import { getModule, isConfigurableModule, type ModuleId } from '../config/modules.ts';
 import { getPalette, inkColor, type PaletteColorName } from '../config/palettes.ts';
@@ -50,32 +50,43 @@ function previewSignature(state: WizardState): string {
  * missing or the render fails) it draws the static approximation. Rendering is
  * debounced so a keyboard storm settles on exactly one starship invocation.
  */
+/**
+ * The last finished render. Every screen mounts its own preview, so without this
+ * each step change would flash the static frame and run starship again.
+ */
+let lastRender: { signature: string; text: string | null } | null = null;
+
+/** Test-only: forget the last render so tests stay independent. */
+export function resetPreviewCacheForTests(): void {
+  if (process.env.VITEST === 'true') lastRender = null;
+}
+
 export function PromptPreview({ state, renderPreview = renderPromptAsync }: PromptPreviewProps) {
-  const [realPrompt, setRealPrompt] = useState<string | null>(null);
-  const lastSignatureRef = useRef<string | null>(null);
+  const [realPrompt, setRealPrompt] = useState<string | null>(() => lastRender?.text ?? null);
+  const [renderedSignature, setRenderedSignature] = useState<string | null>(
+    () => lastRender?.signature ?? null
+  );
   const signature = previewSignature(state);
 
   useEffect(() => {
-    if (lastSignatureRef.current === signature) return;
+    if (renderedSignature === signature) return;
     let cancelled = false;
+    const finish = (text: string | null) => {
+      if (cancelled) return;
+      lastRender = { signature, text };
+      setRenderedSignature(signature);
+      setRealPrompt(text);
+    };
     const timer = setTimeout(() => {
       void renderPreview(state)
-        .then((result) => {
-          if (cancelled) return;
-          lastSignatureRef.current = signature;
-          setRealPrompt(result.mode === 'real' ? result.text : null);
-        })
-        .catch(() => {
-          if (cancelled) return;
-          lastSignatureRef.current = signature;
-          setRealPrompt(null);
-        });
+        .then((result) => finish(result.mode === 'real' ? result.text : null))
+        .catch(() => finish(null));
     }, PREVIEW_DEBOUNCE_MS);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [signature, state, renderPreview]);
+  }, [signature, state, renderPreview, renderedSignature]);
 
   const leftSegmentCount = state.leftModules.filter(isConfigurableModule).length;
 
@@ -96,7 +107,7 @@ export function PromptPreview({ state, renderPreview = renderPromptAsync }: Prom
         </Text>
         {realPrompt !== null && (
           <Text color={uiColor('gray')} italic>
-            rendered live by the starship binary
+            {renderedSignature === signature ? 'rendered live by the starship binary' : 'updating…'}
           </Text>
         )}
       </Box>
