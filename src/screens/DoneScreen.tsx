@@ -37,7 +37,8 @@ export function DoneScreen({ state }: DoneScreenProps) {
 
   const failures = state.installResults.filter((t) => t.status === 'failed');
   const hasFailures = failures.length > 0;
-  const noResults = state.installResults.length === 0;
+  // A dry run never installs, so it has no results to report by design.
+  const noResults = !state.dryRun && state.installResults.length === 0;
 
   useInput((char, key) => {
     if (key.return || key.escape || char.toLowerCase() === 'q') {
@@ -81,9 +82,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
         {state.dryRun && (
           <>
             <Text color={uiColor('yellow')} italic>
-              In real mode the wizard would install{' '}
-              {[`Starship${fontId ? ` (${fontName})` : ''}`, ...state.selectedShells].join(', ')}{' '}
-              and write the config below.
+              A real run would carry out the tasks below and write the config below.
             </Text>
 
             <Box marginTop={1} flexDirection="column" gap={1}>
@@ -99,21 +98,21 @@ export function DoneScreen({ state }: DoneScreenProps) {
             <Box marginTop={1} flexDirection="column" gap={1}>
               <Text bold>Generated config</Text>
               {state.selectedShells.map((shellId) => (
-                <Box key={shellId} flexDirection="column">
-                  <Text color={uiColor('cyan')}>{getShellConfigPath(shellId)}</Text>
-                  <Box marginLeft={2}>
-                    <Text color={uiColor('gray')} dimColor>
-                      {generateToml(state)}
-                    </Text>
-                  </Box>
-                </Box>
+                <Text key={shellId} color={uiColor('cyan')}>
+                  {getShellConfigPath(shellId)}
+                </Text>
               ))}
+              <Box marginLeft={2}>
+                <Text color={uiColor('gray')} dimColor>
+                  {generateToml(state)}
+                </Text>
+              </Box>
             </Box>
           </>
         )}
 
-        <Box flexDirection="column" marginTop={1} gap={1}>
-          {!state.dryRun && (
+        {!state.dryRun && (
+          <Box flexDirection="column" marginTop={1} gap={1}>
             <Box flexDirection="column">
               <Box flexDirection="row" gap={1}>
                 <StatusMark status={configTask?.status ?? 'unknown'} />
@@ -145,119 +144,116 @@ export function DoneScreen({ state }: DoneScreenProps) {
                 </Box>
               )}
             </Box>
-          )}
 
-          {fontId && (
-            <Box flexDirection="column">
+            {fontId && (
+              <Box flexDirection="column">
+                <Box flexDirection="row" gap={1}>
+                  <StatusMark status={fontTask?.status ?? 'unknown'} />
+                  <Text>
+                    Nerd Font {fontTask?.status === 'done' ? 'installed' : 'not installed'}:{' '}
+                    <Text color={uiColor('cyan')}>{fontName}</Text>
+                  </Text>
+                </Box>
+                {fontTask?.status === 'failed' && (
+                  <Box marginLeft={3}>
+                    <Text color={uiColor('red')} italic>
+                      {fontTask.error}
+                    </Text>
+                  </Box>
+                )}
+              </Box>
+            )}
+
+            {state.selectedShells.map((shellId) => {
+              const shell = getShell(shellId);
+              const wasInstalled = state.installedShells.includes(shellId);
+              const installTask = task(state, `shell_${shellId}`);
+              const installOk = wasInstalled || installTask?.status === 'done';
+              // Each shell has its own rc task, so one shell failing no longer
+              // marks the others as failed.
+              const rcTask = task(state, rcTaskId(shellId));
+              const rcNote = rcTask?.note;
+              return (
+                <Box key={shellId} flexDirection="column">
+                  <Box flexDirection="row" gap={1}>
+                    <StatusMark status={rcTask?.status ?? 'unknown'} />
+                    <Text>
+                      {shell?.label ?? shellId.charAt(0).toUpperCase() + shellId.slice(1)}:
+                    </Text>
+                    {!wasInstalled && (
+                      <Text color={uiColor(installOk ? 'cyan' : 'red')}>
+                        {installOk ? 'installed + ' : 'install failed'}
+                      </Text>
+                    )}
+                    <Text color={uiColor('gray')}>
+                      {rcTask?.status === 'done'
+                        ? `init line added to ${shell?.rcFile}`
+                        : rcTask?.status === 'skipped'
+                          ? shell?.rcFile
+                            ? (rcNote ?? 'skipped')
+                            : rcNote === 'already configured'
+                              ? 'already configured'
+                              : 'set up manually'
+                          : rcTask?.status === 'failed'
+                            ? 'not configured'
+                            : 'status unknown'}
+                    </Text>
+                  </Box>
+                  {installTask?.status === 'failed' && !wasInstalled && (
+                    <Box marginLeft={3}>
+                      <Text color={uiColor('red')} italic>
+                        {installTask.error}
+                      </Text>
+                    </Box>
+                  )}
+                  {rcTask?.status === 'failed' && (
+                    <Box marginLeft={3}>
+                      <Text color={uiColor('red')} italic>
+                        {rcTask.error}
+                      </Text>
+                    </Box>
+                  )}
+                  {/* Manual-only shells (nushell, powershell) show the init command, unless it was already applied. */}
+                  {rcTask?.status === 'skipped' &&
+                    !shell?.rcFile &&
+                    shell?.initLine &&
+                    rcNote !== 'already configured' && (
+                      <Box marginLeft={3}>
+                        <Text color={uiColor('cyan')}>
+                          {setupCommand(shell, state.keepExistingConfig)}
+                        </Text>
+                      </Box>
+                    )}
+                  {(rcTask?.status === 'done' ||
+                    (rcTask?.status === 'skipped' && !shell?.rcFile)) &&
+                    rcNote && (
+                      <Box marginLeft={3}>
+                        <Text color={uiColor('gray')} italic>
+                          {rcNote}
+                        </Text>
+                      </Box>
+                    )}
+                </Box>
+              );
+            })}
+
+            {state.setDefaultShell && (
               <Box flexDirection="row" gap={1}>
-                <StatusMark status={fontTask?.status ?? 'unknown'} />
+                <StatusMark status={chshTask?.status ?? 'unknown'} />
                 <Text>
-                  Nerd Font {fontTask?.status === 'done' ? 'installed' : 'not installed'}:{' '}
-                  <Text color={uiColor('cyan')}>{fontName}</Text>
+                  Default shell {chshOk ? 'set to' : 'not set to'}{' '}
+                  <Text color={uiColor('cyan')}>{state.setDefaultShell}</Text>
                 </Text>
               </Box>
-              {fontTask?.status === 'failed' && (
-                <Box marginLeft={3}>
-                  <Text color={uiColor('red')} italic>
-                    {fontTask.error}
-                  </Text>
-                </Box>
-              )}
-            </Box>
-          )}
-
-          {state.selectedShells.map((shellId) => {
-            const shell = getShell(shellId);
-            const wasInstalled = state.installedShells.includes(shellId);
-            const installTask = task(state, `shell_${shellId}`);
-            const installOk = wasInstalled || installTask?.status === 'done';
-            // Each shell has its own rc task, so one shell failing no longer
-            // marks the others as failed.
-            const rcTask = task(state, rcTaskId(shellId));
-            const rcNote = rcTask?.note;
-            return (
-              <Box key={shellId} flexDirection="column">
-                <Box flexDirection="row" gap={1}>
-                  <StatusMark status={rcTask?.status ?? 'unknown'} />
-                  <Text>{shell?.label ?? shellId.charAt(0).toUpperCase() + shellId.slice(1)}:</Text>
-                  {!wasInstalled && (
-                    <Text color={uiColor(installOk ? 'cyan' : 'red')}>
-                      {installOk ? 'installed + ' : 'install failed'}
-                    </Text>
-                  )}
-                  <Text color={uiColor('gray')}>
-                    {rcTask?.status === 'done'
-                      ? `init line added to ${shell?.rcFile}`
-                      : rcTask?.status === 'skipped'
-                        ? shell?.rcFile
-                          ? (rcNote ?? 'skipped')
-                          : rcNote === 'already configured'
-                            ? 'already configured'
-                            : 'set up manually'
-                        : rcTask?.status === 'failed'
-                          ? 'not configured'
-                          : 'status unknown'}
-                  </Text>
-                </Box>
-                {installTask?.status === 'failed' && !wasInstalled && (
-                  <Box marginLeft={3}>
-                    <Text color={uiColor('red')} italic>
-                      {installTask.error}
-                    </Text>
-                  </Box>
-                )}
-                {rcTask?.status === 'failed' && (
-                  <Box marginLeft={3}>
-                    <Text color={uiColor('red')} italic>
-                      {rcTask.error}
-                    </Text>
-                  </Box>
-                )}
-                {/* Manual-only shells (nushell, powershell) show the init command, unless it was already applied. */}
-                {rcTask?.status === 'skipped' &&
-                  !shell?.rcFile &&
-                  shell?.initLine &&
-                  rcNote !== 'already configured' && (
-                    <Box marginLeft={3}>
-                      <Text color={uiColor('cyan')}>
-                        {setupCommand(shell, state.keepExistingConfig)}
-                      </Text>
-                    </Box>
-                  )}
-                {(rcTask?.status === 'done' || (rcTask?.status === 'skipped' && !shell?.rcFile)) &&
-                  rcNote && (
-                    <Box marginLeft={3}>
-                      <Text color={uiColor('gray')} italic>
-                        {rcNote}
-                      </Text>
-                    </Box>
-                  )}
-              </Box>
-            );
-          })}
-
-          {state.setDefaultShell && (
-            <Box flexDirection="row" gap={1}>
-              <StatusMark status={chshTask?.status ?? 'unknown'} />
-              <Text>
-                Default shell {chshOk ? 'set to' : 'not set to'}{' '}
-                <Text color={uiColor('cyan')}>{state.setDefaultShell}</Text>
-              </Text>
-            </Box>
-          )}
-        </Box>
+            )}
+          </Box>
+        )}
 
         <Box marginTop={1} flexDirection="column">
           {state.dryRun ? (
-            <>
-              <Text color={uiColor('gray')}>
-                Run without <Text color={uiColor('cyan')}>--dry-run</Text> to apply these changes.
-              </Text>
-              <Text color={uiColor('gray')}>
-                Run <Text color={uiColor('cyan')}>starship print-config</Text> to view the generated
-                config.
-              </Text>
-            </>
+            <Text color={uiColor('gray')}>
+              Run without <Text color={uiColor('cyan')}>--dry-run</Text> to apply these changes.
+            </Text>
           ) : (
             <>
               <Text color={uiColor('gray')}>Restart your terminal to see the new prompt.</Text>

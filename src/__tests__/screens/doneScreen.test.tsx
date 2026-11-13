@@ -285,3 +285,27 @@ describe('DoneScreen over real install results', () => {
     expect(instance.lastFrame()).not.toContain('Press r');
   });
 });
+
+describe('DoneScreen dry run', () => {
+  it('describes the dry run without reporting missing results or failed rows', () => {
+    const { lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          dryRun: true,
+          selectedShells: ['zsh'],
+          installedShells: [],
+          setDefaultShell: 'zsh',
+          nerdFontToInstall: { kind: 'install', id: 'Hack' },
+        }}
+      />
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('Dry run — no changes were made');
+    expect(frame).not.toContain('reported nothing back');
+    expect(frame).not.toContain('not installed');
+    expect(frame).not.toContain('install failed');
+    expect(frame).not.toContain('Default shell not set');
+    expect(frame).not.toContain('print-config');
+  });
+});
