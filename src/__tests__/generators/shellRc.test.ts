@@ -3,6 +3,12 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 vi.mock('fs', () => ({
+  constants: { W_OK: 2 },
+  lstatSync: vi.fn(),
+  statSync: vi.fn(),
+  realpathSync: vi.fn(),
+  accessSync: vi.fn(),
+  chmodSync: vi.fn(),
   existsSync: vi.fn(),
   mkdirSync: vi.fn(),
   readFileSync: vi.fn(),
@@ -84,10 +90,51 @@ describe('writeShellConfig', () => {
     const result = writeShellConfig(toml, 'zsh');
 
     // The content goes to a temp file that is renamed over the target.
-    const tmpPath = expect.stringContaining(`.${path.basename(expectedConfigPath)}.tmp`);
-    expect(fs.writeFileSync).toHaveBeenCalledWith(tmpPath, toml, 'utf8');
+    const tmpPath = expect.stringMatching(
+      new RegExp(`/\\.${path.basename(expectedConfigPath)}\\.\\d+\\.[0-9a-f]+\\.tmp$`)
+    );
+    expect(fs.writeFileSync).toHaveBeenCalledWith(tmpPath, toml, {
+      encoding: 'utf8',
+      flush: true,
+    });
     expect(fs.renameSync).toHaveBeenCalledWith(tmpPath, expectedConfigPath);
     expect(result.path).toBe(expectedConfigPath);
+  });
+
+  it('writes through a symlinked target and keeps its permissions', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.lstatSync).mockReturnValueOnce({ isSymbolicLink: () => true } as never);
+    vi.mocked(fs.realpathSync).mockReturnValueOnce('/dotfiles/zsh.toml' as never);
+    vi.mocked(fs.statSync).mockReturnValueOnce({ mode: 0o100600 } as never);
+
+    writeShellConfig('x', 'zsh');
+
+    const tmp = vi.mocked(fs.writeFileSync).mock.calls[0]![0] as string;
+    expect(path.dirname(tmp)).toBe('/dotfiles');
+    expect(fs.chmodSync).toHaveBeenCalledWith(tmp, 0o600);
+    expect(fs.renameSync).toHaveBeenCalledWith(tmp, '/dotfiles/zsh.toml');
+  });
+
+  it('refuses a dangling symlink instead of replacing it', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.lstatSync).mockReturnValueOnce({ isSymbolicLink: () => true } as never);
+    vi.mocked(fs.realpathSync).mockImplementationOnce(() => {
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    });
+
+    expect(() => writeShellConfig('x', 'zsh')).toThrow('symlink to a file that does not exist');
+    expect(fs.renameSync).not.toHaveBeenCalled();
+  });
+
+  it('refuses a read-only file instead of rewriting it', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.lstatSync).mockReturnValueOnce({ isSymbolicLink: () => false } as never);
+    vi.mocked(fs.accessSync).mockImplementationOnce(() => {
+      throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    });
+
+    expect(() => writeShellConfig('x', 'zsh')).toThrow('EACCES');
+    expect(fs.renameSync).not.toHaveBeenCalled();
   });
 
   it('writes to the XDG location when one is configured', () => {

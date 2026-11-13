@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getShell, isShellId, type ShellDef } from '../config/shells.ts';
@@ -33,16 +34,43 @@ export function backupStamp(): string {
 }
 
 /**
- * Writes a file atomically: the content goes to a temp file in the same
- * directory, which is then renamed over the target. A crash or error can never
- * leave a half-written config or rc file, and a reader never sees a truncated
- * file. On failure the temp file is removed and the original error re-thrown.
+ * Where a write to `filePath` must land, and the mode it must keep. A symlink
+ * (stow, chezmoi, yadm) is written through to its target so the link survives;
+ * a dangling one is refused rather than replaced; a read-only file is refused
+ * rather than silently made writable.
+ */
+function resolveWriteTarget(filePath: string): { target: string; mode?: number } {
+  const link = fs.lstatSync(filePath, { throwIfNoEntry: false });
+  if (!link) return { target: filePath };
+  let target = filePath;
+  if (link.isSymbolicLink()) {
+    try {
+      target = fs.realpathSync(filePath);
+    } catch (err) {
+      throw new Error(`${filePath} is a symlink to a file that does not exist`, { cause: err });
+    }
+  }
+  fs.accessSync(target, fs.constants.W_OK);
+  const stat = fs.statSync(target, { throwIfNoEntry: false });
+  return { target, mode: stat ? stat.mode & 0o7777 : undefined };
+}
+
+/**
+ * Writes a file atomically: the content goes to a uniquely named temp file in
+ * the same directory, flushed to disk, then renamed over the target, keeping
+ * its permissions. A reader never sees a truncated file. On failure the temp
+ * file is removed and the original error re-thrown.
  */
 export function writeFileAtomic(filePath: string, content: string): void {
-  const tmpPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.tmp`);
+  const { target, mode } = resolveWriteTarget(filePath);
+  const tmpPath = path.join(
+    path.dirname(target),
+    `.${path.basename(target)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
+  );
   try {
-    fs.writeFileSync(tmpPath, content, 'utf8');
-    fs.renameSync(tmpPath, filePath);
+    fs.writeFileSync(tmpPath, content, { encoding: 'utf8', flush: true });
+    if (mode !== undefined) fs.chmodSync(tmpPath, mode);
+    fs.renameSync(tmpPath, target);
   } catch (err) {
     try {
       fs.rmSync(tmpPath, { force: true });
