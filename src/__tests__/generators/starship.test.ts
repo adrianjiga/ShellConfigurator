@@ -455,3 +455,16 @@ describe('text-only presets', () => {
     expect(toml).toContain('symbol   = "node "');
   });
 });
+
+describe('vim mode symbol', () => {
+  it.each([
+    ['arrow', '[❮](bold ok)'],
+    ['lambda', '[λ](bold inverted ok)'],
+    ['dollar', '[\\$](bold inverted ok)'],
+  ] as const)('matches the %s character', (characterSymbol, expected) => {
+    const parsed = toml.parse(
+      generateToml({ ...DEFAULT_STATE, characterSymbol, vimMode: true })
+    ) as { character: { vimcmd_symbol: string } };
+    expect(parsed.character.vimcmd_symbol).toBe(expected);
+  });
+});

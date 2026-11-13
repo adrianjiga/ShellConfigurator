@@ -77,7 +77,8 @@ function moduleBlock(id: ModuleId, ctx: BlockContext): string {
     const error = escapeFormatLiteral(symbol.error);
     // `vimcmd_symbol` only changes the glyph in normal mode; starship's default
     // character format already reads the `symbol` variable for every mode.
-    const vim = state.vimMode ? `\nvimcmd_symbol  = ${tomlLiteral('[❮](bold ok)')}` : '';
+    const vimSymbol = `[${escapeFormatLiteral(symbol.vim)}](${symbol.vimStyle})`;
+    const vim = state.vimMode ? `\nvimcmd_symbol  = ${tomlLiteral(vimSymbol)}` : '';
     return `
 [character]
 success_symbol = ${tomlLiteral(`[${success}](bold ok)`)}
