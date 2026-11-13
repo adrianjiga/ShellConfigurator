@@ -7,6 +7,10 @@ const FFLATE_ENTRY = require.resolve('fflate');
 /** Cap on how long a zip may take to decompress before the worker is killed. */
 const FONT_EXTRACT_TIMEOUT_MS = 60_000;
 
+/** Single Nerd Font files are a few MB; the caps stop a zip bomb inflating unchecked. */
+const MAX_FONT_FILE_BYTES = 64 * 1024 * 1024;
+const MAX_EXTRACTED_BYTES = 1024 * 1024 * 1024;
+
 export interface ExtractedFontFile {
   name: string;
   bytes: Uint8Array;
@@ -25,13 +29,25 @@ const WORKER_SOURCE = `
 const { parentPort, workerData } = require('node:worker_threads');
 const path = require('node:path');
 const { unzipSync } = require(workerData.fflatePath);
+const FONT_FILE = /\\.(ttf|otf|woff2?)$/i;
 try {
-  const entries = unzipSync(workerData.zipBytes);
+  let total = 0;
+  const entries = unzipSync(workerData.zipBytes, {
+    filter: (file) => {
+      if (!FONT_FILE.test(file.name)) return false;
+      if (file.originalSize > workerData.maxEntryBytes) {
+        throw new Error(file.name + ' expands past ' + workerData.maxEntryBytes + ' bytes');
+      }
+      total += file.originalSize;
+      if (total > workerData.maxTotalBytes) {
+        throw new Error('the font files expand past ' + workerData.maxTotalBytes + ' bytes');
+      }
+      return true;
+    },
+  });
   const files = [];
   for (const name of Object.keys(entries)) {
-    if (/\\.(ttf|otf|woff2?)$/i.test(name)) {
-      files.push({ name: path.basename(name), bytes: entries[name] });
-    }
+    files.push({ name: path.basename(name), bytes: entries[name] });
   }
   parentPort.postMessage({ ok: true, files });
 } catch (error) {
@@ -50,7 +66,12 @@ export async function extractFontFiles(zipBytes: Uint8Array): Promise<ExtractedF
   return new Promise((resolve, reject) => {
     const worker = new Worker(WORKER_SOURCE, {
       eval: true,
-      workerData: { fflatePath: FFLATE_ENTRY, zipBytes: bytes },
+      workerData: {
+        fflatePath: FFLATE_ENTRY,
+        zipBytes: bytes,
+        maxEntryBytes: MAX_FONT_FILE_BYTES,
+        maxTotalBytes: MAX_EXTRACTED_BYTES,
+      },
     });
 
     const timer = setTimeout(() => {

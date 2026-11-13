@@ -107,6 +107,12 @@ describe('extractFontFiles', () => {
     ).toBe('ttf');
   });
 
+  it('refuses a font entry that would expand past the size cap', async () => {
+    const zip = zipSync({ 'Huge.ttf': new Uint8Array(65 * 1024 * 1024) }, { level: 9 });
+
+    await expect(extractFontFiles(zipBytes(zip))).rejects.toThrow('Huge.ttf expands past');
+  });
+
   it('returns an empty list when the archive holds no font files', async () => {
     const zip = zipSync({ 'README.md': encode('nothing') });
 
