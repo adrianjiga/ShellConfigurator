@@ -56,7 +56,7 @@ export const PRESETS: PresetDef[] = [
   {
     id: 'plain-text',
     label: 'Plain Text',
-    description: 'ASCII-only in white and grey, maximum compatibility',
+    description: 'Text symbols only, in white and grey, for maximum compatibility',
     requiresNerdFont: false,
     leftModules: CORE_MODULES,
     rightModules: [],
@@ -78,7 +78,7 @@ export const PRESETS: PresetDef[] = [
   {
     id: 'pure-prompt',
     label: 'Pure Prompt',
-    description: 'Minimal, emulates the Pure zsh theme',
+    description: 'Minimal two-line prompt inspired by the Pure zsh theme',
     requiresNerdFont: false,
     leftModules: ['directory', 'git_branch', 'character'],
     rightModules: ['cmd_duration'],
