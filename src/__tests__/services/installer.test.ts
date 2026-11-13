@@ -88,21 +88,6 @@ function spawnOutcome(outcome: SpawnOutcome) {
   mockSpawn.mockImplementation(() => childFor(outcome));
 }
 
-/** Builds a one-chunk body; a consumer reading in a loop sees EOF on the second read. */
-function bodyOf(bytes: ArrayBuffer) {
-  let sent = false;
-  return {
-    getReader: () => ({
-      read: async () => {
-        if (sent) return { done: true, value: undefined };
-        sent = true;
-        return { done: false, value: new Uint8Array(bytes) };
-      },
-      cancel: async () => undefined,
-    }),
-  };
-}
-
 /** Minimal stand-in for the parts of Response that installNerdFont actually uses. */
 function okResponse(overrides: Partial<Response> = {}): Response {
   const arrayBuffer = overrides.arrayBuffer ?? (async () => new ArrayBuffer(0));
