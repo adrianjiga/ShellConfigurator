@@ -474,3 +474,15 @@ describe('format escaping', () => {
     expect(escapeFormatLiteral('$[x](y)\\')).toBe('\\$\\[x\\]\\(y\\)\\\\');
   });
 });
+
+describe('unknown module ids', () => {
+  it('leaves a module with no definition out of the format and the blocks', () => {
+    const out = generateToml({
+      ...DEFAULT_STATE,
+      leftModules: ['directory', 'bogus' as never, 'character'],
+    });
+
+    expect(out).not.toContain('bogus');
+    expect((toml.parse(out) as { format: string }).format).toBe('$directory\n$character');
+  });
+});
