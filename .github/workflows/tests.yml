@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   coverage:
     name: Coverage (node ${{ matrix.node }}, ${{ matrix.os }})
