@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getModule, MODULES } from '../../config/modules.ts';
+import { NERD_FONT_SYMBOLS } from '../../config/promptSymbols.ts';
 
 describe('MODULES', () => {
   it('all modules have required fields', () => {
@@ -33,7 +34,9 @@ describe('MODULES', () => {
     expect(getModule('python')?.previewSegment(true)).toContain('');
     expect(getModule('rust')?.previewSegment(true)).toContain('');
     expect(getModule('git_branch')?.plainPreview?.(false)).toBe('on main');
-    expect(getModule('git_branch')?.plainPreview?.(true)).toMatch(/^on .main$/u);
+    expect(getModule('git_branch')?.plainPreview?.(true)).toBe(
+      `on ${NERD_FONT_SYMBOLS.gitBranch}main`
+    );
   });
 });
 
