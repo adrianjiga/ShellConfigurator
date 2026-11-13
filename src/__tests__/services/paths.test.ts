@@ -27,6 +27,12 @@ describe('stateDir', () => {
     expect(stateDir()).toBe(path.join('/home/someone/.var/state', 'shell-configurator'));
   });
 
+  it('ignores a relative XDG_STATE_HOME, as the XDG spec requires', () => {
+    process.env.XDG_STATE_HOME = 'relative/state';
+    vi.mocked(os.homedir).mockReturnValue('/home/someone');
+    expect(stateDir()).toBe(path.join('/home/someone', '.local', 'state', 'shell-configurator'));
+  });
+
   it('reads the env live, not once at import', () => {
     process.env.XDG_STATE_HOME = '/first/value';
     const first = stateDir();

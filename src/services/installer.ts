@@ -13,6 +13,7 @@ import {
   runCommand,
 } from './exec.ts';
 import { type ExtractedFontFile, extractFontFiles } from './fontExtractor.ts';
+import { xdgBaseDir } from './paths.ts';
 
 // Package names per shell per package manager. Missing combos are intentional
 // (powershell is AUR-only on Arch, nushell is absent from Debian/Ubuntu
@@ -221,9 +222,10 @@ export async function installShell(
 
 export function getNerdFontsDir(): string {
   if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Fonts');
-  const dataHome = process.env.XDG_DATA_HOME?.trim();
-  const base = dataHome ? dataHome : path.join(os.homedir(), '.local', 'share');
-  return path.join(base, 'fonts');
+  return path.join(
+    xdgBaseDir('XDG_DATA_HOME', path.join(os.homedir(), '.local', 'share')),
+    'fonts'
+  );
 }
 
 interface FontAsset {

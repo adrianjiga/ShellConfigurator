@@ -6,9 +6,10 @@ import * as path from 'node:path';
  * spec fallback. Resolved per call so env changes are seen immediately, which
  * is what tests rely on.
  */
-function xdgBaseDir(envName: string, fallback: string): string {
+export function xdgBaseDir(envName: string, fallback: string): string {
   const value = process.env[envName]?.trim();
-  return value ? value : fallback;
+  // The XDG spec says relative paths are invalid and must be ignored.
+  return value && path.isAbsolute(value) ? value : fallback;
 }
 
 /** `$XDG_CONFIG_HOME` (default `~/.config`), where shell and terminal configs live. */
