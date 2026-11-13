@@ -1,24 +1,28 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockExecFileSync, mockSpawn } = vi.hoisted(() => ({
+const { mockExecFileSync, mockSpawn, mockExecFileP } = vi.hoisted(() => ({
   mockExecFileSync: vi.fn(),
   mockSpawn: vi.fn(),
+  mockExecFileP: vi.fn(),
 }));
 
 vi.mock('child_process', () => ({
   execFileSync: mockExecFileSync,
   spawn: mockSpawn,
   execFile: Object.assign(vi.fn(), {
-    [Symbol.for('nodejs.util.promisify.custom')]: vi.fn(),
+    [Symbol.for('nodejs.util.promisify.custom')]: mockExecFileP,
   }),
 }));
 
 import {
+  CAPTURE_TIMEOUT_MS,
   CommandCancelledError,
   commandExists,
   commandPath,
   KILL_ESCALATION_DELAY_MS,
+  runCapture,
+  runCaptureBoth,
   runCommand,
 } from '../../services/exec.ts';
 import { isUiSuspended, resetUiSuspension, resumeUi, suspendUi } from '../../services/tty.ts';
@@ -56,6 +60,29 @@ beforeEach(() => {
 });
 
 afterEach(() => resetUiSuspension());
+
+describe('runCapture / runCaptureBoth', () => {
+  it('bounds a captured command with a timeout and passes the env through', async () => {
+    mockExecFileP.mockResolvedValue({ stdout: ' 1.2.3\n', stderr: ' warn\n' });
+    const env = { PATH: '/x' };
+
+    await expect(runCapture('starship', ['-V'], { env })).resolves.toBe('1.2.3');
+    await expect(runCaptureBoth('starship', ['print-config'])).resolves.toEqual({
+      stdout: '1.2.3',
+      stderr: 'warn',
+    });
+
+    expect(mockExecFileP).toHaveBeenNthCalledWith(1, 'starship', ['-V'], {
+      encoding: 'utf8',
+      timeout: CAPTURE_TIMEOUT_MS,
+      env,
+    });
+    expect(mockExecFileP).toHaveBeenNthCalledWith(2, 'starship', ['print-config'], {
+      encoding: 'utf8',
+      timeout: CAPTURE_TIMEOUT_MS,
+    });
+  });
+});
 
 describe('commandExists', () => {
   it('passes the command as an argument rather than splicing it into the script', () => {

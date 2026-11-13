@@ -35,6 +35,9 @@ export async function commandExistsAsync(cmd: string): Promise<boolean> {
   }
 }
 
+/** A captured command is killed after this long, so a hung binary cannot block detection. */
+export const CAPTURE_TIMEOUT_MS = 30_000;
+
 /**
  * Runs a command and resolves its trimmed stdout; rejects on a non-zero exit.
  * `options.env` replaces the whole environment, so callers wanting to extend it
@@ -47,6 +50,7 @@ export async function runCapture(
 ): Promise<string> {
   const { stdout } = await execFileP(cmd, args, {
     encoding: 'utf8',
+    timeout: CAPTURE_TIMEOUT_MS,
     ...(options.env ? { env: options.env } : {}),
   });
   return stdout.trim();
@@ -64,6 +68,7 @@ export async function runCaptureBoth(
 ): Promise<{ stdout: string; stderr: string }> {
   const { stdout, stderr } = await execFileP(cmd, args, {
     encoding: 'utf8',
+    timeout: CAPTURE_TIMEOUT_MS,
     ...(options.env ? { env: options.env } : {}),
   });
   return { stdout: stdout.trim(), stderr: stderr.trim() };
