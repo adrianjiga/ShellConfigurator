@@ -35,6 +35,20 @@ export function backupStamp(): string {
 }
 
 /**
+ * A fresh `<file>.bak-<stamp>` path. A second backup in the same millisecond
+ * gets a `-2`, `-3`… suffix instead of overwriting the first.
+ */
+export function backupPath(filePath: string): string {
+  const base = `${filePath}.bak-${backupStamp()}`;
+  let candidate = base;
+  for (let n = 2; n < 100 && fs.existsSync(candidate); n++) candidate = `${base}-${n}`;
+  return candidate;
+}
+
+/** A name `backupPath` produced: an ISO stamp with `:`/`.` replaced, maybe a suffix. */
+const BACKUP_STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z(-\d+)?$/;
+
+/**
  * Where a write to `filePath` must land, and the mode it must keep. A symlink
  * (stow, chezmoi, yadm) is written through to its target so the link survives;
  * a dangling one is refused rather than replaced; a read-only file is refused
@@ -97,7 +111,7 @@ export function backupSharedConfig(): string | null {
   } catch {
     // Fall through to a fresh copy.
   }
-  const backup = `${shared}.bak-${backupStamp()}`;
+  const backup = backupPath(shared);
   try {
     fs.copyFileSync(shared, backup);
   } catch {
@@ -134,7 +148,14 @@ function newestBackup(dir: string, prefix: string): string | null {
   } catch {
     return null;
   }
-  const candidates = entries.filter((e) => e.startsWith(`${prefix}.bak-`)).sort();
+  const marker = `${prefix}.bak-`;
+  const candidates = entries
+    .filter((e) => e.startsWith(marker) && BACKUP_STAMP.test(e.slice(marker.length)))
+    .sort((a, b) => {
+      const [stampA, nA = '1'] = a.slice(marker.length).split(/Z-?/);
+      const [stampB, nB = '1'] = b.slice(marker.length).split(/Z-?/);
+      return stampA === stampB ? Number(nA || 1) - Number(nB || 1) : stampA < stampB ? -1 : 1;
+    });
   const newest = candidates[candidates.length - 1];
   return newest ? path.join(dir, newest) : null;
 }
@@ -299,7 +320,7 @@ export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigRes
 
   let backedUpTo: string | undefined;
   if (fs.existsSync(configPath)) {
-    backedUpTo = `${configPath}.bak-${backupStamp()}`;
+    backedUpTo = backupPath(configPath);
     fs.copyFileSync(configPath, backedUpTo);
   }
 
@@ -323,7 +344,7 @@ export function writeSharedConfig(toml: string): WriteConfigResult {
 
   let backedUpTo: string | undefined;
   if (fs.existsSync(configPath)) {
-    backedUpTo = `${configPath}.bak-${backupStamp()}`;
+    backedUpTo = backupPath(configPath);
     fs.copyFileSync(configPath, backedUpTo);
   }
 

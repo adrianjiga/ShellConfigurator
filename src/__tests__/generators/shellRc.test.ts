@@ -29,6 +29,7 @@ import * as fs from 'node:fs';
 import { getShell } from '../../config/shells.ts';
 import {
   applyShellConfig,
+  backupPath,
   backupSharedConfig,
   getSharedConfigPath,
   getShellConfigPath,
@@ -1098,6 +1099,26 @@ describe('restoreConfigBackups', () => {
     expect(fs.copyFileSync).toHaveBeenCalledWith(restored[0]?.restoredFrom, getSharedConfigPath());
   });
 
+  it('ignores hand-made .bak files and orders same-millisecond backups by suffix', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    readdirSyncMock.mockImplementation((dir) =>
+      dir === base
+        ? [
+            'starship.toml.bak-old',
+            'starship.toml.bak-2026-09-09T09-30-00-000Z',
+            'starship.toml.bak-2026-09-09T09-30-00-000Z-2',
+            'starship.toml.bak-2026-09-08T10-00-00-000Z',
+          ]
+        : []
+    );
+
+    const { restored } = restoreConfigBackups();
+
+    expect(restored[0]?.restoredFrom).toBe(
+      path.join(base, 'starship.toml.bak-2026-09-09T09-30-00-000Z-2')
+    );
+  });
+
   it('saves the live file before restoring over it', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     readdirSyncMock.mockImplementation((dir) =>
@@ -1172,5 +1193,15 @@ describe('restoreConfigBackups', () => {
 
     expect(restoreConfigBackups()).toEqual({ restored: [], failed: [] });
     expect(fs.copyFileSync).not.toHaveBeenCalled();
+  });
+});
+
+describe('backupPath', () => {
+  afterEach(() => vi.resetAllMocks());
+
+  it('adds a suffix instead of reusing a backup name taken in the same millisecond', () => {
+    vi.mocked(fs.existsSync).mockReturnValueOnce(true).mockReturnValueOnce(false);
+
+    expect(backupPath('/home/u/.zshrc')).toMatch(/\.zshrc\.bak-[\dT-]+Z-2$/);
   });
 });
