@@ -391,13 +391,38 @@ export async function installNerdFont(
   return undefined;
 }
 
+function listedLoginShells(): string[] {
+  try {
+    return fs
+      .readFileSync('/etc/shells', 'utf8')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('/'));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * chsh only accepts paths listed in /etc/shells, and the first binary on PATH
+ * (e.g. Homebrew's /opt/homebrew/bin/zsh) is often not one of them while
+ * /bin/zsh is.
+ */
+function loginShellPath(binary: string, onPath: string): { path: string; listed: boolean } {
+  const listed = listedLoginShells();
+  if (listed.includes(onPath)) return { path: onPath, listed: true };
+  const match = listed.find((entry) => path.basename(entry) === binary && fs.existsSync(entry));
+  return match ? { path: match, listed: true } : { path: onPath, listed: false };
+}
+
 export async function setDefaultShell(shellId: ShellId, signal?: AbortSignal): Promise<void> {
   const binary = getShellBinary(shellId);
 
-  const shellPath = commandPath(binary);
-  if (!shellPath) {
+  const onPath = commandPath(binary);
+  if (!onPath) {
     throw new Error(`${binary} not found in PATH`);
   }
+  const { path: shellPath } = loginShellPath(binary, onPath);
 
   // chsh prompts for current user's password itself — run with stdio: 'inherit'
   try {

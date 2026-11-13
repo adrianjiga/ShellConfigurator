@@ -702,6 +702,28 @@ describe('setDefaultShell', () => {
     });
   });
 
+  it('prefers the /etc/shells entry over an unlisted binary earlier on PATH', async () => {
+    mockExecFileSync.mockReturnValue('/opt/homebrew/bin/zsh\n');
+    mockReadFileSync.mockReturnValue('# comment\n/bin/sh\n/bin/zsh\n');
+    mockExistsSync.mockReturnValue(true);
+
+    await setDefaultShell('zsh');
+
+    expect(mockSpawn).toHaveBeenCalledWith('chsh', ['-s', '/bin/zsh'], { stdio: 'inherit' });
+  });
+
+  it('keeps the PATH binary when it is itself listed in /etc/shells', async () => {
+    mockExecFileSync.mockReturnValue('/opt/homebrew/bin/zsh\n');
+    mockReadFileSync.mockReturnValue('/bin/zsh\n/opt/homebrew/bin/zsh\n');
+    mockExistsSync.mockReturnValue(true);
+
+    await setDefaultShell('zsh');
+
+    expect(mockSpawn).toHaveBeenCalledWith('chsh', ['-s', '/opt/homebrew/bin/zsh'], {
+      stdio: 'inherit',
+    });
+  });
+
   it('throws when the shell binary is not in PATH', async () => {
     mockExecFileSync.mockImplementation(() => {
       throw new Error('command not found');
