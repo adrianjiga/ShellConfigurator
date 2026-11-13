@@ -149,3 +149,12 @@ describe('ReviewScreen manual shells', () => {
     expect(frame.indexOf('starship init powershell')).toBeLessThan(frame.indexOf('$PROFILE'));
   });
 });
+
+describe('ReviewScreen dry run', () => {
+  it('does not promise an install in the key hint', async () => {
+    const { instance } = setup({ dryRun: true });
+    await flush();
+    expect(instance.lastFrame()).toContain('finish the dry run');
+    expect(instance.lastFrame()).not.toMatch(/Enter\s+install/);
+  });
+});

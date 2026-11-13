@@ -143,7 +143,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
 
       <NavHints
         hints={[
-          { key: 'Enter', label: 'install' },
+          { key: 'Enter', label: state.dryRun ? 'finish the dry run' : 'install' },
           { key: 'Esc', label: 'back' },
         ]}
       />
