@@ -93,31 +93,43 @@ describe('detectPackageManagerAsync', () => {
   });
 
   it('returns apt for ubuntu via os-release', async () => {
-    execFileFails();
+    execFileByArg((arg) => arg === 'apt-get');
     readFileAsyncReturns('ID=ubuntu\nNAME="Ubuntu"');
     expect(await detectPackageManagerAsync()).toBe('apt');
   });
 
   it('returns dnf for fedora via os-release', async () => {
-    execFileFails();
+    execFileByArg((arg) => arg === 'dnf');
     readFileAsyncReturns('ID=fedora\nNAME="Fedora"');
     expect(await detectPackageManagerAsync()).toBe('dnf');
   });
 
-  it('returns pacman for arch via os-release', async () => {
+  it('lets the distro id choose between several package managers', async () => {
+    execFileByArg((arg) => arg === 'apt-get' || arg === 'dnf');
+    readFileAsyncReturns('ID=fedora\nNAME="Fedora"');
+    expect(await detectPackageManagerAsync()).toBe('dnf');
+  });
+
+  it('ignores a distro id whose package manager binary is missing', async () => {
+    execFileFails();
+    readFileAsyncReturns('ID=centos\nVERSION_ID="7"');
+    expect(await detectPackageManagerAsync()).toBe('script');
+  });
+
+  it('does not return pacman for an arch id when pacman is missing', async () => {
     execFileFails();
     readFileAsyncReturns('ID=arch\nNAME="Arch Linux"');
-    expect(await detectPackageManagerAsync()).toBe('pacman');
+    expect(await detectPackageManagerAsync()).toBe('script');
   });
 
   it('returns apt for single-quoted ubuntu ID in os-release', async () => {
-    execFileFails();
+    execFileByArg((arg) => arg === 'apt-get');
     readFileAsyncReturns("ID='ubuntu'\nNAME='Ubuntu'");
     expect(await detectPackageManagerAsync()).toBe('apt');
   });
 
   it('returns apk for alpine via os-release', async () => {
-    execFileFails();
+    execFileByArg((arg) => arg === 'apk');
     readFileAsyncReturns('ID=alpine\nNAME="Alpine Linux"');
     expect(await detectPackageManagerAsync()).toBe('apk');
   });

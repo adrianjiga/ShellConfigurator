@@ -24,6 +24,14 @@ async function readOsReleaseIdAsync(): Promise<string | null> {
   }
 }
 
+function packageManagerForDistro(id: string): PackageManager | null {
+  if (APT_DISTROS.includes(id)) return 'apt';
+  if (DNF_DISTROS.includes(id)) return 'dnf';
+  if (PACMAN_DISTROS.includes(id)) return 'pacman';
+  if (id === 'alpine') return 'apk';
+  return null;
+}
+
 export async function detectPackageManagerAsync(): Promise<PackageManager> {
   const [hasBrew, hasPacman] = await Promise.all([
     commandExistsAsync('brew'),
@@ -32,19 +40,26 @@ export async function detectPackageManagerAsync(): Promise<PackageManager> {
   if (hasBrew) return 'brew';
   if (hasPacman) return 'pacman';
 
-  const id = await readOsReleaseIdAsync();
-  if (id) {
-    if (APT_DISTROS.includes(id)) return 'apt';
-    if (DNF_DISTROS.includes(id)) return 'dnf';
-    if (PACMAN_DISTROS.includes(id)) return 'pacman';
-    if (id === 'alpine') return 'apk';
-  }
-
-  const [hasApt, hasDnf, hasApk] = await Promise.all([
+  const [id, hasApt, hasDnf, hasApk] = await Promise.all([
+    readOsReleaseIdAsync(),
     commandExistsAsync('apt-get'),
     commandExistsAsync('dnf'),
     commandExistsAsync('apk'),
   ]);
+  const present: Record<PackageManager, boolean> = {
+    brew: false,
+    pacman: false,
+    apt: hasApt,
+    dnf: hasDnf,
+    apk: hasApk,
+    script: false,
+  };
+
+  // The distro id breaks a tie between several package managers, but is only
+  // trusted when its binary is really there (CentOS 7 has yum, not dnf).
+  const distroPm = id ? packageManagerForDistro(id) : null;
+  if (distroPm && present[distroPm]) return distroPm;
+
   if (hasApt) return 'apt';
   if (hasDnf) return 'dnf';
   if (hasApk) return 'apk';
