@@ -641,10 +641,7 @@ export async function runDoctor(
   state: WizardState | null,
   deps: DoctorDeps = DEFAULT_DOCTOR_DEPS
 ): Promise<DoctorReport> {
-  const shellIds =
-    state && state.selectedShells.length > 0
-      ? state.selectedShells
-      : await deps.detectInstalledShells();
+  const shellIds = state ? state.selectedShells : await deps.detectInstalledShells();
   const wiring: ShellWiring[] = shellIds.map((id) => ({
     id,
     pointAtShared: state ? state.keepExistingConfig : shellPointsAtShared(id, deps),

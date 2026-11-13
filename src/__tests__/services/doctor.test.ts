@@ -406,6 +406,14 @@ describe('runDoctor', () => {
     expect(find(report, 'config').status).toBe('pass');
   });
 
+  it('does not fall back to every installed shell for a card with no shells', async () => {
+    const report = await runDoctor(
+      baseState({ selectedShells: [] }),
+      makeDeps(wired(new Map()), { detectInstalledShells: vi.fn().mockResolvedValue(['bash']) })
+    );
+    expect(report.findings.some((f) => f.id.startsWith('shell:'))).toBe(false);
+  });
+
   it('passes version drift when nothing was recorded yet', async () => {
     const deps = makeDeps(wired(new Map()));
     const report = await runDoctor(baseState(), deps);

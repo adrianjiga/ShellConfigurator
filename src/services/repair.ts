@@ -52,7 +52,7 @@ export interface RepairDeps {
   installStarship: (pm: PackageManager) => Promise<void>;
   installNerdFont: (fontId: string) => Promise<string | undefined>;
   wireTerminalFont: (terminalId: TerminalId, family: string) => TerminalFontResult;
-  detectPackageManager: () => Promise<PackageManager | null>;
+  detectPackageManager: () => Promise<PackageManager>;
   generateToml: (state: WizardState) => string;
   writeShellConfig: (toml: string, shellId: ShellId) => { path: string };
   recordStarshipVersion: (version: string) => void;
@@ -111,7 +111,6 @@ async function applyFix(
   switch (fix.kind) {
     case 'reinstall-starship': {
       const pm = await deps.detectPackageManager();
-      if (!pm) throw new Error('no supported package manager detected');
       await deps.installStarship(pm);
       const version = await deps.readStarshipVersion(deps.getMissingStarshipPathDir());
       if (version) deps.recordStarshipVersion(version);

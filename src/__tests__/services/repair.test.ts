@@ -147,16 +147,6 @@ describe('runRepair', () => {
     expect(result.actions[0]).toMatchObject({ status: 'skipped' });
   });
 
-  it('fails cleanly when no package manager is detected', async () => {
-    const deps = makeDeps(report([finding({ kind: 'reinstall-starship' })]), undefined, {
-      detectPackageManager: vi.fn().mockResolvedValue(null),
-    });
-    const result = await runRepair(null, deps);
-    expect(deps.installStarship).not.toHaveBeenCalled();
-    expect(result.actions[0]).toMatchObject({ status: 'failed' });
-    expect(result.actions[0].detail).toMatch(/no supported package manager/);
-  });
-
   it('reinstalls a missing font', async () => {
     const deps = makeDeps(report([finding({ kind: 'reinstall-font', fontId: 'JetBrainsMono' })]));
     const result = await runRepair(null, deps);
