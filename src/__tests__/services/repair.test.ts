@@ -66,6 +66,23 @@ describe('runRepair', () => {
     expect(deps.installStarship).not.toHaveBeenCalled();
   });
 
+  it('applies the fixes warnings carry when asked to include warnings', async () => {
+    const deps = makeDeps(
+      report([
+        {
+          id: 'font-selected',
+          title: 'Terminal font',
+          status: 'warn',
+          detail: 'kitty uses "Menlo"',
+          fix: { kind: 'wire-font', terminalId: 'kitty', family: 'Hack Nerd Font' },
+        },
+      ])
+    );
+    const result = await runRepair(null, deps, { includeWarnings: true });
+    expect(deps.wireTerminalFont).toHaveBeenCalledWith('kitty', 'Hack Nerd Font');
+    expect(result.actions[0]).toMatchObject({ status: 'fixed' });
+  });
+
   it('plans fixes without applying them in dry-run', async () => {
     const before = report([finding({ kind: 'configure-shell', shellId: 'zsh' })]);
     const deps = makeDeps(before);

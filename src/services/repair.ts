@@ -40,6 +40,8 @@ export interface RepairReport {
 
 export interface RepairOptions {
   dryRun?: boolean;
+  /** Also apply the fixes warnings carry; they may describe a deliberate choice. */
+  includeWarnings?: boolean;
 }
 
 export interface RepairDeps {
@@ -163,8 +165,8 @@ function blockedReason(
 
 /**
  * Applies the fix for every failing check that carries one, then re-runs the
- * doctor. Warnings are left alone; fixes are attempted independently. With
- * `dryRun` nothing is applied.
+ * doctor. Warnings are left alone unless `includeWarnings` is set; fixes are
+ * attempted independently. With `dryRun` nothing is applied.
  */
 export async function runRepair(
   state: WizardState | null,
@@ -178,7 +180,9 @@ export async function runRepair(
   let fontInstallFailed = false;
 
   for (const finding of before.findings) {
-    if (finding.status !== 'fail' || !finding.fix) continue;
+    const actionable =
+      finding.status === 'fail' || (options.includeWarnings && finding.status === 'warn');
+    if (!actionable || !finding.fix) continue;
     if (options.dryRun) {
       actions.push({
         findingId: finding.id,

@@ -6,6 +6,7 @@ import {
   starshipConfigLine,
 } from '../../generators/shellRc.ts';
 import { type DoctorDeps, formatDoctorReport, runDoctor } from '../../services/doctor.ts';
+import { type RepairDeps, runRepair } from '../../services/repair.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
 const ZSH_RC = getShell('zsh')!.rcFile!;
@@ -525,5 +526,45 @@ describe('formatDoctorReport', () => {
     expect(text).toContain('PASS  A — fine');
     expect(text).toContain('FAIL  B — broken');
     expect(text).toContain('1 passed, 0 warning(s), 1 failed');
+  });
+});
+
+describe('repair against the real doctor', () => {
+  function repairDeps(doctorDeps: DoctorDeps): RepairDeps {
+    return {
+      runDoctor: (state) => runDoctor(state, doctorDeps),
+      shellPointsAtShared: vi.fn().mockReturnValue(false),
+      applyShellConfig: vi.fn().mockReturnValue({ applied: true }),
+      installStarship: vi.fn().mockResolvedValue(undefined),
+      installNerdFont: vi.fn().mockResolvedValue(undefined),
+      wireTerminalFont: vi.fn().mockReturnValue({ applied: true }),
+      detectPackageManager: vi.fn().mockResolvedValue('apt'),
+      generateToml: vi.fn().mockReturnValue(''),
+      writeShellConfig: vi.fn().mockReturnValue({ path: ZSH_CONFIG }),
+      recordStarshipVersion: vi.fn(),
+      getMissingStarshipPathDir: vi.fn().mockReturnValue(null),
+      readStarshipVersion: vi.fn().mockResolvedValue(null),
+    };
+  }
+
+  it('reinstalls a font the card asked for without any opt-in', async () => {
+    const deps = repairDeps(
+      makeDeps(wired(new Map()), { hasNerdFonts: vi.fn().mockReturnValue(false) })
+    );
+    await runRepair(baseState(), deps);
+    expect(deps.installNerdFont).toHaveBeenCalledWith('JetBrainsMono');
+  });
+
+  it('only rewires the terminal font when warnings are included', async () => {
+    const doctorDeps = makeDeps(wired(new Map()), {
+      readFontFamily: vi.fn().mockReturnValue('Menlo'),
+    });
+    const plain = repairDeps(doctorDeps);
+    await runRepair(baseState(), plain);
+    expect(plain.wireTerminalFont).not.toHaveBeenCalled();
+
+    const withWarnings = repairDeps(doctorDeps);
+    await runRepair(baseState(), withWarnings, { includeWarnings: true });
+    expect(withWarnings.wireTerminalFont).toHaveBeenCalledWith('kitty', 'JetBrainsMono Nerd Font');
   });
 });
