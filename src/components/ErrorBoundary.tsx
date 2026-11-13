@@ -38,8 +38,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
         </Text>
         <Text color={uiColor('red')}>{error.message}</Text>
         <Text color={uiColor('gray')}>
-          Nothing further was changed. Please re-run the wizard; if it keeps failing, report this
-          with the message above.
+          The wizard stopped here; anything it changed before this point was kept. Run
+          shell-configurator doctor to check the setup, and report this with the message above if it
+          keeps happening.
         </Text>
       </Box>
     );
