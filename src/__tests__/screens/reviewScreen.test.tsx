@@ -1,3 +1,6 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ReviewScreen } from '../../screens/ReviewScreen.tsx';
@@ -200,5 +203,22 @@ describe('ReviewScreen PATH line', () => {
     const frame = instance.lastFrame() ?? '';
     expect(frame).toContain(`export PATH='/home/u/.local/bin':"$PATH"`);
     expect(frame.indexOf('export PATH=')).toBeLessThan(frame.indexOf('starship init zsh'));
+  });
+});
+
+describe('ReviewScreen with an existing shared config', () => {
+  it('warns that the shared config stops applying to the chosen shells', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sc-review-'));
+    vi.stubEnv('HOME', dir);
+    fs.mkdirSync(path.join(dir, '.config'));
+    fs.writeFileSync(path.join(dir, '.config', 'starship.toml'), 'format = "$all"\n');
+    try {
+      const { instance } = setup();
+      await flush();
+      expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain('apply --adopt');
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

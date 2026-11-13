@@ -48,6 +48,7 @@ vi.mock('../generators/shellRc.ts', () => ({
   BLOCK_MARKER: '# Added by ShellConfigurator',
   ADOPT_MARKER: '# Added by ShellConfigurator (shared config)',
   getShellConfigPath: () => '/tmp/starship.toml',
+  getSharedConfigPath: () => '/nonexistent/starship.toml',
   starshipConfigLine: () => 'export STARSHIP_CONFIG="/tmp/starship.toml"',
 }));
 

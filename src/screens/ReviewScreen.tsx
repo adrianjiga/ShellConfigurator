@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import { Box, Text, useInput } from 'ink';
 import { useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
@@ -57,6 +58,9 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
   const fontId = fontIdToInstall(state.nerdFontToInstall);
   const fontName = fontId ? fontLabel(fontId) : null;
   const [tasks] = useState(() => buildTaskList(state, plannedResetShells(state)));
+  const [sharedConfigShadowed] = useState(
+    () => !state.keepExistingConfig && fs.existsSync(getSharedConfigPath())
+  );
   const [pathDir] = useState(() =>
     state.skipStarshipInstall ? null : plannedPathDir(state.packageManager)
   );
@@ -131,6 +135,13 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
             </Box>
           )}
         </Box>
+
+        {sharedConfigShadowed && (
+          <Text color={uiColor('yellow')}>
+            Your {getSharedConfigPath()} stays on disk (and is backed up), but these shells will
+            read their own configs instead. To keep using it, run shell-configurator apply --adopt.
+          </Text>
+        )}
 
         <Box flexDirection="column" marginTop={1} gap={1}>
           <Text bold>Shell wiring</Text>
