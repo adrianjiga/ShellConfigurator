@@ -40,23 +40,27 @@ jobs:
       # --silent keeps prepare output off stdout so only the tarball name lands
       # in GITHUB_ENV.
       - name: Package release tarball
-        run: echo "artifact=$(npm pack --silent --ignore-scripts)" >> "$GITHUB_ENV"
+        run: |
+          artifact="$(npm pack --silent --ignore-scripts)"
+          test -f "$artifact"
+          echo "artifact=$artifact" >> "$GITHUB_ENV"
       # Smoke-boots the packed tarball: guards against a release that extracts
       # but cannot launch (e.g. missing bundled dependencies).
       - name: Verify tarball boots
         run: |
           tmp=$(mktemp -d)
-          tar -xzf "${{ env.artifact }}" -C "$tmp"
-          node "$tmp/package/dist/index.js" --version
+          tar -xzf "$artifact" -C "$tmp"
+          booted="$(node "$tmp/package/dist/index.js" --version)"
           rm -rf "$tmp"
+          if [ "v$booted" != "$GITHUB_REF_NAME" ]; then
+            echo "the tarball reports $booted, not $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
       # OIDC trusted publishing: npm negotiates a short-lived token from the
       # ACTIONS_ID_TOKEN_REQUEST_URL. No NODE_AUTH_TOKEN is set so the exchange
       # is used. Stage defers 2FA to a later maintainer approval.
       - name: Stage on npm (OIDC)
-        shell: bash
-        run: |
-          set -o pipefail
-          npm stage publish --provenance --access public --ignore-scripts
+        run: npm stage publish --provenance --access public --ignore-scripts
       - name: Build release notes from conventional commits
         shell: bash
         run: scripts/releaseNotes.sh > "$RUNNER_TEMP/release-notes.md"
