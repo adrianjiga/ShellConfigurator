@@ -178,6 +178,20 @@ describe('ShellScreen', () => {
     expect(instance.lastFrame()).toContain('[ ] Zsh');
   });
 
+  it('keeps the selection when going back with Esc', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh']);
+    vi.mocked(detectCurrentShellAsync).mockResolvedValue(null);
+    const { instance, onUpdate, onBack } = setup();
+    await flush();
+    await flush();
+    instance.stdin.write(' '); // zsh on
+    await flush();
+    await pressEsc(instance.stdin);
+
+    expect(onUpdate).toHaveBeenLastCalledWith({ selectedShells: ['zsh'], setDefaultShell: null });
+    expect(onBack).toHaveBeenCalled();
+  });
+
   it('does not clobber an existing selection with detection', async () => {
     vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh', 'bash']);
     vi.mocked(detectCurrentShellAsync).mockResolvedValue('bash');

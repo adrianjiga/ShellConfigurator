@@ -62,8 +62,15 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
     };
   }, []);
 
+  // Sorted against SHELLS rather than click order, so install order and the
+  // Done-screen rows are deterministic.
+  const orderedSelection = (): ShellId[] =>
+    SHELLS.filter((s) => selectedRef.current.has(s.id)).map((s) => s.id);
+
   useInput((char, key) => {
     if (key.escape) {
+      // Keep the choices for when the user comes back, as the other screens do.
+      onUpdate({ selectedShells: orderedSelection(), setDefaultShell: defaultShellRef.current });
       onBack();
       return;
     }
@@ -103,9 +110,7 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
 
     if (key.return && selectedRef.current.size > 0 && installedShells !== null) {
       onNext({
-        // Sorted against SHELLS rather than click order, so install order and the
-        // Done-screen rows are deterministic.
-        selectedShells: SHELLS.filter((s) => selectedRef.current.has(s.id)).map((s) => s.id),
+        selectedShells: orderedSelection(),
         installedShells: installedShells ?? [],
         setDefaultShell: defaultShell,
       });
