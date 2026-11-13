@@ -170,7 +170,8 @@ function StaticPromptFrame({ state: chosen }: { state: WizardState }) {
 
       const text = def.previewSegment(hasNerdFont);
       if (!powerline) {
-        const shown = id === 'directory' ? previewDirectory(state) : text;
+        const plain = bracketed ? text : (def.plainPreview?.(hasNerdFont) ?? text);
+        const shown = id === 'directory' ? previewDirectory(state) : plain;
         return [
           <Text key={id} color={uiColor(color(def.id))}>
             {bracketed ? `[${shown}]` : shown}{' '}

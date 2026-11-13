@@ -37,6 +37,9 @@ export interface ModuleDef {
   // Only modules whose symbol is a genuine Nerd Font glyph branch on hasNerdFont;
   // emoji and plain Unicode render without one, so those symbols are unconditional.
   previewSegment: (hasNerdFont: boolean) => string;
+  /** The plain-prompt preview, where starship's default format adds words
+   *  or brackets the powerline content leaves out. */
+  plainPreview?: (hasNerdFont: boolean) => string;
   /**
    * The module's inner format — what sits inside the coloured segment. A normal
    * prompt leaves starship's own default format alone, but a powerline prompt has
@@ -177,7 +180,8 @@ style_root  = "${tomlBasic(styleFor('err'))}"
     defaultLeft: true,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.gitBranch : 'on '}main`,
+    previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.gitBranch : ''}main`,
+    plainPreview: (nf) => `on ${nf ? NERD_FONT_SYMBOLS.gitBranch : ''}main`,
     content: '$symbol$branch',
     // starship's git_branch format already renders "on " before the symbol.
     settings: ({ hasNerdFont }) =>
@@ -190,6 +194,7 @@ style_root  = "${tomlBasic(styleFor('err'))}"
     defaultRight: false,
 
     previewSegment: () => '+1',
+    plainPreview: () => '[+1]',
     content: '$all_status$ahead_behind',
     settings: () =>
       `
@@ -250,7 +255,7 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '🐳 default',
+    previewSegment: () => '🐳 dev',
     content: '$symbol$context',
     settings: () =>
       `
@@ -293,6 +298,7 @@ disabled = false
     defaultRight: false,
 
     previewSegment: () => '12:34',
+    plainPreview: () => 'at 12:34',
     content: '$time',
     settings: () =>
       `
@@ -302,7 +308,7 @@ time_format = "%H:%M"
   },
   battery: {
     label: 'Battery',
-    description: 'Battery percentage (shown when below threshold)',
+    description: 'Battery level (turns red below 30%)',
     defaultLeft: false,
     defaultRight: false,
 
@@ -339,6 +345,7 @@ style     = "${tomlBasic(styleFor('battery'))}"
     defaultRight: true,
 
     previewSegment: () => '2s',
+    plainPreview: () => 'took 2s',
     content: '$duration',
   },
   jobs: {

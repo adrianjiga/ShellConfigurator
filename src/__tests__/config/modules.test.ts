@@ -32,7 +32,8 @@ describe('MODULES', () => {
     expect(getModule('nodejs')?.previewSegment(true)).toContain('');
     expect(getModule('python')?.previewSegment(true)).toContain('');
     expect(getModule('rust')?.previewSegment(true)).toContain('');
-    expect(getModule('git_branch')?.previewSegment(false)).toContain('on ');
+    expect(getModule('git_branch')?.plainPreview?.(false)).toBe('on main');
+    expect(getModule('git_branch')?.plainPreview?.(true)).toMatch(/^on .main$/u);
   });
 });
 

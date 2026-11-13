@@ -212,6 +212,6 @@ describe('bracketed preset', () => {
     );
 
     expect(lastFrame()).toContain('[~/projects/myapp]');
-    expect(lastFrame()).toContain('[on main]');
+    expect(lastFrame()).toContain('[main]');
   });
 });
