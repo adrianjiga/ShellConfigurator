@@ -96,6 +96,18 @@ describe('appendHistory / readHistory', () => {
     ]);
   });
 
+  it('starts a new line after a record torn by a crash', () => {
+    const file = historyFilePath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, '{"version":1,"kind":"apply"', 'utf8');
+
+    appendHistory(record('install', { exitCode: 0 }));
+
+    const lines = fs.readFileSync(file, 'utf8').split('\n').filter((l) => l.trim() !== '');
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[1])).toMatchObject({ kind: 'install', exitCode: 0 });
+  });
+
   it('returns an empty list when no history exists yet', () => {
     expect(readHistory()).toEqual([]);
   });

@@ -72,7 +72,32 @@ export function recordRun(options: RecordRunOptions): void {
 export function appendHistory(record: HistoryRecord): void {
   const file = historyFilePath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  ensureTrailingNewline(file);
   fs.appendFileSync(file, `${JSON.stringify(record)}\n`, { encoding: 'utf8', mode: 0o600 });
+}
+
+/**
+ * A record torn by a crash mid-append leaves no trailing newline; appending
+ * straight after it would glue the next run onto the broken line and lose both.
+ */
+function ensureTrailingNewline(file: string): void {
+  let size: number;
+  try {
+    size = fs.statSync(file).size;
+  } catch (err) {
+    if (isMissingFile(err)) return;
+    throw err;
+  }
+  if (size === 0) return;
+
+  const fd = fs.openSync(file, 'r');
+  try {
+    const last = Buffer.alloc(1);
+    fs.readSync(fd, last, 0, 1, size - 1);
+    if (last[0] !== 0x0a) fs.appendFileSync(file, '\n');
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 /** True when the failure is simply that the file does not exist yet. */
