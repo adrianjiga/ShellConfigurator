@@ -80,17 +80,15 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
 
     if (char === ' ') {
       const shellId = SHELLS[cursor]!.id;
-      setSelected((prev) => {
-        const next = new Set(prev);
-        if (next.has(shellId)) {
-          next.delete(shellId);
-          // Clear default shell if deselected
-          if (defaultShellRef.current === shellId) setDefaultShell(null);
-        } else {
-          next.add(shellId);
-        }
-        return next;
-      });
+      const next = new Set(selectedRef.current);
+      if (next.has(shellId)) {
+        next.delete(shellId);
+        if (defaultShellRef.current === shellId) setDefaultShell(null);
+      } else {
+        next.add(shellId);
+      }
+      selectedRef.current = next;
+      setSelected(next);
       return;
     }
 
