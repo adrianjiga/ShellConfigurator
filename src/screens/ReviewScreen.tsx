@@ -12,7 +12,7 @@ import {
   starshipConfigLine,
 } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
-import { fontLabel } from '../services/installer.ts';
+import { fontLabel, plannedPathDir } from '../services/installer.ts';
 import { buildTaskList, plannedResetShells, TASK_IDS } from '../services/installTasks.ts';
 import { fontIdToInstall, type ShellId, type WizardState } from '../types.ts';
 
@@ -28,13 +28,23 @@ interface ReviewScreenProps {
  * without an rc file (nushell, powershell). In adopt mode no export is added —
  * the shell reads the shared starship.toml — so only the init line is shown.
  */
-function rcSnippet(shellId: ShellId, pointAtSharedConfig: boolean): string[] {
+function rcSnippet(
+  shellId: ShellId,
+  pointAtSharedConfig: boolean,
+  pathDir: string | null
+): string[] {
   const shell = getShell(shellId);
   if (!shell) return [];
   if (shell.rcFile) {
     const configLine = pointAtSharedConfig ? null : starshipConfigLine(shellId);
     const marker = pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
-    return [marker, ...(configLine ? [configLine] : []), shell.initLine];
+    const pathLine = pathDir && shell.pathLine ? shell.pathLine(pathDir) : null;
+    return [
+      marker,
+      ...(pathLine ? [pathLine] : []),
+      ...(configLine ? [configLine] : []),
+      shell.initLine,
+    ];
   }
   // Manual-only shells (nushell, powershell): the note plus the command to run,
   // or adopt mode where the shared config needs no export.
@@ -47,6 +57,9 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
   const fontId = fontIdToInstall(state.nerdFontToInstall);
   const fontName = fontId ? fontLabel(fontId) : null;
   const [tasks] = useState(() => buildTaskList(state, plannedResetShells(state)));
+  const [pathDir] = useState(() =>
+    state.skipStarshipInstall ? null : plannedPathDir(state.packageManager)
+  );
 
   useInput((_char, key) => {
     if (key.escape) {
@@ -135,7 +148,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
                     {shell?.label ?? shellId}
                     {shell?.rcFile ? ` — ${shell.rcFile}` : ''}
                   </Text>
-                  {rcSnippet(shellId, state.keepExistingConfig).map((line) => (
+                  {rcSnippet(shellId, state.keepExistingConfig, pathDir).map((line) => (
                     <Box key={line} marginLeft={2}>
                       <Text color={uiColor('yellow')}>{line}</Text>
                     </Box>

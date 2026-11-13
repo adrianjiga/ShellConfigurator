@@ -184,6 +184,20 @@ export function getMissingStarshipPathDir(): string | null {
 }
 
 /**
+ * The directory the rc files will add to PATH for this run, known before the
+ * install: an existing script install off PATH, or the bin dir a script install
+ * is about to use when PATH does not include it. Null when starship is reachable.
+ */
+export function plannedPathDir(pm: PackageManager): string | null {
+  const existing = getMissingStarshipPathDir();
+  if (existing) return existing;
+  if (commandExists('starship')) return null;
+  if (pm !== 'script' && pm !== 'apt' && pm !== 'dnf') return null;
+  const dir = scriptInstallBinDir();
+  return (process.env.PATH ?? '').split(path.delimiter).includes(dir) ? null : dir;
+}
+
+/**
  * Whether the current package manager can auto-install a given shell. False for
  * the script fallback (there is no package concept to run an install through)
  * and for shell/manager combos without a package entry (e.g. powershell on

@@ -1,9 +1,15 @@
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ReviewScreen } from '../../screens/ReviewScreen.tsx';
+import { plannedPathDir } from '../../services/installer.ts';
 import { DEFAULT_STATE } from '../../types.ts';
 import { pressEsc } from '../helpers/ink.ts';
 import { flush } from '../helpers/wait.ts';
+
+vi.mock('../../services/installer.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../services/installer.ts')>()),
+  plannedPathDir: vi.fn(() => null),
+}));
 
 afterEach(() => {
   cleanup();
@@ -183,5 +189,16 @@ describe('ReviewScreen without Starship', () => {
     expect(frame).toContain('Starship is skipped');
     expect(frame).not.toContain('Everything below will be installed');
     expect(frame).not.toContain('eval "$(starship init zsh)"');
+  });
+});
+
+describe('ReviewScreen PATH line', () => {
+  it('shows the PATH line a script install will add before the init line', async () => {
+    vi.mocked(plannedPathDir).mockReturnValueOnce('/home/u/.local/bin');
+    const { instance } = setup();
+    await flush();
+    const frame = instance.lastFrame() ?? '';
+    expect(frame).toContain(`export PATH='/home/u/.local/bin':"$PATH"`);
+    expect(frame.indexOf('export PATH=')).toBeLessThan(frame.indexOf('starship init zsh'));
   });
 });
