@@ -299,7 +299,7 @@ export const ADOPT_MARKER = '# Added by ShellConfigurator (shared config)';
 
 function isBlockMarkerLine(line: string): boolean {
   const t = line.trim();
-  return t === BLOCK_MARKER || t.startsWith(`${BLOCK_MARKER} `);
+  return t === BLOCK_MARKER || t === ADOPT_MARKER;
 }
 
 /**

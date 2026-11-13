@@ -316,6 +316,16 @@ describe('applyShellConfig', () => {
     expect(content.match(/starship init zsh/g)).toHaveLength(1);
   });
 
+  it('leaves a user comment that only starts like the marker alone', () => {
+    const own = '# Added by ShellConfigurator users: keep this\nunset STARSHIP_CONFIG\n';
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => own);
+
+    applyShellConfig('zsh');
+
+    expect(lastWrittenContent().startsWith(own)).toBe(true);
+  });
+
   it('uses fish syntax for the STARSHIP_CONFIG line', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() => '');
