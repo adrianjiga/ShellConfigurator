@@ -196,8 +196,8 @@ describe('generateToml', () => {
     for (const preset of PRESETS) {
       const state: WizardState = {
         ...DEFAULT_STATE,
-        leftModules: preset.leftModules ?? ['directory'],
-        rightModules: preset.rightModules ?? [],
+        leftModules: [...preset.leftModules],
+        rightModules: [...preset.rightModules],
       };
       const parsed = toml.parse(generateToml(state));
       expect(parsed, `${preset.id} produced invalid TOML`).toBeTruthy();
@@ -421,8 +421,8 @@ describe('presets are visually distinct', () => {
       const config = generateToml({
         ...DEFAULT_STATE,
         hasNerdFont: true,
-        leftModules: preset.leftModules ?? DEFAULT_STATE.leftModules,
-        rightModules: preset.rightModules ?? DEFAULT_STATE.rightModules,
+        leftModules: [...preset.leftModules],
+        rightModules: [...preset.rightModules],
         palette: preset.palette,
         powerline: preset.powerline,
       });

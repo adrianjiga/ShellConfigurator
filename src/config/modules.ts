@@ -101,7 +101,12 @@ export type ConfigurableModuleId =
 export type ModuleId = ConfigurableModuleId | 'character';
 
 /** The directory/git/character core that nearly every preset starts from. */
-export const CORE_MODULES: ModuleId[] = ['directory', 'git_branch', 'git_status', 'character'];
+export const CORE_MODULES: readonly ModuleId[] = [
+  'directory',
+  'git_branch',
+  'git_status',
+  'character',
+];
 
 export const isConfigurableModule = (id: ModuleId): id is ConfigurableModuleId =>
   id !== 'character';

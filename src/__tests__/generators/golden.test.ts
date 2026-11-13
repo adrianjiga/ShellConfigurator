@@ -13,8 +13,8 @@ function fixturePath(presetId: string): string {
 
 /**
  * The canonical state a preset fixture represents, mirroring how PresetScreen
- * applies a preset: modules fall back to the core defaults, and the palette and
- * powerline flag come from the def. A Nerd Font preset implies the font is
+ * applies a preset: modules, palette and
+ * powerline flag all come from the def. A Nerd Font preset implies the font is
  * present and one that does not implies text symbols, so each fixture matches
  * the promise the preset's label makes rather than one run's detection result.
  */
@@ -23,8 +23,8 @@ function stateForPreset(preset: PresetDef): WizardState {
     ...DEFAULT_STATE,
     hasNerdFont: preset.requiresNerdFont,
     preset: preset.id,
-    leftModules: preset.leftModules ?? DEFAULT_STATE.leftModules,
-    rightModules: preset.rightModules ?? DEFAULT_STATE.rightModules,
+    leftModules: [...preset.leftModules],
+    rightModules: [...preset.rightModules],
     palette: preset.palette,
     powerline: preset.powerline,
   };

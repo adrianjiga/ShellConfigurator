@@ -152,8 +152,8 @@ export function stateFromFlags(flags: CliFlags): WizardState {
       state = {
         ...state,
         preset: preset.id,
-        leftModules: preset.leftModules ?? state.leftModules,
-        rightModules: preset.rightModules ?? state.rightModules,
+        leftModules: [...preset.leftModules],
+        rightModules: [...preset.rightModules],
         palette: preset.palette,
         powerline: preset.powerline,
       };

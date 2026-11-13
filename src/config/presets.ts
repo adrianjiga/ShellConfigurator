@@ -7,8 +7,8 @@ export interface PresetDef {
   description: string;
   requiresNerdFont: boolean;
   // Overrides for left/right modules when this preset is selected
-  leftModules?: ModuleId[];
-  rightModules?: ModuleId[];
+  leftModules: readonly ModuleId[];
+  rightModules: readonly ModuleId[];
   /** The colour theme this preset starts from. Every preset names a different
    *  one, so no two presets generate the same colours. The Style screen seeds
    *  its picker from this and the user can then change it. */
