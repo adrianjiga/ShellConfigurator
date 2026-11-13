@@ -652,7 +652,7 @@ describe('shellInstallSupported', () => {
     expect(shellInstallSupported('powershell', 'apt')).toBe(false);
     expect(shellInstallSupported('powershell', 'dnf')).toBe(false);
     expect(shellInstallSupported('powershell', 'apk')).toBe(false);
-    expect(shellInstallSupported('powershell', 'pacman')).toBe(true);
+    expect(shellInstallSupported('powershell', 'pacman')).toBe(false);
     expect(shellInstallSupported('powershell', 'brew')).toBe(true);
   });
 

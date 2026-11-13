@@ -8,14 +8,14 @@ import { commandExists, commandPath, runCommand } from './exec.ts';
 import { type ExtractedFontFile, extractFontFiles } from './fontExtractor.ts';
 
 // Package names per shell per package manager. Missing combos are intentional
-// (powershell is brew/pacman-only, nushell is absent from Debian/Ubuntu
+// (powershell is AUR-only on Arch, nushell is absent from Debian/Ubuntu
 // repos), so `undefined` is a valid lookup.
 const SHELL_PACKAGES: Record<ShellId, Partial<Record<PackageManager, string>>> = {
   bash: { pacman: 'bash', apt: 'bash', dnf: 'bash', brew: 'bash', apk: 'bash' },
   zsh: { pacman: 'zsh', apt: 'zsh', dnf: 'zsh', brew: 'zsh', apk: 'zsh' },
   fish: { pacman: 'fish', apt: 'fish', dnf: 'fish', brew: 'fish', apk: 'fish' },
   nushell: { pacman: 'nushell', dnf: 'nushell', brew: 'nushell', apk: 'nushell' },
-  powershell: { pacman: 'powershell', brew: 'powershell' },
+  powershell: { brew: 'powershell' },
 };
 
 /** Root (common in containers) has no sudo to call. */
