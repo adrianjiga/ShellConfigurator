@@ -323,6 +323,21 @@ function isManagedLine(shell: ShellDef, line: string): boolean {
   );
 }
 
+/** Matches a managed line by its trimmed text, so CRLF files and stray spaces still match. */
+type LineNeedle = string | ((trimmed: string) => boolean);
+
+function lineMatches(line: string, needle: LineNeedle): boolean {
+  const t = line.trim();
+  return typeof needle === 'string' ? t === needle.trim() : needle(t);
+}
+
+/** Any per-shell STARSHIP_CONFIG export, whatever path an earlier run wrote. */
+function isConfigExport(shell: ShellDef): LineNeedle {
+  return shell.id === 'fish'
+    ? (t) => t.startsWith('set -gx STARSHIP_CONFIG ')
+    : (t) => t.startsWith('export STARSHIP_CONFIG=');
+}
+
 /**
  * Drops every "Added by ShellConfigurator" block containing any needle, so a
  * re-run can repair an rc polluted by the opposite block from an earlier run.
@@ -330,7 +345,7 @@ function isManagedLine(shell: ShellDef, line: string): boolean {
 function removeShellConfiguratorBlocks(
   content: string,
   shell: ShellDef,
-  needles: string[]
+  needles: LineNeedle[]
 ): string {
   const lines = content.split('\n');
   const out: string[] = [];
@@ -345,7 +360,7 @@ function removeShellConfiguratorBlocks(
         block.push(lines[j]);
         j++;
       }
-      if (needles.some((n) => block.includes(n))) {
+      if (needles.some((n) => block.some((blockLine) => lineMatches(blockLine, n)))) {
         // Drop the stale block (and the blank line that follows it).
         i = j;
         if (i < lines.length && lines[i].trim() === '') i++;
@@ -446,18 +461,19 @@ export function applyShellConfig(
   // exclusive: a leftover "unset" guard from a reset run, an adopt-mode block
   // when writing per-shell configs, and — in adopt mode — a per-shell export a
   // previous non-adopt run left pointing at a per-shell TOML.
-  const cleanNeedles = [starshipUnsetLine(shellId)!];
+  const configLine = options.pointAtSharedConfig ? null : starshipConfigLine(shellId);
+  const cleanNeedles: LineNeedle[] = [starshipUnsetLine(shellId)!];
   if (options.pointAtSharedConfig) {
-    const perShellExport = starshipConfigLine(shellId);
-    if (perShellExport) cleanNeedles.push(perShellExport);
+    cleanNeedles.push(isConfigExport(shell));
   } else {
     cleanNeedles.push(ADOPT_MARKER);
+    // An export an earlier run wrote for a different config path is stale too.
+    cleanNeedles.push((t) => lineMatches(t, isConfigExport(shell)) && t !== configLine);
   }
   const cleaned = removeShellConfiguratorBlocks(existing, shell, cleanNeedles);
 
   // The PATH and STARSHIP_CONFIG lines must come before the init line, or
   // `starship init` cannot resolve either the binary or its config.
-  const configLine = options.pointAtSharedConfig ? null : starshipConfigLine(shellId);
 
   const initPresent =
     hasStarshipInit(cleaned, shell.id) ||
@@ -511,9 +527,7 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
   // Drop any per-shell wiring an earlier "configure" run may have added.
   // Keep the Starship init line: an unselected shell should use the shared
   // config, not lose Starship entirely on its next launch.
-  const cleanedBlocks = removeShellConfiguratorBlocks(existing, shell, [
-    starshipConfigLine(shellId)!,
-  ]);
+  const cleanedBlocks = removeShellConfiguratorBlocks(existing, shell, [isConfigExport(shell)]);
   const cleaned =
     existing.includes(shell.initLine) && !cleanedBlocks.includes(shell.initLine)
       ? `${cleanedBlocks.trimEnd()}\n${BLOCK_MARKER}\n${shell.initLine}\n`

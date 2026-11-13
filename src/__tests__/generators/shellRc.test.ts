@@ -289,6 +289,33 @@ describe('applyShellConfig', () => {
     expect(finalContent.indexOf(expected)).toBeLessThan(finalContent.indexOf('starship init'));
   });
 
+  it('drops a stale unset guard from a CRLF rc file', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () => '# mine\r\n# Added by ShellConfigurator\r\nunset STARSHIP_CONFIG\r\n'
+    );
+
+    applyShellConfig('zsh');
+
+    expect(lastWrittenContent()).not.toContain('unset STARSHIP_CONFIG');
+  });
+
+  it('replaces an export an earlier run wrote for a different config path', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () =>
+        '# Added by ShellConfigurator\nexport STARSHIP_CONFIG="/old/xdg/starship/zsh.toml"\neval "$(starship init zsh)"\n'
+    );
+
+    const result = applyShellConfig('zsh');
+
+    expect(result.applied).toBe(true);
+    const content = lastWrittenContent();
+    expect(content).not.toContain('/old/xdg/');
+    expect(content).toContain(`export STARSHIP_CONFIG="${expectedConfigPath}"`);
+    expect(content.match(/starship init zsh/g)).toHaveLength(1);
+  });
+
   it('uses fish syntax for the STARSHIP_CONFIG line', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() => '');
