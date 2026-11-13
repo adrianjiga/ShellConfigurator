@@ -612,3 +612,18 @@ describe('StyleScreen', () => {
     expect(onBack).toHaveBeenCalled();
   });
 });
+
+describe('StyleScreen key bursts', () => {
+  it('applies every arrow in a burst that arrives as one chunk', async () => {
+    const onUpdate = vi.fn();
+    const instance = render(
+      <StyleScreen state={DEFAULT_STATE} onNext={vi.fn()} onUpdate={onUpdate} onBack={vi.fn()} />
+    );
+    await flush();
+    instance.stdin.write('\u001B[B\u001B[B');
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ characterSymbol: 'dollar' })
+    );
+  });
+});

@@ -52,6 +52,11 @@ const CONTINUATION_OPTIONS: {
   { value: 'none', label: 'None', description: 'No marker on wrapped lines' },
 ];
 
+const CHAR_VALUES = CHAR_OPTIONS.map((o) => o.value);
+const PALETTE_IDS = PALETTES.map((p) => p.id);
+const POWERLINE_VALUES = POWERLINE_OPTIONS.map((o) => o.value);
+const CONTINUATION_VALUES = CONTINUATION_OPTIONS.map((o) => o.value);
+
 type FocusSection = 'char' | 'color' | 'powerline' | 'continuation' | 'extras' | 'directory';
 
 const FOCUS_ORDER: FocusSection[] = [
@@ -67,31 +72,51 @@ const FOCUS_ORDER: FocusSection[] = [
 const EXTRA_ROWS = ['addNewline', 'vimMode'] as const;
 type ExtraRow = (typeof EXTRA_ROWS)[number];
 
+/**
+ * useState whose setter also updates a ref at once. Ink can deliver several keys
+ * from one input chunk before re-rendering, so key handlers read the ref.
+ */
+function useLive<T>(initial: T) {
+  const [value, setValue] = useState<T>(initial);
+  const ref = useRef(value);
+  const set = (next: T | ((prev: T) => T)) => {
+    ref.current = typeof next === 'function' ? (next as (prev: T) => T)(ref.current) : next;
+    setValue(ref.current);
+  };
+  return [value, set, ref] as const;
+}
+
+/** The option `delta` steps away from `current`, clamped to the list. */
+function step<T>(options: readonly T[], current: T, delta: number): T {
+  const index = options.indexOf(current);
+  return options[Math.min(options.length - 1, Math.max(0, index + delta))]!;
+}
+
 function depthLabel(value: number): string {
   if (value === 0) return 'Full path';
   return `${value} folder${value === 1 ? '' : 's'}`;
 }
 
 export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProps) {
-  const [characterSymbol, setCharacterSymbol] = useState<CharacterSymbol>(state.characterSymbol);
-  const [palette, setPalette] = useState<PaletteId>(state.palette);
-  const [powerline, setPowerline] = useState<boolean>(state.powerline);
-  const [continuationPrompt, setContinuationPrompt] = useState<ContinuationPrompt>(
-    state.continuationPrompt
+  const [characterSymbol, setCharacterSymbol, characterSymbolRef] = useLive<CharacterSymbol>(
+    state.characterSymbol
   );
-  const [addNewline, setAddNewline] = useState<boolean>(state.addNewline);
-  const [vimMode, setVimMode] = useState<boolean>(state.vimMode);
-  const [directoryTruncationLength, setDirectoryTruncationLength] = useState<number>(
-    state.directoryTruncationLength
-  );
-  const [directorySubstitutions, setDirectorySubstitutions] = useState<DirectorySubstitution[]>(
-    state.directorySubstitutions
-  );
-  const [focus, setFocus] = useState<FocusSection>('char');
-  const [extraCursor, setExtraCursor] = useState(0);
-  const [dirCursor, setDirCursor] = useState(0);
-  const [editingSubs, setEditingSubs] = useState(false);
-  const [subsDraft, setSubsDraft] = useState('');
+  const [palette, setPalette, paletteRef] = useLive<PaletteId>(state.palette);
+  const [powerline, setPowerline, powerlineRef] = useLive<boolean>(state.powerline);
+  const [continuationPrompt, setContinuationPrompt, continuationPromptRef] =
+    useLive<ContinuationPrompt>(state.continuationPrompt);
+  const [addNewline, setAddNewline, addNewlineRef] = useLive<boolean>(state.addNewline);
+  const [vimMode, setVimMode, vimModeRef] = useLive<boolean>(state.vimMode);
+  const [directoryTruncationLength, setDirectoryTruncationLength, directoryTruncationLengthRef] =
+    useLive<number>(state.directoryTruncationLength);
+  const [directorySubstitutions, setDirectorySubstitutions, directorySubstitutionsRef] = useLive<
+    DirectorySubstitution[]
+  >(state.directorySubstitutions);
+  const [focus, setFocus, focusRef] = useLive<FocusSection>('char');
+  const [extraCursor, setExtraCursor, extraCursorRef] = useLive(0);
+  const [dirCursor, setDirCursor, dirCursorRef] = useLive(0);
+  const [editingSubs, setEditingSubs, editingSubsRef] = useLive(false);
+  const [subsDraft, setSubsDraft, subsDraftRef] = useLive('');
   const [subsError, setSubsError] = useState<string | null>(null);
   const isInitialMount = useRef(true);
 
@@ -101,14 +126,14 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
   const continuationIdx = CONTINUATION_OPTIONS.findIndex((o) => o.value === continuationPrompt);
 
   const selection = (): Partial<WizardState> => ({
-    characterSymbol,
-    palette,
-    powerline,
-    continuationPrompt,
-    addNewline,
-    vimMode,
-    directoryTruncationLength,
-    directorySubstitutions,
+    characterSymbol: characterSymbolRef.current,
+    palette: paletteRef.current,
+    powerline: powerlineRef.current,
+    continuationPrompt: continuationPromptRef.current,
+    addNewline: addNewlineRef.current,
+    vimMode: vimModeRef.current,
+    directoryTruncationLength: directoryTruncationLengthRef.current,
+    directorySubstitutions: directorySubstitutionsRef.current,
   });
 
   // Push live updates to parent state so preview stays in sync (skip initial
@@ -138,14 +163,14 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
   }
 
   function startEditingSubs() {
-    setSubsDraft(formatSubstitutions(directorySubstitutions));
+    setSubsDraft(formatSubstitutions(directorySubstitutionsRef.current));
     setSubsError(null);
     setEditingSubs(true);
   }
 
   function commitSubs() {
     try {
-      setDirectorySubstitutions(parseSubstitutions(subsDraft));
+      setDirectorySubstitutions(parseSubstitutions(subsDraftRef.current));
       setSubsError(null);
       setEditingSubs(false);
     } catch (error) {
@@ -154,9 +179,9 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
   }
 
   useInput((char, key) => {
-    // The substitution editor owns the keyboard while it is open, so a typed
-    // `q` or arrow cannot navigate the wizard underneath it.
-    if (editingSubs) {
+    // The substitution editor owns the keyboard while it is open, so typed text
+    // or an arrow cannot navigate the wizard underneath it.
+    if (editingSubsRef.current) {
       if (key.escape) {
         setEditingSubs(false);
         setSubsError(null);
@@ -186,8 +211,10 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
       return;
     }
 
+    const focused = focusRef.current;
+
     // On the substitutions row, Enter opens the editor instead of confirming.
-    if (focus === 'directory' && dirCursor === 1 && key.return) {
+    if (focused === 'directory' && dirCursorRef.current === 1 && key.return) {
       startEditingSubs();
       return;
     }
@@ -197,34 +224,21 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
       return;
     }
 
-    if (focus === 'char') {
-      if (key.upArrow) setCharacterSymbol(CHAR_OPTIONS[Math.max(0, charIdx - 1)].value);
-      if (key.downArrow)
-        setCharacterSymbol(CHAR_OPTIONS[Math.min(CHAR_OPTIONS.length - 1, charIdx + 1)].value);
-    } else if (focus === 'color') {
-      if (key.upArrow) setPalette(PALETTES[Math.max(0, colorIdx - 1)].id);
-      if (key.downArrow) setPalette(PALETTES[Math.min(PALETTES.length - 1, colorIdx + 1)].id);
-    } else if (focus === 'powerline') {
-      if (key.upArrow) setPowerline(POWERLINE_OPTIONS[Math.max(0, powerlineIdx - 1)].value);
-      if (key.downArrow)
-        setPowerline(
-          POWERLINE_OPTIONS[Math.min(POWERLINE_OPTIONS.length - 1, powerlineIdx + 1)].value
-        );
-    } else if (focus === 'continuation') {
-      if (key.upArrow)
-        setContinuationPrompt(CONTINUATION_OPTIONS[Math.max(0, continuationIdx - 1)].value);
-      if (key.downArrow)
-        setContinuationPrompt(
-          CONTINUATION_OPTIONS[Math.min(CONTINUATION_OPTIONS.length - 1, continuationIdx + 1)].value
-        );
-    } else if (focus === 'extras') {
-      if (key.upArrow) setExtraCursor((i) => Math.max(0, i - 1));
-      if (key.downArrow) setExtraCursor((i) => Math.min(EXTRA_ROWS.length - 1, i + 1));
-      if (char === ' ') toggleExtra(EXTRA_ROWS[extraCursor]!);
+    const delta = key.upArrow ? -1 : key.downArrow ? 1 : 0;
+    if (focused === 'char') {
+      if (delta) setCharacterSymbol((v) => step(CHAR_VALUES, v, delta));
+    } else if (focused === 'color') {
+      if (delta) setPalette((v) => step(PALETTE_IDS, v, delta));
+    } else if (focused === 'powerline') {
+      if (delta) setPowerline((v) => step(POWERLINE_VALUES, v, delta));
+    } else if (focused === 'continuation') {
+      if (delta) setContinuationPrompt((v) => step(CONTINUATION_VALUES, v, delta));
+    } else if (focused === 'extras') {
+      if (delta) setExtraCursor((i) => Math.min(EXTRA_ROWS.length - 1, Math.max(0, i + delta)));
+      if (char === ' ') toggleExtra(EXTRA_ROWS[extraCursorRef.current]!);
     } else {
-      if (key.upArrow) setDirCursor((i) => Math.max(0, i - 1));
-      if (key.downArrow) setDirCursor((i) => Math.min(1, i + 1));
-      if (dirCursor === 0) {
+      if (delta) setDirCursor((i) => Math.min(1, Math.max(0, i + delta)));
+      if (dirCursorRef.current === 0) {
         if (key.leftArrow) {
           setDirectoryTruncationLength((v) => clampTruncationLength(v - 1));
         }
