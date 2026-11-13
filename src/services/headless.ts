@@ -306,6 +306,7 @@ export async function fetchImportedConfig(
 
   const timeoutMs = options.timeoutMs ?? IMPORT_FETCH_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? IMPORT_FETCH_MAX_BYTES;
+  const shown = url.replace(/\/\/[^/@]*@/, '//');
 
   let response: Response;
   try {
@@ -313,16 +314,16 @@ export async function fetchImportedConfig(
   } catch (err) {
     // AbortSignal.timeout rejects with a TimeoutError DOMException on timeout.
     if (err instanceof DOMException && err.name === 'TimeoutError') {
-      throw new CliRunError(`Could not fetch '${url}': request timed out after ${timeoutMs}ms`);
+      throw new CliRunError(`Could not fetch '${shown}': request timed out after ${timeoutMs}ms`);
     }
-    throw new CliRunError(`Could not fetch '${url}': ${errorMessage(err)}`);
+    throw new CliRunError(`Could not fetch '${shown}': ${errorMessage(err)}`);
   }
   if (!response.ok) {
-    throw new CliRunError(`Could not fetch '${url}': HTTP ${response.status}`);
+    throw new CliRunError(`Could not fetch '${shown}': HTTP ${response.status}`);
   }
   if (response.url && !response.url.toLowerCase().startsWith('https://')) {
     throw new CliRunError(
-      `Could not fetch '${url}': redirected to a non-https URL ${response.url}`
+      `Could not fetch '${shown}': redirected to a non-https URL ${response.url}`
     );
   }
 
@@ -331,7 +332,7 @@ export async function fetchImportedConfig(
   const declaredSize = Number(response.headers.get('content-length') ?? '0');
   if (declaredSize > maxBytes) {
     throw new CliRunError(
-      `Could not fetch '${url}': server reports ${declaredSize} bytes, ` +
+      `Could not fetch '${shown}': server reports ${declaredSize} bytes, ` +
         `above the ${maxBytes} byte limit.`
     );
   }
@@ -347,16 +348,16 @@ export async function fetchImportedConfig(
         total += value.byteLength;
         if (total > maxBytes) {
           await reader.cancel();
-          throw new CliRunError(`Could not fetch '${url}': config exceeds ${maxBytes} bytes`);
+          throw new CliRunError(`Could not fetch '${shown}': config exceeds ${maxBytes} bytes`);
         }
         chunks.push(value);
       }
     } catch (err) {
       if (err instanceof CliRunError) throw err;
       if (err instanceof DOMException && err.name === 'TimeoutError') {
-        throw new CliRunError(`Could not fetch '${url}': request timed out after ${timeoutMs}ms`);
+        throw new CliRunError(`Could not fetch '${shown}': request timed out after ${timeoutMs}ms`);
       }
-      throw new CliRunError(`Could not fetch '${url}': ${errorMessage(err)}`);
+      throw new CliRunError(`Could not fetch '${shown}': ${errorMessage(err)}`);
     } finally {
       reader.releaseLock();
     }
@@ -364,10 +365,10 @@ export async function fetchImportedConfig(
 
   const content = Buffer.concat(chunks).toString('utf8');
   if (content.trim().length === 0) {
-    throw new CliRunError(`'${url}' returned no config content`);
+    throw new CliRunError(`'${shown}' returned no config content`);
   }
   if (content.trimStart().startsWith('<')) {
-    throw new CliRunError(`'${url}' returned HTML, not a TOML config — use the raw file URL.`);
+    throw new CliRunError(`'${shown}' returned HTML, not a TOML config — use the raw file URL.`);
   }
   return content;
 }

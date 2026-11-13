@@ -769,6 +769,18 @@ describe('runApply', () => {
     );
   });
 
+  it('keeps credentials out of fetch error messages', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('boom'));
+
+    const error = await fetchImportedConfig('https://user:s3cret@example.com/config.toml').catch(
+      (err: Error) => err
+    );
+    expect(error instanceof Error ? error.message : String(error)).not.toContain('s3cret');
+    expect(error instanceof Error ? error.message : String(error)).toContain(
+      "'https://example.com/config.toml'"
+    );
+  });
+
   it('rejects an HTTP error when fetching an imported config as a run failure', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
 
