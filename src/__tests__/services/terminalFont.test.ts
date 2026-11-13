@@ -282,6 +282,8 @@ describe('wireTerminalFont', () => {
 
     expect(result.applied).toBe(false);
     expect(result.note).toContain('alacritty.yml');
+    expect(result.note).toContain('alacritty migrate');
+    expect(result.note).toContain('font.normal.family');
     expect(read('alacritty/alacritty.yml')).toBe('font:\n  family: "Old"\n');
   });
 

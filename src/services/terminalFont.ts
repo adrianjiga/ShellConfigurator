@@ -263,7 +263,9 @@ export function wireTerminalFont(id: TerminalId, family: string): TerminalFontRe
     return {
       applied: false,
       path: filePath,
-      note: `alacritty.yml is in use — add font.family: "${family}" under font: in ${filePath}`,
+      note:
+        `${filePath} is YAML, which Alacritty 0.13+ ignores: run \`alacritty migrate\` and ` +
+        `re-run, or on an older Alacritty set font.normal.family to "${family}" there`,
     };
   }
 
