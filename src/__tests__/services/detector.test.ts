@@ -195,15 +195,26 @@ describe('detectCurrentShellAsync', () => {
     expect(await detectCurrentShellAsync()).toBe('bash');
   });
 
-  it('falls back to ps comm when $SHELL is unknown', async () => {
-    process.env.SHELL = '/usr/bin/weird-shell';
+  /** Answers `ps -p <ppid> -o comm=` with `comm`, and nothing else. */
+  function psReports(comm: string) {
     mockExecFile.mockImplementation((...args: unknown[]) => {
       const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
-      const cmd = args[0] as string;
-      if (cmd === 'ps') cb(null, 'fish', '');
+      const [cmd, cmdArgs] = args as [string, string[]];
+      if (cmd === 'ps' && cmdArgs[1] === String(process.ppid)) cb(null, comm, '');
       else cb(new Error('not found'), '', '');
     });
+  }
+
+  it("falls back to the parent process's ps comm when $SHELL is unknown", async () => {
+    process.env.SHELL = '/usr/bin/weird-shell';
+    psReports('fish');
     expect(await detectCurrentShellAsync()).toBe('fish');
+  });
+
+  it('recognises a login shell reported with a leading dash', async () => {
+    process.env.SHELL = '/usr/bin/weird-shell';
+    psReports('-zsh');
+    expect(await detectCurrentShellAsync()).toBe('zsh');
   });
 
   it('returns null when neither $SHELL nor ps identifies a shell', async () => {

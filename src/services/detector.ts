@@ -129,8 +129,10 @@ export async function detectCurrentShellAsync(): Promise<ShellId | null> {
     if (match) return match.id;
   }
   try {
-    const comm = (await runCapture('ps', ['-p', `${process.pid}`, '-o', 'comm='])).trim();
-    const match = byName(comm.split('/').pop() ?? '');
+    // The parent is the shell that launched the wizard; a login shell's name
+    // carries a leading '-' (e.g. "-zsh").
+    const comm = (await runCapture('ps', ['-p', `${process.ppid}`, '-o', 'comm='])).trim();
+    const match = byName((comm.split('/').pop() ?? '').replace(/^-/, ''));
     if (match) return match.id;
   } catch {
     // fall through to null
