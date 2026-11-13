@@ -17,6 +17,7 @@ const {
   mockExistsSync,
   mockStatSync,
   mockReadFileSync,
+  mockRunCapture,
 } = vi.hoisted(() => ({
   mockSpawn: vi.fn(),
   mockExecFileSync: vi.fn(),
@@ -29,14 +30,15 @@ const {
   mockExistsSync: vi.fn(),
   mockStatSync: vi.fn(),
   mockReadFileSync: vi.fn(),
+  mockRunCapture: vi.fn(),
 }));
 
 vi.mock('child_process', () => ({
   execFileSync: mockExecFileSync,
   spawn: mockSpawn,
-  // exec.ts promisifies execFile; unused here but must exist on the mock.
+  // exec.ts promisifies execFile, which backs runCapture.
   execFile: Object.assign(vi.fn(), {
-    [Symbol.for('nodejs.util.promisify.custom')]: vi.fn(),
+    [Symbol.for('nodejs.util.promisify.custom')]: mockRunCapture,
   }),
 }));
 
@@ -198,6 +200,7 @@ beforeEach(() => {
   // `command -v` prints the path on success, and exec.ts treats empty output as "missing".
   mockExecFileSync.mockReturnValue('/usr/bin/curl\n');
   mockMkdirSync.mockImplementation(() => undefined);
+  mockRunCapture.mockResolvedValue({ stdout: '', stderr: '' });
   mockMkdtempSync.mockReturnValue('/tmp/shellconf-font-test');
   mockWriteFileSync.mockImplementation(() => undefined);
   mockCopyFileSync.mockImplementation(() => undefined);
@@ -516,9 +519,11 @@ describe('installNerdFont', () => {
     Object.defineProperty(process, 'platform', { value: 'linux' });
     try {
       respondWithZip({ 'FiraCodeNerdFont-Regular.ttf': 'font' });
-      spawnOutcome({ status: 1 });
+      mockRunCapture.mockRejectedValue(new Error('fc-cache missing'));
 
       await expect(installNerdFont('FiraCode')).resolves.toBeUndefined();
+      expect(mockRunCapture).toHaveBeenCalledWith('fc-cache', ['-f'], expect.anything());
+      expect(mockSpawn).not.toHaveBeenCalledWith('fc-cache', expect.anything(), expect.anything());
     } finally {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     }

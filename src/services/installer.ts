@@ -4,7 +4,13 @@ import * as path from 'node:path';
 import { getShellBinary } from '../config/shells.ts';
 import type { PackageManager, ShellId } from '../types.ts';
 import { cachedFont, cacheFont, sha256Digest } from './cache.ts';
-import { CommandCancelledError, commandExists, commandPath, runCommand } from './exec.ts';
+import {
+  CommandCancelledError,
+  commandExists,
+  commandPath,
+  runCapture,
+  runCommand,
+} from './exec.ts';
 import { type ExtractedFontFile, extractFontFiles } from './fontExtractor.ts';
 
 // Package names per shell per package manager. Missing combos are intentional
@@ -310,11 +316,7 @@ function verifyChecksum(zipName: string, buffer: Buffer, expectedDigest: string)
   }
 }
 
-async function installFontFiles(
-  zipName: string,
-  buffer: Buffer,
-  signal?: AbortSignal
-): Promise<void> {
+async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> {
   let fontFiles: ExtractedFontFile[];
   try {
     fontFiles = await extractFontFiles(buffer);
@@ -335,10 +337,12 @@ async function installFontFiles(
     fs.writeFileSync(path.join(fontsDir, file.name), file.bytes);
   }
 
-  // Non-fatal: fc-cache may be absent on minimal systems.
+  // Captured rather than inherited: fc-cache never reads stdin, and suspending
+  // the UI for it would blank the install screen for no reason. Non-fatal:
+  // fc-cache may be absent on minimal systems.
   if (process.platform !== 'darwin') {
     try {
-      await runCommand(['fc-cache', '-f'], { signal });
+      await runCapture('fc-cache', ['-f']);
     } catch {
       // ignore
     }
@@ -360,7 +364,7 @@ export async function installNerdFont(
 
   const cached = cachedFont(fontId);
   if (cached) {
-    await installFontFiles(font.zipName, cached.buffer, signal);
+    await installFontFiles(font.zipName, cached.buffer);
     return `installed ${font.label} from cache`;
   }
 
@@ -374,7 +378,7 @@ export async function installNerdFont(
 
   const buffer = await downloadFont(font.zipName, asset.url, signal);
   verifyChecksum(font.zipName, buffer, asset.digest);
-  await installFontFiles(font.zipName, buffer, signal);
+  await installFontFiles(font.zipName, buffer);
 
   // Pin the verified archive so a later run reuses it without re-downloading.
   // A cache that cannot be written (no space, read-only ~/.cache) must not undo
