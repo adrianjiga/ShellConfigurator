@@ -125,6 +125,12 @@ export async function detectTerminalAsync(): Promise<TerminalId | null> {
 /** Env vars that mean "this is a sandbox, not the user's own machine". */
 const CONTAINER_ENV_MARKERS = ['CODESPACES', 'REMOTE_CONTAINERS', 'DEVCONTAINER', 'CI'];
 
+/** An env flag counts as set unless it is empty or an explicit false/0/no. */
+function isTruthyEnv(value: string | undefined): boolean {
+  if (!value) return false;
+  return !['false', '0', 'no'].includes(value.trim().toLowerCase());
+}
+
 /** Files the container runtimes drop at the filesystem root. */
 const CONTAINER_MARKER_FILES = ['/run/.containerenv', '/.dockerenv'];
 
@@ -134,7 +140,7 @@ const CONTAINER_MARKER_FILES = ['/run/.containerenv', '/.dockerenv'];
  * stat'd) to keep this on the same promisified-fs seam the other detectors use.
  */
 export async function detectContainerAsync(): Promise<boolean> {
-  if (CONTAINER_ENV_MARKERS.some((name) => Boolean(process.env[name]))) return true;
+  if (CONTAINER_ENV_MARKERS.some((name) => isTruthyEnv(process.env[name]))) return true;
   for (const marker of CONTAINER_MARKER_FILES) {
     try {
       await readFileP(marker, 'utf8');

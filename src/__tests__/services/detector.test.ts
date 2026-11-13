@@ -333,6 +333,11 @@ describe('detectContainerAsync', () => {
     expect(await detectContainerAsync()).toBe(true);
   });
 
+  it.each(['false', '0', 'no', 'FALSE'])('ignores CI=%s', async (value) => {
+    vi.stubEnv('CI', value);
+    expect(await detectContainerAsync()).toBe(false);
+  });
+
   it('returns true for /run/.containerenv', async () => {
     mockReadFile.mockImplementation((filePath: string, ...args: unknown[]) => {
       const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
