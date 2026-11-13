@@ -26,6 +26,10 @@ const { mockExecFile, mockMkdtemp, mockMkdir, mockWriteFile, mockRm } = vi.hoist
 });
 
 vi.mock('node:child_process', () => ({ execFile: mockExecFile }));
+const { mockMissingPathDir } = vi.hoisted(() => ({
+  mockMissingPathDir: vi.fn<() => string | null>(() => null),
+}));
+vi.mock('../../services/installer.ts', () => ({ getMissingStarshipPathDir: mockMissingPathDir }));
 vi.mock('node:fs/promises', () => ({
   mkdir: mockMkdir,
   mkdtemp: mockMkdtemp,
@@ -179,6 +183,19 @@ describe('renderPromptAsync', () => {
       'utf8'
     );
     expect(mockRm).toHaveBeenCalledWith(SCRATCH, { recursive: true, force: true });
+  });
+
+  it('puts an off-PATH script install on PATH for the render', async () => {
+    mockMissingPathDir.mockReturnValueOnce('/home/u/.local/bin');
+    mockMkdtemp.mockResolvedValue(SCRATCH);
+    mockWriteFile.mockResolvedValue(undefined);
+    mockMkdir.mockResolvedValue(undefined);
+    mockRm.mockResolvedValue(undefined);
+
+    await renderPromptAsync(state, DEFAULT_PREVIEW_DEPS);
+
+    const prompt = execCalls().find((c) => c.cmd === 'starship' && c.args[0] === 'prompt');
+    expect(prompt?.opts?.env?.PATH?.startsWith('/home/u/.local/bin')).toBe(true);
   });
 
   it('keeps rendering even when the sample git repo cannot be created', async () => {
