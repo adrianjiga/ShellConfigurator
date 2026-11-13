@@ -24,7 +24,8 @@ export type InstallTaskId =
   | 'verify'
   | 'terminal'
   | `shell_${ShellId}`
-  | `rc_${ShellId}`;
+  | `rc_${ShellId}`
+  | `reset_${ShellId}`;
 
 /**
  * What the user decided about a Nerd Font. A discriminated union rather than a

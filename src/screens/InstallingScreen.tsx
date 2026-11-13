@@ -10,7 +10,7 @@ import {
   runInstallTasks,
 } from '../services/installTasks.ts';
 import { isUiSuspended, subscribeToUiSuspension } from '../services/tty.ts';
-import type { InstallTask, WizardState } from '../types.ts';
+import type { InstallTask, InstallTaskId, WizardState } from '../types.ts';
 
 export const ADVANCE_AFTER_DONE_MS = 1200;
 let advanceDelayMs = ADVANCE_AFTER_DONE_MS;
@@ -50,7 +50,13 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
     function updateTask(id: string, patch: Partial<InstallTask>) {
       if (unmounted) return;
-      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+      // The reset pass discovers shells at run time, after the plan was built,
+      // so a task id the screen has not seen yet is added rather than dropped.
+      setTasks((prev) =>
+        prev.some((t) => t.id === id)
+          ? prev.map((t) => (t.id === id ? { ...t, ...patch } : t))
+          : [...prev, { id: id as InstallTaskId, label: id, status: 'pending', ...patch }]
+      );
     }
 
     (async () => {

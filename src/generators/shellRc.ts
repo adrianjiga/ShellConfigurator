@@ -179,6 +179,35 @@ export function fishInitFile(rcFile: string): string {
   return path.join(path.dirname(rcFile), 'conf.d', 'starship.fish');
 }
 
+export interface RcIo {
+  exists: (path: string) => boolean;
+  readFile: (path: string) => string;
+}
+
+/**
+ * Of the given installed shells, the ones whose rc actually loads Starship.
+ * Clearing a leaked STARSHIP_CONFIG only makes sense where Starship runs.
+ */
+export function shellsWithStarshipInit(
+  shells: ShellId[],
+  io: RcIo = {
+    exists: (filePath) => fs.existsSync(filePath),
+    readFile: (filePath) => fs.readFileSync(filePath, 'utf8'),
+  }
+): ShellId[] {
+  return shells.filter((shellId) => {
+    const shell = getShell(shellId);
+    if (!shell?.rcFile) return false;
+    try {
+      if (!io.exists(shell.rcFile)) return false;
+      if (hasStarshipInit(io.readFile(shell.rcFile), shellId)) return true;
+      return shellId === 'fish' && io.exists(fishInitFile(shell.rcFile));
+    } catch {
+      return false;
+    }
+  });
+}
+
 /**
  * True when a manual-setup shell's init command has already been applied:
  * nushell's autoload file exists (written by the documented one-liner), or

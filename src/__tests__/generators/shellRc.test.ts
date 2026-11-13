@@ -29,6 +29,7 @@ import {
   hasStarshipInit,
   resetSharedShellConfig,
   restoreConfigBackups,
+  shellsWithStarshipInit,
   writeSharedConfig,
   writeShellConfig,
 } from '../../generators/shellRc.ts';
@@ -185,6 +186,60 @@ describe('writeSharedConfig', () => {
 
     expect(result.backedUpTo).toBeUndefined();
     expect(fs.copyFileSync).not.toHaveBeenCalled();
+  });
+});
+
+describe('shellsWithStarshipInit', () => {
+  const rcFiles = {
+    zsh: getShell('zsh')?.rcFile ?? '',
+    fish: getShell('fish')?.rcFile ?? '',
+  };
+
+  function io(files: Record<string, string>) {
+    return {
+      exists: (filePath: string) => filePath in files,
+      readFile: (filePath: string) => files[filePath],
+    };
+  }
+
+  it('keeps shells whose rc runs starship', () => {
+    expect(
+      shellsWithStarshipInit(
+        ['zsh', 'fish'],
+        io({
+          [rcFiles.zsh]: 'eval "$(starship init zsh)"\n',
+          [rcFiles.fish]: 'set -gx EDITOR vim\n',
+        })
+      )
+    ).toEqual(['zsh']);
+  });
+
+  it('sees fish loading starship from its conf.d drop-in', () => {
+    expect(
+      shellsWithStarshipInit(
+        ['fish'],
+        io({
+          [rcFiles.fish]: '',
+          [path.join(path.dirname(rcFiles.fish), 'conf.d', 'starship.fish')]: '',
+        })
+      )
+    ).toEqual(['fish']);
+  });
+
+  it('ignores commented-out init lines, missing rc files and read errors', () => {
+    const throwing = {
+      exists: () => true,
+      readFile: () => {
+        throw new Error('EACCES');
+      },
+    };
+    expect(shellsWithStarshipInit(['zsh'], throwing)).toEqual([]);
+    expect(
+      shellsWithStarshipInit(
+        ['zsh', 'bash'],
+        io({ [rcFiles.zsh]: '# eval "$(starship init zsh)"\n' })
+      )
+    ).toEqual([]);
   });
 });
 

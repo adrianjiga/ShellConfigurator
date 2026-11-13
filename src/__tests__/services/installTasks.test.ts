@@ -768,6 +768,46 @@ describe('runInstallTasks', () => {
     expect(deps.resetSharedShellConfig).not.toHaveBeenCalledWith('zsh');
   });
 
+  it('lists each reset as its own task and survives one failing shell', async () => {
+    const deps = fakeDeps({
+      getShellsUsingStarship: vi.fn().mockResolvedValue(['bash', 'fish']),
+      resetSharedShellConfig: vi
+        .fn()
+        .mockImplementationOnce(() => {
+          throw new Error('rc is a directory');
+        })
+        .mockReturnValueOnce({ applied: true }),
+    });
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh'], installedShells: ['zsh'] }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.resetSharedShellConfig).toHaveBeenCalledTimes(2);
+    expect(results.find((t) => t.id === 'reset_bash')).toMatchObject({
+      status: 'failed',
+      error: 'rc is a directory',
+    });
+    expect(results.find((t) => t.id === 'reset_fish')?.status).toBe('done');
+  });
+
+  it('does not probe reset shells after the run was cancelled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const deps = fakeDeps();
+
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh'], installedShells: ['zsh'] }),
+      deps,
+      vi.fn(),
+      controller.signal
+    );
+
+    expect(deps.getShellsUsingStarship).not.toHaveBeenCalled();
+    expect(results.every((t) => t.status !== 'pending')).toBe(true);
+  });
+
   it('does not reset shells when starship install is skipped', async () => {
     const deps = fakeDeps({
       getShellsUsingStarship: vi.fn().mockResolvedValue(['bash', 'zsh']),

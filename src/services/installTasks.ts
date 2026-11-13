@@ -5,6 +5,7 @@ import {
   getSharedConfigPath,
   getShellConfigPath,
   resetSharedShellConfig,
+  shellsWithStarshipInit,
   type WriteConfigResult,
   writeSharedConfig,
   writeShellConfig,
@@ -56,7 +57,7 @@ export interface InstallTaskDeps {
     options?: ApplyShellConfigOptions
   ) => { applied: boolean; note?: string };
   resetSharedShellConfig: (shellId: ShellId) => { applied: boolean; note?: string };
-  /** Shells that run Starship and could inherit a leaked STARSHIP_CONFIG. */
+  /** Installed shells whose rc loads Starship (possible STARSHIP_CONFIG inheritors). */
   getShellsUsingStarship: () => Promise<ShellId[]>;
   getMissingStarshipPathDir: () => string | null;
   /** Reads the version of a script install that PATH does not have yet. */
@@ -80,7 +81,7 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   backupSharedConfig,
   applyShellConfig,
   resetSharedShellConfig,
-  getShellsUsingStarship: detectInstalledShellsAsync,
+  getShellsUsingStarship: async () => shellsWithStarshipInit(await detectInstalledShellsAsync()),
   getMissingStarshipPathDir,
   readStarshipVersion: async (pathDir) => {
     const env: Record<string, string | undefined> = { ...process.env };
@@ -115,6 +116,11 @@ export const TASK_IDS = {
 /** Task id for the rc-file step of a given shell. */
 export function rcTaskId(shellId: ShellId): `rc_${ShellId}` {
   return `rc_${shellId}`;
+}
+
+/** Task id for clearing a stale STARSHIP_CONFIG in a shell that is not being wired. */
+export function resetTaskId(shellId: ShellId): `reset_${ShellId}` {
+  return `reset_${shellId}`;
 }
 
 /** Task id for the install step of a given shell. */
@@ -491,17 +497,32 @@ export async function runInstallTasks(
 
   // --- Reset leaked STARSHIP_CONFIG for shells not given their own config ---
   // Their rc must clear the variable at startup or they'd show a parent shell's
-  // prompt. Skipped when Starship was never installed/configured.
+  // prompt. Each row is its own task so one unreadable rc cannot hide the rest.
   if (!state.skipStarshipInstall) {
+    if (cancelled()) {
+      markRemainingCancelled();
+      return tasks;
+    }
+    let starshipShells: ShellId[] = [];
     try {
-      const starshipShells = await deps.getShellsUsingStarship();
-      for (const shellId of starshipShells) {
-        if (state.selectedShells.includes(shellId)) continue;
-        if (cancelled()) break;
-        deps.resetSharedShellConfig(shellId);
-      }
+      starshipShells = await deps.getShellsUsingStarship();
     } catch {
       // Detection is best-effort; a failure must not fail the whole run.
+    }
+    for (const shellId of starshipShells) {
+      if (state.selectedShells.includes(shellId)) continue;
+      const taskId = resetTaskId(shellId);
+      tasks = [
+        ...tasks,
+        { id: taskId, label: `Clear old STARSHIP_CONFIG in ${shellId}`, status: 'pending' },
+      ];
+      onUpdate(taskId, { label: `Clear old STARSHIP_CONFIG in ${shellId}`, status: 'pending' });
+      await runTask(taskId, async () => {
+        const result = deps.resetSharedShellConfig(shellId);
+        if (result.applied) return { status: 'done', patch: { note: result.note } };
+        if (result.note) return { status: 'skipped', patch: { note: result.note } };
+        return undefined;
+      });
     }
   }
 
