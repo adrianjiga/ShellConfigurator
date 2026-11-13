@@ -93,14 +93,14 @@ function setTomlFont(content: string, family: string): string {
 
   const inlineBody = (inner: string) =>
     /family\s*=/.test(inner)
-      ? inner.replace(/family\s*=\s*"[^"]*"/, line)
+      ? inner.replace(/family\s*=\s*(?:"[^"]*"|'[^']*')/, line)
       : inner.trim() === ''
         ? ` ${line} `
         : ` ${line},${inner}`;
   const inline = (key: string) =>
     new RegExp(`^([ \\t]*${key}\\s*=\\s*)\\{([^}]*)\\}([ \\t]*(?:#.*)?)$`, 'm');
   const dotted = (key: string) =>
-    new RegExp(`^([ \\t]*${key})[ \\t]*=[ \\t]*"[^"]*"[ \\t]*(?:#.*)?$`, 'm');
+    new RegExp(`^([ \\t]*${key})[ \\t]*=[ \\t]*(?:"[^"]*"|'[^']*')[ \\t]*(?:#.*)?$`, 'm');
 
   const edited =
     editSection(content, font, inline('normal'), (_m, head, inner, tail) => {

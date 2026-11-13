@@ -192,6 +192,18 @@ describe('wireTerminalFont', () => {
     );
   });
 
+  it.each(["[font]\nnormal = { family = 'Old' }\n", "[font]\nnormal.family = 'Old'\n"])(
+    'replaces a single-quoted alacritty family in %j',
+    (original) => {
+      write('alacritty/alacritty.toml', original);
+
+      const result = wireTerminalFont('alacritty', 'Hack Nerd Font');
+
+      expect(result.applied).toBe(true);
+      expect(read('alacritty/alacritty.toml')).toBe(original.replace("'Old'", '"Hack Nerd Font"'));
+    }
+  );
+
   it('accepts the top-level inline font.normal form', () => {
     write('alacritty/alacritty.toml', 'font.normal = { family = "Old" }\n');
 
