@@ -78,6 +78,28 @@ describe('wireTerminalFont', () => {
     expect(fs.existsSync(path.join(tmp, 'ghostty', 'config'))).toBe(false);
   });
 
+  it('replaces the ghostty primary font after a reset and keeps the fallbacks', () => {
+    write(
+      'ghostty/config',
+      'font-family = Old\nfont-family = ""\nfont-family = Primary\nfont-family = Emoji\n'
+    );
+
+    wireTerminalFont('ghostty', 'Hack Nerd Font');
+
+    expect(read('ghostty/config')).toBe(
+      'font-family = Old\nfont-family = ""\nfont-family = Hack Nerd Font\nfont-family = Emoji\n'
+    );
+  });
+
+  it('leaves ghostty alone when a quoted value already names the font', () => {
+    write('ghostty/config', 'font-family = "Hack Nerd Font"\n');
+
+    const result = wireTerminalFont('ghostty', 'Hack Nerd Font');
+
+    expect(result.applied).toBe(false);
+    expect(fs.readdirSync(path.join(tmp, 'ghostty'))).toEqual(['config']);
+  });
+
   it('writes the ghostty font-family key', () => {
     const result = wireTerminalFont('ghostty', 'Hack Nerd Font');
 

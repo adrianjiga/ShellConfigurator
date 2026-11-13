@@ -30,18 +30,33 @@ function appendBlock(content: string, block: string): string {
   return `${content.replace(/\n*$/, '')}\n\n${block}\n`;
 }
 
-function setLine(content: string, pattern: RegExp, line: string): string {
-  if (pattern.test(content)) return content.replace(pattern, line);
+function appendLine(content: string, line: string): string {
   const base = content.trim() === '' ? '' : content.replace(/\n*$/, '\n');
   return `${base}${line}\n`;
+}
+
+/**
+ * Sets ghostty's primary font: the first font-family after the last
+ * `font-family = ""` reset. The rest of the list stays as fallbacks.
+ */
+function setGhosttyFont(content: string, family: string): string {
+  let primary: RegExpMatchArray | null = null;
+  for (const match of content.matchAll(/^[ \t]*font-family[ \t]*=(.*)$/gm)) {
+    const value = unquote(match[1] ?? '');
+    if (value === '') primary = null;
+    else if (primary === null) primary = match;
+  }
+  if (!primary) return appendLine(content, `font-family = ${family}`);
+  if (unquote(primary[1] ?? '') === family) return content;
+  const start = primary.index ?? 0;
+  return `${content.slice(0, start)}font-family = ${family}${content.slice(start + primary[0].length)}`;
 }
 
 /** Replaces the last line matching `pattern` (a global, multiline regex), or appends `line`. */
 function setLastLine(content: string, pattern: RegExp, line: string): string {
   const last = [...content.matchAll(pattern)].at(-1);
-  if (last) return content.slice(0, last.index) + line + content.slice(last.index + last[0].length);
-  const base = content.trim() === '' ? '' : content.replace(/\n*$/, '\n');
-  return `${base}${line}\n`;
+  if (!last) return appendLine(content, line);
+  return content.slice(0, last.index) + line + content.slice(last.index + last[0].length);
 }
 
 interface TomlSection {
@@ -263,7 +278,7 @@ export function wireTerminalFont(id: TerminalId, family: string): TerminalFontRe
       updated = setLastLine(existing, /^[ \t]*font_family[ \t]+.*$/gm, `font_family ${family}`);
       break;
     case 'ghostty':
-      updated = setLine(existing, /^font-family\s*=.*$/m, `font-family = ${family}`);
+      updated = setGhosttyFont(existing, family);
       break;
     case 'foot':
       updated = setFootFont(existing, family);
