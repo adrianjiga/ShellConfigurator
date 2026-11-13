@@ -378,3 +378,20 @@ describe('DoneScreen default shell', () => {
     expect(lastFrame()).toContain('chsh: wrong password');
   });
 });
+
+describe('DoneScreen font reminder', () => {
+  it('names the family the terminal font picker lists', () => {
+    const { lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          selectedShells: ['zsh'],
+          installedShells: ['zsh'],
+          nerdFontToInstall: { kind: 'install', id: 'CascadiaCode' },
+          installResults: [{ id: 'font', label: 'Nerd Font', status: 'done' }],
+        }}
+      />
+    );
+    expect((lastFrame() ?? '').replace(/\s+/g, ' ')).toContain('CaskaydiaCove Nerd Font');
+  });
+});

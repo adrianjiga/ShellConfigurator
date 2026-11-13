@@ -10,7 +10,7 @@ import {
   restoreConfigBackups,
 } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
-import { fontLabel } from '../services/installer.ts';
+import { fontLabel, getFontFamily } from '../services/installer.ts';
 import { buildTaskList, plannedResetShells, rcTaskId, TASK_IDS } from '../services/installTasks.ts';
 import { fontIdToInstall, type InstallTask, type WizardState } from '../types.ts';
 
@@ -313,8 +313,11 @@ export function DoneScreen({ state }: DoneScreenProps) {
               )}
               {fontId && fontTask?.status === 'done' && terminalTask?.status !== 'done' && (
                 <Text color={uiColor('yellow')}>
-                  Remember to set <Text color={uiColor('cyan')}>{fontName} Nerd Font</Text> in your
-                  terminal emulator settings.
+                  Remember to set{' '}
+                  <Text color={uiColor('cyan')}>
+                    {(fontId && getFontFamily(fontId)) ?? fontName}
+                  </Text>{' '}
+                  in your terminal emulator settings.
                 </Text>
               )}
               <Text color={uiColor('gray')}>

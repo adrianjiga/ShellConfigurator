@@ -62,6 +62,7 @@ vi.mock('../services/installer.ts', () => ({
   plannedPathDir: vi.fn(() => null),
   getNerdFontsDir: () => '/tmp/fonts',
   fontLabel: (id: string) => id,
+  getFontFamily: (id: string) => `${id} Nerd Font`,
   shellInstallSupported: (_shellId: string, pm: string) => pm !== 'script',
 }));
 
