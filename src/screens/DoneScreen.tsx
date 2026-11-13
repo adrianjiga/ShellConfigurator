@@ -2,7 +2,7 @@ import { Box, Text, useApp, useInput } from 'ink';
 import { useState } from 'react';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
-import { getShell } from '../config/shells.ts';
+import { getShell, setupCommand } from '../config/shells.ts';
 import { type ReportedStatus, statusMark } from '../config/status.ts';
 import {
   getShellConfigPath,
@@ -219,7 +219,9 @@ export function DoneScreen({ state }: DoneScreenProps) {
                   shell?.initLine &&
                   rcNote !== 'already configured' && (
                     <Box marginLeft={3}>
-                      <Text color={uiColor('cyan')}>{shell.initLine}</Text>
+                      <Text color={uiColor('cyan')}>
+                        {setupCommand(shell, state.keepExistingConfig)}
+                      </Text>
                     </Box>
                   )}
                 {(rcTask?.status === 'done' || (rcTask?.status === 'skipped' && !shell?.rcFile)) &&

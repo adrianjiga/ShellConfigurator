@@ -366,7 +366,7 @@ function checkShellWiring(
   const fix: DoctorFix = { kind: 'configure-shell', shellId };
 
   if (!shell.rcFile) {
-    return manualSetupAppliedWith(shell, deps)
+    return manualSetupAppliedWith(shell, deps, pointAtShared)
       ? {
           id: `shell:${shellId}`,
           title: shell.label,

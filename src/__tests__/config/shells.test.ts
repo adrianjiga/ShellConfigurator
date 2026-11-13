@@ -1,7 +1,7 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getShell } from '../../config/shells.ts';
+import { getShell, setupCommand } from '../../config/shells.ts';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -22,5 +22,22 @@ describe('shell rc paths', () => {
     expect(getShell('powershell')?.initPath).toBe(
       path.join('/home/u/.xdg', 'powershell', 'Microsoft.PowerShell_profile.ps1')
     );
+  });
+});
+
+describe('setupCommand', () => {
+  it('drops the per-shell pin for the manual shells in adopt mode', () => {
+    const nu = getShell('nushell')!;
+    const pwsh = getShell('powershell')!;
+
+    expect(setupCommand(nu, false)).toContain('STARSHIP_CONFIG');
+    expect(setupCommand(nu, true)).not.toContain('STARSHIP_CONFIG');
+    expect(setupCommand(nu, true)).toContain('rm -f');
+    expect(setupCommand(pwsh, true)).toBe('Invoke-Expression (&starship init powershell)');
+  });
+
+  it('keeps the rc init line for shells with an rc file', () => {
+    const zsh = getShell('zsh')!;
+    expect(setupCommand(zsh, true)).toBe(zsh.initLine);
   });
 });

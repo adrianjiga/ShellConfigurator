@@ -287,7 +287,11 @@ export interface ManualSetupIo {
   readFile: (path: string) => string;
 }
 
-export function manualSetupAppliedWith(shell: ShellDef, io: ManualSetupIo): boolean {
+export function manualSetupAppliedWith(
+  shell: ShellDef,
+  io: ManualSetupIo,
+  pointAtSharedConfig = false
+): boolean {
   if (!shell.initPath || !io.exists(shell.initPath)) return false;
   if (shell.id === 'powershell') {
     try {
@@ -296,14 +300,22 @@ export function manualSetupAppliedWith(shell: ShellDef, io: ManualSetupIo): bool
       return false;
     }
   }
-  return (shell.additionalInitPaths ?? []).every((filePath) => io.exists(filePath));
+  // Adopt mode reads the shared config, so the per-shell pin must be gone.
+  const pins = shell.additionalInitPaths ?? [];
+  return pointAtSharedConfig
+    ? pins.every((filePath) => !io.exists(filePath))
+    : pins.every((filePath) => io.exists(filePath));
 }
 
-export function manualSetupApplied(shell: ShellDef): boolean {
-  return manualSetupAppliedWith(shell, {
-    exists: (filePath) => fs.existsSync(filePath),
-    readFile: (filePath) => fs.readFileSync(filePath, 'utf8'),
-  });
+export function manualSetupApplied(shell: ShellDef, pointAtSharedConfig = false): boolean {
+  return manualSetupAppliedWith(
+    shell,
+    {
+      exists: (filePath) => fs.existsSync(filePath),
+      readFile: (filePath) => fs.readFileSync(filePath, 'utf8'),
+    },
+    pointAtSharedConfig
+  );
 }
 
 /**
@@ -547,7 +559,7 @@ export function applyShellConfig(
   // If the init command has already been applied, a re-run should say so rather
   // than always reporting "set up manually".
   if (!shell.rcFile) {
-    if (manualSetupApplied(shell)) {
+    if (manualSetupApplied(shell, options.pointAtSharedConfig)) {
       return { applied: false, note: 'already configured' };
     }
     return { applied: false, note: shell.manualNote };

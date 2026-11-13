@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
-import { getShell } from '../config/shells.ts';
+import { getShell, setupCommand } from '../config/shells.ts';
 import {
   ADOPT_MARKER,
   getSharedConfigPath,
@@ -34,7 +34,8 @@ function rcSnippet(shellId: ShellId, pointAtSharedConfig: boolean): string[] {
   if (configLine) return [configLine, shell.initLine];
   // Manual-only shells (nushell, powershell): the note plus the command to run,
   // or adopt mode where the shared config needs no export.
-  return shell.manualNote ? [shell.manualNote, shell.initLine] : [shell.initLine];
+  const command = setupCommand(shell, pointAtSharedConfig);
+  return shell.manualNote ? [shell.manualNote, command] : [command];
 }
 
 export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {

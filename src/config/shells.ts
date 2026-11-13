@@ -20,6 +20,11 @@ export interface ShellDef {
   additionalInitPaths?: string[];
   /** Renders a PATH addition in this shell's own syntax, when one is needed. */
   pathLine?: (dir: string) => string;
+  /**
+   * For shells without an rc file: the setup command in adopt mode, which reads
+   * the shared starship.toml instead of pinning a per-shell config.
+   */
+  adoptInitLine?: string;
 }
 
 export const SHELLS: ShellDef[] = [
@@ -69,6 +74,13 @@ export const SHELLS: ShellDef[] = [
           `'${pin}' | save -f ($d | path join starship-config.nu)`
       )}`;
     },
+    get adoptInitLine() {
+      return `nu -c ${posixShellQuote(
+        `let d = ($nu.data-dir | path join vendor/autoload); mkdir $d; ` +
+          `starship init nu | save -f ($d | path join starship.nu); ` +
+          `rm -f ($d | path join starship-config.nu)`
+      )}`;
+    },
     manualNote: 'Run the command above from Bash (it invokes Nushell to write its autoload files).',
     get initPath() {
       return path.join(nushellDataDir(), 'vendor', 'autoload', 'starship.nu');
@@ -87,6 +99,7 @@ export const SHELLS: ShellDef[] = [
       const configPath = perShellConfigPath('powershell').replaceAll("'", "''");
       return `$env:STARSHIP_CONFIG = '${configPath}'; Invoke-Expression (&starship init powershell)`;
     },
+    adoptInitLine: 'Invoke-Expression (&starship init powershell)',
     manualNote: 'Add the above line to your $PROFILE file in PowerShell.',
     get initPath() {
       return path.join(configHome(), 'powershell', 'Microsoft.PowerShell_profile.ps1');
@@ -109,6 +122,11 @@ function nushellDataDir(): string {
 
 function posixShellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/** The setup command for a shell, in adopt mode when it reads the shared config. */
+export function setupCommand(shell: ShellDef, pointAtSharedConfig: boolean): string {
+  return pointAtSharedConfig && shell.adoptInitLine ? shell.adoptInitLine : shell.initLine;
 }
 
 export function getShell(id: ShellId): ShellDef | undefined {

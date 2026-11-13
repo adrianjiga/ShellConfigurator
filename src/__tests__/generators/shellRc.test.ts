@@ -671,6 +671,19 @@ describe('applyShellConfig', () => {
     expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
+  it('reports adopt-mode Nushell configured only once the per-shell pin is gone', () => {
+    const pin = getShell('nushell')!.additionalInitPaths![0]!;
+    vi.mocked(fs.existsSync).mockImplementation((p) => String(p) !== pin);
+    expect(applyShellConfig('nushell', { pointAtSharedConfig: true }).note).toBe(
+      'already configured'
+    );
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    expect(applyShellConfig('nushell', { pointAtSharedConfig: true }).note).not.toBe(
+      'already configured'
+    );
+  });
+
   it('does not report Nushell configured if only one autoload file exists', () => {
     const nushell = getShell('nushell')!;
     vi.mocked(fs.existsSync).mockImplementation((file) => file === nushell.initPath);
