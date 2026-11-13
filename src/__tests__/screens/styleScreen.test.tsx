@@ -39,14 +39,23 @@ describe('StyleScreen', () => {
     expect(instance.lastFrame()).toContain('Colour palette');
     expect(instance.lastFrame()).toContain('Segment style');
     expect(instance.lastFrame()).toContain('Wrapped-line marker');
-    expect(instance.lastFrame()).toContain('Prompt extras');
+    expect(instance.lastFrame()).toContain('Prompt extras: blank line');
     expect(instance.lastFrame()).toContain('❯ Arrow');
+    // Only the focused section lists its options.
+    expect(instance.lastFrame()).not.toContain('Blank line before prompt');
+    for (let i = 0; i < 4; i++) {
+      instance.stdin.write('\t');
+      await flush();
+    }
     expect(instance.lastFrame()).toContain('Blank line before prompt');
     expect(instance.lastFrame()).toContain('Vim mode symbol');
+    expect(instance.lastFrame()).toContain('Prompt character: ❯ Arrow');
   });
 
   it('lists every palette, so each preset has one of its own', async () => {
     const { instance } = setup();
+    await flush();
+    instance.stdin.write('\t'); // → palette section
     await flush();
     for (const palette of PALETTES) {
       expect(instance.lastFrame()).toContain(palette.label);
@@ -585,6 +594,8 @@ describe('StyleScreen', () => {
     delete process.env.NO_COLOR;
     const { instance } = setup();
     await flush();
+    instance.stdin.write('\t'); // → palette section
+    await flush();
 
     const paletteLine = (instance.lastFrame() ?? '')
       .split('\n')
@@ -596,6 +607,8 @@ describe('StyleScreen', () => {
   it('hides the palette swatches but keeps the names when NO_COLOR is set', async () => {
     process.env.NO_COLOR = '1';
     const { instance } = setup();
+    await flush();
+    instance.stdin.write('\t'); // → palette section
     await flush();
 
     const paletteLine = (instance.lastFrame() ?? '')

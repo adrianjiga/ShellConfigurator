@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from 'ink';
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { PickerRow } from '../components/PickerRow.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
@@ -90,6 +90,31 @@ function useLive<T>(initial: T) {
 function step<T>(options: readonly T[], current: T, delta: number): T {
   const index = options.indexOf(current);
   return options[Math.min(options.length - 1, Math.max(0, index + delta))]!;
+}
+
+/**
+ * One Style section: only the focused one lists its options, the rest show a
+ * one-line summary, so the screen fits a normal-height terminal.
+ */
+function Section({
+  title,
+  focused,
+  summary,
+  children,
+}: {
+  title: string;
+  focused: boolean;
+  summary: string;
+  children: ReactNode;
+}) {
+  return (
+    <Box flexDirection="column">
+      <Text color={uiColor(focused ? 'cyan' : 'gray')} bold={focused}>
+        {focused ? title : `${title}: ${summary}`}
+      </Text>
+      {focused && children}
+    </Box>
+  );
 }
 
 function depthLabel(value: number): string {
@@ -260,31 +285,31 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
       <Box flexDirection="column" gap={1}>
         <Text bold>Style options</Text>
 
-        {/* Character symbol picker */}
-        <Box flexDirection="column" marginTop={1}>
-          <Text color={uiColor(focus === 'char' ? 'cyan' : 'gray')} bold={focus === 'char'}>
-            Prompt character
-          </Text>
+        <Section
+          title="Prompt character"
+          focused={focus === 'char'}
+          summary={`${CHAR_OPTIONS[charIdx]!.preview} ${CHAR_OPTIONS[charIdx]!.label}`}
+        >
           {CHAR_OPTIONS.map((opt, i) => (
             <PickerRow
               key={opt.value}
-              focused={focus === 'char' && i === charIdx}
+              focused={i === charIdx}
               selected={i === charIdx}
               indent={1}
               label={`${opt.preview} ${opt.label}`}
             />
           ))}
-        </Box>
+        </Section>
 
-        {/* Palette picker */}
-        <Box flexDirection="column" marginTop={1}>
-          <Text color={uiColor(focus === 'color' ? 'cyan' : 'gray')} bold={focus === 'color'}>
-            Colour palette
-          </Text>
+        <Section
+          title="Colour palette"
+          focused={focus === 'color'}
+          summary={PALETTES[colorIdx]!.label}
+        >
           {PALETTES.map((opt, i) => (
             <PickerRow
               key={opt.id}
-              focused={focus === 'color' && i === colorIdx}
+              focused={i === colorIdx}
               selected={i === colorIdx}
               indent={1}
               label={opt.label}
@@ -302,20 +327,17 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
               }
             />
           ))}
-        </Box>
+        </Section>
 
-        {/* Powerline toggle */}
-        <Box flexDirection="column" marginTop={1}>
-          <Text
-            color={uiColor(focus === 'powerline' ? 'cyan' : 'gray')}
-            bold={focus === 'powerline'}
-          >
-            Segment style
-          </Text>
+        <Section
+          title="Segment style"
+          focused={focus === 'powerline'}
+          summary={POWERLINE_OPTIONS[powerlineIdx]!.label}
+        >
           {POWERLINE_OPTIONS.map((opt, i) => (
             <PickerRow
               key={opt.label}
-              focused={focus === 'powerline' && i === powerlineIdx}
+              focused={i === powerlineIdx}
               selected={i === powerlineIdx}
               indent={1}
               label={opt.label}
@@ -326,26 +348,22 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
               }
             />
           ))}
-          {powerline && !state.hasNerdFont && (
-            <Text color={uiColor('yellow')}>
-              {'  '}Powerline separators need a Nerd Font — a plain prompt will be generated
-              instead.
-            </Text>
-          )}
-        </Box>
-
-        {/* Continuation prompt picker */}
-        <Box flexDirection="column" marginTop={1}>
-          <Text
-            color={uiColor(focus === 'continuation' ? 'cyan' : 'gray')}
-            bold={focus === 'continuation'}
-          >
-            Wrapped-line marker (fish has none)
+        </Section>
+        {powerline && !state.hasNerdFont && (
+          <Text color={uiColor('yellow')}>
+            {'  '}Powerline separators need a Nerd Font — a plain prompt will be generated instead.
           </Text>
+        )}
+
+        <Section
+          title="Wrapped-line marker (fish has none)"
+          focused={focus === 'continuation'}
+          summary={CONTINUATION_OPTIONS[continuationIdx]!.label}
+        >
           {CONTINUATION_OPTIONS.map((opt, i) => (
             <PickerRow
               key={opt.value}
-              focused={focus === 'continuation' && i === continuationIdx}
+              focused={i === continuationIdx}
               selected={i === continuationIdx}
               indent={1}
               label={opt.label}
@@ -356,15 +374,18 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
               }
             />
           ))}
-        </Box>
+        </Section>
 
-        {/* Prompt extras: two independent checkboxes. */}
-        <Box flexDirection="column" marginTop={1}>
-          <Text color={uiColor(focus === 'extras' ? 'cyan' : 'gray')} bold={focus === 'extras'}>
-            Prompt extras
-          </Text>
+        <Section
+          title="Prompt extras"
+          focused={focus === 'extras'}
+          summary={
+            [addNewline && 'blank line', vimMode && 'vim symbol'].filter(Boolean).join(', ') ||
+            'none'
+          }
+        >
           <PickerRow
-            focused={focus === 'extras' && extraCursor === 0}
+            focused={extraCursor === 0}
             selected={addNewline}
             marker={addNewline ? '[✓]' : '[ ]'}
             indent={1}
@@ -372,31 +393,32 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
             hint="Space toggles · starship add_newline"
           />
           <PickerRow
-            focused={focus === 'extras' && extraCursor === 1}
+            focused={extraCursor === 1}
             selected={vimMode}
             marker={vimMode ? '[✓]' : '[ ]'}
             indent={1}
             label="Vim mode symbol"
-            hint="Shows ❮ in vim normal mode (cmd, fish, zsh)"
+            hint="Marks vim normal mode (cmd, fish and zsh only)"
           />
-        </Box>
+        </Section>
 
-        {/* Directory display: depth plus optional folder substitutions. */}
-        <Box flexDirection="column" marginTop={1}>
-          <Text
-            color={uiColor(focus === 'directory' ? 'cyan' : 'gray')}
-            bold={focus === 'directory'}
-          >
-            Directory display
-          </Text>
+        <Section
+          title="Directory display"
+          focused={focus === 'directory'}
+          summary={`${depthLabel(directoryTruncationLength)}, ${
+            directorySubstitutions.length > 0
+              ? `${directorySubstitutions.length} substitution(s)`
+              : 'no substitutions'
+          }`}
+        >
           <PickerRow
-            focused={focus === 'directory' && dirCursor === 0}
+            focused={dirCursor === 0}
             indent={1}
             label={`Depth: ${depthLabel(directoryTruncationLength)}`}
             hint="←→ adjusts · 0 shows the full path"
           />
           <PickerRow
-            focused={focus === 'directory' && dirCursor === 1}
+            focused={dirCursor === 1}
             indent={1}
             label={
               directorySubstitutions.length > 0
@@ -421,7 +443,7 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
               )}
             </Box>
           )}
-        </Box>
+        </Section>
       </Box>
 
       <NavHints
