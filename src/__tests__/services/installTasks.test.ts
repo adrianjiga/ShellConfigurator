@@ -12,7 +12,7 @@ describe('runInstallTasks', () => {
     const deps = fakeDeps();
     const results = await runInstallTasks(state(), deps, vi.fn());
 
-    expect(deps.installStarship).toHaveBeenCalledWith('apt');
+    expect(deps.installStarship).toHaveBeenCalledWith('apt', undefined);
     expect(results.find((t) => t.id === 'starship')?.status).toBe('done');
   });
 
@@ -26,6 +26,26 @@ describe('runInstallTasks', () => {
     const starship = results.find((t) => t.id === 'starship');
     expect(starship?.status).toBe('skipped');
     expect(starship?.label).toContain('starship 1.20');
+  });
+
+  it('passes the cancel signal to the install steps', async () => {
+    const controller = new AbortController();
+    const deps = fakeDeps();
+
+    await runInstallTasks(
+      state({
+        selectedShells: ['zsh'],
+        installedShells: [],
+        nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' },
+      }),
+      deps,
+      vi.fn(),
+      controller.signal
+    );
+
+    expect(deps.installStarship).toHaveBeenCalledWith('apt', controller.signal);
+    expect(deps.installNerdFont).toHaveBeenCalledWith('JetBrainsMono', controller.signal);
+    expect(deps.installShell).toHaveBeenCalledWith('zsh', 'apt', controller.signal);
   });
 
   it('does not install or list starship when skipStarshipInstall is set', async () => {
@@ -97,7 +117,7 @@ describe('runInstallTasks', () => {
     );
 
     expect(deps.installNerdFont).toHaveBeenCalledTimes(1);
-    expect(deps.installNerdFont).toHaveBeenCalledWith('JetBrainsMono');
+    expect(deps.installNerdFont).toHaveBeenCalledWith('JetBrainsMono', undefined);
     expect(withFont.find((t) => t.id === 'font')?.status).toBe('done');
     expect(withSentinel.some((t) => t.id === 'font')).toBe(false);
   });
@@ -127,7 +147,7 @@ describe('runInstallTasks', () => {
     );
 
     expect(deps.installShell).toHaveBeenCalledTimes(1);
-    expect(deps.installShell).toHaveBeenCalledWith('zsh', 'apt');
+    expect(deps.installShell).toHaveBeenCalledWith('zsh', 'apt', undefined);
     expect(results.find((t) => t.id === 'shell_bash')).toBeUndefined();
     expect(results.find((t) => t.id === 'shell_zsh')?.status).toBe('done');
   });
@@ -212,7 +232,7 @@ describe('runInstallTasks', () => {
 
     const deps = fakeDeps();
     const results = await runInstallTasks(state({ setDefaultShell: 'zsh' }), deps, vi.fn());
-    expect(deps.setDefaultShell).toHaveBeenCalledWith('zsh');
+    expect(deps.setDefaultShell).toHaveBeenCalledWith('zsh', undefined);
     expect(results.find((t) => t.id === 'chsh')?.status).toBe('done');
   });
 

@@ -38,13 +38,13 @@ import { type TerminalFontResult, terminalLabel, wireTerminalFont } from './term
 
 export interface InstallTaskDeps {
   isStarshipInstalled: () => Promise<{ installed: boolean; version?: string }>;
-  installStarship: (pm: PackageManager) => Promise<void>;
+  installStarship: (pm: PackageManager, signal?: AbortSignal) => Promise<void>;
   /** Records the starship version a fresh install produced, for drift. */
   recordStarshipVersion: (version: string) => void;
-  installShell: (shellId: ShellId, pm: PackageManager) => Promise<void>;
-  setDefaultShell: (shellId: ShellId) => Promise<void>;
+  installShell: (shellId: ShellId, pm: PackageManager, signal?: AbortSignal) => Promise<void>;
+  setDefaultShell: (shellId: ShellId, signal?: AbortSignal) => Promise<void>;
   /** Installs a Nerd Font; resolves with a note when it came from the cache. */
-  installNerdFont: (fontId: string) => Promise<string | undefined>;
+  installNerdFont: (fontId: string, signal?: AbortSignal) => Promise<string | undefined>;
   generateToml: (state: WizardState) => string;
   writeShellConfig: (toml: string, shellId: ShellId) => WriteConfigResult;
   /** Writes the shared starship.toml in adopt mode (e.g. an --import-url fetch). */
@@ -256,7 +256,7 @@ export async function runInstallTasks(
           patch: { label: `Starship (${check.version ?? 'installed'})` },
         };
       }
-      await deps.installStarship(state.packageManager);
+      await deps.installStarship(state.packageManager, signal);
       // Record what the fresh install produced, so the doctor can flag drift
       // when a later package-manager update moves starship under its nose.
       const after = await deps.isStarshipInstalled();
@@ -282,7 +282,7 @@ export async function runInstallTasks(
     fontInstallFailed =
       (await runTask(TASK_IDS.font, async () => {
         // A cache note (e.g. "installed from cache") is shown as task detail.
-        const note = await deps.installNerdFont(fontId);
+        const note = await deps.installNerdFont(fontId, signal);
         return note ? { status: 'done', patch: { note } } : undefined;
       })) === 'failed';
   }
@@ -313,7 +313,7 @@ export async function runInstallTasks(
   for (const shellId of state.selectedShells) {
     if (state.installedShells.includes(shellId)) continue;
     const status = await runTask(shellTaskId(shellId), async () => {
-      await deps.installShell(shellId, state.packageManager);
+      await deps.installShell(shellId, state.packageManager, signal);
     });
     if (status === 'failed') shellInstallFailures.add(shellId);
   }
@@ -325,7 +325,7 @@ export async function runInstallTasks(
       if (shellInstallFailures.has(defaultShell)) {
         throw new Error(`Cannot set ${defaultShell} as the default shell — its install failed`);
       }
-      await deps.setDefaultShell(defaultShell);
+      await deps.setDefaultShell(defaultShell, signal);
     });
   }
 

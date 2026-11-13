@@ -243,7 +243,7 @@ describe('full wizard walkthrough', () => {
 
     expect(toml).toContain('$character');
     expect(mockInstallNerdFont).toHaveBeenCalledTimes(1);
-    expect(mockInstallNerdFont).toHaveBeenCalledWith('JetBrainsMono');
+    expect(mockInstallNerdFont).toHaveBeenCalledWith('JetBrainsMono', expect.any(AbortSignal));
     expect(process.exitCode ?? 0).toBe(0);
   });
 
@@ -301,7 +301,7 @@ describe('full wizard walkthrough', () => {
 
     expect(toml).toContain('$character');
     expect(mockInstallShell).toHaveBeenCalledTimes(1);
-    expect(mockInstallShell).toHaveBeenCalledWith('zsh', 'apt');
+    expect(mockInstallShell).toHaveBeenCalledWith('zsh', 'apt', expect.any(AbortSignal));
     expect(process.exitCode ?? 0).toBe(0);
   });
 });

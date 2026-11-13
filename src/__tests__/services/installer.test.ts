@@ -323,6 +323,14 @@ describe('installStarship', () => {
 });
 
 describe('installShell', () => {
+  it('refuses to start when the run is already cancelled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(installShell('zsh', 'apt', controller.signal)).rejects.toThrow('Cancelled');
+    expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
   it('refreshes the apt index once before installing', async () => {
     await installShell('zsh', 'apt');
     expect(mockSpawn).toHaveBeenCalledWith('sudo', ['apt-get', 'update', '-qq'], {
@@ -381,6 +389,23 @@ describe('installNerdFont', () => {
   it('throws for an unknown font id', async () => {
     await expect(installNerdFont('NotAFont')).rejects.toThrow('Unknown font: NotAFont');
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it('cancels the download when the run is aborted', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.signal?.aborted) {
+          throw new DOMException('The operation was aborted.', 'AbortError');
+        }
+        return okResponse();
+      })
+    );
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(installNerdFont('FiraCode', controller.signal)).rejects.toThrow('Cancelled');
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
   it('throws when the download fails', async () => {
