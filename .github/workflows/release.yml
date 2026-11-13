@@ -6,6 +6,10 @@ on:
 
 permissions: read-all
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Publish to npm + GitHub Releases
@@ -68,4 +72,6 @@ jobs:
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           files: ${{ env.artifact }}
+          fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
           body_path: ${{ runner.temp }}/release-notes.md
