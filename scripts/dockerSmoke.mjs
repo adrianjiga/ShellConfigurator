@@ -3,31 +3,6 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 import { parse } from '@iarna/toml';
-import { PRESETS } from '../dist/config/presets.js';
-import { getShell, getShellBinary } from '../dist/config/shells.js';
-import {
-  applyShellConfig,
-  backupSharedConfig,
-  getSharedConfigPath,
-  getShellConfigPath,
-  resetSharedShellConfig,
-  restoreConfigBackups,
-  writeShellConfig,
-} from '../dist/generators/shellRc.js';
-import { generateToml } from '../dist/generators/starship.js';
-import {
-  detectCurrentShellAsync,
-  detectInstalledShellsAsync,
-  detectPackageManagerAsync,
-  isStarshipInstalledAsync,
-} from '../dist/services/detector.js';
-import { commandExistsAsync } from '../dist/services/exec.js';
-import {
-  getMissingStarshipPathDir,
-  installStarship,
-  scriptInstallBinDir,
-} from '../dist/services/installer.js';
-import { DEFAULT_STATE } from '../dist/types.js';
 import { die, requireScratchHome } from './ci/smokeHome.mjs';
 
 const expectedPm = process.env.EXPECTED_PM;
@@ -38,6 +13,31 @@ const homeDir = requireScratchHome();
 if (!existsSync(new URL('../dist', import.meta.url))) {
   die('Missing ../dist — run "npm run build" before the smoke harness.');
 }
+if (!expectedPm) die('Set EXPECTED_PM to the package manager this image should detect.');
+
+const { PRESETS } = await import('../dist/config/presets.js');
+const { getShell, getShellBinary } = await import('../dist/config/shells.js');
+const {
+  applyShellConfig,
+  backupSharedConfig,
+  getSharedConfigPath,
+  getShellConfigPath,
+  resetSharedShellConfig,
+  restoreConfigBackups,
+  writeShellConfig,
+} = await import('../dist/generators/shellRc.js');
+const { generateToml } = await import('../dist/generators/starship.js');
+const {
+  detectCurrentShellAsync,
+  detectInstalledShellsAsync,
+  detectPackageManagerAsync,
+  isStarshipInstalledAsync,
+} = await import('../dist/services/detector.js');
+const { commandExistsAsync } = await import('../dist/services/exec.js');
+const { getMissingStarshipPathDir, installStarship, scriptInstallBinDir } = await import(
+  '../dist/services/installer.js'
+);
+const { DEFAULT_STATE } = await import('../dist/types.js');
 
 async function check(name, fn) {
   try {
@@ -55,12 +55,7 @@ await check('node engine floor is met', () => {
 });
 
 await check('detects the configured package manager', async () => {
-  const pm = await detectPackageManagerAsync();
-  if (expectedPm) {
-    assert.equal(pm, expectedPm);
-  } else {
-    console.log(`WARN EXPECTED_PM not set; package manager detected as ${pm}`);
-  }
+  assert.equal(await detectPackageManagerAsync(), expectedPm);
 });
 
 await check('detects at least bash as an installed shell', async () => {
@@ -211,8 +206,7 @@ await check('nushell manual command resolves to its own per-shell config', () =>
   assert.ok(nu.initLine.includes('STARSHIP_CONFIG'), 'command missing STARSHIP_CONFIG');
   assert.ok(nu.initLine.includes('starship init nu'), 'command missing starship init');
 
-  const configHome =
-    process.env.XDG_CONFIG_HOME?.trim() || nodePath.join(process.env.HOME, '.config');
+  const configHome = process.env.XDG_CONFIG_HOME;
   assert.equal(
     getShellConfigPath('nushell'),
     nodePath.join(configHome, 'starship', 'nushell.toml')
@@ -320,7 +314,7 @@ await check('getMissingStarshipPathDir flags ~/.local/bin when starship is unrea
 });
 
 await check('writeShellConfig backs up and restoreConfigBackups restores', () => {
-  const configBaseDir = nodePath.join(homeDir, '.config');
+  const configBaseDir = process.env.XDG_CONFIG_HOME;
   const configDir = nodePath.join(configBaseDir, 'starship');
   rmSync(configBaseDir, { recursive: true, force: true });
   mkdirSync(configDir, { recursive: true });
