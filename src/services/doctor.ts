@@ -279,7 +279,7 @@ async function checkRunningShell(shellIds: ShellId[], deps: DoctorDeps): Promise
     id: 'current-shell',
     title: 'Current shell',
     status: 'pass',
-    detail: `${shell.label} will load Starship on the next prompt (restart it to apply now)`,
+    detail: `${shell.label} loads Starship — restart it to see the new prompt`,
   };
 }
 
@@ -348,7 +348,6 @@ function checkShellWiring(
           title: shell.label,
           status: 'warn',
           detail: shell.manualNote ?? 'needs manual setup',
-          fix,
         };
   }
 
@@ -560,8 +559,7 @@ async function checkFontSelected(
       id: 'font-selected',
       title: 'Terminal font',
       status: 'warn',
-      detail: `WezTerm's config is Lua — verify it selects ${expectedFamily ?? 'a Nerd Font'}`,
-      ...(wireFix ? { fix: wireFix } : {}),
+      detail: `WezTerm's config is Lua — check it selects ${expectedFamily ?? 'a Nerd Font'}`,
     };
   }
 

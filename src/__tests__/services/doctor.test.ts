@@ -278,6 +278,15 @@ describe('runDoctor', () => {
     });
   });
 
+  it('leaves manual setup to the user, without a repair action', async () => {
+    const report = await runDoctor(
+      baseState({ selectedShells: ['nushell'] }),
+      makeDeps(new Map(), { detectCurrentShell: vi.fn().mockResolvedValue(null) })
+    );
+    expect(find(report, 'shell:nushell')).toMatchObject({ status: 'warn' });
+    expect(find(report, 'shell:nushell').fix).toBeUndefined();
+  });
+
   it('does not pass a manual setup whose init was never applied', async () => {
     const shell = getShell('nushell')!;
     const files = new Map<string, string>();
