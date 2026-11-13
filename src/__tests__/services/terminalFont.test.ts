@@ -133,17 +133,17 @@ describe('wireTerminalFont', () => {
     );
   });
 
-  it.each([
-    '[font]\nnormal.family = "Old"\nstyle = "Bold"\n',
-    'font.normal.family = "Old"\n',
-  ])('updates the dotted alacritty family key written as %s', (original) => {
-    write('alacritty/alacritty.toml', original);
+  it.each(['[font]\nnormal.family = "Old"\nstyle = "Bold"\n', 'font.normal.family = "Old"\n'])(
+    'updates the dotted alacritty family key written as %s',
+    (original) => {
+      write('alacritty/alacritty.toml', original);
 
-    wireTerminalFont('alacritty', 'Hack Nerd Font');
+      wireTerminalFont('alacritty', 'Hack Nerd Font');
 
-    expect(read('alacritty/alacritty.toml')).toBe(original.replace('"Old"', '"Hack Nerd Font"'));
-    expect(read('alacritty/alacritty.toml').match(/^\[font.normal\]/gm)).toBeNull();
-  });
+      expect(read('alacritty/alacritty.toml')).toBe(original.replace('"Old"', '"Hack Nerd Font"'));
+      expect(read('alacritty/alacritty.toml').match(/^\[font.normal\]/gm)).toBeNull();
+    }
+  );
 
   it('adds a [font.normal] table when only [font] exists', () => {
     write('alacritty/alacritty.toml', '[font]\nsize = 12\n');
@@ -187,9 +187,7 @@ describe('wireTerminalFont', () => {
 
       expect(result.applied).toBe(true);
       expect(result.path).toBe(path.join(tmp, 'Library', 'Preferences', 'kitty', 'kitty.conf'));
-      expect(read('Library/Preferences/kitty/kitty.conf')).toBe(
-        'font_family FiraCode Nerd Font\n'
-      );
+      expect(read('Library/Preferences/kitty/kitty.conf')).toBe('font_family FiraCode Nerd Font\n');
       expect(fs.existsSync(path.join(tmp, 'kitty', 'kitty.conf'))).toBe(false);
     }
   );

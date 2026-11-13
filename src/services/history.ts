@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { InstallTask, WizardState } from '../types.ts';
 import { writeFileAtomic } from '../generators/shellRc.ts';
+import type { InstallTask, WizardState } from '../types.ts';
 import { stateDir } from './paths.ts';
 import { serializeState } from './state.ts';
 

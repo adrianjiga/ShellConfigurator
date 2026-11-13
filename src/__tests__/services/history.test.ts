@@ -109,11 +109,13 @@ describe('appendHistory', () => {
 
     appendHistory(record('install', { exitCode: 0 }));
 
-    const lines = fs.readFileSync(file, 'utf8').split('\n').filter((l) => l.trim() !== '');
+    const lines = fs
+      .readFileSync(file, 'utf8')
+      .split('\n')
+      .filter((l) => l.trim() !== '');
     expect(lines).toHaveLength(2);
     expect(JSON.parse(lines[1])).toMatchObject({ kind: 'install', exitCode: 0 });
   });
-
 });
 
 describe('recordRun', () => {
