@@ -224,7 +224,7 @@ function StaticPromptFrame({ state: chosen }: { state: WizardState }) {
       </Box>
 
       {/* The prompt character sits on its own line, as in the generated config */}
-      <Box flexDirection="row">{leftModules.includes('character') && renderCharacter()}</Box>
+      <Box flexDirection="row">{renderCharacter()}</Box>
 
       {/* Right prompt (dimmed, shown below for simplicity) */}
       {rightModules.length > 0 && (

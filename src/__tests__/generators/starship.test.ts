@@ -503,3 +503,12 @@ describe('battery symbols', () => {
     expect(parsed.battery.full_symbol).toBeUndefined();
   });
 });
+
+describe('character block', () => {
+  it('writes the chosen character even when the module list omits it', () => {
+    const parsed = toml.parse(
+      generateToml({ ...DEFAULT_STATE, characterSymbol: 'lambda', leftModules: ['directory'] })
+    ) as { character?: { success_symbol: string } };
+    expect(parsed.character?.success_symbol).toBe('[λ](bold ok)');
+  });
+});

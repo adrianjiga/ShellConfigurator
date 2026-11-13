@@ -178,9 +178,10 @@ export function generateToml(chosen: WizardState): string {
       })
     );
 
-  const characterBlock = leftModules.includes('character')
-    ? [moduleBlock('character', { state, powerline, bracketed, separator: false, side: 'left' })]
-    : [];
+  // `$character` always ends the format, so its block is always written.
+  const characterBlock = [
+    moduleBlock('character', { state, powerline, bracketed, separator: false, side: 'left' }),
+  ];
 
   const blocks = [
     ...blocksFor(leftSegments, 'left'),
