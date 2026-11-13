@@ -251,3 +251,16 @@ describe('InstallingScreen SIGINT', () => {
     expect(ours()).toHaveLength(0);
   });
 });
+
+describe('InstallingScreen when the chain throws', () => {
+  it('reports every step as failed and moves on instead of hanging', async () => {
+    mocks.buildTaskList.mockReturnValue(statusFixture());
+    mocks.runInstallTasks.mockRejectedValue(new Error('chain broke'));
+    const { onNext } = setup();
+    await waitFor(() => onNext.mock.calls.length > 0);
+
+    const results = onNext.mock.calls[0]![0].installResults as InstallTask[];
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((t) => t.status === 'failed' && t.error === 'chain broke')).toBe(true);
+  });
+});

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { statusMark } from '../config/status.ts';
+import { errorMessage } from '../services/errors.ts';
 import {
   buildTaskList,
   DEFAULT_INSTALL_TASK_DEPS,
@@ -72,12 +73,22 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
     }
 
     (async () => {
-      const results = await runInstallTasks(
-        state,
-        DEFAULT_INSTALL_TASK_DEPS,
-        updateTask,
-        controller.signal
-      );
+      let results: InstallTask[];
+      try {
+        results = await runInstallTasks(
+          state,
+          DEFAULT_INSTALL_TASK_DEPS,
+          updateTask,
+          controller.signal
+        );
+      } catch (err) {
+        // The chain itself broke: report every step as failed rather than hang here.
+        results = buildTaskList(state).map((task) => ({
+          ...task,
+          status: 'failed',
+          error: errorMessage(err),
+        }));
+      }
 
       // Advance after a brief pause so the user can see the final state
       await new Promise((r) => setTimeout(r, advanceDelayMs));
