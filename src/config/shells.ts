@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { homeDir } from '../services/paths.ts';
+import { configHome, homeDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 
 export interface ShellDef {
@@ -27,7 +27,10 @@ export const SHELLS: ShellDef[] = [
     id: 'zsh',
     binary: 'zsh',
     label: 'Zsh',
-    rcFile: path.join(homeDir(), '.zshrc'),
+    get rcFile() {
+      const zdotdir = process.env.ZDOTDIR?.trim();
+      return path.join(zdotdir && path.isAbsolute(zdotdir) ? zdotdir : homeDir(), '.zshrc');
+    },
     initLine: 'eval "$(starship init zsh)"',
     pathLine: (dir) => `export PATH="${dir}:$PATH"`,
   },
@@ -35,7 +38,9 @@ export const SHELLS: ShellDef[] = [
     id: 'bash',
     binary: 'bash',
     label: 'Bash',
-    rcFile: path.join(homeDir(), '.bashrc'),
+    get rcFile() {
+      return path.join(homeDir(), '.bashrc');
+    },
     initLine: 'eval "$(starship init bash)"',
     pathLine: (dir) => `export PATH="${dir}:$PATH"`,
   },
@@ -43,7 +48,9 @@ export const SHELLS: ShellDef[] = [
     id: 'fish',
     binary: 'fish',
     label: 'Fish',
-    rcFile: path.join(homeDir(), '.config', 'fish', 'config.fish'),
+    get rcFile() {
+      return path.join(configHome(), 'fish', 'config.fish');
+    },
     initLine: 'starship init fish | source',
     pathLine: (dir) => `fish_add_path ${dir}`,
   },
@@ -86,7 +93,9 @@ export const SHELLS: ShellDef[] = [
     initLine:
       '$env:STARSHIP_CONFIG = Join-Path $HOME ".config/starship/powershell.toml"; Invoke-Expression (&starship init powershell)',
     manualNote: 'Add the above line to your $PROFILE file in PowerShell.',
-    initPath: path.join(homeDir(), '.config', 'powershell', 'Microsoft.PowerShell_profile.ps1'),
+    get initPath() {
+      return path.join(configHome(), 'powershell', 'Microsoft.PowerShell_profile.ps1');
+    },
   },
 ];
 
