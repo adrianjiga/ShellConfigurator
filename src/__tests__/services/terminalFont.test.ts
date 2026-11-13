@@ -57,6 +57,17 @@ describe('wireTerminalFont', () => {
     expect(read('kitty/kitty.conf')).toBe('font_size 12\nfont_family FiraCode Nerd Font\n');
   });
 
+  it('replaces the kitty font_family that wins, the last one', () => {
+    write('kitty/kitty.conf', 'font_family Old\nfont_size 12\nfont_family Override\n');
+
+    wireTerminalFont('kitty', 'Hack Nerd Font');
+
+    expect(read('kitty/kitty.conf')).toBe(
+      'font_family Old\nfont_size 12\nfont_family Hack Nerd Font\n'
+    );
+    expect(readTerminalFontFamily('kitty')).toBe('Hack Nerd Font');
+  });
+
   it('writes the ghostty font-family key', () => {
     const result = wireTerminalFont('ghostty', 'Hack Nerd Font');
 

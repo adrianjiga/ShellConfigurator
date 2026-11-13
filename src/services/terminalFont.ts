@@ -36,6 +36,14 @@ function setLine(content: string, pattern: RegExp, line: string): string {
   return `${base}${line}\n`;
 }
 
+/** Replaces the last line matching `pattern` (a global, multiline regex), or appends `line`. */
+function setLastLine(content: string, pattern: RegExp, line: string): string {
+  const last = [...content.matchAll(pattern)].at(-1);
+  if (last) return content.slice(0, last.index) + line + content.slice(last.index + last[0].length);
+  const base = content.trim() === '' ? '' : content.replace(/\n*$/, '\n');
+  return `${base}${line}\n`;
+}
+
 interface TomlSection {
   /** The table name, or null for the keys before the first header. */
   name: string | null;
@@ -245,7 +253,7 @@ export function wireTerminalFont(id: TerminalId, family: string): TerminalFontRe
       updated = setTomlFont(existing, family);
       break;
     case 'kitty':
-      updated = setLine(existing, /^font_family\s+.*$/m, `font_family ${family}`);
+      updated = setLastLine(existing, /^[ \t]*font_family[ \t]+.*$/gm, `font_family ${family}`);
       break;
     case 'ghostty':
       updated = setLine(existing, /^font-family\s*=.*$/m, `font-family = ${family}`);
