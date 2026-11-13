@@ -676,3 +676,16 @@ describe('StyleScreen substitution editor', () => {
     expect(instance.lastFrame()).not.toContain("Missing '='");
   });
 });
+
+describe('StyleScreen hints', () => {
+  it('shows Space only in the extras section', async () => {
+    const { instance } = setup();
+    await flush();
+    expect(instance.lastFrame()).not.toContain('Space');
+    for (let i = 0; i < 4; i++) {
+      instance.stdin.write('\t');
+      await flush();
+    }
+    expect(instance.lastFrame()).toContain('Space');
+  });
+});

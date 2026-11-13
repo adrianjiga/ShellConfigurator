@@ -425,13 +425,25 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
       </Box>
 
       <NavHints
-        hints={[
-          { key: '↑↓', label: 'navigate' },
-          { key: 'Tab', label: 'switch section' },
-          { key: 'Space', label: 'toggle' },
-          { key: 'Enter', label: 'confirm' },
-          { key: 'Esc', label: 'back' },
-        ]}
+        hints={
+          editingSubs
+            ? [
+                { key: 'Enter', label: 'save' },
+                { key: 'Esc', label: 'cancel' },
+              ]
+            : [
+                { key: '↑↓', label: 'navigate' },
+                { key: 'Tab/Shift+Tab', label: 'switch section' },
+                ...(focus === 'extras' ? [{ key: 'Space', label: 'toggle' }] : []),
+                ...(focus === 'directory' && dirCursor === 0
+                  ? [{ key: '←→', label: 'depth' }]
+                  : []),
+                focus === 'directory' && dirCursor === 1
+                  ? { key: 'Enter', label: 'edit' }
+                  : { key: 'Enter', label: 'confirm' },
+                { key: 'Esc', label: 'back' },
+              ]
+        }
       />
     </WizardLayout>
   );
