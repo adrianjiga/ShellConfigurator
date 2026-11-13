@@ -497,13 +497,57 @@ describe('applyShellConfig', () => {
   });
 
   it('works for fish', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.existsSync).mockImplementation((p) => !String(p).includes('conf.d'));
     vi.mocked(fs.readFileSync).mockImplementation(() => '');
 
     const result = applyShellConfig('fish');
 
     expect(result.applied).toBe(true);
     expect(lastWrittenContent()).toContain('starship init fish');
+  });
+
+  it('adds only the fish export when conf.d already inits starship', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => '');
+
+    applyShellConfig('fish');
+
+    expect(lastWrittenContent()).toContain('set -gx STARSHIP_CONFIG');
+    expect(lastWrittenContent()).not.toContain('starship init fish');
+  });
+
+  it('adds back an init line that was removed after an earlier run', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () => `# Added by ShellConfigurator\nexport STARSHIP_CONFIG="${expectedConfigPath}"\n`
+    );
+
+    const result = applyShellConfig('zsh');
+
+    expect(result.applied).toBe(true);
+    expect(lastWrittenContent()).toContain('eval "$(starship init zsh)"');
+  });
+
+  it('does not count a commented-out export as present', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () => `# export STARSHIP_CONFIG="${expectedConfigPath}"\neval "$(starship init zsh)"\n`
+    );
+
+    const result = applyShellConfig('zsh');
+
+    expect(result.applied).toBe(true);
+    expect(lastWrittenContent()).toMatch(/^export STARSHIP_CONFIG=/m);
+  });
+
+  it('only notes the PATH change when the PATH line was really added', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => 'export PATH="/home/u/.local/bin:$PATH"\n');
+
+    const result = applyShellConfig('zsh', { ensurePathDir: '/home/u/.local/bin' });
+
+    expect(result.applied).toBe(true);
+    expect(result.note).toBeUndefined();
   });
 
   it('returns manual note for nushell (no rc file)', () => {

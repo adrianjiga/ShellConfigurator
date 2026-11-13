@@ -416,23 +416,34 @@ function ensureRcDir(rcPath: string): void {
   }
 }
 
+/** True when a non-comment line of `content` is exactly `line`. */
+function hasLine(content: string, line: string): boolean {
+  return content.split('\n').some((l) => l.trim() === line);
+}
+
 /**
- * Computes the PATH, STARSHIP_CONFIG, and init lines that should be appended,
- * skipping any already present in the cleaned rc file.
+ * The PATH, STARSHIP_CONFIG, and init lines still missing from the cleaned rc
+ * file, each checked on its own so a removed init line or a newly needed PATH
+ * line is never skipped as "already configured".
  */
 function buildAdditionLines(
   shell: ShellDef,
   cleaned: string,
-  options: ApplyShellConfigOptions
-): string[] {
+  options: ApplyShellConfigOptions,
+  initPresent: boolean
+): { lines: string[]; pathLine: string | null } {
   const pathDir = options.ensurePathDir;
-  const pathLine = pathDir && shell.pathLine ? shell.pathLine(pathDir) : null;
+  const wantedPath = pathDir && shell.pathLine ? shell.pathLine(pathDir) : null;
+  const pathLine = wantedPath && !hasLine(cleaned, wantedPath) ? wantedPath : null;
   const configLine = options.pointAtSharedConfig ? null : starshipConfigLine(shell.id);
-  return [
-    ...(pathLine && !cleaned.includes(pathLine) ? [pathLine] : []),
-    ...(configLine && !cleaned.includes(configLine) ? [configLine] : []),
-    ...(!hasStarshipInit(cleaned, shell.id) ? [shell.initLine] : []),
-  ];
+  return {
+    lines: [
+      ...(pathLine ? [pathLine] : []),
+      ...(configLine && !hasLine(cleaned, configLine) ? [configLine] : []),
+      ...(!initPresent ? [shell.initLine] : []),
+    ],
+    pathLine,
+  };
 }
 
 export function applyShellConfig(
@@ -472,32 +483,25 @@ export function applyShellConfig(
   }
   const cleaned = removeShellConfiguratorBlocks(existing, shell, cleanNeedles);
 
-  // The PATH and STARSHIP_CONFIG lines must come before the init line, or
-  // `starship init` cannot resolve either the binary or its config.
-
   const initPresent =
     hasStarshipInit(cleaned, shell.id) ||
     (shell.id === 'fish' && fs.existsSync(fishInitFile(rcPath)));
 
-  // Idempotent: skip if already configured (check for the full block we'd add).
-  if (configLine ? cleaned.includes(configLine) : initPresent) {
+  const { lines, pathLine } = buildAdditionLines(shell, cleaned, options, initPresent);
+  if (lines.length === 0) {
     // An already-configured rc may still carry a stale opposite-mode block;
     // write the cleaned file so the modes stay mutually exclusive.
     if (cleaned !== existing) writeFileAtomic(rcPath, cleaned);
     return { applied: false, note: 'already configured' };
   }
 
-  const lines = buildAdditionLines(shell, cleaned, options);
   const marker = options.pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
   const addition = `\n${marker}\n${lines.join('\n')}\n`;
   writeFileAtomic(rcPath, cleaned + addition);
 
   return {
     applied: true,
-    note:
-      options.ensurePathDir && shell.pathLine
-        ? `${options.ensurePathDir} added to PATH`
-        : undefined,
+    note: pathLine ? `${options.ensurePathDir} added to PATH` : undefined,
   };
 }
 
