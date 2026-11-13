@@ -15,6 +15,8 @@ export interface PresetDef {
   palette: PaletteId;
   /** Whether this preset draws segments as interlocking coloured blocks. */
   powerline: boolean;
+  /** Text symbols only, even for a user whose terminal has a Nerd Font. */
+  textOnly?: boolean;
 }
 
 export const PRESETS: PresetDef[] = [
@@ -47,6 +49,7 @@ export const PRESETS: PresetDef[] = [
     rightModules: ['cmd_duration'],
     palette: 'terminal',
     powerline: false,
+    textOnly: true,
   },
   {
     id: 'plain-text',
@@ -57,6 +60,7 @@ export const PRESETS: PresetDef[] = [
     rightModules: [],
     palette: 'mono',
     powerline: false,
+    textOnly: true,
   },
   {
     id: 'bracketed-segments',
@@ -139,3 +143,11 @@ export const PRESETS: PresetDef[] = [
     powerline: false,
   },
 ];
+
+/**
+ * Whether the prompt may use Nerd Font glyphs: the terminal must have the font
+ * and the chosen preset must not be a text-only one.
+ */
+export function rendersGlyphs(state: { hasNerdFont: boolean; preset: string | null }): boolean {
+  return state.hasNerdFont && !PRESETS.find((p) => p.id === state.preset)?.textOnly;
+}

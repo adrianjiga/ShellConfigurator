@@ -440,3 +440,18 @@ describe('presets are visually distinct', () => {
     expect(new Set(palettes).size).toBe(PRESETS.length);
   });
 });
+
+describe('text-only presets', () => {
+  it('writes no Nerd Font glyphs for a text-only preset even when the font is present', () => {
+    const toml = generateToml({
+      ...DEFAULT_STATE,
+      preset: 'plain-text',
+      hasNerdFont: true,
+      leftModules: ['directory', 'git_branch', 'character'],
+      rightModules: ['nodejs'],
+    });
+
+    expect(toml).not.toMatch(/[\ue000-\uf8ff]/u);
+    expect(toml).toContain('symbol   = "node "');
+  });
+});

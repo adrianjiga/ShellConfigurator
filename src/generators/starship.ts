@@ -5,6 +5,7 @@ import {
   type ModuleId,
 } from '../config/modules.ts';
 import { getPalette, type PaletteColorName } from '../config/palettes.ts';
+import { rendersGlyphs } from '../config/presets.ts';
 import {
   CHARACTER_SYMBOLS,
   CONTINUATION_PROMPTS,
@@ -131,7 +132,8 @@ function paletteBlock(state: WizardState): string {
   return [`[palettes.${palette.id}]`, ...entries].join('\n');
 }
 
-export function generateToml(state: WizardState): string {
+export function generateToml(chosen: WizardState): string {
+  const state = { ...chosen, hasNerdFont: rendersGlyphs(chosen) };
   // Powerline separators are Nerd Font glyphs. Promising one without the font
   // would fill the prompt with tofu, so the plain layout is used instead.
   const powerline = state.powerline && state.hasNerdFont;

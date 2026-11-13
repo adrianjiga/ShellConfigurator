@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { uiColor } from '../config/colors.ts';
 import { getModule, isConfigurableModule, type ModuleId } from '../config/modules.ts';
 import { getPalette, inkColor, type PaletteColorName } from '../config/palettes.ts';
+import { rendersGlyphs } from '../config/presets.ts';
 import {
   CHARACTER_SYMBOLS,
   NERD_FONT_SYMBOLS,
@@ -136,7 +137,8 @@ function previewDirectory(state: WizardState): string {
   return `${state.hasNerdFont ? NERD_FONT_SYMBOLS.directory : ''}${renderedPath}`;
 }
 
-function StaticPromptFrame({ state }: { state: WizardState }) {
+function StaticPromptFrame({ state: chosen }: { state: WizardState }) {
+  const state = { ...chosen, hasNerdFont: rendersGlyphs(chosen) };
   const { leftModules, rightModules, hasNerdFont, characterSymbol } = state;
   const palette = getPalette(state.palette);
   // Mirrors the generator: separators are Nerd Font glyphs, so without one the
