@@ -372,7 +372,7 @@ export function writeSharedConfig(toml: string): WriteConfigResult {
   return { path: configPath, backedUpTo };
 }
 
-const BLOCK_MARKER = '# Added by ShellConfigurator';
+export const BLOCK_MARKER = '# Added by ShellConfigurator';
 /**
  * Adopt-mode block marker: these blocks carry only the init line (no
  * STARSHIP_CONFIG export), so a later non-adopt run can recognise and drop them.

@@ -6,6 +6,7 @@ import { uiColor } from '../config/colors.ts';
 import { getShell, setupCommand } from '../config/shells.ts';
 import {
   ADOPT_MARKER,
+  BLOCK_MARKER,
   getSharedConfigPath,
   getShellConfigPath,
   starshipConfigLine,
@@ -30,8 +31,11 @@ interface ReviewScreenProps {
 function rcSnippet(shellId: ShellId, pointAtSharedConfig: boolean): string[] {
   const shell = getShell(shellId);
   if (!shell) return [];
-  const configLine = pointAtSharedConfig ? null : starshipConfigLine(shellId);
-  if (configLine) return [configLine, shell.initLine];
+  if (shell.rcFile) {
+    const configLine = pointAtSharedConfig ? null : starshipConfigLine(shellId);
+    const marker = pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
+    return [marker, ...(configLine ? [configLine] : []), shell.initLine];
+  }
   // Manual-only shells (nushell, powershell): the note plus the command to run,
   // or adopt mode where the shared config needs no export.
   const command = setupCommand(shell, pointAtSharedConfig);
@@ -80,54 +84,54 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
 
         <Box flexDirection="column" marginTop={1} gap={1}>
           <Text bold>{state.keepExistingConfig ? 'Config to keep' : 'Configuration to write'}</Text>
+          {state.keepExistingConfig ? (
+            // Adopt mode: every shell reads the one shared config.
+            <Box flexDirection="column" marginLeft={1}>
+              <Text color={uiColor('cyan')} bold>
+                {getSharedConfigPath()} (shared by every shell)
+              </Text>
+              <Box marginLeft={2}>
+                {state.sharedConfigToml ? (
+                  <Text color={uiColor('gray')} dimColor>
+                    {state.sharedConfigToml}
+                  </Text>
+                ) : (
+                  <Text color={uiColor('gray')}>The existing config will be kept as-is.</Text>
+                )}
+              </Box>
+            </Box>
+          ) : (
+            // The same TOML goes to every shell's file, so it is shown once.
+            <Box flexDirection="column" marginLeft={1}>
+              {state.selectedShells.map((shellId) => (
+                <Text key={shellId} color={uiColor('cyan')} bold>
+                  {getShellConfigPath(shellId)} ({getShell(shellId)?.label ?? shellId})
+                </Text>
+              ))}
+              <Box marginLeft={2}>
+                <Text color={uiColor('gray')} dimColor>
+                  {generateToml(state)}
+                </Text>
+              </Box>
+            </Box>
+          )}
+        </Box>
+
+        <Box flexDirection="column" marginTop={1} gap={1}>
+          <Text bold>Shell wiring</Text>
           {state.selectedShells.map((shellId) => {
             const shell = getShell(shellId);
-            const label = shell?.label ?? shellId;
-            if (state.keepExistingConfig) {
-              // Adopt mode: every shell reads the shared config, so the preview
-              // shows that file and the rc wiring — never a generated per-shell TOML.
-              return (
-                <Box key={shellId} flexDirection="column" marginLeft={1}>
-                  <Text color={uiColor('cyan')} bold>
-                    {getSharedConfigPath()} (shared)
-                  </Text>
-                  <Box marginLeft={2}>
-                    <Text color={uiColor('yellow')}>{ADOPT_MARKER}</Text>
-                  </Box>
-                  {rcSnippet(shellId, true).map((line) => (
-                    <Box key={line} marginLeft={2}>
-                      <Text color={uiColor('yellow')}>{line}</Text>
-                    </Box>
-                  ))}
-                  <Box marginLeft={2}>
-                    {state.sharedConfigToml ? (
-                      <Text color={uiColor('gray')} dimColor>
-                        {state.sharedConfigToml}
-                      </Text>
-                    ) : (
-                      <Text color={uiColor('gray')}>
-                        The existing config above will be kept as-is.
-                      </Text>
-                    )}
-                  </Box>
-                </Box>
-              );
-            }
             return (
               <Box key={shellId} flexDirection="column" marginLeft={1}>
-                <Text color={uiColor('cyan')} bold>
-                  {getShellConfigPath(shellId)} ({label})
+                <Text color={uiColor('cyan')}>
+                  {shell?.label ?? shellId}
+                  {shell?.rcFile ? ` — ${shell.rcFile}` : ''}
                 </Text>
-                {rcSnippet(shellId, false).map((line) => (
+                {rcSnippet(shellId, state.keepExistingConfig).map((line) => (
                   <Box key={line} marginLeft={2}>
                     <Text color={uiColor('yellow')}>{line}</Text>
                   </Box>
                 ))}
-                <Box marginLeft={2}>
-                  <Text color={uiColor('gray')} dimColor>
-                    {generateToml(state)}
-                  </Text>
-                </Box>
               </Box>
             );
           })}

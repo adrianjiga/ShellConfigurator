@@ -80,13 +80,15 @@ describe('ReviewScreen', () => {
     const frame = instance.lastFrame();
     expect(frame).toContain('Config to keep');
     expect(frame).toContain('Keep existing Starship config');
-    expect(frame).toContain('starship.toml (shared)');
+    expect((frame ?? '').replace(/\s+/g, ' ')).toContain('starship.toml (shared by every shell)');
     expect(frame).toContain('success_symbol = "…"');
     expect(frame).toContain('starship init zsh');
     // Adopt mode wires the shell to the shared config: no per-shell export, and
     // never a freshly generated TOML in the review.
-    expect(frame).not.toContain('STARSHIP_CONFIG="');
+    expect(frame).not.toContain('STARSHIP_CONFIG=');
     expect(frame).not.toContain('$directory$git_branch$git_status');
+    // One shared block, however many shells read it.
+    expect(frame?.match(/shared by every/g)).toHaveLength(1);
   });
 
   it('notes that an adopted config with no import is kept as-is', async () => {
@@ -156,5 +158,19 @@ describe('ReviewScreen dry run', () => {
     await flush();
     expect(instance.lastFrame()).toContain('finish the dry run');
     expect(instance.lastFrame()).not.toMatch(/Enter\s+install/);
+  });
+});
+
+describe('ReviewScreen with several shells', () => {
+  it('prints the generated TOML once and the rc wiring for each shell', async () => {
+    const { instance } = setup({
+      selectedShells: ['zsh', 'bash'],
+      installedShells: ['zsh', 'bash'],
+    });
+    await flush();
+    const frame = instance.lastFrame() ?? '';
+    expect(frame.match(/\$directory\$git_branch\$git_status/g)).toHaveLength(1);
+    expect(frame).toContain('starship init zsh');
+    expect(frame).toContain('starship init bash');
   });
 });
