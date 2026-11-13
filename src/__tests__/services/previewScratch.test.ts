@@ -19,17 +19,18 @@ afterEach(() => {
 });
 
 describe('DEFAULT_PREVIEW_DEPS.createScratch', () => {
-  it('creates its scratch dir when the app cache dir does not exist yet', async () => {
-    // XDG_CACHE_HOME points at an existing dir whose shell-configurator child is
-    // absent, which is the state of a fresh machine before any font is cached.
+  it('uses the system temp dir and leaves the app cache alone', async () => {
     process.env.XDG_CACHE_HOME = tmp;
 
     const scratch = await DEFAULT_PREVIEW_DEPS.createScratch();
-
-    expect(fs.existsSync(scratch)).toBe(true);
-    expect(scratch.startsWith(`${path.join(tmp, 'shell-configurator')}${path.sep}`)).toBe(true);
-
-    await DEFAULT_PREVIEW_DEPS.cleanup(scratch);
+    try {
+      expect(fs.existsSync(scratch)).toBe(true);
+      expect(path.dirname(scratch)).toBe(os.tmpdir());
+      expect(fs.existsSync(path.join(tmp, 'shell-configurator'))).toBe(false);
+    } finally {
+      await DEFAULT_PREVIEW_DEPS.cleanup(scratch);
+    }
+    expect(fs.existsSync(scratch)).toBe(false);
   });
 });
 

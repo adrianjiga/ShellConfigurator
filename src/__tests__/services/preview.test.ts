@@ -1,3 +1,4 @@
+import * as os from 'node:os';
 import * as nodePath from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -153,7 +154,7 @@ describe('renderPromptAsync', () => {
     const result = await renderPromptAsync(state, DEFAULT_PREVIEW_DEPS);
 
     expect(result).toEqual({ mode: 'real', text: '~/projects/myapp on  main \n❯' });
-    expect(mockMkdtemp).toHaveBeenCalledWith('/tmp/xdg-cache/shell-configurator/preview-');
+    expect(mockMkdtemp).toHaveBeenCalledWith(nodePath.join(os.tmpdir(), 'shellconf-preview-'));
 
     const calls = execCalls();
     const prompt = calls.find((c) => c.cmd === 'starship' && c.args[0] === 'prompt');

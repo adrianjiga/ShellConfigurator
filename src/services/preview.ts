@@ -1,12 +1,12 @@
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import * as os from 'node:os';
 import * as nodePath from 'node:path';
 import { promisify } from 'node:util';
 import { generateToml } from '../generators/starship.ts';
 import type { WizardState } from '../types.ts';
 import { isStarshipInstalledAsync } from './detector.ts';
 import { runCapture } from './exec.ts';
-import { cacheDir } from './paths.ts';
 
 const execFileP = promisify(execFile);
 
@@ -55,11 +55,9 @@ const SAMPLE_PROJECT_NAME = 'myapp';
 
 export const DEFAULT_PREVIEW_DEPS: PreviewDeps = {
   isStarshipInstalled: async () => (await isStarshipInstalledAsync()).installed,
-  createScratch: async () => {
-    // mkdtemp does not create parents; on a first run the app cache dir is absent.
-    await mkdir(cacheDir(), { recursive: true });
-    return mkdtemp(nodePath.join(cacheDir(), 'preview-'));
-  },
+  // The system temp dir, not the app cache: a dry run writes nothing of the
+  // app's, and a scratch dir a crash leaves behind is cleaned by the OS.
+  createScratch: async () => mkdtemp(nodePath.join(os.tmpdir(), 'shellconf-preview-')),
   writeConfig: async (scratch, toml) =>
     writeFile(nodePath.join(scratch, STARSHIP_CONFIG_FILE), toml, 'utf8'),
   scaffoldProject: async (scratch) => {
