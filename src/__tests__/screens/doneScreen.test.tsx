@@ -359,3 +359,22 @@ describe('DoneScreen task rows', () => {
     expect(frame).toContain('verified 1 config(s)');
   });
 });
+
+describe('DoneScreen default shell', () => {
+  it('shows why chsh failed', () => {
+    const { lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          selectedShells: ['zsh'],
+          installedShells: ['zsh'],
+          setDefaultShell: 'zsh',
+          installResults: [
+            { id: 'chsh', label: 'Set zsh', status: 'failed', error: 'chsh: wrong password' },
+          ],
+        }}
+      />
+    );
+    expect(lastFrame()).toContain('chsh: wrong password');
+  });
+});

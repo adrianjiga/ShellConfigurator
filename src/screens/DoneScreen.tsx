@@ -276,12 +276,21 @@ export function DoneScreen({ state }: DoneScreenProps) {
               </Box>
             )}
             {state.setDefaultShell && !state.container && (
-              <Box flexDirection="row" gap={1}>
-                <StatusMark status={chshTask?.status ?? 'unknown'} />
-                <Text>
-                  Default shell {chshOk ? 'set to' : 'not set to'}{' '}
-                  <Text color={uiColor('cyan')}>{state.setDefaultShell}</Text>
-                </Text>
+              <Box flexDirection="column">
+                <Box flexDirection="row" gap={1}>
+                  <StatusMark status={chshTask?.status ?? 'unknown'} />
+                  <Text>
+                    Default shell {chshOk ? 'set to' : 'not set to'}{' '}
+                    <Text color={uiColor('cyan')}>{state.setDefaultShell}</Text>
+                  </Text>
+                </Box>
+                {chshTask?.error && (
+                  <Box marginLeft={3}>
+                    <Text color={uiColor('red')} italic>
+                      {chshTask.error}
+                    </Text>
+                  </Box>
+                )}
               </Box>
             )}
           </Box>
