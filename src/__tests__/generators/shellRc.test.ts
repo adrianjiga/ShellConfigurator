@@ -743,6 +743,17 @@ describe('applyShellConfig', () => {
     expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
+  it('finds the powershell init line in the all-hosts profile.ps1', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation((p) =>
+      String(p).endsWith('profile.ps1') && !String(p).includes('Microsoft')
+        ? 'Invoke-Expression (&starship init powershell)\n'
+        : ''
+    );
+
+    expect(applyShellConfig('powershell').note).toBe('already configured');
+  });
+
   it('keeps the manual note when powershell $PROFILE exists but lacks the init line', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() => '# my profile\n');

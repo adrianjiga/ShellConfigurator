@@ -294,14 +294,19 @@ export function manualSetupAppliedWith(
   io: ManualSetupIo,
   pointAtSharedConfig = false
 ): boolean {
-  if (!shell.initPath || !io.exists(shell.initPath)) return false;
+  if (!shell.initPath) return false;
   if (shell.id === 'powershell') {
-    try {
-      return hasStarshipInit(io.readFile(shell.initPath), shell.id);
-    } catch {
-      return false;
-    }
+    // The all-hosts profile.ps1 beside the current-host profile is loaded too.
+    const profiles = [shell.initPath, path.join(path.dirname(shell.initPath), 'profile.ps1')];
+    return profiles.some((profile) => {
+      try {
+        return io.exists(profile) && hasStarshipInit(io.readFile(profile), shell.id);
+      } catch {
+        return false;
+      }
+    });
   }
+  if (!io.exists(shell.initPath)) return false;
   // Adopt mode reads the shared config, so the per-shell pin must be gone.
   const pins = shell.additionalInitPaths ?? [];
   return pointAtSharedConfig
