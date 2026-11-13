@@ -319,13 +319,12 @@ style     = "${tomlBasic(styleFor('battery'))}"
   },
   cmd_duration: {
     label: 'Command Duration',
-    description: 'Time taken by the last command',
+    description: 'Time taken by the last command (when it ran 2s or longer)',
     defaultLeft: false,
     defaultRight: true,
 
     previewSegment: () => '2s',
     content: '$duration',
-    settings: () => `min_time = 0`,
   },
   jobs: {
     label: 'Background Jobs',

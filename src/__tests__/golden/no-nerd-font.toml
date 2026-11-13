@@ -27,7 +27,6 @@ deleted   = "-${count}"
 
 [cmd_duration]
 style  = "bold cmd_duration"
-min_time = 0
 
 [character]
 success_symbol = '[❯](bold ok)'

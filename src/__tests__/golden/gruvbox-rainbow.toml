@@ -54,7 +54,6 @@ disabled = false
 [cmd_duration]
 style  = "bold fg:fg bg:cmd_duration"
 format = "([](fg:cmd_duration bg:prev_bg)[ $duration ]($style))"
-min_time = 0
 
 [character]
 success_symbol = '[❯](bold ok)'
