@@ -108,7 +108,7 @@ describe('renderPromptAsync', () => {
     expect(deps.createScratch).toHaveBeenCalledOnce();
     expect(deps.scaffoldProject).toHaveBeenCalledWith(SCRATCH);
     expect(deps.writeConfig).toHaveBeenCalledWith(SCRATCH, expectedToml);
-    expect(deps.runStarshipPrompt).toHaveBeenCalledWith(SCRATCH, PROJECT);
+    expect(deps.runStarshipPrompt).toHaveBeenCalledWith(SCRATCH, PROJECT, 110);
     expect(deps.cleanup).toHaveBeenCalledWith(SCRATCH);
   });
 

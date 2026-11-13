@@ -10,7 +10,12 @@ import {
   SEPARATOR_LEFT,
   SEPARATOR_RIGHT,
 } from '../config/promptSymbols.ts';
-import { PREVIEW_DEBOUNCE_MS, type PreviewResult, renderPromptAsync } from '../services/preview.ts';
+import {
+  PREVIEW_DEBOUNCE_MS,
+  PREVIEW_TERMINAL_WIDTH,
+  type PreviewResult,
+  renderPromptAsync,
+} from '../services/preview.ts';
 import type { WizardState } from '../types.ts';
 
 interface PromptPreviewProps {
@@ -20,7 +25,9 @@ interface PromptPreviewProps {
    * the wizard shows true output; tests inject a stub to stay hermetically
    * on the static fallback.
    */
-  renderPreview?: (state: WizardState) => Promise<PreviewResult>;
+  renderPreview?: (state: WizardState, width: number) => Promise<PreviewResult>;
+  /** Columns the prompt is drawn in, so starship's `$fill` fits the panel. */
+  width?: number;
 }
 
 /**
@@ -61,12 +68,19 @@ export function resetPreviewCacheForTests(): void {
   if (process.env.VITEST === 'true') lastRender = null;
 }
 
-export function PromptPreview({ state, renderPreview = renderPromptAsync }: PromptPreviewProps) {
+const renderWithStarship = (state: WizardState, width: number) =>
+  renderPromptAsync(state, undefined, width);
+
+export function PromptPreview({
+  state,
+  renderPreview = renderWithStarship,
+  width = PREVIEW_TERMINAL_WIDTH,
+}: PromptPreviewProps) {
   const [realPrompt, setRealPrompt] = useState<string | null>(() => lastRender?.text ?? null);
   const [renderedSignature, setRenderedSignature] = useState<string | null>(
     () => lastRender?.signature ?? null
   );
-  const signature = previewSignature(state);
+  const signature = `${width}:${previewSignature(state)}`;
 
   useEffect(() => {
     if (renderedSignature === signature) return;
@@ -78,7 +92,7 @@ export function PromptPreview({ state, renderPreview = renderPromptAsync }: Prom
       setRealPrompt(text);
     };
     const timer = setTimeout(() => {
-      void renderPreview(state)
+      void renderPreview(state, width)
         .then((result) => finish(result.mode === 'real' ? result.text : null))
         .catch(() => finish(null));
     }, PREVIEW_DEBOUNCE_MS);
@@ -86,7 +100,7 @@ export function PromptPreview({ state, renderPreview = renderPromptAsync }: Prom
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [signature, state, renderPreview, renderedSignature]);
+  }, [signature, state, renderPreview, renderedSignature, width]);
 
   const leftSegmentCount = state.leftModules.filter(isConfigurableModule).length;
 

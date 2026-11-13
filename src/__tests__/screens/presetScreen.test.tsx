@@ -66,8 +66,9 @@ describe('PresetScreen', () => {
     await flush();
 
     const frame = instance.lastFrame();
-    // The notice wraps mid-sentence in the 100-col frame.
-    expect(frame).toContain('hidden (you chose text symbols)');
+    // The notice wraps mid-sentence beside the preview, so check both halves.
+    expect(frame).toContain('Nerd Font presets hidden');
+    expect(frame).toContain('chose text symbols)');
     expect(frame).not.toContain('Nerd Font Symbols');
     expect(frame).not.toContain('★');
   });

@@ -14,9 +14,9 @@ const execFileP = promisify(execFile);
 export const STARSHIP_CONFIG_FILE = 'starship.toml';
 
 /**
- * The width the real render is told to target. Starship's `$fill` computes the
- * gap to this width; a fixed value keeps the preview stable regardless of the
- * user's terminal size.
+ * The width the real render targets when the caller gives none. Starship's
+ * `$fill` computes the gap to this width, so the caller passes the width of the
+ * panel the prompt is drawn in.
  */
 export const PREVIEW_TERMINAL_WIDTH = 110;
 
@@ -46,7 +46,7 @@ export interface PreviewDeps {
    */
   scaffoldProject(scratch: string): Promise<string>;
   /** Runs `starship prompt` against the scratch config and sample cwd. */
-  runStarshipPrompt(scratch: string, projectDir: string): Promise<string>;
+  runStarshipPrompt(scratch: string, projectDir: string, width: number): Promise<string>;
   /** Removes the scratch dir. Must not throw. */
   cleanup(scratch: string): Promise<void>;
 }
@@ -96,7 +96,7 @@ export const DEFAULT_PREVIEW_DEPS: PreviewDeps = {
     }
     return project;
   },
-  runStarshipPrompt: async (scratch, projectDir) => {
+  runStarshipPrompt: async (scratch, projectDir, width) => {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       HOME: scratch,
@@ -108,7 +108,7 @@ export const DEFAULT_PREVIEW_DEPS: PreviewDeps = {
     delete env.STARSHIP_SHELL;
     return runCapture(
       'starship',
-      ['prompt', '--path', projectDir, '--terminal-width', String(PREVIEW_TERMINAL_WIDTH)],
+      ['prompt', '--path', projectDir, '--terminal-width', String(width)],
       { env }
     );
   },
@@ -129,7 +129,8 @@ export const DEFAULT_PREVIEW_DEPS: PreviewDeps = {
  */
 export async function renderPromptAsync(
   state: WizardState,
-  deps: PreviewDeps = DEFAULT_PREVIEW_DEPS
+  deps: PreviewDeps = DEFAULT_PREVIEW_DEPS,
+  width: number = PREVIEW_TERMINAL_WIDTH
 ): Promise<PreviewResult> {
   if (!(await deps.isStarshipInstalled())) {
     return { mode: 'static', reason: 'starship-missing' };
@@ -140,7 +141,7 @@ export async function renderPromptAsync(
     scratch = await deps.createScratch();
     await deps.writeConfig(scratch, generateToml(state));
     const projectDir = await deps.scaffoldProject(scratch);
-    const text = await deps.runStarshipPrompt(scratch, projectDir);
+    const text = await deps.runStarshipPrompt(scratch, projectDir, width);
     if (text.trim().length === 0) return { mode: 'static', reason: 'render-failed' };
     return { mode: 'real', text };
   } catch {

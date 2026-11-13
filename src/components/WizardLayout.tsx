@@ -36,8 +36,10 @@ export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps
       !(step === 'installing' && state.dryRun)
   );
   const currentIndex = Math.max(0, steps.indexOf(state.step));
-  const showPreview =
-    !hidePreview && (stdout?.columns ?? PREVIEW_MIN_COLUMNS) >= PREVIEW_MIN_COLUMNS;
+  const columns = stdout?.columns ?? PREVIEW_MIN_COLUMNS;
+  const showPreview = !hidePreview && columns >= PREVIEW_MIN_COLUMNS;
+  // The preview gets about two fifths of the row (less padding and gap).
+  const previewWidth = Math.max(36, Math.floor((columns - 4) * 0.4));
 
   return (
     <Box flexDirection="column" padding={1}>
@@ -84,8 +86,9 @@ export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps
 
         {/* Right: live preview (hidden on narrow terminals and on welcome/done) */}
         {showPreview && (
-          <Box flexDirection="column" minWidth={36}>
-            <PromptPreview state={state} />
+          <Box flexDirection="column" width={previewWidth}>
+            {/* The frame's border and padding take four columns. */}
+            <PromptPreview state={state} width={previewWidth - 4} />
           </Box>
         )}
       </Box>
