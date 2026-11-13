@@ -197,8 +197,10 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
         setSubsError(null);
         return;
       }
-      if (char && !key.ctrl && !key.meta) {
-        setSubsDraft((d) => d + char);
+      // A pasted line break is dropped rather than put into the draft.
+      const text = char.replace(/[\r\n]/g, '');
+      if (text && !key.ctrl && !key.meta) {
+        setSubsDraft((d) => d + text);
         setSubsError(null);
       }
       return;

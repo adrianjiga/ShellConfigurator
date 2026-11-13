@@ -652,6 +652,15 @@ describe('StyleScreen substitution editor', () => {
     await flush();
   }
 
+  it('drops line breaks from pasted text', async () => {
+    const { instance } = setup();
+    await flush();
+    await openEditor(instance);
+    instance.stdin.write('a=b\nc');
+    await flush();
+    expect(instance.lastFrame()).toContain('> a=bc');
+  });
+
   it('clears the error once the user edits the text again', async () => {
     const { instance } = setup();
     await flush();
