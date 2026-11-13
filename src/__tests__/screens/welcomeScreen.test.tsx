@@ -62,6 +62,7 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: null,
       container: false,
+      skipStarshipInstall: false,
     });
   });
 
@@ -78,6 +79,7 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: null,
       container: false,
+      skipStarshipInstall: false,
     });
   });
 
@@ -133,6 +135,7 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: null,
       container: false,
+      skipStarshipInstall: false,
     });
   });
 
@@ -152,6 +155,7 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: 'kitty',
       container: false,
+      skipStarshipInstall: false,
     });
   });
 
@@ -170,6 +174,7 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: null,
       container: true,
+      skipStarshipInstall: false,
     });
   });
 });

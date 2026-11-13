@@ -60,14 +60,18 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
     };
   }, [runDetection]);
 
+  /** What detection found, plus whether this run installs Starship. */
+  function proceed(found: Detection, skipStarshipInstall: boolean) {
+    onNext({
+      packageManager: found.pm,
+      terminal: found.terminal,
+      container: found.container,
+      skipStarshipInstall,
+    });
+  }
+
   useInput((_, key) => {
-    if (key.return && detection?.starship.installed) {
-      onNext({
-        packageManager: detection.pm,
-        terminal: detection.terminal,
-        container: detection.container,
-      });
-    }
+    if (key.return && detection?.starship.installed) proceed(detection, false);
   });
 
   const installItems: Item<InstallChoice>[] = [
@@ -84,11 +88,7 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
     if (!detection) return;
     switch (item.value) {
       case 'auto':
-        onNext({
-          packageManager: detection.pm,
-          terminal: detection.terminal,
-          container: detection.container,
-        });
+        proceed(detection, false);
         break;
       case 'manual':
         setShowManualHelp(true);
@@ -105,12 +105,7 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
         await runDetection();
         break;
       case 'continue':
-        onNext({
-          packageManager: detection.pm,
-          terminal: detection.terminal,
-          container: detection.container,
-          skipStarshipInstall: true,
-        });
+        proceed(detection, true);
         break;
     }
   }
