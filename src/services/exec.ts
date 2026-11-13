@@ -129,7 +129,10 @@ export function runCommand(args: string[], options: { signal?: AbortSignal } = {
     };
     options.signal?.addEventListener('abort', onAbort, { once: true });
 
+    let settled = false;
     const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
       options.signal?.removeEventListener('abort', onAbort);
       if (escalationTimer) clearTimeout(escalationTimer);
       resumeUi();

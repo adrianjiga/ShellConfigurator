@@ -21,7 +21,7 @@ import {
   KILL_ESCALATION_DELAY_MS,
   runCommand,
 } from '../../services/exec.ts';
-import { isUiSuspended, resetUiSuspension } from '../../services/tty.ts';
+import { isUiSuspended, resetUiSuspension, resumeUi, suspendUi } from '../../services/tty.ts';
 
 interface SpawnOutcome {
   status?: number | null;
@@ -165,6 +165,22 @@ describe('runCommand', () => {
     } finally {
       Object.defineProperty(process, 'stdin', { configurable: true, value: realStdin });
     }
+  });
+
+  it('settles once when an error is followed by an exit', async () => {
+    const child = new EventEmitter() as EventEmitter & { kill: ReturnType<typeof vi.fn> };
+    child.kill = vi.fn();
+    mockSpawn.mockImplementationOnce(() => child);
+    suspendUi();
+
+    const promise = runCommand(['x']);
+    child.emit('error', new Error('boom'));
+    child.emit('exit', 1, null);
+
+    await expect(promise).rejects.toThrow('boom');
+    // The outer suspend is still held: a second resume would have dropped it.
+    expect(isUiSuspended()).toBe(true);
+    resumeUi();
   });
 
   it('resumes the UI when spawn throws before a child exists', async () => {
