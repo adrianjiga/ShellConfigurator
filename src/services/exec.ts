@@ -1,4 +1,4 @@
-import { type ChildProcess, execFile, execFileSync, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resumeUi, suspendUi } from './tty.ts';
 
@@ -73,14 +73,6 @@ export function commandPath(cmd: string): string | null {
   return probe(cmd);
 }
 
-/** The child currently holding the terminal, so a cancel request can kill it. */
-let activeChild: ChildProcess | null = null;
-
-/** Kills the running command, if any. Used to abort the install phase. */
-export function killActiveCommand(signal: NodeJS.Signals = 'SIGTERM'): void {
-  activeChild?.kill(signal);
-}
-
 export class CommandCancelledError extends Error {
   constructor(command: string) {
     super(`Cancelled: ${command}`);
@@ -114,7 +106,6 @@ export function runCommand(args: string[], options: { signal?: AbortSignal } = {
   return new Promise<void>((resolve, reject) => {
     suspendUi();
     const child = spawn(cmd, rest, { stdio: 'inherit' });
-    activeChild = child;
 
     let cancelled = false;
     let escalationTimer: NodeJS.Timeout | undefined;
@@ -134,7 +125,6 @@ export function runCommand(args: string[], options: { signal?: AbortSignal } = {
     const settle = (fn: () => void) => {
       options.signal?.removeEventListener('abort', onAbort);
       if (escalationTimer) clearTimeout(escalationTimer);
-      if (activeChild === child) activeChild = null;
       resumeUi();
       fn();
     };

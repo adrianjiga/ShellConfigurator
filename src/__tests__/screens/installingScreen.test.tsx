@@ -17,13 +17,8 @@ const mocks = vi.hoisted(() => ({
         signal?: AbortSignal
       ) => Promise<InstallTask[]>
     >(),
-  killActiveCommand: vi.fn<() => void>(),
   subscribeToUiSuspension: vi.fn<(listener: (suspended: boolean) => void) => () => void>(),
   isUiSuspended: vi.fn<() => boolean>(),
-}));
-
-vi.mock('../../services/exec.ts', () => ({
-  killActiveCommand: () => mocks.killActiveCommand(),
 }));
 
 vi.mock('../../services/installTasks.ts', () => ({
@@ -53,6 +48,16 @@ beforeEach(() => {
   mocks.isUiSuspended.mockReturnValue(false);
   setAdvanceDelayForTests(0);
 });
+
+/** Keeps the run pending and hands back the abort signal it was given. */
+function captureSignal(): { current?: AbortSignal } {
+  const captured: { current?: AbortSignal } = {};
+  mocks.runInstallTasks.mockImplementation((_state, _deps, _onUpdate, abortSignal) => {
+    captured.current = abortSignal;
+    return new Promise<InstallTask[]>(() => {});
+  });
+  return captured;
+}
 
 function setup() {
   const onNext = vi.fn();
@@ -125,13 +130,12 @@ describe('InstallingScreen', () => {
     await flush();
 
     expect(instance.lastFrame()).toContain('Cancelling');
-    expect(mocks.killActiveCommand).toHaveBeenCalled();
-    expect(signal).toBeDefined();
+    expect(signal?.aborted).toBe(true);
   });
 
   it('cancels the run on ctrl-c', async () => {
     mocks.buildTaskList.mockReturnValue(statusFixture());
-    mocks.runInstallTasks.mockReturnValue(new Promise<InstallTask[]>(() => {}));
+    const signal = captureSignal();
     const { instance } = setup();
     await flush();
 
@@ -139,12 +143,12 @@ describe('InstallingScreen', () => {
     await flush();
 
     expect(instance.lastFrame()).toContain('Cancelling');
-    expect(mocks.killActiveCommand).toHaveBeenCalled();
+    expect(signal.current?.aborted).toBe(true);
   });
 
   it('cancels the run on an uppercase C', async () => {
     mocks.buildTaskList.mockReturnValue(statusFixture());
-    mocks.runInstallTasks.mockReturnValue(new Promise<InstallTask[]>(() => {}));
+    const signal = captureSignal();
     const { instance } = setup();
     await flush();
 
@@ -152,7 +156,7 @@ describe('InstallingScreen', () => {
     await flush();
 
     expect(instance.lastFrame()).toContain('Cancelling');
-    expect(mocks.killActiveCommand).toHaveBeenCalled();
+    expect(signal.current?.aborted).toBe(true);
   });
 
   it('does not advance after an unmount while the run is still finishing', async () => {
@@ -171,7 +175,7 @@ describe('InstallingScreen', () => {
     expect(onNext).not.toHaveBeenCalled();
   });
 
-  it('aborts the chain and kills the running command on unmount', async () => {
+  it('aborts the chain on unmount', async () => {
     let signal: AbortSignal | undefined;
     mocks.buildTaskList.mockReturnValue(statusFixture());
     mocks.runInstallTasks.mockImplementation(
@@ -191,7 +195,6 @@ describe('InstallingScreen', () => {
     instance.unmount();
 
     expect(signal?.aborted).toBe(true);
-    expect(mocks.killActiveCommand).toHaveBeenCalled();
   });
 
   it('advances with the results once every task has finished', async () => {

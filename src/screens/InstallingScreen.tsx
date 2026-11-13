@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { statusMark } from '../config/status.ts';
-import { killActiveCommand } from '../services/exec.ts';
 import {
   buildTaskList,
   DEFAULT_INSTALL_TASK_DEPS,
@@ -75,7 +74,6 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
     return () => {
       unmounted = true;
       controller.abort();
-      killActiveCommand();
     };
   }, []);
 
@@ -86,8 +84,6 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
       if (char === 'c' || char === 'C' || (key.ctrl && char === 'c')) {
         setCancelling(true);
         abortRef.current?.abort();
-        // Stops the command already in flight; the task chain halts at the next checkpoint.
-        killActiveCommand();
       }
     },
     { isActive: !uiSuspended }
