@@ -219,17 +219,26 @@ await check('nushell manual command resolves to its own per-shell config', () =>
   );
 });
 
-await check('resetSharedShellConfig replaces a per-shell block with the unset guard', () => {
+await check('resetSharedShellConfig leaves a shell with its own per-shell wiring alone', () => {
   const rcPath = nodePath.join(homeDir, '.bashrc');
   rmSync(rcPath, { force: true });
   applyShellConfig('bash');
+  const before = readFileSync(rcPath, 'utf8');
+
+  const result = resetSharedShellConfig('bash');
+  assert.equal(result.applied, false);
+  assert.equal(readFileSync(rcPath, 'utf8'), before, 'per-shell wiring was changed');
+});
+
+await check('resetSharedShellConfig guards a shell that only inits starship', () => {
+  const rcPath = nodePath.join(homeDir, '.bashrc');
+  writeFileSync(rcPath, 'eval "$(starship init bash)"\n');
 
   const result = resetSharedShellConfig('bash');
   assert.equal(result.applied, true);
 
   const content = readFileSync(rcPath, 'utf8');
   assert.ok(content.includes('unset STARSHIP_CONFIG'), 'missing unset guard');
-  assert.ok(!content.includes('export STARSHIP_CONFIG'), 'per-shell export survived reset');
   assert.ok(content.includes('starship init bash'), 'Starship init line was removed');
 });
 
@@ -276,17 +285,16 @@ await check('applyShellConfig drops a stale fish unset guard and stays configure
   assert.ok(!content.includes('set -e STARSHIP_CONFIG'), 'stale unset guard survived');
 });
 
-await check('resetSharedShellConfig switches fish back to the shared config', () => {
+await check('resetSharedShellConfig guards fish with its own syntax', () => {
   const fishRc = nodePath.join(homeDir, '.config', 'fish', 'config.fish');
-  rmSync(fishRc, { force: true });
-  assert.equal(applyShellConfig('fish').applied, true, 'fish not configured first');
+  mkdirSync(nodePath.dirname(fishRc), { recursive: true });
+  writeFileSync(fishRc, 'starship init fish | source\n');
 
   const result = resetSharedShellConfig('fish');
   assert.equal(result.applied, true);
 
   const content = readFileSync(fishRc, 'utf8');
   assert.ok(content.includes('set -e STARSHIP_CONFIG'), 'missing unset guard');
-  assert.ok(!content.includes('set -gx STARSHIP_CONFIG'), 'per-shell wiring survived reset');
   assert.ok(content.includes('starship init fish | source'), 'Starship init line was removed');
 });
 
