@@ -218,7 +218,7 @@ disabled = false
     defaultRight: false,
 
     previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.python : 'py '}3.12.0`,
-    content: '$symbol$version',
+    content: '$symbol$version( \\($virtualenv\\))',
     settings: ({ hasNerdFont }) =>
       `
 symbol   = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.python : 'py ')}"
@@ -260,7 +260,7 @@ disabled = false
     defaultRight: false,
 
     previewSegment: () => '☸ prod',
-    content: '$symbol$context',
+    content: '$symbol$context( \\($namespace\\))',
     settings: () =>
       `
 symbol   = "☸ "
@@ -274,7 +274,7 @@ disabled = false
     defaultRight: false,
 
     previewSegment: () => '☁️ us-east-1',
-    content: '$symbol$profile$region',
+    content: '$symbol($profile )(\\($region\\))',
     settings: () =>
       `
 symbol   = "☁️  "
@@ -391,7 +391,7 @@ threshold = 2
     defaultRight: false,
 
     previewSegment: () => '(a1b2c3d)',
-    content: '$hash',
+    content: '\\($hash$tag\\)',
   },
   golang: {
     label: 'Go',

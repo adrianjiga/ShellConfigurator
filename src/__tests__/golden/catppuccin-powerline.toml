@@ -42,7 +42,7 @@ disabled = false
 
 [python]
 style  = "bold fg:fg bg:python"
-format = "([](fg:python bg:prev_bg)[ $symbol$version ]($style))"
+format = "([](fg:python bg:prev_bg)[ $symbol$version( \\($virtualenv\\)) ]($style))"
 symbol   = " "
 disabled = false
 
