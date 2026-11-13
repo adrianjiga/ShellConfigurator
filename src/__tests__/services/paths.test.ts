@@ -1,9 +1,10 @@
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cacheDir, stateDir } from '../../services/paths.ts';
+import { cacheDir, configHome, stateDir } from '../../services/paths.ts';
 
 vi.mock('node:os', () => ({
   homedir: vi.fn(() => '/real/home'),
+  userInfo: vi.fn(() => ({ homedir: '/real/home' })),
 }));
 
 import * as os from 'node:os';
@@ -52,5 +53,13 @@ describe('cacheDir', () => {
     process.env.XDG_CACHE_HOME = '/home/someone/.var/cache';
     vi.mocked(os.homedir).mockReturnValue('/home/other');
     expect(cacheDir()).toBe(path.join('/home/someone/.var/cache', 'shell-configurator'));
+  });
+});
+
+describe('homeDir', () => {
+  it('uses the passwd entry when HOME is set but empty', () => {
+    vi.mocked(os.homedir).mockReturnValue('');
+    vi.mocked(os.userInfo).mockReturnValue({ homedir: '/home/from-passwd' } as never);
+    expect(configHome()).toBe(path.join('/home/from-passwd', '.config'));
   });
 });

@@ -1,10 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { backupStamp } from '../generators/shellRc.ts';
 import { assertNever, type TerminalId } from '../types.ts';
-import { configHome } from './paths.ts';
+import { configHome, homeDir } from './paths.ts';
 
 /** Human-readable terminal name, for task labels and notes. */
 export const TERMINAL_LABELS: Record<TerminalId, string> = {
@@ -208,7 +207,7 @@ function configLookupPaths(id: TerminalId): string[] {
     if (kittyDir) paths.push(path.join(kittyDir, 'kitty.conf'));
     paths.push(path.join(configHome(), 'kitty', 'kitty.conf'));
     if (process.platform === 'darwin') {
-      paths.push(path.join(os.homedir(), 'Library', 'Preferences', 'kitty', 'kitty.conf'));
+      paths.push(path.join(homeDir(), 'Library', 'Preferences', 'kitty', 'kitty.conf'));
     }
     return paths;
   }
@@ -219,14 +218,14 @@ function configLookupPaths(id: TerminalId): string[] {
       alacrittyYmlPath(),
       path.join(root, 'alacritty.toml'),
       path.join(root, 'alacritty.yml'),
-      path.join(os.homedir(), '.alacritty.toml'),
-      path.join(os.homedir(), '.alacritty.yml'),
+      path.join(homeDir(), '.alacritty.toml'),
+      path.join(homeDir(), '.alacritty.yml'),
     ];
   }
   if (id === 'ghostty') {
     const dirs = [path.join(configHome(), 'ghostty')];
     if (process.platform === 'darwin') {
-      dirs.push(path.join(os.homedir(), 'Library', 'Application Support', 'com.mitchellh.ghostty'));
+      dirs.push(path.join(homeDir(), 'Library', 'Application Support', 'com.mitchellh.ghostty'));
     }
     return dirs.flatMap((dir) => [path.join(dir, 'config.ghostty'), path.join(dir, 'config')]);
   }
@@ -238,9 +237,9 @@ function weztermConfigPath(): string {
   const candidates = [
     process.env.WEZTERM_CONFIG_FILE?.trim(),
     terminalConfigPath('wezterm'),
-    path.join(os.homedir(), '.wezterm.lua'),
+    path.join(homeDir(), '.wezterm.lua'),
   ].filter((p): p is string => Boolean(p));
-  return candidates.find((p) => fs.existsSync(p)) ?? path.join(os.homedir(), '.wezterm.lua');
+  return candidates.find((p) => fs.existsSync(p)) ?? path.join(homeDir(), '.wezterm.lua');
 }
 
 function resolveTerminalConfigPath(id: TerminalId): string {

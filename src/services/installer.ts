@@ -13,7 +13,7 @@ import {
   runCommand,
 } from './exec.ts';
 import { type ExtractedFontFile, extractFontFiles } from './fontExtractor.ts';
-import { xdgBaseDir } from './paths.ts';
+import { homeDir, xdgBaseDir } from './paths.ts';
 
 // Package names per shell per package manager. Missing combos are intentional
 // (powershell is AUR-only on Arch, nushell is absent from Debian/Ubuntu
@@ -104,7 +104,7 @@ const MAX_FONT_ARCHIVE_BYTES = 200 * 1024 * 1024;
 
 /** Where the official install script puts the binary when run without sudo. */
 export function scriptInstallBinDir(): string {
-  return path.join(os.homedir(), '.local', 'bin');
+  return path.join(homeDir(), '.local', 'bin');
 }
 
 const STARSHIP_INSTALL_URL = 'https://starship.rs/install.sh';
@@ -221,11 +221,8 @@ export async function installShell(
 }
 
 export function getNerdFontsDir(): string {
-  if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Fonts');
-  return path.join(
-    xdgBaseDir('XDG_DATA_HOME', path.join(os.homedir(), '.local', 'share')),
-    'fonts'
-  );
+  if (process.platform === 'darwin') return path.join(homeDir(), 'Library', 'Fonts');
+  return path.join(xdgBaseDir('XDG_DATA_HOME', path.join(homeDir(), '.local', 'share')), 'fonts');
 }
 
 interface FontAsset {

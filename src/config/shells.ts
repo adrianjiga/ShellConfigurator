@@ -1,5 +1,5 @@
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { homeDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 
 export interface ShellDef {
@@ -27,7 +27,7 @@ export const SHELLS: ShellDef[] = [
     id: 'zsh',
     binary: 'zsh',
     label: 'Zsh',
-    rcFile: path.join(os.homedir(), '.zshrc'),
+    rcFile: path.join(homeDir(), '.zshrc'),
     initLine: 'eval "$(starship init zsh)"',
     pathLine: (dir) => `export PATH="${dir}:$PATH"`,
   },
@@ -35,7 +35,7 @@ export const SHELLS: ShellDef[] = [
     id: 'bash',
     binary: 'bash',
     label: 'Bash',
-    rcFile: path.join(os.homedir(), '.bashrc'),
+    rcFile: path.join(homeDir(), '.bashrc'),
     initLine: 'eval "$(starship init bash)"',
     pathLine: (dir) => `export PATH="${dir}:$PATH"`,
   },
@@ -43,7 +43,7 @@ export const SHELLS: ShellDef[] = [
     id: 'fish',
     binary: 'fish',
     label: 'Fish',
-    rcFile: path.join(os.homedir(), '.config', 'fish', 'config.fish'),
+    rcFile: path.join(homeDir(), '.config', 'fish', 'config.fish'),
     initLine: 'starship init fish | source',
     pathLine: (dir) => `fish_add_path ${dir}`,
   },
@@ -57,7 +57,7 @@ export const SHELLS: ShellDef[] = [
     initLine: `nu -c ${posixShellQuote(`mkdir ($nu.data-dir | path join "vendor/autoload"); $"export-env { $env.STARSHIP_CONFIG = '($nu.default-config-dir | path dirname | path join starship nushell.toml)' }" | save -f ($nu.data-dir | path join "vendor/autoload/starship-config.nu"); starship init nu | save -f ($nu.data-dir | path join "vendor/autoload/starship.nu")`)}`,
     manualNote: 'Run the command above from Bash (it invokes Nushell to write its autoload files).',
     initPath: path.join(
-      os.homedir(),
+      homeDir(),
       '.local',
       'share',
       'nushell',
@@ -67,7 +67,7 @@ export const SHELLS: ShellDef[] = [
     ),
     additionalInitPaths: [
       path.join(
-        os.homedir(),
+        homeDir(),
         '.local',
         'share',
         'nushell',
@@ -86,7 +86,7 @@ export const SHELLS: ShellDef[] = [
     initLine:
       '$env:STARSHIP_CONFIG = Join-Path $HOME ".config/starship/powershell.toml"; Invoke-Expression (&starship init powershell)',
     manualNote: 'Add the above line to your $PROFILE file in PowerShell.',
-    initPath: path.join(os.homedir(), '.config', 'powershell', 'Microsoft.PowerShell_profile.ps1'),
+    initPath: path.join(homeDir(), '.config', 'powershell', 'Microsoft.PowerShell_profile.ps1'),
   },
 ];
 
