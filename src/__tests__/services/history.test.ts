@@ -1,13 +1,14 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   appendHistory,
   type HistoryRecord,
   historyFilePath,
   lastRunShells,
   recordRun,
+  recordRunSafely,
   snapshotDir,
   snapshotPath,
   writeSnapshot,
@@ -193,5 +194,41 @@ describe('lastRunShells', () => {
     appendHistory(record('apply'));
 
     expect(lastRunShells()).toEqual(['bash', 'fish']);
+  });
+
+  it('falls back past torn, non-object and snapshot-less lines to an earlier run', () => {
+    recordRun({ kind: 'install', state: { ...DEFAULT_STATE, selectedShells: ['zsh'] } });
+    appendHistory(record('apply', { snapshotId: 'deleted-snapshot' }));
+    fs.appendFileSync(historyFilePath(), 'null\n42\n{"version":1,"snapsh');
+
+    expect(lastRunShells()).toEqual(['zsh']);
+  });
+});
+
+describe('appendHistory failures', () => {
+  it.skipIf(process.getuid?.() === 0)('rethrows a read error that is not a missing file', () => {
+    appendHistory(record('install'));
+    const dir = path.dirname(historyFilePath());
+    fs.chmodSync(dir, 0o000);
+    try {
+      expect(() => appendHistory(record('apply'))).toThrow(/EACCES/);
+    } finally {
+      fs.chmodSync(dir, 0o700);
+    }
+  });
+});
+
+describe('recordRunSafely', () => {
+  it('turns a failed write into a warning instead of ending the run', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const failing = vi.fn(() => {
+      throw new Error('disk full');
+    });
+
+    expect(() => recordRunSafely({ kind: 'apply' }, failing)).not.toThrow();
+    expect(stderr).toHaveBeenCalledWith(
+      'Warning: could not record this run in history: disk full\n'
+    );
+    stderr.mockRestore();
   });
 });
