@@ -18,6 +18,11 @@ configured ones:
 shell-configurator doctor
 ```
 
+If you still need to file a bug, attach the setup report:
+`shell-configurator debug-info > issue.md` writes the versions, detection,
+shells, PATH and these doctor findings as Markdown, with your home directory
+shown as `~`. Read it before posting.
+
 `doctor --fix` (or `repair`) applies the fix each failing check carries and
 re-runs the checks: it re-adds the init line, rewrites a per-shell config,
 reinstalls Starship via the detected package manager, or reinstalls the font
