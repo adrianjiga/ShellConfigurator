@@ -380,7 +380,7 @@ async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> 
   try {
     fontFiles = await extractFontFiles(buffer);
   } catch (err) {
-    throw new Error(`Could not extract ${zipName}: ${err instanceof Error ? err.message : err}`, {
+    throw new Error(`Could not extract ${zipName}: ${errorMessage(err)}`, {
       cause: err,
     });
   }

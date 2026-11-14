@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getShell, isShellId, posixShellQuote, type ShellDef } from '../config/shells.ts';
+import { errorMessage } from '../services/errors.ts';
 import { configHome, homeDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 
@@ -183,7 +184,7 @@ function restoreOne(
     outcome.failed.push({
       what,
       restoredFrom: backup,
-      error: err instanceof Error ? err.message : String(err),
+      error: errorMessage(err),
     });
   }
 }
@@ -499,10 +500,7 @@ function ensureRcDir(rcPath: string): void {
   try {
     fs.mkdirSync(rcDir, { recursive: true });
   } catch (err) {
-    throw new Error(
-      `Cannot create directory ${rcDir}: ${err instanceof Error ? err.message : err}`,
-      { cause: err }
-    );
+    throw new Error(`Cannot create directory ${rcDir}: ${errorMessage(err)}`, { cause: err });
   }
 }
 

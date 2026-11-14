@@ -10,6 +10,7 @@ import {
   parseSubstitutions,
 } from '../config/directory.ts';
 import { inkColor, PALETTES, type PaletteColorName, type PaletteId } from '../config/palettes.ts';
+import { errorMessage } from '../services/errors.ts';
 import type {
   CharacterSymbol,
   ContinuationPrompt,
@@ -199,7 +200,7 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
       setSubsError(null);
       setEditingSubs(false);
     } catch (error) {
-      setSubsError(error instanceof Error ? error.message : String(error));
+      setSubsError(errorMessage(error));
     }
   }
 
