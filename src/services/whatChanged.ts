@@ -59,7 +59,9 @@ export function renderWhatChanged(run: WhatChangedRun): string {
     '',
     ...(run.manifest
       ? run.manifest.files.map((file) => `- ${fileChange(file)} \`${file.path}\``)
-      : ['No copies of the changed files were kept, so this run cannot be rolled back.']),
+      : [
+          'No changed files were recorded: the run changed none, or their copies could not be saved, so `rollback` has nothing to put back.',
+        ]),
     '',
     '## Shells',
     '',

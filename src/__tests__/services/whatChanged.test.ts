@@ -78,10 +78,12 @@ describe('renderWhatChanged', () => {
     expect(text).toContain('add `--font Hack` to remove the font');
   });
 
-  it('says a run without kept copies cannot be rolled back, and offers no rollback', () => {
+  it('says no changed files were recorded, without claiming a failure, and offers no rollback', () => {
     const text = renderWhatChanged(run({ kind: 'install', command: undefined, manifest: null }));
     expect(text).toContain('Wizard install on 2026-11-14T10:00:00.000Z.');
-    expect(text).toContain('this run cannot be rolled back');
+    expect(text).toContain(
+      'No changed files were recorded: the run changed none, or their copies could not be saved'
+    );
     expect(text).not.toContain('`shell-configurator rollback`');
   });
 
