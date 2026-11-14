@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from 'ink';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { PickerRow } from '../components/PickerRow.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
@@ -11,6 +11,7 @@ import {
 } from '../config/directory.ts';
 import { inkColor, PALETTES, type PaletteColorName, type PaletteId } from '../config/palettes.ts';
 import { powerlineDroppedReason } from '../config/presets.ts';
+import { useUpdateEffect } from '../hooks/useUpdateEffect.ts';
 import { errorMessage } from '../services/errors.ts';
 import type {
   CharacterSymbol,
@@ -146,7 +147,6 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
   const [editingSubs, setEditingSubs, editingSubsRef] = useLive(false);
   const [subsDraft, setSubsDraft, subsDraftRef] = useLive('');
   const [subsError, setSubsError] = useState<string | null>(null);
-  const isInitialMount = useRef(true);
 
   const charIdx = CHAR_OPTIONS.findIndex((o) => o.value === characterSymbol);
   const colorIdx = PALETTES.findIndex((o) => o.id === palette);
@@ -164,26 +164,21 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
     directorySubstitutions: directorySubstitutionsRef.current,
   });
 
-  // Push live updates to parent state so preview stays in sync (skip initial
-  // mount). onUpdate is a fresh closure each render; including it would loop on
-  // every state push.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: onUpdate is a fresh closure each render.
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    onUpdate(selection());
-  }, [
-    characterSymbol,
-    palette,
-    powerline,
-    continuationPrompt,
-    addNewline,
-    vimMode,
-    directoryTruncationLength,
-    directorySubstitutions,
-  ]);
+  // Push live updates to parent state so preview stays in sync. onUpdate is a
+  // fresh closure each render; including it would loop on every state push.
+  useUpdateEffect(
+    () => onUpdate(selection()),
+    [
+      characterSymbol,
+      palette,
+      powerline,
+      continuationPrompt,
+      addNewline,
+      vimMode,
+      directoryTruncationLength,
+      directorySubstitutions,
+    ]
+  );
 
   function toggleExtra(row: ExtraRow) {
     if (row === 'addNewline') setAddNewline((v) => !v);

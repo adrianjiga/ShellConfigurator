@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from 'ink';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { PickerRow } from '../components/PickerRow.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
@@ -10,6 +10,7 @@ import {
   type ModuleDef,
   type ModuleId,
 } from '../config/modules.ts';
+import { useUpdateEffect } from '../hooks/useUpdateEffect.ts';
 import type { WizardState } from '../types.ts';
 
 interface SegmentsScreenProps {
@@ -86,7 +87,6 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
     cursor: 0,
   }));
   const viewRef = useRef(view);
-  const isInitialMount = useRef(true);
   const { selected, filter, cursor } = view;
 
   const rows = buildRows(selected, filter, takenByLeft);
@@ -114,16 +114,9 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
   const orderedForSide = (modules: ConfigurableModuleId[]): ModuleId[] =>
     side === 'left' ? [...modules, 'character'] : modules;
 
-  // Push live updates to parent state so preview stays in sync (skip initial mount)
-  // onUpdate is a fresh closure each parent render; including it would loop on every state push.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: onUpdate loops on every state push.
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    applyModules(onUpdate, orderedForSide(selected));
-  }, [selected, side]);
+  // Push live updates to parent state so preview stays in sync. onUpdate is a
+  // fresh closure each parent render; including it would loop on every state push.
+  useUpdateEffect(() => applyModules(onUpdate, orderedForSide(selected)), [selected, side]);
 
   function saveAndProceed() {
     applyModules(onNext, orderedForSide(viewRef.current.selected));
