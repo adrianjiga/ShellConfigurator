@@ -115,12 +115,16 @@ export async function extractFontFiles(
       reject(error instanceof Error ? error : new Error(String(error)));
     });
     worker.on('exit', (code) => {
-      // A clean exit after a successful postMessage is the happy path and must
-      // not reject a promise that already resolved.
-      if (code !== 0) {
-        clearTimeout(timer);
-        reject(new Error(`Font extraction worker exited with code ${code}.`));
-      }
+      // After a posted result this reject is a no-op; without one, waiting for
+      // the timeout would only delay the same failure.
+      clearTimeout(timer);
+      reject(
+        new Error(
+          code === 0
+            ? 'Font extraction worker exited without a result.'
+            : `Font extraction worker exited with code ${code}.`
+        )
+      );
     });
   });
 }

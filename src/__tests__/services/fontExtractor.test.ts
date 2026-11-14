@@ -180,6 +180,17 @@ describe('extractFontFiles', () => {
     await expect(extractFontFiles(encode('bytes'))).rejects.toThrow('exited with code 3');
   });
 
+  it('rejects at once when the worker exits cleanly without a result', async () => {
+    vi.useFakeTimers();
+    workerControls.mode = 'silent';
+    workerControls.exitCode = 0;
+
+    const promise = extractFontFiles(encode('bytes'));
+    const resolution = expect(promise).rejects.toThrow('exited without a result');
+    await vi.advanceTimersByTimeAsync(10);
+    await resolution;
+  });
+
   it('rejects with a timeout when the worker hangs', async () => {
     vi.useFakeTimers();
     workerControls.mode = 'silent';
