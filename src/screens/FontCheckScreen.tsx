@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import { AppSelectInput, type SelectItem } from '../components/AppSelectInput.tsx';
-import { NavHints } from '../components/NavHints.tsx';
+import { LIST_HINTS, NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { NERD_FONT_SYMBOLS } from '../config/promptSymbols.ts';
@@ -96,13 +96,7 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
         </Box>
       </Box>
 
-      <NavHints
-        hints={[
-          { key: '↑↓', label: 'navigate' },
-          { key: 'Enter/1-9', label: 'select' },
-          { key: 'Esc', label: 'back' },
-        ]}
-      />
+      <NavHints hints={LIST_HINTS} />
     </WizardLayout>
   );
 }

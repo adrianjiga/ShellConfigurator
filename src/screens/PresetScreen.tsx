@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { useState } from 'react';
 import { AppSelectInput } from '../components/AppSelectInput.tsx';
-import { NavHints } from '../components/NavHints.tsx';
+import { LIST_HINTS, NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { PRESETS } from '../config/presets.ts';
@@ -110,11 +110,7 @@ export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
                 { key: 'Enter', label: 'apply' },
                 { key: 'Esc', label: 'cancel' },
               ]
-            : [
-                { key: '↑↓', label: 'navigate' },
-                { key: 'Enter/1-9', label: 'select' },
-                { key: 'Esc', label: 'back' },
-              ]
+            : LIST_HINTS
         }
       />
     </WizardLayout>

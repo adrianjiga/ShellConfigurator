@@ -6,8 +6,15 @@ interface Hint {
   label: string;
 }
 
+/** The bar under a plain option list. */
+export const LIST_HINTS: readonly Hint[] = [
+  { key: '↑↓', label: 'navigate' },
+  { key: 'Enter/1-9', label: 'select' },
+  { key: 'Esc', label: 'back' },
+];
+
 interface NavHintsProps {
-  hints: Hint[];
+  hints: readonly Hint[];
 }
 
 export function NavHints({ hints }: NavHintsProps) {

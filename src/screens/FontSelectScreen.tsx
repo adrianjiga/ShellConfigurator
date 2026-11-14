@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import { AppSelectInput } from '../components/AppSelectInput.tsx';
-import { NavHints } from '../components/NavHints.tsx';
+import { LIST_HINTS, NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { getNerdFontsDir, NERD_FONTS } from '../services/installer.ts';
@@ -53,13 +53,7 @@ export function FontSelectScreen({ state, onNext, onBack }: FontSelectScreenProp
         </Box>
       </Box>
 
-      <NavHints
-        hints={[
-          { key: '↑↓', label: 'navigate' },
-          { key: 'Enter/1-9', label: 'select' },
-          { key: 'Esc', label: 'back' },
-        ]}
-      />
+      <NavHints hints={LIST_HINTS} />
     </WizardLayout>
   );
 }
