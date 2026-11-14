@@ -631,3 +631,22 @@ describe('repair against the real doctor', () => {
     expect(withWarnings.wireTerminalFont).toHaveBeenCalledWith('kitty', 'JetBrainsMono Nerd Font');
   });
 });
+
+describe('runDoctor with an init in a sourced file', () => {
+  it('passes a shell whose rc starts Starship through a file it sources', async () => {
+    const bashrc = getShell('bash')!.rcFile!;
+    const files = new Map([
+      [bashrc, 'source "$OMARCHY_PATH/default/bash/rc"\n'],
+      ['/opt/omarchy/default/bash/rc', 'eval "$(starship init bash)"\n'],
+    ]);
+    const report = await runDoctor(
+      baseState({ selectedShells: ['bash'], keepExistingConfig: true }),
+      makeDeps(files, {
+        detectCurrentShell: vi.fn().mockResolvedValue('bash'),
+        detectInstalledShells: vi.fn().mockResolvedValue(['bash']),
+        env: { LANG: 'en_US.UTF-8', OMARCHY_PATH: '/opt/omarchy' },
+      })
+    );
+    expect(find(report, 'shell:bash').status).toBe('pass');
+  });
+});

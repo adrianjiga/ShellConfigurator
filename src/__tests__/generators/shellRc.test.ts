@@ -38,12 +38,14 @@ import {
   getShellConfigPath,
   hasManagedRcBlock,
   hasStarshipInit,
+  initReachable,
   removeManagedRcBlocks,
   removeShellConfigFile,
   resetRcContent,
   resetSharedShellConfig,
   restoreConfigBackups,
   shellsWithStarshipInit,
+  sourcedFiles,
   starshipConfigLine,
   startsStarship,
   writeSharedConfig,
@@ -1578,5 +1580,82 @@ describe('appliedRcContent and resetRcContent', () => {
   it('are null for shells without an rc file', () => {
     expect(appliedRcContent('nushell', '', {}, noFiles)).toBeNull();
     expect(resetRcContent('powershell', '', noFiles)).toBeNull();
+  });
+});
+
+describe('a Starship init in a sourced file, as on Omarchy', () => {
+  const env = { OMARCHY_PATH: '/usr/share/omarchy', HOME: os.homedir() };
+  const BASHRC = [
+    '[[ -r /usr/share/omarchy/default/bash/env-bootstrap ]] && source /usr/share/omarchy/default/bash/env-bootstrap',
+    '[[ $- != *i* ]] && return',
+    'source "$OMARCHY_PATH/default/bash/rc"',
+    '',
+  ].join('\n');
+  const files = new Map([
+    ['/usr/share/omarchy/default/bash/env-bootstrap', 'export OMARCHY_PATH=/usr/share/omarchy\n'],
+    [
+      '/usr/share/omarchy/default/bash/rc',
+      'source $OMARCHY_PATH/default/bash/aliases\n. "${OMARCHY_PATH}/default/bash/init"\n',
+    ],
+    ['/usr/share/omarchy/default/bash/aliases', "alias ls='eza'\n"],
+    [
+      '/usr/share/omarchy/default/bash/init',
+      'if command -v starship &> /dev/null; then\n  eval "$(starship init bash)"\nfi\n',
+    ],
+  ]);
+  const io = {
+    exists: (file: string) => files.has(file),
+    readFile: (file: string) => files.get(file) ?? '',
+  };
+
+  it('lists the files a script sources, expanded, leaving out comments and unknown variables', () => {
+    expect(
+      sourcedFiles(
+        `${BASHRC}# source /commented\nsource $NOT_SET/x\n. ~/.bash_aliases\nsource relative.sh\n`,
+        env
+      )
+    ).toEqual([
+      '/usr/share/omarchy/default/bash/env-bootstrap',
+      '/usr/share/omarchy/default/bash/rc',
+      path.join(os.homedir(), '.bash_aliases'),
+    ]);
+  });
+
+  it('finds the init two files down, and stops at three levels and at cycles', () => {
+    expect(initReachable(BASHRC, 'bash', io, env)).toBe(true);
+    expect(initReachable(BASHRC, 'zsh', io, env)).toBe(false);
+    const deep = new Map([
+      ['/a', 'source /b\n'],
+      ['/b', 'source /c\n'],
+      ['/c', 'source /d\n'],
+      ['/d', 'eval "$(starship init bash)"\n'],
+    ]);
+    const deepIo = { exists: (f: string) => deep.has(f), readFile: (f: string) => deep.get(f)! };
+    expect(initReachable('source /a\n', 'bash', deepIo, env)).toBe(false);
+    expect(initReachable('source /b\n', 'bash', deepIo, env)).toBe(true);
+    const loop = new Map([
+      ['/x', 'source /y\n'],
+      ['/y', 'source /x\n'],
+    ]);
+    const loopIo = { exists: (f: string) => loop.has(f), readFile: (f: string) => loop.get(f)! };
+    expect(initReachable('source /x\n', 'bash', loopIo, env)).toBe(false);
+  });
+
+  it('counts such a shell as starting Starship, and adds no second init line to it', () => {
+    vi.stubEnv('OMARCHY_PATH', '/usr/share/omarchy');
+    const rc = getShell('bash')!.rcFile!;
+    const withRc = {
+      exists: (file: string) => file === rc || files.has(file),
+      readFile: (file: string) => (file === rc ? BASHRC : (files.get(file) ?? '')),
+    };
+    try {
+      expect(shellsWithStarshipInit(['bash'], withRc)).toEqual(['bash']);
+      expect(startsStarship('bash', false, withRc)).toBe(true);
+      const planned = appliedRcContent('bash', BASHRC, {}, withRc)!;
+      expect(planned.content).not.toContain('starship init bash');
+      expect(planned.content).toContain(starshipConfigLine('bash'));
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
