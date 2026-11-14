@@ -60,6 +60,7 @@ import type { ModuleId } from '../../config/modules.ts';
 import type { CliFlags } from '../../services/args.ts';
 import { CliRunError, CliUsageError } from '../../services/errors.ts';
 import {
+  dryRunPlan,
   fetchImportedConfig,
   runApply,
   runGenerate,
@@ -1232,5 +1233,16 @@ describe('runApply', () => {
         flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'https://offline.test/raw' })
       )
     ).rejects.toThrow(/Could not fetch.*ENOTFOUND/);
+  });
+});
+
+describe('dryRunPlan', () => {
+  it('labels an empty imported config as imported, since the run writes it', () => {
+    const plan = dryRunPlan(
+      { ...DEFAULT_STATE, keepExistingConfig: true, sharedConfigToml: '' },
+      [],
+      []
+    );
+    expect(plan.config).toMatchObject({ kind: 'imported', toml: '' });
   });
 });

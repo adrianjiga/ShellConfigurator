@@ -431,7 +431,7 @@ export function dryRunPlan(
     installStarship: !state.skipStarshipInstall,
     tasks,
     config: state.keepExistingConfig
-      ? state.sharedConfigToml
+      ? state.sharedConfigToml != null
         ? { kind: 'imported', path: shared, toml: state.sharedConfigToml }
         : { kind: 'kept', path: shared, exists: fs.existsSync(shared) }
       : perShellConfig(state),
