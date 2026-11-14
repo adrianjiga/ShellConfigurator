@@ -30,6 +30,7 @@ function lastWrittenContent(): string {
 import * as fs from 'node:fs';
 import { getShell } from '../../config/shells.ts';
 import {
+  appliedRcContent,
   applyShellConfig,
   backupPath,
   backupSharedConfig,
@@ -40,9 +41,11 @@ import {
   plannedRcBlock,
   removeManagedRcBlocks,
   removeShellConfigFile,
+  resetRcContent,
   resetSharedShellConfig,
   restoreConfigBackups,
   shellsWithStarshipInit,
+  starshipConfigLine,
   startsStarship,
   writeSharedConfig,
   writeShellConfig,
@@ -1557,5 +1560,49 @@ describe('startsStarship', () => {
 
   it('is false for a shell with no rc', () => {
     expect(startsStarship('zsh', false, { exists: () => false, readFile: () => '' })).toBe(false);
+  });
+});
+
+describe('appliedRcContent and resetRcContent', () => {
+  const noFiles = { exists: () => false, readFile: () => '' };
+  const zshInit = 'eval "$(starship init zsh)"';
+
+  it('return what the writers would write, without writing', () => {
+    const applied = appliedRcContent('zsh', 'alias ll="ls -l"\n', {}, noFiles);
+    expect(applied).toMatchObject({ applied: true });
+    expect(applied!.content).toBe(
+      `alias ll="ls -l"\n\n# Added by ShellConfigurator\n${starshipConfigLine('zsh')}\n${zshInit}\n`
+    );
+
+    const reset = resetRcContent('zsh', `${zshInit}\n`, noFiles);
+    expect(reset).toEqual({
+      content: `# Added by ShellConfigurator\nunset STARSHIP_CONFIG\n\n${zshInit}\n`,
+      applied: true,
+    });
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it('leave the content as it is when the rc is already configured', () => {
+    const configured = appliedRcContent('zsh', '', {}, noFiles)!.content;
+    expect(appliedRcContent('zsh', configured, {}, noFiles)).toEqual({
+      content: configured,
+      applied: false,
+      note: 'already configured',
+    });
+  });
+
+  it("see fish's conf.d init through the given io", () => {
+    const confD = {
+      exists: (p: string) => p.endsWith(path.join('conf.d', 'starship.fish')),
+      readFile: () => '',
+    };
+    expect(
+      appliedRcContent('fish', '', { pointAtSharedConfig: true }, confD)!.content
+    ).not.toContain('starship init fish');
+  });
+
+  it('are null for shells without an rc file', () => {
+    expect(appliedRcContent('nushell', '', {}, noFiles)).toBeNull();
+    expect(resetRcContent('powershell', '', noFiles)).toBeNull();
   });
 });

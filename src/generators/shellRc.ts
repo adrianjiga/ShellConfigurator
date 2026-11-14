@@ -545,6 +545,67 @@ function insertBeforeInit(
   return all.join('\n');
 }
 
+export interface RcPlan {
+  content: string;
+  applied: boolean;
+  note?: string;
+}
+
+/**
+ * What `applyShellConfig` makes of the rc text `existing`, without writing it:
+ * `content` equals `existing` when the file stays as it is. Null for shells
+ * without an rc file.
+ */
+export function appliedRcContent(
+  shellId: ShellId,
+  existing: string,
+  options: ApplyShellConfigOptions = {},
+  io: RcIo = FS_RC_IO
+): RcPlan | null {
+  const shell = getShell(shellId);
+  if (!shell?.rcFile) return null;
+  const rcPath = shell.rcFile;
+
+  // Drop stale blocks this run is not the owner of, so the modes stay mutually
+  // exclusive: a leftover "unset" guard from a reset run, an adopt-mode block
+  // when writing per-shell configs, and — in adopt mode — a per-shell export a
+  // previous non-adopt run left pointing at a per-shell TOML.
+  const configLine = options.pointAtSharedConfig ? null : starshipConfigLine(shellId);
+  const cleanNeedles: LineNeedle[] = [starshipUnsetLine(shellId)!];
+  if (options.pointAtSharedConfig) {
+    cleanNeedles.push(isConfigExport(shell));
+  } else {
+    cleanNeedles.push(ADOPT_MARKER);
+    // An export an earlier run wrote for a different config path is stale too.
+    cleanNeedles.push((t) => lineMatches(t, isConfigExport(shell)) && t !== configLine);
+  }
+  const carriedPathLines: string[] = [];
+  const cleaned = removeShellConfiguratorBlocks(existing, shell, cleanNeedles, carriedPathLines);
+
+  const initPresent =
+    hasStarshipInit(cleaned, shell.id) || (shell.id === 'fish' && io.exists(fishInitFile(rcPath)));
+
+  const added = buildAdditionLines(shell, cleaned, options.ensurePathDir, configLine, initPresent);
+  const carried = [...new Set(carriedPathLines)].filter(
+    (line) => line !== added.pathLine && !hasLine(cleaned, line)
+  );
+  const lines = [...carried, ...added.lines];
+  const { pathLine } = added;
+  if (lines.length === 0) {
+    // An already-configured rc may still carry a stale opposite-mode block;
+    // the cleaned file is written so the modes stay mutually exclusive.
+    return { content: cleaned, applied: false, note: 'already configured' };
+  }
+
+  const marker = options.pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
+  const inserted = initPresent ? insertBeforeInit(cleaned, shell, marker, lines) : null;
+  return {
+    content: inserted ?? appendManagedBlock(cleaned, marker, lines),
+    applied: true,
+    note: pathLine ? `${options.ensurePathDir} added to PATH` : undefined,
+  };
+}
+
 export function applyShellConfig(
   shellId: ShellId,
   options: ApplyShellConfigOptions = {}
@@ -564,50 +625,10 @@ export function applyShellConfig(
 
   const rcPath = shell.rcFile;
   ensureRcDir(rcPath);
-
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
-
-  // Drop stale blocks this run is not the owner of, so the modes stay mutually
-  // exclusive: a leftover "unset" guard from a reset run, an adopt-mode block
-  // when writing per-shell configs, and — in adopt mode — a per-shell export a
-  // previous non-adopt run left pointing at a per-shell TOML.
-  const configLine = options.pointAtSharedConfig ? null : starshipConfigLine(shellId);
-  const cleanNeedles: LineNeedle[] = [starshipUnsetLine(shellId)!];
-  if (options.pointAtSharedConfig) {
-    cleanNeedles.push(isConfigExport(shell));
-  } else {
-    cleanNeedles.push(ADOPT_MARKER);
-    // An export an earlier run wrote for a different config path is stale too.
-    cleanNeedles.push((t) => lineMatches(t, isConfigExport(shell)) && t !== configLine);
-  }
-  const carriedPathLines: string[] = [];
-  const cleaned = removeShellConfiguratorBlocks(existing, shell, cleanNeedles, carriedPathLines);
-
-  const initPresent =
-    hasStarshipInit(cleaned, shell.id) ||
-    (shell.id === 'fish' && fs.existsSync(fishInitFile(rcPath)));
-
-  const added = buildAdditionLines(shell, cleaned, options.ensurePathDir, configLine, initPresent);
-  const carried = [...new Set(carriedPathLines)].filter(
-    (line) => line !== added.pathLine && !hasLine(cleaned, line)
-  );
-  const lines = [...carried, ...added.lines];
-  const { pathLine } = added;
-  if (lines.length === 0) {
-    // An already-configured rc may still carry a stale opposite-mode block;
-    // write the cleaned file so the modes stay mutually exclusive.
-    if (cleaned !== existing) writeFileAtomic(rcPath, cleaned);
-    return { applied: false, note: 'already configured' };
-  }
-
-  const marker = options.pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
-  const inserted = initPresent ? insertBeforeInit(cleaned, shell, marker, lines) : null;
-  writeFileAtomic(rcPath, inserted ?? appendManagedBlock(cleaned, marker, lines));
-
-  return {
-    applied: true,
-    note: pathLine ? `${options.ensurePathDir} added to PATH` : undefined,
-  };
+  const { content, ...result } = appliedRcContent(shellId, existing, options)!;
+  if (content !== existing) writeFileAtomic(rcPath, content);
+  return result;
 }
 
 /** Appends a managed block at the end, after a blank line unless the file is empty. */
@@ -657,8 +678,24 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
 
   const rcPath = shell.rcFile;
   ensureRcDir(rcPath);
-
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
+  const { content, ...result } = resetRcContent(shellId, existing)!;
+  if (content !== existing) writeFileAtomic(rcPath, content);
+  return result;
+}
+
+/**
+ * What `resetSharedShellConfig` makes of the rc text `existing`, without
+ * writing it. Null for shells without an rc file.
+ */
+export function resetRcContent(
+  shellId: ShellId,
+  existing: string,
+  io: RcIo = FS_RC_IO
+): RcPlan | null {
+  const shell = getShell(shellId);
+  if (!shell?.rcFile) return null;
+  const rcPath = shell.rcFile;
   const unsetLine = starshipUnsetLine(shellId)!;
   const carried: string[] = [];
 
@@ -670,8 +707,7 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
   }
 
   const initPresent =
-    hasStarshipInit(content, shellId) ||
-    (shell.id === 'fish' && fs.existsSync(fishInitFile(rcPath)));
+    hasStarshipInit(content, shellId) || (shell.id === 'fish' && io.exists(fishInitFile(rcPath)));
   const needsInit = !initPresent && hasStarshipInit(existing, shellId);
   const lines = [
     ...[...new Set(carried)].filter((line) => !hasLine(content, line)),
@@ -680,17 +716,17 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
   const note = ownExport ? 'sets its own STARSHIP_CONFIG' : undefined;
 
   if (lines.length === 0 && !needsInit) {
-    if (content !== existing) writeFileAtomic(rcPath, content);
-    return { applied: false, note: note ?? 'already configured' };
+    return { content, applied: false, note: note ?? 'already configured' };
   }
 
   const inserted = initPresent ? insertBeforeInit(content, shell, BLOCK_MARKER, lines) : null;
-  writeFileAtomic(
-    rcPath,
-    inserted ??
-      appendManagedBlock(content, BLOCK_MARKER, needsInit ? [...lines, shell.initLine] : lines)
-  );
-  return note ? { applied: true, note } : { applied: true };
+  return {
+    content:
+      inserted ??
+      appendManagedBlock(content, BLOCK_MARKER, needsInit ? [...lines, shell.initLine] : lines),
+    applied: true,
+    ...(note ? { note } : {}),
+  };
 }
 
 const EVERY_BLOCK: LineNeedle = () => true;
