@@ -41,6 +41,7 @@ import {
   resetSharedShellConfig,
   restoreConfigBackups,
   shellsWithStarshipInit,
+  startsStarship,
   writeSharedConfig,
   writeShellConfig,
 } from '../../generators/shellRc.ts';
@@ -1517,5 +1518,44 @@ describe('removing ShellConfigurator lines', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     expect(removeShellConfigFile('zsh').removed).toBe(false);
     expect(fs.renameSync).not.toHaveBeenCalled();
+  });
+});
+
+describe('startsStarship', () => {
+  const zshrc = getShell('zsh')!.rcFile!;
+  const managed = '# Added by ShellConfigurator\neval "$(starship init zsh)"\n';
+  const rcIo = (content: string, extra: string[] = []) => ({
+    exists: (p: string) => p === zshrc || extra.includes(p),
+    readFile: () => content,
+  });
+
+  it('counts a managed init until its blocks are removed', () => {
+    expect(startsStarship('zsh', false, rcIo(managed))).toBe(true);
+    expect(startsStarship('zsh', true, rcIo(managed))).toBe(false);
+  });
+
+  it("counts the user's own init line either way", () => {
+    const own = `eval "$(starship init zsh)"\n\n${managed}`;
+    expect(startsStarship('zsh', true, rcIo(own))).toBe(true);
+  });
+
+  it('counts a fish conf.d init, which uninstall never removes', () => {
+    const fishRc = getShell('fish')!.rcFile!;
+    const confD = path.join(path.dirname(fishRc), 'conf.d', 'starship.fish');
+    const io = { exists: (p: string) => p === confD, readFile: () => '' };
+    expect(startsStarship('fish', true, io)).toBe(true);
+  });
+
+  it('counts a hand-applied Nushell setup', () => {
+    const nu = getShell('nushell')!;
+    const io = { exists: (p: string) => p === nu.initPath, readFile: () => '' };
+    expect(startsStarship('nushell', true, io)).toBe(true);
+    expect(startsStarship('nushell', true, { exists: () => false, readFile: () => '' })).toBe(
+      false
+    );
+  });
+
+  it('is false for a shell with no rc', () => {
+    expect(startsStarship('zsh', false, { exists: () => false, readFile: () => '' })).toBe(false);
   });
 });

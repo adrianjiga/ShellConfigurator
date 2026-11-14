@@ -708,6 +708,34 @@ export function hasManagedRcBlock(shellId: ShellId, io: RcIo = FS_RC_IO): boolea
   }
 }
 
+/**
+ * Whether the shell starts Starship: from its rc (ignoring ShellConfigurator's
+ * blocks when `withoutManagedBlocks`, as after an uninstall), fish's conf.d
+ * file, or a hand-applied Nushell or PowerShell setup.
+ */
+export function startsStarship(
+  shellId: ShellId,
+  withoutManagedBlocks: boolean,
+  io: RcIo = FS_RC_IO
+): boolean {
+  const shell = getShell(shellId);
+  if (!shell) return false;
+  if (!shell.rcFile) {
+    return manualSetupAppliedWith(shell, io, false) || manualSetupAppliedWith(shell, io, true);
+  }
+  try {
+    if (shell.id === 'fish' && io.exists(fishInitFile(shell.rcFile))) return true;
+    if (!io.exists(shell.rcFile)) return false;
+    const content = io.readFile(shell.rcFile);
+    const kept = withoutManagedBlocks
+      ? removeShellConfiguratorBlocks(content, shell, [EVERY_BLOCK])
+      : content;
+    return hasStarshipInit(kept, shellId);
+  } catch {
+    return false;
+  }
+}
+
 export interface RemovalResult {
   removed: boolean;
   backedUpTo?: string;
