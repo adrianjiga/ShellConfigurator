@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { cleanup, render } from 'ink-testing-library';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReviewScreen } from '../../screens/ReviewScreen.tsx';
 import { plannedPathDir } from '../../services/installer.ts';
 import { DEFAULT_STATE } from '../../types.ts';
@@ -14,9 +14,20 @@ vi.mock('../../services/installer.ts', async (importOriginal) => ({
   plannedPathDir: vi.fn(() => null),
 }));
 
+let home: string;
+
+beforeEach(() => {
+  home = fs.mkdtempSync(path.join(os.tmpdir(), 'sc-review-'));
+  vi.stubEnv('HOME', home);
+  vi.stubEnv('XDG_CONFIG_HOME', undefined);
+  vi.stubEnv('ZDOTDIR', undefined);
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
+  fs.rmSync(home, { recursive: true, force: true });
 });
 
 function setup(overrides: Partial<typeof DEFAULT_STATE> = {}) {
@@ -218,17 +229,35 @@ describe('ReviewScreen PATH line', () => {
 
 describe('ReviewScreen with an existing shared config', () => {
   it('warns that the shared config stops applying to the chosen shells', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sc-review-'));
-    vi.stubEnv('HOME', dir);
-    fs.mkdirSync(path.join(dir, '.config'));
-    fs.writeFileSync(path.join(dir, '.config', 'starship.toml'), 'format = "$all"\n');
-    try {
-      const { instance } = setup();
-      await flush();
-      expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain('apply --adopt');
-    } finally {
-      vi.unstubAllEnvs();
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+    fs.mkdirSync(path.join(home, '.config'));
+    fs.writeFileSync(path.join(home, '.config', 'starship.toml'), 'format = "$all"\n');
+    const { instance } = setup();
+    await flush();
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain('apply --adopt');
+  });
+});
+
+describe('ReviewScreen against the files on disk', () => {
+  it('shows where the block goes in an existing rc and lists every file the run writes', async () => {
+    fs.writeFileSync(path.join(home, '.zshrc'), 'alias ll="ls -l"\n');
+    const { instance } = setup();
+    await flush();
+    const frame = instance.lastFrame() ?? '';
+    const flat = frame.replace(/\s+/g, ' ');
+    expect(flat).toContain('Files on disk');
+    expect(flat).toContain('create ~/.config/starship/zsh.toml (+');
+    expect(flat).toContain('edit ~/.zshrc (+4 -0)');
+    expect(frame).toContain(' alias ll="ls -l"');
+    expect(frame).toContain('+# Added by ShellConfigurator');
+    expect(frame).toContain('+eval "$(starship init zsh)"');
+  });
+
+  it('says an rc that is already set up stays as it is', async () => {
+    fs.writeFileSync(path.join(home, '.zshrc'), 'eval "$(starship init zsh)"\n');
+    const { instance } = setup({ keepExistingConfig: true });
+    await flush();
+    const frame = (instance.lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(frame).toContain('already set up: the file stays as it is');
+    expect(frame).toContain('No config or rc file changes.');
   });
 });
