@@ -209,14 +209,12 @@ export function assertBashCompletions(homeDir) {
     'bash',
     [
       '-c',
-      `source "$1"
+      `source "$COMPLETION_SCRIPT"
 t() { COMP_WORDS=("$@"); COMP_CWORD=$(( $# - 1 )); COMPREPLY=(); _shell_configurator; echo "\${COMPREPLY[*]}"; }
 t shell-configurator debug
 t shell-configurator generate --character la`,
-      'bash',
-      script,
     ],
-    { encoding: 'utf8' }
+    { encoding: 'utf8', env: { ...process.env, COMPLETION_SCRIPT: script } }
   );
   assert.equal(out, 'debug-info\nlambda\n', `bash completions offered:\n${out}`);
 }
@@ -257,12 +255,16 @@ export function assertScriptingSurface() {
   assert.deepEqual(plan.shells, ['bash'], 'apply --dry-run --json has the wrong shells');
   assert.equal(plan.config.kind, 'per-shell', 'apply --dry-run --json has no generated config');
   const rcChange = plan.changes.find((change) => change.path === bashrc);
-  assert.ok(rcChange, `apply --dry-run --json has no change for ${bashrc}`);
-  assert.match(
-    rcChange.diff,
-    /^\+eval "\$\(starship init bash\)"$/m,
-    'the dry-run diff of .bashrc does not add the init line'
-  );
+  const addsInit = /^\+eval "\$\(starship init bash\)"$/m;
+  if (bashrcBefore?.includes('starship init bash')) {
+    assert.ok(
+      !rcChange?.diff.match(addsInit),
+      `the dry run adds a second init line to an already wired .bashrc:\n${rcChange?.diff}`
+    );
+  } else {
+    assert.ok(rcChange, `apply --dry-run --json has no change for ${bashrc}`);
+    assert.match(rcChange.diff, addsInit, 'the dry-run diff of .bashrc does not add the init line');
+  }
   assert.equal(
     existsSync(bashrc) ? readFileSync(bashrc, 'utf8') : null,
     bashrcBefore,
