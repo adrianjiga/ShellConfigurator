@@ -270,6 +270,23 @@ function showControlCharacters(text: string): string {
   );
 }
 
+/** The `command` and `when` lines of the `[custom.*]` modules in `toml`, which Starship runs on every prompt. */
+export function customCommands(toml: string): string[] {
+  const found: string[] = [];
+  let module: string | null = null;
+  for (const line of toml.split(/\r?\n/)) {
+    const table = /^\s*\[\s*([^\]]+?)\s*\]/.exec(line);
+    if (table) {
+      module = /^custom\./.test(table[1]!) ? table[1]! : null;
+      continue;
+    }
+    const key = /^\s*(command|when)\s*=\s*(.+?)\s*$/.exec(line);
+    if (module && key && !/^(true|false)$/.test(key[2]!))
+      found.push(`${module}.${key[1]} = ${key[2]}`);
+  }
+  return found;
+}
+
 function printTasks(tasks: InstallTask[]): void {
   for (const task of tasks) process.stdout.write(`  ${formatTask(task)}\n`);
 }
@@ -450,11 +467,16 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
   }
 
   if (flags.importUrl) {
-    state = {
-      ...state,
-      keepExistingConfig: true,
-      sharedConfigToml: await fetchImportedConfig(flags.importUrl),
-    };
+    const toml = await fetchImportedConfig(flags.importUrl);
+    const commands = customCommands(toml);
+    if (commands.length > 0) {
+      process.stderr.write(
+        `shell-configurator: the imported config runs these commands on every prompt; check them:\n${commands
+          .map((command) => `  ${showControlCharacters(command)}`)
+          .join('\n')}\n`
+      );
+    }
+    state = { ...state, keepExistingConfig: true, sharedConfigToml: toml };
   }
   const [installedShells, packageManager, container, terminal, remoteSession] = await Promise.all([
     detectInstalledShellsAsync(),

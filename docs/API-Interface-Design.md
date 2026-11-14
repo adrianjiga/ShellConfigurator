@@ -844,7 +844,9 @@ shell-configurator apply [--state <file>] [generate flags] [--dry-run [--json]] 
   --adopt       keep the shared ~/.config/starship.toml (never writes per-shell files)
   --import-url  fetch a starship.toml and adopt it (implies --adopt; the fetch is
                 bounded — a 10s timeout and a 1 MB cap reject a hung or oversized
-                response. A non-https URL, or one with a user name or password, is a usage error; an HTTP error, an
+                response. Every redirect hop must be https too. The `command`/`when` lines of
+                its `[custom.*]` modules, which run on every prompt, are printed to stderr
+                before anything happens. A non-https URL, or one with a user name or password, is a usage error; an HTTP error, an
                 empty or HTML body is a run error)
   --json        with --dry-run, print { dryRun, shells, installStarship, tasks,
                 config, changes } instead of text; config is { kind: 'per-shell', toml,

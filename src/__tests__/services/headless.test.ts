@@ -64,6 +64,7 @@ import { getShell } from '../../config/shells.ts';
 import type { CliFlags } from '../../services/args.ts';
 import { CliRunError, CliUsageError } from '../../services/errors.ts';
 import {
+  customCommands,
   dryRunPlan,
   fetchImportedConfig,
   runApply,
@@ -1240,6 +1241,27 @@ describe('runApply', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('warns about the commands an imported config runs on every prompt', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('[custom.ip]\ncommand = "curl -s https://ip.example"\nwhen = true\n', {
+        status: 200,
+      })
+    );
+
+    await runApply(
+      flags({
+        subcommand: 'apply',
+        shells: ['zsh'],
+        dryRun: true,
+        importUrl: 'https://example.com/c',
+      })
+    );
+
+    expect(stderrWrite).toHaveBeenCalledWith(
+      expect.stringContaining('custom.ip.command = "curl -s https://ip.example"')
+    );
+  });
+
   it('refuses a redirect through plain http on the way, not only at the end', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(null, { status: 302, headers: { location: 'http://example.com/cfg.toml' } })
@@ -1426,5 +1448,18 @@ describe('dryRunPlan', () => {
       []
     );
     expect(plan.config).toMatchObject({ kind: 'imported', toml: '' });
+  });
+});
+
+describe('customCommands', () => {
+  it('lists the command and when lines of custom modules only', () => {
+    expect(
+      customCommands(
+        '[directory]\ncommand = "not a module key"\n[custom.git_email]\ncommand = "git config user.email"\nwhen = "git rev-parse"\n[custom.on]\nwhen = true\n'
+      )
+    ).toEqual([
+      'custom.git_email.command = "git config user.email"',
+      'custom.git_email.when = "git rev-parse"',
+    ]);
   });
 });
