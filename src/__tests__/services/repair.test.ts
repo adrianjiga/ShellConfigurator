@@ -131,6 +131,32 @@ describe('runRepair', () => {
     expect(result.actions[0]).toMatchObject({ status: 'skipped', detail: 'already configured' });
   });
 
+  it('names the skip itself when the rc writer gives no note', async () => {
+    const deps = makeDeps(
+      report([finding({ kind: 'configure-shell', shellId: 'zsh' })]),
+      undefined,
+      {
+        applyShellConfig: vi.fn().mockReturnValue({ applied: false }),
+      }
+    );
+    const result = await runRepair(null, deps);
+    expect(result.actions[0]).toMatchObject({ status: 'skipped', detail: 'already configured' });
+  });
+
+  it('is not ok when a fix failed, even if the checks pass afterwards', async () => {
+    const deps = makeDeps(
+      report([finding({ kind: 'reinstall-font', fontId: 'Hack' })]),
+      report([]),
+      {
+        installNerdFont: vi.fn().mockRejectedValue(new Error('download failed')),
+      }
+    );
+    const result = await runRepair(null, deps);
+    expect(result.after.ok).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.actions[0]).toMatchObject({ status: 'failed', detail: 'download failed' });
+  });
+
   it('reinstalls starship via the detected package manager', async () => {
     const deps = makeDeps(report([finding({ kind: 'reinstall-starship' })]), undefined, {
       detectPackageManager: vi.fn().mockResolvedValue('brew'),
@@ -283,6 +309,21 @@ describe('formatRepairReport', () => {
       dryRun: false,
     });
     expect(text).toContain('Nothing to repair.');
+  });
+
+  it('lines up failed and skipped actions in the status column', () => {
+    const text = formatRepairReport({
+      before: report([]),
+      after: report([]),
+      actions: [
+        { findingId: 'a', title: 'Nerd Font', status: 'failed', detail: 'download failed' },
+        { findingId: 'b', title: 'Zsh', status: 'skipped', detail: 'already configured' },
+      ],
+      ok: false,
+      dryRun: false,
+    });
+    expect(text).toContain('FAILED  Nerd Font — download failed');
+    expect(text).toContain('SKIPPED Zsh — already configured');
   });
 
   it('labels a dry run and skips the post-repair report', () => {
