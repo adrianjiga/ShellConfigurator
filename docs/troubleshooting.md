@@ -230,9 +230,17 @@ off a terminal). Run it again to undo the run before; `--run <id>` picks one.
   report "already as it was before that run".
 - **"Nothing to roll back."**: no recorded run changed any file, or every run
   has been rolled back already. Runs made before rollback existed kept no
-  copies.
+  copies, and only the newest 50 runs are kept.
+- **"its saved copy cannot be read"** or **"could not be read after that
+  run"**: that file's copy is gone, or the run left the file unreadable (e.g.
+  replaced by a folder). The other files are still put back; fix that one by
+  hand.
 - **Rolled back too far**: a rollback is a run too, so
   `rollback --run <that rollback's id>` (see `--list`) redoes what it undid.
 - **The font or Starship is still there**: rollback only covers files, not the
   font, the Starship binary or the login shell (`chsh`). Use `uninstall
   --font <id> --starship` for those.
+- **"starship: command not found" after rolling back an uninstall**: the
+  uninstall removed Starship (`--starship`), and rollback put back the rc lines
+  that start it but cannot reinstall the binary. Run `shell-configurator repair`
+  (or `apply`) to install it again.
