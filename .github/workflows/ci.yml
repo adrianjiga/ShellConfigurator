@@ -68,9 +68,14 @@ jobs:
       - name: shellcheck
         run: shellcheck scripts/install.sh scripts/releaseNotes.sh scripts/ci/*.sh
       - name: actionlint
+        env:
+          ACTIONLINT_SHA256: 023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757
         run: |
-          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash \
-            | bash -s -- 1.7.7 "$RUNNER_TEMP"
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl -fsSL -o "$archive" \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          echo "$ACTIONLINT_SHA256  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
           "$RUNNER_TEMP/actionlint" -color
       - name: zizmor
         run: pipx run zizmor==1.11.0 --min-severity medium .github/workflows
@@ -145,7 +150,7 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/node-tarball-cache
-          key: node-${{ runner.arch }}-${{ env.NODE_VERSION }}
+          key: node-${{ runner.arch }}-${{ env.NODE_VERSION }}-${{ matrix.image }}-${{ matrix.package-manager }}
       - name: Run the smoke test in ${{ matrix.image }}
         env:
           IMAGE: ${{ matrix.image }}
