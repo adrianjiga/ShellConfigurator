@@ -74,11 +74,19 @@ export function hashOf(file: string): string | null {
   return content === null ? null : sha256Digest(content);
 }
 
-function newRunId(): string {
+/** Creates a new, unused run folder and returns its id. */
+function createRunFolder(): string {
+  fs.mkdirSync(runsDir(), { recursive: true, mode: 0o700 });
   const base = new Date().toISOString().replaceAll(':', '-');
-  let id = base;
-  for (let n = 2; fs.existsSync(runDir(id)); n++) id = `${base}-${n}`;
-  return id;
+  for (let n = 1; ; n++) {
+    const runId = n === 1 ? base : `${base}-${n}`;
+    try {
+      fs.mkdirSync(runDir(runId), { mode: 0o700 });
+      return runId;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+    }
+  }
 }
 
 /**
@@ -87,9 +95,9 @@ function newRunId(): string {
  * could not be put back.
  */
 export function beginRunCapture(files: string[]): RunCapture {
-  const runId = newRunId();
+  const runId = createRunFolder();
   const dir = runDir(runId);
-  fs.mkdirSync(path.join(dir, 'files'), { recursive: true, mode: 0o700 });
+  fs.mkdirSync(path.join(dir, 'files'), { mode: 0o700 });
   const captured = [...new Set(files)].flatMap((file, index): CapturedFile[] => {
     let content: Buffer | null;
     try {

@@ -98,6 +98,18 @@ describe('beginRunCapture / finishRunCapture', () => {
     expect(mode).toBe(0o600);
   });
 
+  it('never reuses an existing run folder', () => {
+    vi.useFakeTimers({ now: new Date('2026-11-14T10:00:00.000Z'), toFake: ['Date'] });
+    try {
+      fs.mkdirSync(runDir('2026-11-14T10-00-00.000Z'), { recursive: true });
+      fs.mkdirSync(runDir('2026-11-14T10-00-00.000Z-2'));
+
+      expect(beginRunCapture([]).runId).toBe('2026-11-14T10-00-00.000Z-3');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('gives two captures in the same millisecond different ids', () => {
     const a = beginRunCapture([]);
     const b = beginRunCapture([]);
