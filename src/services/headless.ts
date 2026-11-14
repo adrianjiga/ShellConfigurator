@@ -401,8 +401,21 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
   return { ...state, installedShells, packageManager, container, terminal };
 }
 
-/** The `apply --dry-run --json` report: the plan and the config a real run would write. */
-export function dryRunPlan(state: WizardState, tasks: InstallTask[]) {
+export type DryRunConfig =
+  | { kind: 'per-shell'; toml: string }
+  | { kind: 'imported'; path: string; toml: string }
+  | { kind: 'kept'; path: string; exists: boolean };
+
+export interface DryRunPlan {
+  dryRun: true;
+  shells: ShellId[];
+  installStarship: boolean;
+  tasks: InstallTask[];
+  config: DryRunConfig;
+}
+
+/** What `apply --dry-run` reports, as text or with --json: the plan and the config a real run would write. */
+export function dryRunPlan(state: WizardState, tasks: InstallTask[]): DryRunPlan {
   const shared = getSharedConfigPath();
   return {
     dryRun: true,
@@ -433,33 +446,30 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
 
   const tasks = buildTaskList(state, plannedResetShells(state));
 
-  if (flags.dryRun && flags.json) {
-    process.stdout.write(`${JSON.stringify(dryRunPlan(state, tasks), null, 2)}\n`);
-    return;
-  }
   if (flags.dryRun) {
+    const plan = dryRunPlan(state, tasks);
+    if (flags.json) {
+      process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
+      return;
+    }
     process.stdout.write('shell-configurator apply (dry run) — nothing will be changed.\n\n');
     process.stdout.write(
-      `Targets: ${state.selectedShells.join(', ') || '(none)'} · ` +
-        `will ${state.skipStarshipInstall ? 'skip' : 'install'} Starship\n`
+      `Targets: ${plan.shells.join(', ') || '(none)'} · ` +
+        `will ${plan.installStarship ? 'install' : 'skip'} Starship\n`
     );
-    printTasks(tasks);
-    if (state.keepExistingConfig) {
-      if (state.sharedConfigToml) {
-        process.stdout.write('\nConfig to keep (no per-shell TOML is generated):\n\n');
-        process.stdout.write(state.sharedConfigToml);
-        if (!state.sharedConfigToml.endsWith('\n')) process.stdout.write('\n');
-      } else {
-        const shared = getSharedConfigPath();
-        process.stdout.write(
-          fs.existsSync(shared)
-            ? `\nConfig to keep: ${shared} (left untouched)\n`
-            : `\nNo config to keep yet: ${shared} does not exist, and a real run would leave that as is.\n`
-        );
-      }
+    printTasks(plan.tasks);
+    const config = plan.config;
+    if (config.kind === 'per-shell') {
+      process.stdout.write(`\nGenerated starship.toml:\n\n${config.toml}`);
+    } else if (config.kind === 'imported') {
+      process.stdout.write('\nConfig to keep (no per-shell TOML is generated):\n\n');
+      process.stdout.write(config.toml.endsWith('\n') ? config.toml : `${config.toml}\n`);
     } else {
-      process.stdout.write('\nGenerated starship.toml:\n\n');
-      process.stdout.write(generateToml(state));
+      process.stdout.write(
+        config.exists
+          ? `\nConfig to keep: ${config.path} (left untouched)\n`
+          : `\nNo config to keep yet: ${config.path} does not exist, and a real run would leave that as is.\n`
+      );
     }
     return;
   }
