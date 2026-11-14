@@ -5,7 +5,7 @@ import { PALETTES } from '../config/palettes.ts';
 import { PRESETS, powerlineDroppedReason } from '../config/presets.ts';
 import { SHELLS } from '../config/shells.ts';
 import { statusLine, statusMark } from '../config/status.ts';
-import { getSharedConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
+import { getSharedConfigPath, getShellConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import {
   type CharacterSymbol,
@@ -441,19 +441,31 @@ export function dryRunPlan(
   };
 }
 
-function printChanges(changes: FileChange[]): void {
-  if (changes.length === 0) {
+function printChanges(plan: DryRunPlan): void {
+  const shownAbove = new Set(
+    plan.config.kind === 'per-shell'
+      ? plan.shells.map((shellId) => getShellConfigPath(shellId))
+      : plan.config.kind === 'imported'
+        ? [plan.config.path]
+        : []
+  );
+  if (plan.changes.length === 0) {
     process.stdout.write('\nNo config or rc file on disk would change.\n');
     return;
   }
-  process.stdout.write('\nChanges to files on disk:\n');
-  for (const change of changes) {
-    process.stdout.write(
-      change.status === 'unreadable'
-        ? `\ncannot read ${change.path}: ${change.error}\n`
-        : `\n${change.diff}`
-    );
+  process.stdout.write('\nChanges to config and rc files on disk:\n');
+  for (const change of plan.changes) {
+    if (change.status === 'unreadable') {
+      process.stdout.write(`\ncannot read ${change.path}: ${change.error}\n`);
+    } else if (change.status === 'create' && shownAbove.has(change.path)) {
+      process.stdout.write(`\ncreate ${change.path}: the config shown above\n`);
+    } else {
+      process.stdout.write(`\n${change.diff}`);
+    }
   }
+  process.stdout.write(
+    '\nA real run also saves a backup of each config it replaces and writes WHAT-CHANGED.md.\n'
+  );
 }
 
 /**
@@ -498,7 +510,7 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
           : `\nNo config to keep yet: ${config.path} does not exist, and a real run would leave that as is.\n`
       );
     }
-    printChanges(plan.changes);
+    printChanges(plan);
     return;
   }
 

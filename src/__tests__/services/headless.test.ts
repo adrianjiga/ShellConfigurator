@@ -649,9 +649,13 @@ describe('runApply', () => {
       };
 
       const text = await output(false);
-      expect(text).toContain('Changes to files on disk:');
+      expect(text).toContain('Changes to config and rc files on disk:');
       expect(text).toContain(
-        `--- /dev/null\n+++ ${path.join(dir, '.config', 'starship', 'bash.toml')}`
+        `create ${path.join(dir, '.config', 'starship', 'bash.toml')}: the config shown above`
+      );
+      expect(text).not.toContain('--- /dev/null');
+      expect(text).toContain(
+        'saves a backup of each config it replaces and writes WHAT-CHANGED.md'
       );
       expect(text).toContain(`--- ${bashrc}\n+++ ${bashrc}\n@@ -1,1 +1,`);
       expect(text).toContain(' alias ll="ls -l"\n+\n+# Added by ShellConfigurator\n');
@@ -665,6 +669,26 @@ describe('runApply', () => {
       );
       expect(fs.readFileSync(bashrc, 'utf8')).toBe('alias ll="ls -l"\n');
       expect(fs.existsSync(path.join(dir, '.config'))).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('diffs an existing per-shell config instead of only pointing at the config above', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    vi.stubEnv('HOME', dir);
+    vi.stubEnv('XDG_CONFIG_HOME', undefined);
+    try {
+      const config = path.join(dir, '.config', 'starship', 'bash.toml');
+      fs.mkdirSync(path.dirname(config), { recursive: true });
+      fs.writeFileSync(config, 'add_newline = false\n');
+      await runApply(flags({ subcommand: 'apply', shells: ['bash'], dryRun: true }));
+      const text = stdoutWrite.mock.calls
+        .map((call: [string, ...unknown[]]) => String(call[0]))
+        .join('');
+      expect(text).toContain(`--- ${config}\n+++ ${config}\n`);
+      expect(text).toContain('-add_newline = false');
     } finally {
       vi.unstubAllEnvs();
       fs.rmSync(dir, { recursive: true, force: true });
