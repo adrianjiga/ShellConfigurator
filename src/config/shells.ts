@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { configHome, homeDir, xdgBaseDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
@@ -46,7 +47,7 @@ export const SHELLS: ShellDef[] = [
     binary: 'zsh',
     label: 'Zsh',
     get rcFile() {
-      const zdotdir = process.env.ZDOTDIR?.trim();
+      const zdotdir = process.env.ZDOTDIR?.trim() || zshenvZdotdir();
       return path.join(zdotdir && path.isAbsolute(zdotdir) ? zdotdir : homeDir(), '.zshrc');
     },
     initLine: 'eval "$(starship init zsh)"',
@@ -116,6 +117,47 @@ export const SHELLS: ShellDef[] = [
     },
   },
 ];
+
+/** `$NAME`, `${NAME}` and `${NAME:-default}` in `value`, or null when one cannot be resolved. */
+function expandShellWord(value: string): string | null {
+  const vars: Record<string, string | undefined> = {
+    ...process.env,
+    HOME: homeDir(),
+    XDG_CONFIG_HOME: configHome(),
+  };
+  let unresolved = false;
+  const expanded = value
+    .replace(/^(["'])(.*)\1$/, '$2')
+    .replace(/^~(?=\/|$)/, homeDir())
+    .replace(
+      /\$\{(\w+):-([^}]*)\}|\$\{(\w+)\}|\$(\w+)/g,
+      (_m, withDefault, fallback, braced, bare) => {
+        const name = withDefault ?? braced ?? bare;
+        const found = vars[name] || (withDefault ? expandShellWord(fallback) : undefined);
+        if (!found) unresolved = true;
+        return found ?? '';
+      }
+    );
+  return unresolved ? null : expanded;
+}
+
+/**
+ * The ZDOTDIR ~/.zshenv sets, which zsh uses even when it is not exported, so
+ * a tool started from zsh does not see it.
+ */
+export function zshenvZdotdir(): string | null {
+  try {
+    const setting = fs
+      .readFileSync(path.join(homeDir(), '.zshenv'), 'utf8')
+      .split('\n')
+      .map((line) => /^\s*(?:export\s+)?ZDOTDIR=(\S+)\s*(?:#.*)?$/.exec(line)?.[1])
+      .filter((value): value is string => value !== undefined)
+      .at(-1);
+    return setting ? expandShellWord(setting) : null;
+  } catch {
+    return null;
+  }
+}
 
 /** The per-shell config the wizard writes; mirrors getShellConfigPath in shellRc.ts. */
 function perShellConfigPath(id: ShellId): string {

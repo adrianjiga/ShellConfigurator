@@ -43,6 +43,8 @@ export function requireScratchHome() {
         ? nodePath.resolve(value)
         : nodePath.join(homeDir, fallback);
   }
+  const zdotdir = process.env.ZDOTDIR?.trim();
+  if (zdotdir && !isWithin(nodePath.resolve(zdotdir), homeDir)) delete process.env.ZDOTDIR;
   return homeDir;
 }
 

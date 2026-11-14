@@ -173,6 +173,17 @@ to undo the later run.
 
 ---
 
+## zsh reads its files from `$ZDOTDIR`
+
+When `ZDOTDIR` is set, zsh reads `$ZDOTDIR/.zshrc` instead of `~/.zshrc`.
+ShellConfigurator uses `ZDOTDIR` from the environment, or else the
+`ZDOTDIR=...` line in `~/.zshenv` (which zsh honours even when it is not
+exported), with `~`, `$HOME`, `$XDG_CONFIG_HOME` and `${VAR:-default}`
+expanded. A setting it cannot expand falls back to `~/.zshrc`; export
+`ZDOTDIR` before running ShellConfigurator in that case.
+
+---
+
 ## Bash on macOS still shows the old prompt
 
 Terminal and iTerm start Bash as a login shell, which reads `~/.bash_profile`
