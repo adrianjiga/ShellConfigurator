@@ -461,7 +461,8 @@ function getMissingStarshipPathDir(): string | null;
 function plannedStarshipRemoval(pm: PackageManager): Promise<StarshipRemoval>;
 // How uninstall --starship would remove Starship: { kind: 'script', path } for the
 // install script's ~/.local/bin binary, { kind: 'package', pm, command } when
-// pacman (-Qqo), apk (--who-owns) or brew (list) says it owns the binary on PATH,
+// pacman (-Qqo) or apk (--who-owns) owns the binary on PATH, or its real path is
+// inside the real path of `brew --prefix starship`,
 // { kind: 'manual', path } for any other binary, { kind: 'absent' } when it is
 // not installed.
 
@@ -517,7 +518,10 @@ function captureRun<T>(
 // only those the run changed in manifest.json ({ version, runId, files: [{ path,
 // before: copy name | null, after: sha256 | null }] }). Best-effort: a capture
 // that cannot be written never stops the run. runId is null then, and when the
-// run changed nothing. Tests get a stub from setup.ts.
+// run changed nothing. Each run gets its own folder (created exclusively), and
+// each file's mode is kept so a restore gets it back. A throwing run rejects
+// with a CapturedRunError carrying its runId, which apply and the wizard still
+// record. Tests get a stub from setup.ts.
 
 function readRunManifest(runId: string): RunManifest | null;
 ```
@@ -527,21 +531,25 @@ function readRunManifest(runId: string): RunManifest | null;
 ```typescript
 function listRollbackRuns(records?: HistoryRecord[]): RollbackRun[];
 // The recorded runs with a manifest, newest first, each marked rolledBack while
-// a rollback of it stands (one that was not itself rolled back).
+// a complete rollback of it stands (one that was not itself rolled back; a
+// rollback recorded `partial` left some changes and does not count).
 
 function defaultRollbackRun(runs: RollbackRun[]): RollbackRun | null;
 // The newest non-rollback run that still stands: what a plain `rollback` undoes.
 
 function planRollback(manifest: RunManifest): RollbackStep[];
-// Per file: put back the copy, or delete a file the run created. A file whose
-// hash no longer matches the run's `after` changed since, and is left alone.
+// Per file: put back the copy's exact bytes and mode, or delete a file the run
+// created. A file whose hash no longer matches the run's `after` changed since,
+// and is left alone (checked again right before each change); one already back
+// to its copy needs nothing.
 
 function runRollback(
   runId: string,
   steps: RollbackStep[],
   opts?: { dryRun?: boolean }
 ): RollbackReport;
-// Statuses: restored | removed | skipped | failed | planned.
+// Statuses: restored | removed | skipped | failed | planned. complete is false
+// while a change of the run stays in place (left: true on that action).
 ```
 
 ### fontExtractor.ts
@@ -784,8 +792,12 @@ Puts back the files a captured run changed (`src/services/rollback.ts`): by
 default the newest install, apply or uninstall that still stands, otherwise the
 run `--run` names (an id from `--list`). Each file goes back to its copy from
 before that run, or is deleted when that run created it. A file that changed
-again since is skipped, so a rollback never overwrites a later edit: roll back
-the later run first. The rollback is captured and recorded (`kind: 'rollback'`,
+again since is skipped (checked again right before it is changed, so an edit
+made at the prompt survives), so a rollback never overwrites a later edit: roll
+back the later run first. Restores keep the exact bytes and the file's mode. A
+rollback that left some changes in place is recorded `partial: true`, and that
+run stays next to roll back; files already restored then report "already as it
+was before that run". The rollback is captured and recorded (`kind: 'rollback'`,
 `rollbackOf`), so a second `rollback` undoes the run before, and
 `rollback --run <rollback id>` redoes the run it undid. It asks like
 `uninstall` (`--yes` off a terminal or with `--json`). A file it could not put
