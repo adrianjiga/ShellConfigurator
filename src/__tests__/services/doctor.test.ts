@@ -218,9 +218,61 @@ describe('runDoctor', () => {
     expect(report.ok).toBe(false);
   });
 
-  it('warns when no config file exists at all', async () => {
-    const report = await runDoctor(baseState(), makeDeps(new Map(), { verifyConfig: vi.fn() }));
+  it('warns when no config file exists at all, without asking starship to load one', async () => {
+    const deps = makeDeps(new Map(), { verifyConfig: vi.fn() });
+    const report = await runDoctor(baseState(), deps);
     expect(find(report, 'config').status).toBe('warn');
+    expect(deps.verifyConfig).not.toHaveBeenCalled();
+  });
+
+  it('reads LC_ALL before LC_CTYPE before LANG', async () => {
+    const locale = async (env: Record<string, string>) =>
+      find(await runDoctor(baseState(), makeDeps(wired(new Map()), { env })), 'locale');
+
+    expect(
+      await locale({ LC_ALL: 'C', LC_CTYPE: 'en_US.UTF-8', LANG: 'en_US.UTF-8' })
+    ).toMatchObject({
+      status: 'warn',
+      detail: 'C is not UTF-8 — Nerd Font glyphs may render as boxes',
+    });
+    expect(await locale({ LC_CTYPE: 'en_US.UTF-8', LANG: 'C' })).toMatchObject({
+      status: 'pass',
+      detail: 'en_US.UTF-8',
+    });
+  });
+
+  it('fails a card shell id it does not know', async () => {
+    const report = await runDoctor(
+      baseState({ selectedShells: ['bogus' as WizardState['selectedShells'][number]] }),
+      makeDeps(wired(new Map()))
+    );
+    expect(find(report, 'shell:bogus')).toMatchObject({
+      status: 'fail',
+      detail: "unknown shell 'bogus'",
+    });
+  });
+
+  it('only warns about a missing Nerd Font when no card asked for one', async () => {
+    const report = await runDoctor(
+      null,
+      makeDeps(wired(new Map()), { hasNerdFonts: vi.fn(() => false) })
+    );
+    const finding = find(report, 'font-installed');
+    expect(finding).toMatchObject({ status: 'warn', detail: 'no Nerd Font found' });
+    expect(finding.fix).toBeUndefined();
+  });
+
+  it('warns without a card when the terminal font is not a Nerd Font', async () => {
+    const report = await runDoctor(
+      null,
+      makeDeps(wired(new Map()), { readFontFamily: vi.fn(() => 'Menlo') })
+    );
+    const finding = find(report, 'font-selected');
+    expect(finding).toMatchObject({
+      status: 'warn',
+      detail: 'kitty uses "Menlo", which is not a Nerd Font',
+    });
+    expect(finding.fix).toBeUndefined();
   });
 
   it('passes the font checks when the setup chose no Nerd Font', async () => {
