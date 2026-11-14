@@ -52,24 +52,30 @@ vi.mock('../generators/shellRc.ts', () => ({
   getSharedConfigPath: () => '/nonexistent/starship.toml',
 }));
 
+const { mockPlannedFileChanges } = vi.hoisted(() => ({
+  mockPlannedFileChanges: vi.fn(),
+}));
+
 vi.mock('../services/fileDiff.ts', async () => {
   const { getShell } = await import('../config/shells.ts');
   const actual =
     await vi.importActual<typeof import('../services/fileDiff.ts')>('../services/fileDiff.ts');
+  mockPlannedFileChanges.mockImplementation((state: { selectedShells: string[] }) =>
+    state.selectedShells.flatMap((shellId) => {
+      const rc = getShell(shellId as 'zsh')?.rcFile;
+      if (!rc) return [];
+      const block = [
+        '+# Added by ShellConfigurator',
+        '+export STARSHIP_CONFIG="/tmp/starship.toml"',
+        `+eval "$(starship init ${shellId})"`,
+      ];
+      const diff = `--- ${rc}\n+++ ${rc}\n@@ -0,0 +1,3 @@\n${block.join('\n')}\n`;
+      return [{ path: rc, status: 'modify', added: 3, removed: 0, diff }];
+    })
+  );
   return {
     diffHunkLines: actual.diffHunkLines,
-    plannedFileChanges: (state: { selectedShells: string[] }) =>
-      state.selectedShells.flatMap((shellId) => {
-        const rc = getShell(shellId as 'zsh')?.rcFile;
-        if (!rc) return [];
-        const block = [
-          '+# Added by ShellConfigurator',
-          '+export STARSHIP_CONFIG="/tmp/starship.toml"',
-          `+eval "$(starship init ${shellId})"`,
-        ];
-        const diff = `--- ${rc}\n+++ ${rc}\n@@ -0,0 +1,3 @@\n${block.join('\n')}\n`;
-        return [{ path: rc, status: 'modify', added: 3, removed: 0, diff }];
-      }),
+    plannedFileChanges: mockPlannedFileChanges,
   };
 });
 
@@ -217,9 +223,12 @@ describe('full wizard walkthrough', () => {
 
     const frame = instance.lastFrame();
     expect(frame).toContain('Review your configuration');
-    // The rc snippet and the generated TOML are shown for the chosen shell.
-    expect(frame).toContain('STARSHIP_CONFIG="/tmp/starship.toml"');
-    expect(frame).toContain('eval "$(starship init zsh)"');
+    expect(mockPlannedFileChanges).toHaveBeenCalledWith(
+      expect.objectContaining({ selectedShells: ['zsh'] }),
+      expect.anything(),
+      null
+    );
+    expect(frame).toMatch(/edit {3}\S*\.zshrc \(\+3 -0\)/);
     expect(frame).toContain('$directory$git_branch$git_status');
     // Reviewing must not have written anything yet.
     expect(mockWriteConfig).not.toHaveBeenCalled();

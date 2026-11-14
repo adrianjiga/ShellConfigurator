@@ -110,6 +110,8 @@ describe('App wizard routing', () => {
     await press(instance, ' '); // drop the first segment
 
     const after = instance.lastFrame()?.match(/(\d+) left segments?/)?.[1];
+    expect(before).toMatch(/^\d+$/);
+    expect(after).toMatch(/^\d+$/);
     expect(Number(after)).toBe(Number(before) - 1);
   });
 });

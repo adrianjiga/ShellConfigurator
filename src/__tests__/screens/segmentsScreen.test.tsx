@@ -52,10 +52,19 @@ describe('SegmentsScreen', () => {
   });
 
   it('renders the configurable modules without character', async () => {
-    const { instance } = setup();
+    const { instance, onNext } = setup();
     await flush();
-    expect(instance.lastFrame()).toContain('Username');
-    expect(instance.lastFrame()).not.toContain('Prompt character');
+    const frame = instance.lastFrame() ?? '';
+    expect(frame).toContain('Username');
+    expect(frame).toContain('1. Directory');
+    expect(frame).toContain('2. Git Branch');
+    expect(frame).not.toMatch(/\b3\. /);
+
+    instance.stdin.write('\r');
+    await flush();
+    expect(onNext).toHaveBeenCalledWith(
+      expect.objectContaining({ leftModules: ['directory', 'git_branch', 'character'] })
+    );
   });
 
   it('shows selected modules in prompt order, then the available ones', async () => {

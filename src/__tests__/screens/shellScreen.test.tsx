@@ -12,13 +12,17 @@ vi.mock('../../services/detector.ts', () => ({
   detectInstalledShellsAsync: vi.fn(),
 }));
 
-afterEach(() => {
-  cleanup();
-  vi.clearAllMocks();
+beforeEach(() => {
+  vi.mocked(detectCurrentShellAsync).mockReset().mockResolvedValue(null);
+  vi.mocked(detectInstalledShellsAsync).mockReset();
 });
 
-function setup() {
-  const state = { ...DEFAULT_STATE, selectedShells: [], installedShells: [] };
+afterEach(() => {
+  cleanup();
+});
+
+function setup(selectedShells: ShellId[] = []) {
+  const state = { ...DEFAULT_STATE, selectedShells, installedShells: [] };
   const onNext = vi.fn();
   const onUpdate = vi.fn();
   const onBack = vi.fn();
@@ -31,7 +35,7 @@ function setup() {
 describe('ShellScreen', () => {
   it('blocks Enter while shell detection is in progress', async () => {
     vi.mocked(detectInstalledShellsAsync).mockReturnValue(new Promise(() => {}));
-    const { instance, onNext } = setup();
+    const { instance, onNext } = setup(['zsh']);
     await flush();
 
     instance.stdin.write('\r');

@@ -4,7 +4,7 @@ import { getShell } from '../../config/shells.ts';
 import { getShellConfigPath } from '../../generators/shellRc.ts';
 import { DoneScreen } from '../../screens/DoneScreen.tsx';
 import { type InstallTaskDeps, runInstallTasks } from '../../services/installTasks.ts';
-import { DEFAULT_STATE, type WizardState } from '../../types.ts';
+import { DEFAULT_STATE, type InstallTask, type WizardState } from '../../types.ts';
 import { pressEsc } from '../helpers/ink.ts';
 import { fakeDeps as baseFakeDeps } from '../helpers/installTasks.ts';
 import { flush } from '../helpers/wait.ts';
@@ -487,19 +487,23 @@ describe('DoneScreen restore failure', () => {
 
 describe('DoneScreen after a failed config write', () => {
   it('does not promise a new prompt after a restart', () => {
-    const { lastFrame } = render(
-      <DoneScreen
-        state={{
-          ...DEFAULT_STATE,
-          selectedShells: ['zsh'],
-          installedShells: ['zsh'],
-          installResults: [
-            { id: 'config', label: 'Write config files', status: 'failed', error: 'EACCES' },
-          ],
-        }}
-      />
+    const frameWith = (configTask: InstallTask) =>
+      render(
+        <DoneScreen
+          state={{
+            ...DEFAULT_STATE,
+            selectedShells: ['zsh'],
+            installedShells: ['zsh'],
+            installResults: [configTask],
+          }}
+        />
+      ).lastFrame();
+    expect(frameWith({ id: 'config', label: 'Write config files', status: 'done' })).toContain(
+      'Restart your terminal'
     );
-    expect(lastFrame()).not.toContain('Restart your terminal');
+    expect(
+      frameWith({ id: 'config', label: 'Write config files', status: 'failed', error: 'EACCES' })
+    ).not.toContain('Restart your terminal');
   });
 });
 

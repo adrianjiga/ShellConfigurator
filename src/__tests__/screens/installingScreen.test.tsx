@@ -1,3 +1,4 @@
+import { Text } from 'ink';
 import { cleanup, render } from 'ink-testing-library';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -269,17 +270,21 @@ describe('InstallingScreen SIGINT', () => {
   it('stops listening for SIGINT, SIGTERM and SIGHUP once the screen is gone', async () => {
     mocks.buildTaskList.mockReturnValue(statusFixture());
     captureSignal();
-    const counts = () =>
-      ['SIGINT', 'SIGTERM', 'SIGHUP'].map(
-        (s) => process.listeners(s).filter((l) => l.toString().includes('receive(signal)')).length
-      );
-    const before = counts();
+    const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+    const before = signals.map((s) => process.listeners(s));
+    const addedSince = () =>
+      signals.map((s, i) => process.listeners(s).filter((l) => !before[i]!.includes(l)).length);
+    const plain = render(<Text>plain</Text>);
+    await flush();
+    const byInk = addedSince();
+    plain.unmount();
+    await flush();
     const { instance } = setup();
     await flush();
-    expect(counts()).toEqual(before.map((n) => n + 1));
+    expect(addedSince()).toEqual(byInk.map((n) => n + 1));
     instance.unmount();
     await flush();
-    expect(counts()).toEqual(before);
+    expect(signals.map((s) => process.listeners(s))).toEqual(before);
   });
 
   it('counts a Ctrl+C key as the first cancel, so a following SIGINT exits', async () => {
@@ -413,6 +418,7 @@ describe('InstallingScreen after the run', () => {
     const { instance } = setup();
     await flush();
     await flush();
+    expect(instance.lastFrame()).toContain('All done');
     instance.stdin.write('c');
     await flush();
     expect(instance.lastFrame()).not.toContain('Cancelling');
