@@ -270,19 +270,29 @@ function showControlCharacters(text: string): string {
   );
 }
 
-/** The `command` and `when` lines of the `[custom.*]` modules in `toml`, which Starship runs on every prompt. */
+/**
+ * Every line of `toml` that may set a command Starship runs on every prompt: a
+ * `command`, `when` or `shell` key in any form (dotted, quoted, inline table),
+ * a `custom` table header, and the rest of a multi-line string such a key
+ * starts. It over-reports rather than miss one, since it is a warning.
+ */
 export function customCommands(toml: string): string[] {
+  const lines = toml.split(/\r?\n/);
   const found: string[] = [];
-  let module: string | null = null;
-  for (const line of toml.split(/\r?\n/)) {
-    const table = /^\s*\[\s*([^\]]+?)\s*\]/.exec(line);
-    if (table) {
-      module = /^custom\./.test(table[1]!) ? table[1]! : null;
-      continue;
+  const key = /(^|[\s.{,])["']?(command|when|shell)["']?\s*=/;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (line.trimStart().startsWith('#')) continue;
+    const header = /^\s*\[\[?[^\]]*\bcustom\b/.test(line);
+    if (!header && !key.test(line)) continue;
+    found.push(line.trim());
+    const quote = /("""|''')/.exec(line)?.[1];
+    if (quote && line.split(quote).length === 2) {
+      while (++i < lines.length) {
+        found.push(lines[i]!.trim());
+        if (lines[i]!.includes(quote)) break;
+      }
     }
-    const key = /^\s*(command|when)\s*=\s*(.+?)\s*$/.exec(line);
-    if (module && key && !/^(true|false)$/.test(key[2]!))
-      found.push(`${module}.${key[1]} = ${key[2]}`);
   }
   return found;
 }
@@ -471,7 +481,7 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
     const commands = customCommands(toml);
     if (commands.length > 0) {
       process.stderr.write(
-        `shell-configurator: the imported config runs these commands on every prompt; check them:\n${commands
+        `shell-configurator: these lines of the imported config may run commands on every prompt; check them:\n${commands
           .map((command) => `  ${showControlCharacters(command)}`)
           .join('\n')}\n`
       );

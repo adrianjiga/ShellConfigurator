@@ -1258,7 +1258,7 @@ describe('runApply', () => {
     );
 
     expect(stderrWrite).toHaveBeenCalledWith(
-      expect.stringContaining('custom.ip.command = "curl -s https://ip.example"')
+      expect.stringContaining('command = "curl -s https://ip.example"')
     );
   });
 
@@ -1452,14 +1452,44 @@ describe('dryRunPlan', () => {
 });
 
 describe('customCommands', () => {
-  it('lists the command and when lines of custom modules only', () => {
-    expect(
-      customCommands(
-        '[directory]\ncommand = "not a module key"\n[custom.git_email]\ncommand = "git config user.email"\nwhen = "git rev-parse"\n[custom.on]\nwhen = true\n'
-      )
-    ).toEqual([
-      'custom.git_email.command = "git config user.email"',
-      'custom.git_email.when = "git rev-parse"',
+  it('lists every line that may set a command, in any TOML form', () => {
+    const toml = [
+      '[directory]',
+      'truncation_length = 3',
+      '[custom.git_email]',
+      'command = "git config user.email"',
+      'when = "git rev-parse"',
+      '[ custom . spaced ]',
+      '"command" = "quoted key"',
+      'custom.dotted.command = "dotted key"',
+      '[custom]',
+      'inline = { command = "inline table", when = true }',
+      'multi = { shell = ["bash"] }',
+      '[custom.long]',
+      'command = """',
+      'curl -s https://example.com',
+      '"""',
+      '# command = "a comment"',
+    ].join('\n');
+
+    expect(customCommands(toml)).toEqual([
+      '[custom.git_email]',
+      'command = "git config user.email"',
+      'when = "git rev-parse"',
+      '[ custom . spaced ]',
+      '"command" = "quoted key"',
+      'custom.dotted.command = "dotted key"',
+      '[custom]',
+      'inline = { command = "inline table", when = true }',
+      'multi = { shell = ["bash"] }',
+      '[custom.long]',
+      'command = """',
+      'curl -s https://example.com',
+      '"""',
     ]);
+  });
+
+  it('finds nothing in a config without commands', () => {
+    expect(customCommands('[directory]\ntruncation_length = 3\n')).toEqual([]);
   });
 });
