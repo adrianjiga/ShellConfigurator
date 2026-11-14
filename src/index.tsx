@@ -32,6 +32,7 @@ import {
   runRollback,
 } from './services/rollback.ts';
 import { captureRun, trackedFiles } from './services/runCapture.ts';
+import { removeWhatChangedSafely, whatChangedPath } from './services/whatChanged.ts';
 import { restoreTty } from './services/tty.ts';
 import {
   DEFAULT_UNINSTALL_DEPS,
@@ -433,7 +434,11 @@ export async function runUninstallCommand(
   }
 
   const { result: report, runId } = changes
-    ? await captureRun(trackedFiles(), () => runUninstall(steps))
+    ? await captureRun([...trackedFiles(), whatChangedPath()], async () => {
+        const result = await runUninstall(steps);
+        removeWhatChangedSafely();
+        return result;
+      })
     : { result: await runUninstall(steps, { dryRun }), runId: null };
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
@@ -527,8 +532,14 @@ export async function runRollbackCommand(
 
   const { result: report, runId } = changes
     ? await captureRun(
-        manifest.files.map((file) => file.path),
-        async () => runRollback(target.runId, steps)
+        [...manifest.files.map((file) => file.path), whatChangedPath()],
+        async () => {
+          const result = runRollback(target.runId, steps);
+          if (!manifest.files.some((file) => file.path === whatChangedPath())) {
+            removeWhatChangedSafely();
+          }
+          return result;
+        }
       )
     : { result: runRollback(target.runId, steps, { dryRun }), runId: null };
   process.stdout.write(

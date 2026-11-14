@@ -16,4 +16,5 @@ vi.mock('../../services/runCapture.ts', async (importOriginal) => ({
 vi.mock('../../services/whatChanged.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/whatChanged.ts')>()),
   writeWhatChangedSafely: vi.fn(() => null),
+  removeWhatChangedSafely: vi.fn(),
 }));

@@ -8,6 +8,7 @@ vi.unmock('../../services/whatChanged.ts');
 import { getShell } from '../../config/shells.ts';
 import { getSharedConfigPath, getShellConfigPath } from '../../generators/shellRc.ts';
 import {
+  removeWhatChangedSafely,
   renderWhatChanged,
   type WhatChangedRun,
   whatChangedPath,
@@ -148,5 +149,14 @@ describe('writeWhatChanged', () => {
     fs.mkdirSync(process.env.XDG_CONFIG_HOME!, { recursive: true });
     fs.writeFileSync(path.join(process.env.XDG_CONFIG_HOME!, 'starship'), 'a file, not a folder');
     expect(writeWhatChangedSafely(run())).toBeNull();
+  });
+});
+
+describe('removeWhatChangedSafely', () => {
+  it('deletes the summary, and does nothing when there is none', () => {
+    const file = writeWhatChanged(run());
+    removeWhatChangedSafely();
+    expect(fs.existsSync(file)).toBe(false);
+    expect(() => removeWhatChangedSafely()).not.toThrow();
   });
 });

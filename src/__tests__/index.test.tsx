@@ -113,6 +113,7 @@ import { homeDir } from '../services/paths.ts';
 import { beginRunCapture, captureRun, finishRunCapture, runDir } from '../services/runCapture.ts';
 import { serializeState } from '../services/state.ts';
 import type { UninstallDeps } from '../services/uninstall.ts';
+import { removeWhatChangedSafely, whatChangedPath } from '../services/whatChanged.ts';
 import { DEFAULT_STATE, type InstallTask, type ShellId } from '../types.ts';
 
 describe('index CLI handling', () => {
@@ -741,6 +742,7 @@ describe('index uninstall command', () => {
   const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
 
   it('shows the plan and removes nothing when the user says no', async () => {
+    vi.mocked(removeWhatChangedSafely).mockClear();
     const io = fakeIo({ confirm: vi.fn().mockResolvedValue(false) });
 
     await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);
@@ -750,9 +752,11 @@ describe('index uninstall command', () => {
     expect(output()).toContain('Nothing was changed.');
     expect(io.deps.removeManagedRcBlocks).not.toHaveBeenCalled();
     expect(mockRecordRun).not.toHaveBeenCalled();
+    expect(removeWhatChangedSafely).not.toHaveBeenCalled();
   });
 
   it('removes everything once confirmed, records the run and points at rollback', async () => {
+    vi.mocked(removeWhatChangedSafely).mockClear();
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
       result: await run(),
       runId: 'run-9',
@@ -766,6 +770,8 @@ describe('index uninstall command', () => {
     expect(output()).toContain('REMOVED Zsh config');
     expect(output()).toContain('Undo it with: shell-configurator rollback');
     expect(output()).not.toContain('  cp ');
+    expect(removeWhatChangedSafely).toHaveBeenCalledOnce();
+    expect(vi.mocked(captureRun).mock.lastCall?.[0]).toContain(whatChangedPath());
     expect(mockRecordRun).toHaveBeenCalledWith({
       kind: 'uninstall',
       command: 'uninstall',
@@ -983,8 +989,11 @@ describe('index rollback command', () => {
     recordedRun('install', 'one');
     const second = recordedRun('apply', 'two');
     const prompt = io();
+    vi.mocked(removeWhatChangedSafely).mockClear();
 
     await runRollbackCommand(parseCliArgs(['rollback']), 'rollback', prompt);
+
+    expect(removeWhatChangedSafely).toHaveBeenCalledOnce();
 
     expect(prompt.confirm).toHaveBeenCalled();
     expect(fs.readFileSync(rc(), 'utf8')).toBe('one');
@@ -997,6 +1006,22 @@ describe('index rollback command', () => {
       rollbackOf: second,
       partial: false,
     });
+  });
+
+  it('keeps a summary that the run it rolls back had removed', async () => {
+    process.env.XDG_CONFIG_HOME = path.join(tmpDir, 'config');
+    fs.mkdirSync(path.dirname(whatChangedPath()), { recursive: true });
+    fs.writeFileSync(whatChangedPath(), 'summary');
+    const capture = beginRunCapture([whatChangedPath()]);
+    fs.rmSync(whatChangedPath());
+    const runId = finishRunCapture(capture)!.runId;
+    appendHistory({ version: 1, timestamp: new Date().toISOString(), kind: 'apply', runId });
+    vi.mocked(removeWhatChangedSafely).mockClear();
+
+    await runRollbackCommand(parseCliArgs(['rollback', '--yes']), 'rollback', io());
+
+    expect(fs.readFileSync(whatChangedPath(), 'utf8')).toBe('summary');
+    expect(removeWhatChangedSafely).not.toHaveBeenCalled();
   });
 
   it('records a rollback that left a change in place as partial', async () => {
@@ -1044,7 +1069,9 @@ describe('index rollback command', () => {
 
   it('only prints the plan in a dry run', async () => {
     recordedRun('install', 'one');
+    vi.mocked(removeWhatChangedSafely).mockClear();
     await runRollbackCommand(parseCliArgs(['rollback', '--dry-run']), 'rollback', io());
+    expect(removeWhatChangedSafely).not.toHaveBeenCalled();
     expect(output()).toContain(`PLANNED ${rc()}`);
     expect(fs.existsSync(rc())).toBe(true);
   });

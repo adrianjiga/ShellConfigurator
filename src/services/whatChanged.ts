@@ -96,6 +96,16 @@ export function writeWhatChanged(run: WhatChangedRun): string {
   return file;
 }
 
+/**
+ * Deletes the summary once uninstall or rollback has changed files, since it
+ * would describe a run that no longer stands. Never throws.
+ */
+export function removeWhatChangedSafely(): void {
+  try {
+    fs.rmSync(whatChangedPath(), { force: true });
+  } catch {}
+}
+
 /** `writeWhatChanged` that never throws: the summary must not fail a finished run. */
 export function writeWhatChangedSafely(run: WhatChangedRun): string | null {
   try {
