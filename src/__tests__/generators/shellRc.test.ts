@@ -604,6 +604,19 @@ describe('applyShellConfig', () => {
     expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
+  it('still recognises managed lines that gained trailing spaces', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () =>
+        `# Added by ShellConfigurator  \nexport STARSHIP_CONFIG='${expectedConfigPath}'  \neval "$(starship init zsh)"  \n`
+    );
+
+    const result = applyShellConfig('zsh');
+
+    expect(result).toMatchObject({ applied: false, note: 'already configured' });
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+  });
+
   it('creates the rc when its folder exists but the file does not', () => {
     const rcPath = getShell('zsh')!.rcFile!;
     vi.mocked(fs.existsSync).mockImplementation((p) => String(p) !== rcPath);
@@ -987,6 +1000,19 @@ describe('resetSharedShellConfig', () => {
     expect(written).toContain('unset STARSHIP_CONFIG');
     expect(written).toContain('# Added by ShellConfigurator');
     expect(fs.renameSync).toHaveBeenCalled();
+  });
+
+  it('keeps an adopt block and adds the unset guard as a block of its own', () => {
+    const adopt = '# Added by ShellConfigurator (shared config)\neval "$(starship init bash)"\n';
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => adopt);
+
+    const result = resetSharedShellConfig('bash');
+
+    expect(result.applied).toBe(true);
+    expect(lastWrittenContent()).toBe(
+      `${adopt}\n# Added by ShellConfigurator\nunset STARSHIP_CONFIG\n`
+    );
   });
 
   it('uses fish syntax for the unset line', () => {
