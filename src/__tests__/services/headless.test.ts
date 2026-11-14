@@ -1489,6 +1489,12 @@ describe('customCommands', () => {
     ]);
   });
 
+  it('lists a key or table spelled with escapes, which could hide a command', () => {
+    expect(
+      customCommands('["\\u0063ustom".x]\n"\\u0063ommand" = "id"\nformat = "\\u2192 $all"\n')
+    ).toEqual(['["\\u0063ustom".x]', '"\\u0063ommand" = "id"']);
+  });
+
   it('finds nothing in a config without commands', () => {
     expect(customCommands('[directory]\ntruncation_length = 3\n')).toEqual([]);
   });

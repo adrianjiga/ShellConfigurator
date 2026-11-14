@@ -284,7 +284,8 @@ export function customCommands(toml: string): string[] {
     const line = lines[i]!;
     if (line.trimStart().startsWith('#')) continue;
     const header = /^\s*\[\[?[^\]]*\bcustom\b/.test(line);
-    if (!header && !key.test(line)) continue;
+    const escapedKey = /^[^=]*\\[uU]/.test(line) || /^\s*\[[^\]]*\\[uU]/.test(line);
+    if (!header && !escapedKey && !key.test(line)) continue;
     found.push(line.trim());
     const quote = /("""|''')/.exec(line)?.[1];
     if (quote && line.split(quote).length === 2) {
