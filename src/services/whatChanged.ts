@@ -4,6 +4,7 @@ import { getShell, setupCommand } from '../config/shells.ts';
 import { statusMark } from '../config/status.ts';
 import { getSharedConfigPath, getShellConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
 import { fontIdToInstall, type InstallTask, type WizardState } from '../types.ts';
+import { redactUrls } from './debugInfo.ts';
 import { TASK_IDS } from './installTasks.ts';
 import { configHome, redactHome } from './paths.ts';
 import type { RunManifest } from './runCapture.ts';
@@ -20,6 +21,12 @@ export interface WhatChangedRun {
   results: InstallTask[];
   manifest: RunManifest | null;
   command?: string;
+}
+
+function codeSpan(text: string): string {
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = '`'.repeat(longest + 1);
+  return longest === 0 ? `${fence}${text}${fence}` : `${fence} ${text} ${fence}`;
 }
 
 function fileChange(file: RunManifest['files'][number]): string {
@@ -49,7 +56,7 @@ export function renderWhatChanged(run: WhatChangedRun): string {
   const lines = [
     '# What ShellConfigurator changed',
     '',
-    `${run.kind === 'install' ? 'Wizard install' : 'Headless apply'} on ${run.timestamp}${run.command ? ` (\`shell-configurator ${run.command}\`)` : ''}${run.manifest ? `, run id \`${run.manifest.runId}\`` : ''}.`,
+    `${run.kind === 'install' ? 'Wizard install' : 'Headless apply'} on ${run.timestamp}${run.command ? ` (${codeSpan(`shell-configurator ${redactUrls(run.command)}`)})` : ''}${run.manifest ? `, run id \`${run.manifest.runId}\`` : ''}.`,
     '',
     '## Tasks',
     '',

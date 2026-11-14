@@ -107,6 +107,20 @@ describe('renderWhatChanged', () => {
     expect(text).toContain('`shell-configurator uninstall` removes the Starship lines;');
   });
 
+  it('drops URL credentials and queries from the command and keeps a backtick inside its code span', () => {
+    const text = renderWhatChanged(
+      run({
+        command:
+          "apply --import-url 'https://user:token@example.com/cfg.toml?sig=abc' --shells 'a`b'",
+      })
+    );
+    expect(text).not.toContain('token');
+    expect(text).not.toContain('sig=abc');
+    expect(text).toContain(
+      "(`` shell-configurator apply --import-url https://example.com/cfg.toml --shells 'a`b' ``)"
+    );
+  });
+
   it('shows the home directory as ~', () => {
     const text = renderWhatChanged(
       run({
