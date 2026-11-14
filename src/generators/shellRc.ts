@@ -271,17 +271,16 @@ export interface RcIo {
   readFile: (path: string) => string;
 }
 
+const FS_RC_IO: RcIo = {
+  exists: (filePath) => fs.existsSync(filePath),
+  readFile: (filePath) => fs.readFileSync(filePath, 'utf8'),
+};
+
 /**
  * Of the given installed shells, the ones whose rc actually loads Starship.
  * Clearing a leaked STARSHIP_CONFIG only makes sense where Starship runs.
  */
-export function shellsWithStarshipInit(
-  shells: ShellId[],
-  io: RcIo = {
-    exists: (filePath) => fs.existsSync(filePath),
-    readFile: (filePath) => fs.readFileSync(filePath, 'utf8'),
-  }
-): ShellId[] {
+export function shellsWithStarshipInit(shells: ShellId[], io: RcIo = FS_RC_IO): ShellId[] {
   return shells.filter((shellId) => {
     const shell = getShell(shellId);
     if (!shell?.rcFile) return false;
@@ -300,14 +299,9 @@ export function shellsWithStarshipInit(
  * nushell's autoload file exists (written by the documented one-liner), or
  * powershell's $PROFILE contains the init line.
  */
-export interface ManualSetupIo {
-  exists: (path: string) => boolean;
-  readFile: (path: string) => string;
-}
-
 export function manualSetupAppliedWith(
   shell: ShellDef,
-  io: ManualSetupIo,
+  io: RcIo,
   pointAtSharedConfig = false
 ): boolean {
   if (!shell.initPath) return false;
@@ -331,14 +325,7 @@ export function manualSetupAppliedWith(
 }
 
 export function manualSetupApplied(shell: ShellDef, pointAtSharedConfig = false): boolean {
-  return manualSetupAppliedWith(
-    shell,
-    {
-      exists: (filePath) => fs.existsSync(filePath),
-      readFile: (filePath) => fs.readFileSync(filePath, 'utf8'),
-    },
-    pointAtSharedConfig
-  );
+  return manualSetupAppliedWith(shell, FS_RC_IO, pointAtSharedConfig);
 }
 
 /**
