@@ -2,6 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import { useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { PickerRow } from '../components/PickerRow.tsx';
+import { editedText } from '../components/textInput.ts';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import {
@@ -197,11 +198,6 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
       return;
     }
 
-    if (key.backspace || key.delete) {
-      setFilter(viewRef.current.filter.slice(0, -1));
-      return;
-    }
-
     if (char === ' ') {
       toggleRow();
       return;
@@ -212,12 +208,9 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
       return;
     }
 
-    // Everything printable narrows the list. Control and meta combos are not text,
-    // and a pasted line break is dropped.
-    const text = char.replace(/[\r\n]/g, '');
-    if (text && !key.ctrl && !key.meta) {
-      setFilter(viewRef.current.filter + text);
-    }
+    // Everything typed narrows the list; Backspace widens it again.
+    const next = editedText(viewRef.current.filter, char, key);
+    if (next !== null) setFilter(next);
   });
 
   return (

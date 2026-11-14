@@ -2,6 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import { type ReactNode, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { PickerRow } from '../components/PickerRow.tsx';
+import { editedText } from '../components/textInput.ts';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { colorsEnabled, uiColor } from '../config/colors.ts';
 import {
@@ -215,15 +216,9 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
         return;
       }
       // Editing the draft clears the error the last attempt left.
-      if (key.backspace || key.delete) {
-        setSubsDraft((d) => d.slice(0, -1));
-        setSubsError(null);
-        return;
-      }
-      // A pasted line break is dropped rather than put into the draft.
-      const text = char.replace(/[\r\n]/g, '');
-      if (text && !key.ctrl && !key.meta) {
-        setSubsDraft((d) => d + text);
+      const draft = editedText(subsDraftRef.current, char, key);
+      if (draft !== null) {
+        setSubsDraft(draft);
         setSubsError(null);
       }
       return;
