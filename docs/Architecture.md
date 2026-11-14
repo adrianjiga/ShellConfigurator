@@ -81,10 +81,10 @@ The navigation logic itself lives in `src/stepMachine.ts` as two pure functions,
 
 ### Navigation Functions
 
-| Function                      | Behavior                                                                                       |
-| ----------------------------- | ---------------------------------------------------------------------------------------------- |
+| Function                      | Behavior                                                                                                                           |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `getNextStep(state, update?)` | Pure — merges `update`, advances to the next step, skipping `font_select` when no font is being picked and `installing` in dry-run |
-| `getPrevStep(state)`          | Pure — moves to the previous step, honoring the conditional `font_select` skip; never leaves `installing` or `done` |
+| `getPrevStep(state)`          | Pure — moves to the previous step, honoring the conditional `font_select` skip; never leaves `installing` or `done`                |
 
 `src/app.tsx` wraps these in state setters: `goNext(update?)` calls `getNextStep` via a functional `setState` updater, `goBack()` calls `getPrevStep`. `advanceTo(step, update?)` jumps straight to a step. InstallingScreen's `onNext` is `finishInstall(update?)`, which records the install outcome and then calls `advanceTo('done', update)` with the task results.
 
@@ -176,18 +176,18 @@ App (owns state)
 
 ### Which Screens Set Which State
 
-| Screen                 | Fields Updated                                                                                                                                  |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| WelcomeScreen          | `packageManager`, `terminal`, `container`, `skipStarshipInstall`                                                                                |
-| FontCheckScreen        | `hasNerdFont`, `nerdFontToInstall`                                                                                                              |
-| FontSelectScreen       | `nerdFontToInstall`, `hasNerdFont`                                                                                                              |
-| PresetScreen           | `preset`, `leftModules`, `rightModules`, `palette`, `powerline`                                                                                 |
-| SegmentsScreen (left)  | `leftModules`, `rightModules` (drops modules now on the left; live via `onUpdate`)                                                              |
-| SegmentsScreen (right) | `rightModules` (live via `onUpdate`)                                                                                                            |
+| Screen                 | Fields Updated                                                                                                                                                        |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| WelcomeScreen          | `packageManager`, `terminal`, `container`, `skipStarshipInstall`                                                                                                      |
+| FontCheckScreen        | `hasNerdFont`, `nerdFontToInstall`                                                                                                                                    |
+| FontSelectScreen       | `nerdFontToInstall`, `hasNerdFont`                                                                                                                                    |
+| PresetScreen           | `preset`, `leftModules`, `rightModules`, `palette`, `powerline`                                                                                                       |
+| SegmentsScreen (left)  | `leftModules`, `rightModules` (drops modules now on the left; live via `onUpdate`)                                                                                    |
+| SegmentsScreen (right) | `rightModules` (live via `onUpdate`)                                                                                                                                  |
 | StyleScreen            | `characterSymbol`, `palette`, `powerline`, `continuationPrompt`, `addNewline`, `vimMode`, `directoryTruncationLength`, `directorySubstitutions` (live via `onUpdate`) |
-| ShellScreen            | `selectedShells`, `installedShells`, `setDefaultShell`                                                                                          |
-| InstallingScreen       | `installResults` (final task list passed via `finishInstall(update)`)                                                                           |
-| DoneScreen             | (reads `installResults` for status display)                                                                                                     |
+| ShellScreen            | `selectedShells`, `installedShells`, `setDefaultShell`                                                                                                                |
+| InstallingScreen       | `installResults` (final task list passed via `finishInstall(update)`)                                                                                                 |
+| DoneScreen             | (reads `installResults` for status display)                                                                                                                           |
 
 ### Live Preview Sync
 
