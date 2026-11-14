@@ -73,7 +73,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
       exit();
       return;
     }
-    if (char.toLowerCase() === 's' && canShare && shared === null) {
+    if (char.toLowerCase() === 's' && canShare && !(shared && 'file' in shared)) {
       try {
         setShared({ file: writeShareFile(state) });
       } catch (err) {
@@ -380,7 +380,10 @@ export function DoneScreen({ state }: DoneScreenProps) {
                 Saved the prompt to share: <Text color={uiColor('cyan')}>{shared.file}</Text>
               </>
             ) : (
-              <Text color={uiColor('red')}>Could not save the prompt: {shared.error}</Text>
+              <>
+                <Text color={uiColor('red')}>Could not save the prompt: {shared.error}</Text> Press{' '}
+                <Text color={uiColor('cyan')}>s</Text> to try again.
+              </>
             )}
           </Text>
         </Box>

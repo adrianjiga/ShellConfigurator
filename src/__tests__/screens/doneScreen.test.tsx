@@ -510,7 +510,7 @@ describe('DoneScreen share', () => {
     );
   });
 
-  it('says why it could not save', async () => {
+  it('says why it could not save, and saves on another s', async () => {
     mocks.writeShareFile.mockImplementationOnce(() => {
       throw new Error('EACCES: permission denied');
     });
@@ -519,7 +519,14 @@ describe('DoneScreen share', () => {
     instance.stdin.write('s');
     await flush();
     expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
-      'Could not save the prompt: EACCES: permission denied'
+      'Could not save the prompt: EACCES: permission denied Press s to try again.'
+    );
+
+    instance.stdin.write('s');
+    await flush();
+    expect(mocks.writeShareFile).toHaveBeenCalledTimes(2);
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
+      'Saved the prompt to share: /work/starship-prompt.md'
     );
   });
 
