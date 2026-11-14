@@ -25,7 +25,6 @@ import {
 import { recordStarshipVersion } from './cache.ts';
 import { detectInstalledShellsAsync, isStarshipInstalledAsync } from './detector.ts';
 import { errorMessage } from './errors.ts';
-import { runCapture } from './exec.ts';
 import {
   fontLabel,
   getFontFamily,
@@ -33,6 +32,7 @@ import {
   installNerdFont,
   installShell,
   installStarship,
+  readStarshipVersion,
   setDefaultShell,
   shellInstallSupported,
   verifyStarshipConfig,
@@ -87,15 +87,7 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   resetSharedShellConfig,
   getShellsUsingStarship: async () => shellsWithStarshipInit(await detectInstalledShellsAsync()),
   getMissingStarshipPathDir,
-  readStarshipVersion: async (pathDir) => {
-    const env: Record<string, string | undefined> = { ...process.env };
-    env.PATH = `${pathDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`;
-    try {
-      return await runCapture('starship', ['-V'], { env });
-    } catch {
-      return null;
-    }
-  },
+  readStarshipVersion,
   verifyConfig: (configPath, pathDir) => verifyStarshipConfig(configPath, pathDir ?? null),
   wireTerminalFont,
 };

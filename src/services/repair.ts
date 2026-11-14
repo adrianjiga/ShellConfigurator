@@ -11,12 +11,12 @@ import {
   shellPointsAtShared,
 } from './doctor.ts';
 import { errorMessage } from './errors.ts';
-import { runCapture } from './exec.ts';
 import {
   fontLabel,
   getMissingStarshipPathDir,
   installNerdFont,
   installStarship,
+  readStarshipVersion,
 } from './installer.ts';
 import { type TerminalFontResult, terminalLabel, wireTerminalFont } from './terminalFont.ts';
 
@@ -60,17 +60,6 @@ export interface RepairDeps {
   recordStarshipVersion: (version: string) => void;
   getMissingStarshipPathDir: () => string | null;
   readStarshipVersion: (pathDir: string | null) => Promise<string | null>;
-}
-
-/** Resolves the freshly installed binary even when its dir is not on PATH yet. */
-async function readStarshipVersion(pathDir: string | null): Promise<string | null> {
-  const env: Record<string, string | undefined> = { ...process.env };
-  if (pathDir) env.PATH = `${pathDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`;
-  try {
-    return await runCapture('starship', ['-V'], { env });
-  } catch {
-    return null;
-  }
 }
 
 export const DEFAULT_REPAIR_DEPS: RepairDeps = {

@@ -191,6 +191,17 @@ function withPathDir(dir: string | null): NodeJS.ProcessEnv['PATH'] {
   return current ? `${dir}${path.delimiter}${current}` : dir;
 }
 
+/** `starship -V`, with `pathDir` on PATH for a script install PATH lacks; null when it fails. */
+export async function readStarshipVersion(pathDir: string | null): Promise<string | null> {
+  try {
+    return await runCapture('starship', ['-V'], {
+      env: { ...process.env, PATH: withPathDir(pathDir) },
+    });
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Rejects when starship cannot load the config at `configPath`. `print-config`
  * exits 0 even on a broken config, so its warnings on stderr are the failure.

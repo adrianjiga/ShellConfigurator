@@ -24,6 +24,7 @@ import {
   getFontFamily,
   getMissingStarshipPathDir,
   getNerdFontsDir,
+  readStarshipVersion,
   verifyStarshipConfig,
 } from './installer.ts';
 import { readTerminalFontFamily, terminalLabel } from './terminalFont.ts';
@@ -76,7 +77,7 @@ export interface DoctorDeps {
 export const DEFAULT_DOCTOR_DEPS: DoctorDeps = {
   isStarshipInstalled: isStarshipInstalledAsync,
   getMissingStarshipPathDir,
-  readStarshipVersion: (pathDir) => readStarshipVersion(pathDir),
+  readStarshipVersion,
   detectCurrentShell: detectCurrentShellAsync,
   readCachedStarshipVersion: () => cachedStarshipVersion(),
   detectInstalledShells: detectInstalledShellsAsync,
@@ -102,20 +103,6 @@ async function hasBundledNerdFonts(terminalId: TerminalId): Promise<boolean> {
     return Number(match[1]) > 0 || Number(match[2]) >= 36;
   } catch {
     return false;
-  }
-}
-
-function withPathDir(dir: string): string {
-  return `${dir}${process.env.PATH ? `:${process.env.PATH}` : ''}`;
-}
-
-async function readStarshipVersion(pathDir: string): Promise<string | null> {
-  try {
-    return await runCapture('starship', ['-V'], {
-      env: { ...process.env, PATH: withPathDir(pathDir) },
-    });
-  } catch {
-    return null;
   }
 }
 
