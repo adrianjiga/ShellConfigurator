@@ -6,8 +6,9 @@ import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { posixShellQuote } from './config/shells.ts';
 import { restoreConfigBackups } from './generators/shellRc.ts';
+import { generateToml } from './generators/starship.ts';
 import type { CliFlags } from './services/args.ts';
-import { parseCliArgs, quoteArgv } from './services/args.ts';
+import { parseCliArgs, quoteArgv, SUBCOMMANDS } from './services/args.ts';
 import { COMPLETION_SHELLS, type CompletionShell } from './services/cliSurface.ts';
 import { completionScript } from './services/completions.ts';
 import {
@@ -17,7 +18,7 @@ import {
   formatDebugInfo,
 } from './services/debugInfo.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
-import { CliRunError, CliUsageError } from './services/errors.ts';
+import { CliRunError, CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
 import { lastRunShells, recordRunSafely } from './services/history.ts';
 import { formatListing, listEntries } from './services/listings.ts';
@@ -32,6 +33,13 @@ import {
   runRollback,
 } from './services/rollback.ts';
 import { captureRun, trackedFiles } from './services/runCapture.ts';
+import {
+  DEFAULT_PROBE_DEPS,
+  formatTimings,
+  type ProbeDeps,
+  type TimingsReport,
+  timePrompt,
+} from './services/starshipProbe.ts';
 import { restoreTty } from './services/tty.ts';
 import {
   DEFAULT_UNINSTALL_DEPS,
@@ -95,6 +103,7 @@ Usage:
   shell-configurator rollback     put back the files the last run changed
   shell-configurator debug-info   print a report of the setup to attach to a bug report
   shell-configurator completions <bash|zsh|fish>   print a shell completion script
+  shell-configurator timings      time each prompt module here and suggest fixes for slow ones
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
@@ -174,6 +183,12 @@ rollback options (undoes the newest run that changed files; asks first):
 debug-info options (reads only; e.g. shell-configurator debug-info > issue.md):
   --json               Print the report data as JSON instead of Markdown
   Your home directory is shown as ~ so the report does not name you.
+
+timings options (reads only; times the modules in the current folder):
+  --config <file>      Time this starship.toml instead of one built from the
+                       generate flags (--preset, --palette, --state, ...)
+  --json               Print the timings and suggestions as JSON
+  Modules run in parallel, so the prompt is about as slow as its slowest one.
 
 completions (install the script where your shell loads completions from):
   bash   shell-configurator completions bash > ~/.local/share/bash-completion/completions/shell-configurator
@@ -292,11 +307,24 @@ function presentFlags(flags: CliFlags): string[] {
     [flags.starship, '--starship'],
     [flags.list, '--list'],
     [flags.runId, '--run'],
+    [flags.configFile, '--config'],
   ];
   for (const [value, name] of others) if (value) present.push(name);
   return present;
 }
 
+const LOOK_FLAGS = [
+  '--preset',
+  '--palette',
+  '--powerline',
+  '--no-powerline',
+  '--font',
+  '--has-nerd-font',
+  '--no-nerd-font',
+  '--character',
+  '--state',
+];
+const TIMINGS_FLAGS = new Set([...LOOK_FLAGS, '--config', '--json']);
 const UNINSTALL_FLAGS = new Set([
   '--shells',
   '--font',
@@ -554,6 +582,51 @@ export async function runRollbackCommand(
   }
 }
 
+/**
+ * Times every module of a config in the current folder: the one --config names,
+ * or one built from the config flags like generate. Changes nothing.
+ */
+export async function runTimingsCommand(
+  flags: CliFlags,
+  deps: ProbeDeps = DEFAULT_PROBE_DEPS
+): Promise<void> {
+  const present = presentFlags(flags);
+  const unused = present.filter((flag) => !TIMINGS_FLAGS.has(flag));
+  if (unused.length > 0) {
+    throw new CliUsageError(`${unused.join(', ')} cannot be used with timings.`);
+  }
+  const building = present.filter((flag) => LOOK_FLAGS.includes(flag));
+  if (flags.configFile && building.length > 0) {
+    throw new CliUsageError(
+      `--config times an existing file, so ${building.join(', ')} cannot be used with it.`
+    );
+  }
+  let toml: string;
+  let config: string;
+  if (flags.configFile) {
+    try {
+      toml = readFileSync(flags.configFile, 'utf8');
+    } catch (err) {
+      throw new CliUsageError(`Could not read '${flags.configFile}': ${errorMessage(err)}`);
+    }
+    config = flags.configFile;
+  } else {
+    toml = generateToml(stateFromFlags(flags));
+    config = 'built from the flags';
+  }
+  let report: TimingsReport;
+  try {
+    report = await timePrompt(toml, process.cwd(), deps);
+  } catch (err) {
+    throw new CliRunError(errorMessage(err));
+  }
+  process.stdout.write(
+    flags.json
+      ? `${JSON.stringify({ config, ...report }, null, 2)}\n`
+      : formatTimings(report, config)
+  );
+}
+
 export function runCompletionsCommand(flags: CliFlags): void {
   const unused = presentFlags(flags);
   if (unused.length > 0) {
@@ -589,7 +662,7 @@ export async function runDebugInfoCommand(
 }
 
 /**
- * Runs a headless subcommand (`generate`, `apply`, `doctor`, `repair`, `uninstall`, `rollback` or `debug-info`) to completion,
+ * Runs a headless subcommand (one of SUBCOMMANDS) to completion,
  * returning true when the flags targeted one so the Ink wizard is skipped
  * entirely. Errors propagate for the caller's fatal handler — headless runs
  * never render. `command` is the original invocation line, recorded for
@@ -606,6 +679,9 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.starship && flags.subcommand !== 'uninstall') {
     throw new CliUsageError('--starship only applies to uninstall.');
   }
+  if (flags.configFile && flags.subcommand !== 'timings') {
+    throw new CliUsageError('--config only applies to timings.');
+  }
   if ((flags.list || flags.runId) && flags.subcommand !== 'rollback') {
     throw new CliUsageError(`${flags.list ? '--list' : '--run'} only applies to rollback.`);
   }
@@ -619,6 +695,10 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   }
   if (flags.subcommand === 'completions') {
     runCompletionsCommand(flags);
+    return true;
+  }
+  if (flags.subcommand === 'timings') {
+    await runTimingsCommand(flags);
     return true;
   }
   if (flags.subcommand === 'uninstall') {
@@ -655,7 +735,7 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.fix) dropped.push('--fix');
   if (dropped.length > 0) {
     throw new CliUsageError(
-      `${dropped.join(', ')} require a subcommand (generate, apply, doctor, repair, uninstall, rollback, debug-info or completions).`
+      `${dropped.join(', ')} require a subcommand (${SUBCOMMANDS.join(', ')}).`
     );
   }
   return false;

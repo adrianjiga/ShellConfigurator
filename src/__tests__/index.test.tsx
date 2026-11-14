@@ -100,6 +100,7 @@ import {
   runGlobalFlags,
   runHeadlessCommand,
   runRollbackCommand,
+  runTimingsCommand,
   runUninstallCommand,
   type UninstallIo,
 } from '../index.tsx';
@@ -1292,5 +1293,78 @@ describe('index list flags', () => {
   it('documents the list flags in the help text', () => {
     runGlobalFlags(parseCliArgs(['--help']));
     expect(output()).toContain('--list-presets | --list-modules | --list-fonts [--json]');
+  });
+});
+
+describe('index timings command', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+  const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
+  const TIMINGS = ` Here are the timings of modules in your prompt (>=1ms or output):
+ git_status  -  320ms  -   "[?1] "
+ character   -   <1ms  -   "> "
+`;
+  const deps = (installed = true) => ({
+    isStarshipInstalled: async () => installed,
+    run: vi.fn(async (_command: string, _path: string, configPath: string) => ({
+      stdout: TIMINGS,
+      stderr: `config was ${fs.readFileSync(configPath, 'utf8').length} bytes`,
+    })),
+  });
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+  });
+  afterEach(() => stdoutWrite.mockRestore());
+
+  it('times a config built from the flags in the current folder, with suggestions', async () => {
+    const probe = deps();
+    await runTimingsCommand(parseCliArgs(['timings', '--preset', 'pure-prompt']), probe);
+
+    expect(probe.run).toHaveBeenCalledWith('timings', process.cwd(), expect.any(String));
+    expect(output()).toContain('(config: built from the flags)');
+    expect(output()).toMatch(/git_status\s+320ms {2}slow/);
+    expect(output()).toContain('Suggestions:');
+    expect(output()).toContain('git_status took 320ms');
+  });
+
+  it('times the file --config names, as JSON with --json', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-timings-'));
+    const config = path.join(dir, 'starship.toml');
+    fs.writeFileSync(config, 'format = "$git_status$character"\n');
+    try {
+      await runTimingsCommand(parseCliArgs(['timings', '--config', config, '--json']), deps());
+      expect(JSON.parse(output())).toMatchObject({ config, slowestMs: 320, slow: true });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    [['--config', 'x', '--preset', 'pure-prompt'], /--config times an existing file, so --preset/],
+    [['--config', '/no/such/file'], /Could not read '\/no\/such\/file'/],
+    [['--shells', 'zsh'], /--shells cannot be used with timings/],
+    [['--yes'], /--yes cannot be used with timings/],
+  ])('rejects %o', async (args, message) => {
+    await expect(runTimingsCommand(parseCliArgs(['timings', ...args]), deps())).rejects.toThrow(
+      message
+    );
+  });
+
+  it('says Starship is needed when it is not installed', async () => {
+    await expect(runTimingsCommand(parseCliArgs(['timings']), deps(false))).rejects.toThrow(
+      /Starship is not installed/
+    );
+  });
+
+  it('documents timings in the help text', () => {
+    runGlobalFlags(parseCliArgs(['--help']));
+    expect(output()).toContain('shell-configurator timings');
+    expect(output()).toContain('--config <file>');
+  });
+
+  it('rejects --config outside timings', async () => {
+    await expect(
+      runHeadlessCommand(parseCliArgs(['generate', '--config', 'x']), '')
+    ).rejects.toThrow('--config only applies to timings.');
   });
 });
