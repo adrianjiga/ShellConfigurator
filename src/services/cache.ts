@@ -119,3 +119,27 @@ export function recordStarshipVersion(version: string): void {
   fs.mkdirSync(cacheDir(), { recursive: true });
   fs.writeFileSync(starshipVersionFilePath(), `${version}\n`, 'utf8');
 }
+
+function scriptInstallRecordPath(): string {
+  return path.join(cacheDir(), 'starship.script-install');
+}
+
+/** Notes the binary this tool's script install put in place, by its SHA-256. */
+export function recordScriptInstall(binary: string): void {
+  fs.mkdirSync(cacheDir(), { recursive: true });
+  fs.writeFileSync(scriptInstallRecordPath(), `${sha256Digest(fs.readFileSync(binary))}\n`, 'utf8');
+}
+
+/** Whether `binary` is still the one this tool's script install put in place. */
+export function isRecordedScriptInstall(binary: string): boolean {
+  try {
+    const recorded = fs.readFileSync(scriptInstallRecordPath(), 'utf8').trim();
+    return recorded !== '' && recorded === sha256Digest(fs.readFileSync(binary));
+  } catch {
+    return false;
+  }
+}
+
+export function forgetScriptInstall(): void {
+  fs.rmSync(scriptInstallRecordPath(), { force: true });
+}

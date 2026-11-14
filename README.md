@@ -93,7 +93,7 @@ run could not be recorded, it prints the `cp` commands that do so instead), but
 not a Starship or font it removed: reinstall those with `apply` or `repair`. Your own `starship init` line (or fish's `conf.d` init) stays,
 with the PATH line it needs. Nushell and PowerShell were set up by hand, so it
 names the file to clean instead. Starship is removed only with `--starship`,
-and only once no shell would still start it: the script install's binary, or
+and only once no shell would still start it: the binary its own script install put in `~/.local/bin` (while it is unchanged), or
 the pacman, apk or Homebrew package when that package manager owns the binary.
 A font goes only with `--font <id>`, its files listed from its cached archive;
 the plan names any terminal still set to it. On a terminal it shows the plan

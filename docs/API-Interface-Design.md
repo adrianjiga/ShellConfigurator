@@ -952,7 +952,7 @@ block from the rc, and moves `~/.config/starship/<shell>.toml` to a `.bak-*`
 backup. Nushell and PowerShell were set up by hand, so their step only names
 the file to clean. `--font <id>` deletes that Nerd Font's files, listed from its
 cached archive, and names any terminal still set to it. `--starship` deletes
-the script install's binary, or removes the pacman/apk/Homebrew package when
+the binary its own script install put in `~/.local/bin` (recorded by its SHA-256, so another one there is left alone), or removes the pacman/apk/Homebrew package when
 that package manager owns the binary, and forgets the recorded version; it is
 held back while any shell would still start Starship. A shell's config stays
 when its rc could not be cleaned. A real run is captured like any other, so

@@ -3,7 +3,14 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { getShellBinary, posixShellQuote } from '../config/shells.ts';
 import type { PackageManager, ShellId } from '../types.ts';
-import { cachedFont, cacheFont, sha256Digest } from './cache.ts';
+import {
+  cachedFont,
+  cacheFont,
+  forgetScriptInstall,
+  isRecordedScriptInstall,
+  recordScriptInstall,
+  sha256Digest,
+} from './cache.ts';
 import { errorMessage } from './errors.ts';
 import {
   CommandCancelledError,
@@ -175,6 +182,11 @@ async function installStarshipViaScript(signal?: AbortSignal): Promise<void> {
       ['env', 'POSIXLY_CORRECT=1', 'sh', scriptPath, '--yes', '--bin-dir', scriptInstallBinDir()],
       { signal }
     );
+    try {
+      recordScriptInstall(path.join(scriptInstallBinDir(), 'starship'));
+    } catch {
+      // Without the record, uninstall leaves the binary to the user.
+    }
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -508,7 +520,11 @@ export type StarshipRemoval =
  */
 export async function plannedStarshipRemoval(pm: PackageManager): Promise<StarshipRemoval> {
   const scriptBinary = path.join(scriptInstallBinDir(), 'starship');
-  if (fs.existsSync(scriptBinary)) return { kind: 'script', path: scriptBinary };
+  if (fs.existsSync(scriptBinary)) {
+    return isRecordedScriptInstall(scriptBinary)
+      ? { kind: 'script', path: scriptBinary }
+      : { kind: 'manual', path: scriptBinary };
+  }
   const onPath = commandPath('starship');
   if (!onPath) return { kind: 'absent' };
   const remove = REMOVE_CMDS[pm];
@@ -517,8 +533,10 @@ export async function plannedStarshipRemoval(pm: PackageManager): Promise<Starsh
 }
 
 export async function removeStarship(plan: StarshipRemoval, signal?: AbortSignal): Promise<void> {
-  if (plan.kind === 'script') fs.rmSync(plan.path, { force: true });
-  else if (plan.kind === 'package') await runCommand(plan.command, { signal });
+  if (plan.kind === 'script') {
+    fs.rmSync(plan.path, { force: true });
+    forgetScriptInstall();
+  } else if (plan.kind === 'package') await runCommand(plan.command, { signal });
 }
 
 /**

@@ -1041,9 +1041,23 @@ describe('plannedStarshipRemoval', () => {
     });
   }
 
-  it('deletes the script install binary', async () => {
+  function scriptBinaryHolds(bytes: string, recorded: string) {
     mockExistsSync.mockImplementation((p: string) => p === scriptBinary);
+    mockReadFileSync.mockImplementation((p: string) =>
+      String(p).endsWith('starship.script-install')
+        ? `${createHash('sha256').update(recorded).digest('hex')}\n`
+        : Buffer.from(bytes)
+    );
+  }
+
+  it('deletes the script install binary this tool put there', async () => {
+    scriptBinaryHolds('starship-binary', 'starship-binary');
     expect(await plannedStarshipRemoval('apt')).toEqual({ kind: 'script', path: scriptBinary });
+  });
+
+  it('leaves a ~/.local/bin/starship this tool did not install to whatever did', async () => {
+    scriptBinaryHolds('someone-elses-starship', 'starship-binary');
+    expect(await plannedStarshipRemoval('apt')).toEqual({ kind: 'manual', path: scriptBinary });
   });
 
   it('has nothing to remove when Starship is not installed', async () => {
