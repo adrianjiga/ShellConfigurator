@@ -130,11 +130,12 @@ generate options (the config — a versioned state card with --export):
 
 apply options (a headless install from a state card):
   --state <file>       The state card describing the install (also: --import)
-  --dry-run            Print the plan and generated config; change nothing
+  --dry-run            Print the plan, the generated config and a diff of each
+                       file it would change; change nothing
   --adopt              Keep the existing shared starship.toml instead of
                        regenerating it (per-shell files are never written)
   --import-url <url>   Fetch a starship.toml over the web and adopt it (implies --adopt)
-  --json               With --dry-run, print the plan and config as JSON
+  --json               With --dry-run, print the plan, config and diffs as JSON
   Without --state, apply also takes the generate options above; --shells is
   then required.
 
