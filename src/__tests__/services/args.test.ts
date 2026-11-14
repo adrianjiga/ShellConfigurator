@@ -33,6 +33,10 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['uninstall']).subcommand).toBe('uninstall');
     });
 
+    it('recognises rollback', () => {
+      expect(parseCliArgs(['rollback']).subcommand).toBe('rollback');
+    });
+
     it('rejects an unknown word in the subcommand position', () => {
       expect(() => parseCliArgs(['deploy'])).toThrow(/Unknown command 'deploy'/);
       expect(() => parseCliArgs(['docter'])).toThrow(/Unknown command 'docter'/);
@@ -40,7 +44,9 @@ describe('parseCliArgs', () => {
     });
 
     it('lists the available commands in the error', () => {
-      expect(() => parseCliArgs(['deploy'])).toThrow(/generate, apply, doctor, repair, uninstall/);
+      expect(() => parseCliArgs(['deploy'])).toThrow(
+        /generate, apply, doctor, repair, uninstall, rollback/
+      );
     });
 
     it('rejects a second positional argument', () => {
@@ -74,6 +80,7 @@ describe('parseCliArgs', () => {
       ['--yes', 'yes', true],
       ['-y', 'yes', true],
       ['--starship', 'starship', true],
+      ['--list', 'list', true],
     ];
 
     it.each(cases)('%s sets %s to %s', (arg, key, expected) => {
@@ -178,6 +185,12 @@ describe('parseCliArgs', () => {
     it('rejects an empty next-token value', () => {
       expect(() => parseCliArgs(['--preset', '', '--dry-run'])).toThrow(
         /Flag '--preset' needs a value/
+      );
+    });
+
+    it('--run takes the run id', () => {
+      expect(parseCliArgs(['rollback', '--run', '2026-11-14T10-00-00.000Z']).runId).toBe(
+        '2026-11-14T10-00-00.000Z'
       );
     });
 

@@ -10,7 +10,7 @@
 import { posixShellQuote } from '../config/shells.ts';
 import { CliUsageError } from './errors.ts';
 
-export type Subcommand = 'generate' | 'apply' | 'doctor' | 'repair' | 'uninstall';
+export type Subcommand = 'generate' | 'apply' | 'doctor' | 'repair' | 'uninstall' | 'rollback';
 
 export const SUBCOMMANDS: readonly Subcommand[] = [
   'generate',
@@ -18,6 +18,7 @@ export const SUBCOMMANDS: readonly Subcommand[] = [
   'doctor',
   'repair',
   'uninstall',
+  'rollback',
 ];
 
 export interface CliFlags {
@@ -58,6 +59,10 @@ export interface CliFlags {
   yes?: boolean;
   /** Let uninstall remove Starship itself (--starship). */
   starship?: boolean;
+  /** List the runs rollback can undo (--list). */
+  list?: boolean;
+  /** The run rollback undoes, instead of the newest (--run). */
+  runId?: string;
   help: boolean;
   version: boolean;
   restore: boolean;
@@ -124,6 +129,9 @@ const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> 
   '--starship': (r, v) => {
     r.starship = v;
   },
+  '--list': (r, v) => {
+    r.list = v;
+  },
 };
 
 /** Value flags; the handler stores the consumed value. */
@@ -163,6 +171,9 @@ const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
   },
   '--export': (r, v) => {
     r.exportFile = v;
+  },
+  '--run': (r, v) => {
+    r.runId = v;
   },
 };
 
