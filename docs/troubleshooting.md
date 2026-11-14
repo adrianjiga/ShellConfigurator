@@ -28,8 +28,11 @@ re-runs the checks: it re-adds the init line, rewrites a per-shell config,
 reinstalls Starship via the detected package manager, or reinstalls the font
 (from cache when a verified copy is there, otherwise by downloading it). It
 never touches anything that passed, and warnings are left alone unless you add
-`--include-warnings`. Without `--state` it checks every installed shell, so the
-fixes can reach all of them. `--json` prints the full report.
+`--include-warnings`. Without `--state` it checks the shells that were set up,
+not every installed one, so a shell you never chose is not reported. It shows
+the fixes and asks before applying them (`--yes` skips the question), and
+`shell-configurator rollback` puts back the files they changed. `--json` prints
+the full report.
 
 ---
 
@@ -133,7 +136,10 @@ unconfigured shell. This happens because the configured parent shell exports
 ShellConfigurator normally adds an `unset STARSHIP_CONFIG` guard to detected
 Starship-running shells you chose **not** to configure and that have no setup of
 their own, so the parent's per-shell config doesn't leak in. A shell with its own
-setup already sets its own `STARSHIP_CONFIG`, so it is left alone. It preserves the shell's Starship init line so it can
+setup already sets its own `STARSHIP_CONFIG`, so it is left alone, and so is a
+shell where you set `STARSHIP_CONFIG` yourself: in its rc (`export`,
+`typeset -x` or `declare -x`), a file the rc sources, or another startup file
+(`~/.zshenv`, `~/.zprofile`, `~/.bash_profile`, `~/.bash_login`, `~/.profile`). It preserves the shell's Starship init line so it can
 continue using the shared config. Re-run the wizard to apply or repair this wiring.
 
 If the problem persists after a clean run, open the shell's RC file and check
@@ -154,6 +160,16 @@ shell without its own config and can look as if it never started;
 `echo $FISH_VERSION` prints a version only inside fish. To get its prompt back,
 run the wizard again with that shell selected, or `shell-configurator rollback`
 to undo the later run.
+
+---
+
+## Bash on macOS still shows the old prompt
+
+Terminal and iTerm start Bash as a login shell, which reads `~/.bash_profile`
+(or `~/.bash_login`, or `~/.profile`) and not `~/.bashrc`. When ShellConfigurator
+sets up Bash on macOS, it adds a line that loads `~/.bashrc` to the first of
+those files that exists, or creates `~/.bash_profile`. `doctor` fails Bash when
+that line is missing, and `repair` adds it.
 
 ---
 
@@ -197,6 +213,11 @@ For a failed package install, check that:
 2. You have `sudo` privileges (required for `apt`, `dnf`, `pacman`, and `apk`
    unless you run as root)
 3. Your package manager is working — try running the install command manually
+
+On Arch-based systems ShellConfigurator installs with `pacman -S` and never
+upgrades the whole system. When pacman cannot download a package because its
+package lists are out of date, the error says so: run `sudo pacman -Syu` to
+upgrade the system, then run ShellConfigurator again.
 
 If you're on a minimal image (Alpine, Arch, Fedora Docker), the shell package
 may not exist under that name. Run `apt-cache search <shell>` or equivalent
@@ -250,8 +271,11 @@ what ran, which files it changed, and the commands that undo it. A later
 --list` shows the runs that still stand. Rolling an install or `apply` back puts
 the summary from before it back.
 
-Every wizard install, `apply` and `uninstall` keeps a copy of the rc files,
-per-shell configs, shared config and terminal configs it changes.
+Every wizard install, `apply`, `repair` and `uninstall` keeps a copy of the rc
+files, per-shell configs, shared config and terminal configs it changes. A run
+that was killed partway (Ctrl+C twice, a closed terminal window, a `kill`)
+shows up as "interrupted" the next time ShellConfigurator runs, and rolls back
+like any other.
 `shell-configurator rollback --list` shows those runs, newest first, and
 `shell-configurator rollback` puts the newest one back (asking first; `--yes`
 off a terminal). Run it again to undo the run before; `--run <id>` picks one.

@@ -876,8 +876,8 @@ at a time, and only `--json` may go with them; any other flag is a usage error.
 ### doctor / repair (day-2 health)
 
 ```
-shell-configurator doctor [--state <file>] [--json] [--fix [--include-warnings]]
-shell-configurator repair [--state <file>] [--json] [--dry-run] [--include-warnings]
+shell-configurator doctor [--state <file>] [--json] [--fix [--include-warnings] [--yes] [--dry-run]]
+shell-configurator repair [--state <file>] [--json] [--yes] [--dry-run] [--include-warnings]
 ```
 
 `doctor` is read-only and never installs. It checks Starship on `PATH`, a
@@ -886,8 +886,11 @@ shell rc (or the shared config in adopt mode), that the configs load under the
 real `starship print-config`, that a Nerd Font is installed, and that it is
 selected in the detected terminal (`src/services/doctor.ts`). With `--state`
 it checks the card's shells and wiring mode (`keepExistingConfig`); without
-one it checks every installed shell and reads each one's mode (per-shell or
-shared) from its rc. The locale, terminal-font and (without a card)
+one it checks the installed shells that were set up — the last recorded run
+chose them, or they start Starship or carry a ShellConfigurator block — and
+reads each one's mode (per-shell or shared) from its rc. With none set up it
+warns instead. On macOS, Bash fails when its login file does not load
+`~/.bashrc`. The locale, terminal-font and (without a card)
 font-installed checks only ever warn; a font the card asked for that is missing
 fails. Two further checks are also `warn`-only and read the runtime: **version drift** — the installed
 starship binary no longer matches the version the last install/apply recorded,
@@ -905,8 +908,11 @@ doctor and reports the _result_. Warnings are left alone unless
 `--include-warnings` is passed; that also applies the fixes warnings carry, such
 as rewiring the terminal font or adding a missing `STARSHIP_CONFIG` export. The
 font fixes exist only when a `--state` card names a font. `--dry-run` lists the
-planned fixes without applying them. A check that still fails keeps the exit
-code non-zero.
+planned fixes without applying them. Otherwise, with fixes to apply, it shows
+them and asks on a terminal, like `uninstall`; off a terminal, or with
+`--json`, it needs `--yes`. The fixes run inside `captureRun`, so `rollback`
+puts back the files they changed, and the run is recorded in history as
+`repair`. A check that still fails keeps the exit code non-zero.
 
 Flags may appear before or after the subcommand; when a flag is repeated, the
 last one wins. Unknown or malformed flags (a bogus `--name`, an unparseable
@@ -941,7 +947,8 @@ Without
 `--json`, a run that would change something is a `CliUsageError`. `--dry-run`
 only prints the plan. A failed step does not stop the rest and sets exit code
 `1`. Config flags other than `--shells` and `--font`, and `--state`, are usage
-errors, as are `--yes` and `--starship` outside `uninstall`.
+errors, as are `--starship` outside `uninstall` and `--yes` outside `repair`,
+`doctor --fix`, `uninstall` and `rollback`.
 
 ### rollback
 
