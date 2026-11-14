@@ -18,13 +18,14 @@ export interface RollbackRun {
 
 /**
  * The recorded runs that changed files, newest first. A run counts as rolled
- * back while a rollback of it stands, i.e. that rollback was not undone too.
+ * back while a complete rollback of it stands, i.e. that rollback was not
+ * undone too.
  */
 export function listRollbackRuns(records: HistoryRecord[] = readHistory()): RollbackRun[] {
   const captured = records.filter((r): r is HistoryRecord & { runId: string } => Boolean(r.runId));
   const undoers = new Map<string, string[]>();
   for (const r of captured) {
-    if (r.kind === 'rollback' && r.rollbackOf) {
+    if (r.kind === 'rollback' && r.rollbackOf && !r.partial) {
       undoers.set(r.rollbackOf, [...(undoers.get(r.rollbackOf) ?? []), r.runId]);
     }
   }
@@ -68,29 +69,35 @@ export interface RollbackStep {
   path: string;
   detail: string;
   /** Changes the file; a step without one is skipped. */
-  run?: () => { status: 'restored' | 'removed' | 'skipped'; detail: string };
+  run?: () => { status: 'restored' | 'removed' | 'skipped'; detail: string; left?: boolean };
+  /** The run's change stays in place. */
+  left?: boolean;
 }
 
 export interface RollbackAction {
   path: string;
   status: RollbackStatus;
   detail: string;
+  /** The run's change to this file is still in place. */
+  left?: boolean;
 }
 
 export interface RollbackReport {
   runId: string;
   actions: RollbackAction[];
   ok: boolean;
+  /** Every change of the run was undone. */
+  complete: boolean;
   dryRun: boolean;
 }
+
+const CHANGED_SINCE = 'changed since that run, so it is left as it is';
 
 /**
  * One step per file the run changed. A file that changed again since is left
  * alone, so a rollback never overwrites later edits; roll back the later run
- * first.
+ * first. A file already back to its earlier content needs nothing.
  */
-const CHANGED_SINCE = 'changed since that run, so it is left as it is';
-
 export function planRollback(manifest: RunManifest): RollbackStep[] {
   return manifest.files.map((file) => {
     const unchanged = () => hashOf(file.path) === file.after;
@@ -101,14 +108,18 @@ export function planRollback(manifest: RunManifest): RollbackStep[] {
       return { path: file.path, detail: `cannot be read: ${errorMessage(err)}` };
     }
     if (current !== file.after) {
-      return { path: file.path, detail: CHANGED_SINCE };
+      const copy = file.before ? path.join(runDir(manifest.runId), 'files', file.before) : null;
+      if (current === (copy ? hashOf(copy) : null)) {
+        return { path: file.path, detail: 'already as it was before that run' };
+      }
+      return { path: file.path, detail: CHANGED_SINCE, left: true };
     }
     if (file.before === null) {
       return {
         path: file.path,
         detail: 'delete it: that run created it',
         run: () => {
-          if (!unchanged()) return { status: 'skipped', detail: CHANGED_SINCE };
+          if (!unchanged()) return { status: 'skipped', detail: CHANGED_SINCE, left: true };
           fs.rmSync(file.path, { force: true });
           return { status: 'removed', detail: 'deleted it: that run created it' };
         },
@@ -119,7 +130,7 @@ export function planRollback(manifest: RunManifest): RollbackStep[] {
       path: file.path,
       detail: 'put back its content from before that run',
       run: () => {
-        if (!unchanged()) return { status: 'skipped', detail: CHANGED_SINCE };
+        if (!unchanged()) return { status: 'skipped', detail: CHANGED_SINCE, left: true };
         const content = fs.readFileSync(copy);
         fs.mkdirSync(path.dirname(file.path), { recursive: true });
         writeFileAtomic(file.path, content);
@@ -136,19 +147,20 @@ export function runRollback(
   steps: RollbackStep[],
   options: { dryRun?: boolean } = {}
 ): RollbackReport {
-  const actions = steps.map(({ path: file, detail, run }): RollbackAction => {
-    if (!run) return { path: file, status: 'skipped', detail };
+  const actions = steps.map(({ path: file, detail, run, left }): RollbackAction => {
+    if (!run) return { path: file, status: 'skipped', detail, ...(left ? { left } : {}) };
     if (options.dryRun) return { path: file, status: 'planned', detail };
     try {
       return { path: file, ...run() };
     } catch (err) {
-      return { path: file, status: 'failed', detail: errorMessage(err) };
+      return { path: file, status: 'failed', detail: errorMessage(err), left: true };
     }
   });
   return {
     runId,
     actions,
     ok: actions.every((a) => a.status !== 'failed'),
+    complete: actions.every((a) => !a.left),
     dryRun: options.dryRun ?? false,
   };
 }
@@ -162,6 +174,9 @@ export function formatRollbackReport(report: RollbackReport): string {
   ];
   for (const action of report.actions) {
     lines.push(statusLine(action.status, `${action.path} — ${action.detail}`));
+  }
+  if (!report.dryRun && !report.complete) {
+    lines.push('', 'Some of its changes are still in place, so it stays next to roll back.');
   }
   return `${lines.join('\n')}\n`;
 }

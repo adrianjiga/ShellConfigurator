@@ -34,6 +34,8 @@ export interface HistoryRecord {
   runId?: string;
   /** For a rollback: the runId of the run it undid. */
   rollbackOf?: string;
+  /** For a rollback: some of the run's changes were left in place. */
+  partial?: boolean;
 }
 
 /** The append-only ledger path: <stateDir>/history.jsonl. */
@@ -50,6 +52,7 @@ export interface RecordRunOptions {
   exitCode?: number;
   runId?: string | null;
   rollbackOf?: string;
+  partial?: boolean;
 }
 
 /**
@@ -69,6 +72,7 @@ export function recordRun(options: RecordRunOptions): void {
     ...(options.exitCode !== undefined ? { exitCode: options.exitCode } : {}),
     ...(options.runId ? { runId: options.runId } : {}),
     ...(options.rollbackOf ? { rollbackOf: options.rollbackOf } : {}),
+    ...(options.partial ? { partial: true } : {}),
   });
 }
 

@@ -459,6 +459,7 @@ export async function runRollbackCommand(
       exitCode: report.ok ? 0 : 1,
       runId,
       rollbackOf: target.runId,
+      partial: !report.complete,
     });
   }
 }

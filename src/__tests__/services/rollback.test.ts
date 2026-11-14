@@ -121,6 +121,37 @@ describe('planRollback / runRollback', () => {
     expect(read('new')).toBe('edited too');
   });
 
+  it('marks the report incomplete while a change of the run stays in place', async () => {
+    fs.writeFileSync(file('a'), 'a1');
+    fs.writeFileSync(file('b'), 'b1');
+    const manifest = await capturedRun(['a', 'b'], () => {
+      fs.writeFileSync(file('a'), 'a2');
+      fs.writeFileSync(file('b'), 'b2');
+    });
+    fs.writeFileSync(file('b'), 'b3');
+
+    const first = runRollback(manifest.runId, planRollback(manifest));
+    expect(first.complete).toBe(false);
+    expect(first.actions.map((a) => [a.status, a.left])).toEqual([
+      ['restored', undefined],
+      ['skipped', true],
+    ]);
+    expect(formatRollbackReport(first)).toContain(
+      'Some of its changes are still in place, so it stays next to roll back.'
+    );
+
+    fs.writeFileSync(file('b'), 'b2');
+    const second = runRollback(manifest.runId, planRollback(manifest));
+    expect(second.actions[0]).toEqual({
+      path: file('a'),
+      status: 'skipped',
+      detail: 'already as it was before that run',
+    });
+    expect(second.actions[1]!.status).toBe('restored');
+    expect(second.complete).toBe(true);
+    expect(read('b')).toBe('b1');
+  });
+
   it('only plans in a dry run', async () => {
     fs.writeFileSync(file('rc'), 'one');
     const manifest = await capturedRun(['rc'], () => fs.writeFileSync(file('rc'), 'two'));
@@ -193,6 +224,16 @@ describe('listRollbackRuns', () => {
     expect(defaultRollbackRun(runs)?.runId).toBe(second.runId);
   });
 
+  it('keeps a partly rolled back run next in line', async () => {
+    const run = await recorded('apply');
+    const partial = await recorded('rollback', { rollbackOf: run.runId, partial: true });
+
+    const runs = listRollbackRuns([run, partial]);
+
+    expect(runs.find((r) => r.runId === run.runId)!.rolledBack).toBe(false);
+    expect(defaultRollbackRun(runs)?.runId).toBe(run.runId);
+  });
+
   it('has no default once everything was rolled back', async () => {
     const only = await recorded('install');
     const undo = await recorded('rollback', { rollbackOf: only.runId });
@@ -217,6 +258,7 @@ describe('formatting', () => {
       formatRollbackReport({
         runId: 'r1',
         ok: true,
+        complete: true,
         dryRun: true,
         actions: [{ path: '/h/.zshrc', status: 'planned', detail: 'put back' }],
       })

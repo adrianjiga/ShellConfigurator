@@ -962,7 +962,28 @@ describe('index rollback command', () => {
       exitCode: 0,
       runId: null,
       rollbackOf: second,
+      partial: false,
     });
+  });
+
+  it('records a rollback that left a change in place as partial', async () => {
+    const other = path.join(tmpDir, 'other');
+    fs.writeFileSync(rc(), 'zero');
+    fs.writeFileSync(other, 'zero');
+    const capture = beginRunCapture([rc(), other]);
+    fs.writeFileSync(rc(), 'one');
+    fs.writeFileSync(other, 'one');
+    const runId = finishRunCapture(capture)!.runId;
+    appendHistory({ version: 1, timestamp: new Date().toISOString(), kind: 'apply', runId });
+    fs.writeFileSync(other, 'edited');
+
+    await runRollbackCommand(parseCliArgs(['rollback', '--yes']), 'rollback', io());
+
+    expect(fs.readFileSync(rc(), 'utf8')).toBe('zero');
+    expect(output()).toContain('so it stays next to roll back');
+    expect(mockRecordRun).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'rollback', rollbackOf: runId, partial: true })
+    );
   });
 
   it('rolls back the run --run names', async () => {
