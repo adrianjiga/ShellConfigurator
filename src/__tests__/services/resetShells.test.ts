@@ -207,3 +207,23 @@ describe('a shell whose rc starts Starship from a file it sources', () => {
     expect(content.indexOf('unset STARSHIP_CONFIG')).toBeLessThan(content.indexOf(source));
   });
 });
+
+describe('an rc that is not UTF-8 text', () => {
+  it('is left byte for byte as it is, with a message that says why', () => {
+    const zshrc = path.join(home, '.zshrc');
+    const latin1 = Buffer.from([0x23, 0x20, 0x63, 0x61, 0x66, 0xe9, 0x0a]);
+    fs.writeFileSync(zshrc, latin1);
+
+    expect(() => applyShellConfig('zsh')).toThrow(`${zshrc} is not UTF-8 text`);
+    expect(fs.readFileSync(zshrc).equals(latin1)).toBe(true);
+  });
+
+  it('is told apart from UTF-8 text that holds a replacement character itself', () => {
+    const zshrc = path.join(home, '.zshrc');
+    fs.writeFileSync(zshrc, '# �\n');
+
+    applyShellConfig('zsh');
+
+    expect(fs.readFileSync(zshrc, 'utf8')).toContain('starship init zsh');
+  });
+});

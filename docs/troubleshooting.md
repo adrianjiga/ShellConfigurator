@@ -184,6 +184,16 @@ expanded. A setting it cannot expand falls back to `~/.zshrc`; export
 
 ---
 
+## "is not UTF-8 text, so it is left as it is"
+
+ShellConfigurator rewrites an rc file as text, and bytes that are not UTF-8
+(an old Latin-1 comment, say) would not survive that. Such a file is left
+alone and its step fails with this message. Convert it, for example with
+`iconv -f latin1 -t utf-8 ~/.zshrc > ~/.zshrc.utf8 && mv ~/.zshrc.utf8 ~/.zshrc`,
+then run ShellConfigurator again.
+
+---
+
 ## Bash on macOS still shows the old prompt
 
 Terminal and iTerm start Bash as a login shell, which reads `~/.bash_profile`

@@ -1,3 +1,4 @@
+import { isUtf8 } from 'node:buffer';
 import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -267,6 +268,20 @@ function initLineIndex(lines: string[], shellId: ShellId): number {
 /** Fish's drop-in init file, which `hasStarshipInit` cannot see from config.fish. */
 export function fishInitFile(rcFile: string): string {
   return path.join(path.dirname(rcFile), 'conf.d', 'starship.fish');
+}
+
+/**
+ * A file this tool is about to rewrite, as text. Bytes that are not UTF-8 would
+ * not survive the rewrite, so such a file is refused.
+ */
+export function readTextToRewrite(file: string): string {
+  const text = fs.readFileSync(file, 'utf8');
+  if (text.includes('\uFFFD') && !isUtf8(fs.readFileSync(file))) {
+    throw new Error(
+      `${file} is not UTF-8 text, so it is left as it is: save it as UTF-8 and run this again`
+    );
+  }
+  return text;
 }
 
 export interface RcIo {
@@ -756,7 +771,7 @@ export function bashLoginContent(existing: string, io: RcIo = FS_RC_IO): string 
 function ensureBashLogin(): string | null {
   if (!bashNeedsLoginFile()) return null;
   const file = bashLoginFile();
-  const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  const existing = fs.existsSync(file) ? readTextToRewrite(file) : '';
   const content = bashLoginContent(existing);
   if (content === existing) return null;
   writeFileAtomic(file, content);
@@ -782,7 +797,7 @@ export function applyShellConfig(
 
   const rcPath = shell.rcFile;
   ensureRcDir(rcPath);
-  const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
+  const existing = fs.existsSync(rcPath) ? readTextToRewrite(rcPath) : '';
   const { content, ...result } = appliedRcContent(shellId, existing, options)!;
   if (content !== existing) writeFileAtomic(rcPath, content);
   if (shellId !== 'bash') return result;
@@ -813,7 +828,7 @@ export function bashLoginBlockFiles(io: RcIo = FS_RC_IO): string[] {
 
 export function removeBashLoginBlock(file: string): RemovalResult {
   if (!fs.existsSync(file)) return { removed: false, note: `${file} does not exist` };
-  const lines = fs.readFileSync(file, 'utf8').split('\n');
+  const lines = readTextToRewrite(file).split('\n');
   const at = lines.findIndex((line) => line.trim() === LOGIN_MARKER);
   if (at === -1) return { removed: false, note: `no ShellConfigurator line in ${file}` };
   const end = lines[at + 1]?.trim() === LOGIN_LINE ? at + 2 : at + 1;
@@ -935,7 +950,7 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
 
   const rcPath = shell.rcFile;
   ensureRcDir(rcPath);
-  const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
+  const existing = fs.existsSync(rcPath) ? readTextToRewrite(rcPath) : '';
   const { content, ...result } = resetRcContent(shellId, existing)!;
   if (content !== existing) writeFileAtomic(rcPath, content);
   return result;
@@ -1048,7 +1063,7 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
   const rcPath = shell.rcFile;
   if (!fs.existsSync(rcPath)) return { removed: false, note: `${rcPath} does not exist` };
 
-  const existing = fs.readFileSync(rcPath, 'utf8');
+  const existing = readTextToRewrite(rcPath);
   const carried: string[] = [];
   const stripped = removeShellConfiguratorBlocks(existing, shell, [EVERY_BLOCK], carried);
   if (stripped === existing) {
