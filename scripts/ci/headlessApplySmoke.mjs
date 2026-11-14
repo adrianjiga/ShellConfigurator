@@ -3,6 +3,7 @@ import * as nodePath from 'node:path';
 import {
   assertApplyVerified,
   assertRcWired,
+  assertTimings,
   assertUninstalled,
   assertWhatChanged,
   readOrNull,
@@ -34,5 +35,6 @@ await runSmoke('Headless apply smoke', () => {
   assertApplyVerified(out);
   assertRcWired(bashrc, 'bash');
   assertWhatChanged(out, bashrc);
+  assertTimings(shellConfigPath('bash'));
   assertUninstalled(homeDir, bashrc, 'bash', before);
 });
