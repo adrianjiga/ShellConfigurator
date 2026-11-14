@@ -50,6 +50,7 @@ body:
         - apt
         - dnf
         - pacman
+        - apk
         - brew
         - fallback script
         - Not sure / not detected
