@@ -99,3 +99,18 @@ describe('drawsPowerline', () => {
     );
   });
 });
+
+describe('powerline presets', () => {
+  it('give neighbouring segments different background colours', () => {
+    for (const preset of PRESETS.filter((p) => p.powerline)) {
+      const colors = getPalette(preset.palette).colors as Record<string, string>;
+      for (const side of [preset.leftModules, preset.rightModules]) {
+        const segments = side.filter((id) => id !== 'character');
+        for (let i = 1; i < segments.length; i++) {
+          const [a, b] = [segments[i - 1]!, segments[i]!];
+          expect(colors[a], `${preset.id}: ${a} and ${b} share ${colors[a]}`).not.toBe(colors[b]);
+        }
+      }
+    }
+  });
+});
