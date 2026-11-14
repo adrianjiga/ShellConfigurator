@@ -224,6 +224,22 @@ describe('listRollbackRuns', () => {
     expect(defaultRollbackRun(runs)?.runId).toBe(second.runId);
   });
 
+  it('counts a complete rollback whose own files could not be captured', async () => {
+    const first = await recorded('install');
+    const second = await recorded('apply');
+    const uncaptured: HistoryRecord = {
+      version: 1,
+      timestamp: 't',
+      kind: 'rollback',
+      rollbackOf: second.runId!,
+    };
+
+    const runs = listRollbackRuns([first, second, uncaptured]);
+
+    expect(runs.find((r) => r.runId === second.runId)!.rolledBack).toBe(true);
+    expect(defaultRollbackRun(runs)?.runId).toBe(first.runId);
+  });
+
   it('keeps a partly rolled back run next in line', async () => {
     const run = await recorded('apply');
     const partial = await recorded('rollback', { rollbackOf: run.runId, partial: true });

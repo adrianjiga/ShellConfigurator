@@ -30,10 +30,10 @@ export function rollbackRunsWithManifests(
   records: HistoryRecord[] = readHistory()
 ): { run: RollbackRun; manifest: RunManifest }[] {
   const captured = records.filter((r): r is HistoryRecord & { runId: string } => Boolean(r.runId));
-  const undoers = new Map<string, string[]>();
-  for (const r of captured) {
+  const undoers = new Map<string, (string | null)[]>();
+  for (const r of records) {
     if (r.kind === 'rollback' && r.rollbackOf && !r.partial) {
-      undoers.set(r.rollbackOf, [...(undoers.get(r.rollbackOf) ?? []), r.runId]);
+      undoers.set(r.rollbackOf, [...(undoers.get(r.rollbackOf) ?? []), r.runId ?? null]);
     }
   }
   const memo = new Map<string, boolean>();
@@ -42,7 +42,9 @@ export function rollbackRunsWithManifests(
     if (known !== undefined) return known;
     if (seen.has(runId)) return false;
     seen.add(runId);
-    const result = (undoers.get(runId) ?? []).some((undo) => !isRolledBack(undo, seen));
+    const result = (undoers.get(runId) ?? []).some(
+      (undo) => undo === null || !isRolledBack(undo, seen)
+    );
     memo.set(runId, result);
     return result;
   };
