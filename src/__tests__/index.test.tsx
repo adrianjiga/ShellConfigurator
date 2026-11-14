@@ -108,6 +108,7 @@ import { completionScript } from '../services/completions.ts';
 import type { DebugInfoDeps } from '../services/debugInfo.ts';
 import { CliRunError, CliUsageError } from '../services/errors.ts';
 import { appendHistory } from '../services/history.ts';
+import { formatListing, listEntries } from '../services/listings.ts';
 import { homeDir } from '../services/paths.ts';
 import { beginRunCapture, captureRun, finishRunCapture, runDir } from '../services/runCapture.ts';
 import { serializeState } from '../services/state.ts';
@@ -1218,5 +1219,51 @@ describe('index completions command', () => {
     runGlobalFlags(parseCliArgs(['--help']));
     expect(output()).toContain('shell-configurator completions <bash|zsh|fish>');
     expect(output()).toContain('~/.config/fish/completions/shell-configurator.fish');
+  });
+});
+
+describe('index list flags', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+  });
+
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+  });
+
+  const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
+
+  it.each([
+    ['--list-presets', 'presets'],
+    ['--list-modules', 'modules'],
+    ['--list-fonts', 'fonts'],
+  ] as const)('%s prints the %s', (flag, kind) => {
+    expect(runGlobalFlags(parseCliArgs([flag]))).toBe(true);
+    expect(output()).toBe(formatListing(listEntries(kind)));
+  });
+
+  it('prints the data as JSON with --json', () => {
+    runGlobalFlags(parseCliArgs(['--list-fonts', '--json']));
+    expect(JSON.parse(output())).toEqual(listEntries('fonts'));
+  });
+
+  it('runs before the subcommand check, so --json needs no subcommand', async () => {
+    expect((await routeCli(['--list-presets', '--json'])).handled).toBe(true);
+  });
+
+  it('rejects a list flag with a subcommand, or two at once', () => {
+    expect(() => runGlobalFlags(parseCliArgs(['apply', '--list-presets']))).toThrow(
+      '--list-presets cannot be combined with the apply subcommand.'
+    );
+    expect(() => runGlobalFlags(parseCliArgs(['--list-presets', '--list-fonts']))).toThrow(
+      'Pass one of --list-presets, --list-fonts at a time.'
+    );
+  });
+
+  it('documents the list flags in the help text', () => {
+    runGlobalFlags(parseCliArgs(['--help']));
+    expect(output()).toContain('--list-presets | --list-modules | --list-fonts [--json]');
   });
 });

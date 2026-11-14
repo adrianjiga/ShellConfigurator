@@ -21,6 +21,7 @@ import { formatDoctorReport, runDoctor } from './services/doctor.ts';
 import { CliRunError, CliUsageError } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
 import { lastRunShells, recordRunSafely } from './services/history.ts';
+import { formatListing, listEntries } from './services/listings.ts';
 import { formatRepairReport, runRepair } from './services/repair.ts';
 import {
   defaultRollbackRun,
@@ -98,6 +99,8 @@ Usage:
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
   shell-configurator --restore    restore configs from their newest backup
+  shell-configurator --list-presets | --list-modules | --list-fonts [--json]
+                                  list the ids those flags accept
 
 Options:
   -h, --help          Show this help and exit
@@ -207,6 +210,27 @@ export function runGlobalFlags(flags: CliFlags): boolean {
   }
   if (flags.version) {
     process.stdout.write(`${VERSION}\n`);
+    return true;
+  }
+  const lists = (
+    [
+      ['--list-presets', 'presets', flags.listPresets],
+      ['--list-modules', 'modules', flags.listModules],
+      ['--list-fonts', 'fonts', flags.listFonts],
+    ] as const
+  ).filter(([, , asked]) => asked);
+  if (lists.length > 0) {
+    const names = lists.map(([name]) => name).join(', ');
+    if (flags.subcommand) {
+      throw new CliUsageError(
+        `${names} cannot be combined with the ${flags.subcommand} subcommand.`
+      );
+    }
+    if (lists.length > 1) throw new CliUsageError(`Pass one of ${names} at a time.`);
+    const entries = listEntries(lists[0]![1]);
+    process.stdout.write(
+      flags.json ? `${JSON.stringify(entries, null, 2)}\n` : formatListing(entries)
+    );
     return true;
   }
   if (flags.restore) {
