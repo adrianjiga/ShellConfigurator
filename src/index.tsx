@@ -280,6 +280,7 @@ export async function runUninstallCommand(
 ): Promise<void> {
   const unused = presentConfigFlags(flags).filter((f) => f !== '--shells' && f !== '--font');
   if (flags.stateFile) unused.push('--state');
+  if (flags.fix) unused.push('--fix');
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with uninstall.`);
   }

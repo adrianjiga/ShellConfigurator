@@ -833,6 +833,7 @@ describe('index uninstall command', () => {
   it.each([
     [['--preset', 'pure-prompt'], /--preset cannot be used with uninstall/],
     [['--state', 'card.json'], /--state cannot be used with uninstall/],
+    [['--fix'], /--fix cannot be used with uninstall/],
     [['--font', 'none'], /not none/],
     [['--font', 'Comic'], /Unknown Nerd Font/],
     [['--shells', 'tcsh'], /Unknown shell id/],
