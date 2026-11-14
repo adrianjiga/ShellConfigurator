@@ -1,5 +1,6 @@
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getShell } from '../../config/shells.ts';
 import { ShellScreen } from '../../screens/ShellScreen.tsx';
 import { detectCurrentShellAsync, detectInstalledShellsAsync } from '../../services/detector.ts';
 import { DEFAULT_STATE, type ShellId } from '../../types.ts';
@@ -123,6 +124,15 @@ describe('ShellScreen', () => {
 
     expect(onUpdate).toHaveBeenCalledWith({ installedShells: ['zsh'] });
     expect(instance.lastFrame()).toContain('› [✓] Bash');
+  });
+
+  it('shows the focused shell rc file it will edit', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh']);
+    const { instance } = setup();
+    await flush();
+    await flush();
+
+    expect(instance.lastFrame()).toContain(`→ ${getShell('zsh')!.rcFile}`);
   });
 
   it('warns about manual shells without implying a command is already shown', async () => {

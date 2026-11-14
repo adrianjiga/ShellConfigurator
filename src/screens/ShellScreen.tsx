@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
+import { PickerRow } from '../components/PickerRow.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { SHELLS } from '../config/shells.ts';
@@ -143,42 +144,37 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
             const isDefault = defaultShell === shell.id;
 
             return (
-              <Box key={shell.id} flexDirection="column">
-                <Box flexDirection="row" gap={1}>
-                  <Text color={uiColor(isActive ? 'cyan' : 'gray')}>{isActive ? '›' : ' '}</Text>
-                  <Text color={uiColor(isChecked ? 'green' : 'gray')}>
-                    {isChecked ? '[✓]' : '[ ]'}
-                  </Text>
-                  <Text color={uiColor(isActive ? 'white' : 'gray')} bold={isActive}>
-                    {shell.label}
-                  </Text>
-                  {isChecked && (
-                    <Text color={uiColor(isInstalled ? 'green' : 'yellow')}>
-                      {isInstalled
-                        ? '[installed]'
-                        : shellInstallSupported(shell.id, state.packageManager)
-                          ? '[will install]'
-                          : '[install it yourself]'}
-                    </Text>
-                  )}
-                  {isDefault && <Text color={uiColor('cyan')}>[will set as login shell]</Text>}
-                </Box>
-                {isActive && shell.rcFile && (
-                  <Box marginLeft={4}>
-                    <Text color={uiColor('gray')} italic>
-                      → {shell.rcFile}
-                    </Text>
-                  </Box>
-                )}
-                {isActive && shell.manualNote && (
-                  <Box marginLeft={4}>
+              <PickerRow
+                key={shell.id}
+                focused={isActive}
+                selected={isChecked}
+                marker={isChecked ? '[✓]' : '[ ]'}
+                label={shell.label}
+                suffix={
+                  <>
+                    {isChecked && (
+                      <Text color={uiColor(isInstalled ? 'green' : 'yellow')}>
+                        {isInstalled
+                          ? '[installed]'
+                          : shellInstallSupported(shell.id, state.packageManager)
+                            ? '[will install]'
+                            : '[install it yourself]'}
+                      </Text>
+                    )}
+                    {isDefault && <Text color={uiColor('cyan')}>[will set as login shell]</Text>}
+                  </>
+                }
+                hint={
+                  shell.rcFile ? (
+                    `→ ${shell.rcFile}`
+                  ) : shell.manualNote ? (
                     <Text color={uiColor('yellow')} italic>
                       ⚠ Manual setup required — the wizard shows the setup command after
                       installation.
                     </Text>
-                  </Box>
-                )}
-              </Box>
+                  ) : undefined
+                }
+              />
             );
           })}
         </Box>

@@ -16,14 +16,14 @@ interface PickerRowProps {
   indent?: number;
   /** Content after the label on the same line — swatches, inline notes. */
   suffix?: ReactNode;
-  /** Help text on its own line, shown only while the row is focused. */
-  hint?: string;
+  /** Help on its own line, shown only while the row is focused; text is drawn as a grey note. */
+  hint?: ReactNode;
 }
 
 /**
  * One row of a single-choice or multi-choice picker: cursor marker, optional
  * checkbox, label, and optional inline suffix/hint. Shared by the Style and
- * Segments screens so the three lists look and behave identically.
+ * Segments and Shell screens so the lists look and behave identically.
  */
 export function PickerRow({
   label,
@@ -53,9 +53,13 @@ export function PickerRow({
       </Box>
       {focused && hint && (
         <Box marginLeft={indent + 4}>
-          <Text color={uiColor('gray')} italic>
-            {hint}
-          </Text>
+          {typeof hint === 'string' ? (
+            <Text color={uiColor('gray')} italic>
+              {hint}
+            </Text>
+          ) : (
+            hint
+          )}
         </Box>
       )}
     </Box>
