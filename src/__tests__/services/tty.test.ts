@@ -127,6 +127,7 @@ describe('suspendUi / resumeUi', () => {
   });
 
   it('tolerates a setRawMode that throws (not a TTY race)', () => {
+    const realStdin = process.stdin;
     Object.defineProperty(process, 'stdin', {
       configurable: true,
       value: {
@@ -137,10 +138,14 @@ describe('suspendUi / resumeUi', () => {
       },
     });
 
-    expect(() => {
-      suspendUi();
-      resumeUi();
-    }).not.toThrow();
+    try {
+      expect(() => {
+        suspendUi();
+        resumeUi();
+      }).not.toThrow();
+    } finally {
+      Object.defineProperty(process, 'stdin', { configurable: true, value: realStdin });
+    }
   });
 });
 
