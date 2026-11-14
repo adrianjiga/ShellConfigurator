@@ -59,9 +59,29 @@ export function backupIfExists(filePath: string): string | undefined {
 function writeWithBackup(configPath: string, toml: string): WriteConfigResult {
   const configDir = path.dirname(configPath);
   if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
-  const backedUpTo = backupIfExists(configPath);
+  const current = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
+  let backedUpTo: string | undefined;
+  if (current !== null && current !== toml) {
+    assertWritable(configPath);
+    backedUpTo = sameBackup(configPath, current) ?? backupIfExists(configPath);
+  }
   writeFileAtomic(configPath, toml);
-  return { path: configPath, backedUpTo };
+  return { path: configPath, ...(backedUpTo ? { backedUpTo } : {}) };
+}
+
+/** Refuses a file that cannot be written before anything is backed up for it. */
+function assertWritable(filePath: string): void {
+  if (fs.existsSync(filePath)) fs.accessSync(filePath, fs.constants.W_OK);
+}
+
+/** The newest backup of `filePath` when it already holds `content`. */
+function sameBackup(filePath: string, content: string): string | undefined {
+  try {
+    const previous = newestBackup(path.dirname(filePath), path.basename(filePath));
+    return previous && fs.readFileSync(previous, 'utf8') === content ? previous : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** A name `backupPath` produced: an ISO stamp with `:`/`.` replaced, maybe a suffix. */
@@ -95,14 +115,24 @@ function resolveWriteTarget(filePath: string): { target: string; mode?: number }
  * its permissions. A reader never sees a truncated file. On failure the temp
  * file is removed and the original error re-thrown.
  */
-export function writeFileAtomic(filePath: string, content: string | Buffer): void {
-  const { target, mode } = resolveWriteTarget(filePath);
+export function writeFileAtomic(
+  filePath: string,
+  content: string | Buffer,
+  newFileMode?: number
+): void {
+  const resolved = resolveWriteTarget(filePath);
+  const { target } = resolved;
+  const mode = resolved.mode ?? newFileMode;
   const tmpPath = path.join(
     path.dirname(target),
     `.${path.basename(target)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
   );
   try {
-    fs.writeFileSync(tmpPath, content, { encoding: 'utf8', flush: true });
+    fs.writeFileSync(tmpPath, content, {
+      encoding: 'utf8',
+      flush: true,
+      ...(mode !== undefined ? { mode } : {}),
+    });
     if (mode !== undefined) fs.chmodSync(tmpPath, mode);
     fs.renameSync(tmpPath, target);
   } catch (err) {
@@ -726,7 +756,7 @@ export function appliedRcContent(
   const marker = options.pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
   const inserted = initPresent ? insertBeforeInit(cleaned, shell, marker, lines, io) : null;
   return {
-    content: inserted ?? appendManagedBlock(cleaned, marker, lines),
+    content: keepLineEndings(existing, inserted ?? appendManagedBlock(cleaned, marker, lines)),
     applied: true,
     note: pathLine ? `${options.ensurePathDir} added to PATH` : undefined,
   };
@@ -765,7 +795,7 @@ export function loginLoadsBashrc(
 export function bashLoginContent(existing: string, io: RcIo = FS_RC_IO): string {
   return loginLoadsBashrc(existing, io)
     ? existing
-    : appendManagedBlock(existing, LOGIN_MARKER, [LOGIN_LINE]);
+    : keepLineEndings(existing, appendManagedBlock(existing, LOGIN_MARKER, [LOGIN_LINE]));
 }
 
 function ensureBashLogin(): string | null {
@@ -835,6 +865,7 @@ export function removeBashLoginBlock(file: string): RemovalResult {
   const start = at > 0 && lines[at - 1].trim() === '' ? at - 1 : at;
   lines.splice(start, end - start);
   const content = lines.join('\n');
+  if (content.trim() !== '') assertWritable(file);
   const backedUpTo = backupIfExists(file);
   if (content.trim() === '') fs.rmSync(file);
   else writeFileAtomic(file, content);
@@ -843,6 +874,11 @@ export function removeBashLoginBlock(file: string): RemovalResult {
     ...(backedUpTo ? { backedUpTo } : {}),
     ...(content.trim() === '' ? { note: 'it held nothing else, so it is gone' } : {}),
   };
+}
+
+/** `content` with the line endings of `existing`, so lines added to a CRLF file end the same way. */
+function keepLineEndings(existing: string, content: string): string {
+  return existing.includes('\r\n') ? content.replace(/\r?\n/g, '\r\n') : content;
 }
 
 /** Appends a managed block at the end, after a blank line unless the file is empty. */
@@ -995,9 +1031,11 @@ export function resetRcContent(
 
   const inserted = initPresent ? insertBeforeInit(content, shell, BLOCK_MARKER, lines, io) : null;
   return {
-    content:
+    content: keepLineEndings(
+      existing,
       inserted ??
-      appendManagedBlock(content, BLOCK_MARKER, needsInit ? [...lines, shell.initLine] : lines),
+        appendManagedBlock(content, BLOCK_MARKER, needsInit ? [...lines, shell.initLine] : lines)
+    ),
     applied: true,
     ...(note ? { note } : {}),
   };
@@ -1088,8 +1126,9 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
     lines.splice(at, 0, ...kept);
   }
 
+  assertWritable(rcPath);
   const backedUpTo = backupIfExists(rcPath);
-  writeFileAtomic(rcPath, lines.join('\n'));
+  writeFileAtomic(rcPath, keepLineEndings(existing, lines.join('\n')));
   const notes = [
     ...(ownInit ? ['your own Starship init line stays'] : []),
     ...(otherInit

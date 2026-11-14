@@ -10,6 +10,7 @@ import {
   removeManagedRcBlocks,
   resetRcContent,
   resetSharedShellConfig,
+  writeFileAtomic,
   writeShellConfig,
 } from '../../generators/shellRc.ts';
 import { DEFAULT_INSTALL_TASK_DEPS, plannedResetShells } from '../../services/installTasks.ts';
@@ -225,5 +226,44 @@ describe('an rc that is not UTF-8 text', () => {
     applyShellConfig('zsh');
 
     expect(fs.readFileSync(zshrc, 'utf8')).toContain('starship init zsh');
+  });
+});
+
+describe('writing configs and rc files', () => {
+  const backups = (dir: string, name: string) =>
+    fs.readdirSync(dir).filter((file) => file.startsWith(`${name}.bak-`));
+
+  it('backs a config up only when a write replaces different content', () => {
+    const config = getShellConfigPath('zsh');
+    writeShellConfig('a\n', 'zsh');
+    writeShellConfig('b\n', 'zsh');
+    writeShellConfig('b\n', 'zsh');
+    expect(backups(path.dirname(config), 'zsh.toml')).toHaveLength(1);
+  });
+
+  it('leaves no backup behind for a read-only config it refuses to write', () => {
+    const config = getShellConfigPath('zsh');
+    writeShellConfig('a\n', 'zsh');
+    fs.chmodSync(config, 0o444);
+
+    expect(() => writeShellConfig('b\n', 'zsh')).toThrow();
+    expect(backups(path.dirname(config), 'zsh.toml')).toHaveLength(0);
+  });
+
+  it('creates a file with the mode asked for, never wider first', () => {
+    const file = path.join(home, 'private');
+    writeFileAtomic(file, 'x', 0o600);
+    expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+  });
+
+  it('adds lines to an rc with Windows line endings the same way', () => {
+    const zshrc = path.join(home, '.zshrc');
+    fs.writeFileSync(zshrc, 'export EDITOR=vim\r\n');
+
+    applyShellConfig('zsh');
+
+    const content = fs.readFileSync(zshrc, 'utf8');
+    expect(content).toContain('starship init zsh');
+    expect(content.replace(/\r\n/g, '')).not.toContain('\n');
   });
 });

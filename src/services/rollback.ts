@@ -171,7 +171,7 @@ export function planRollback(manifest: RunManifest): RollbackStep[] {
         if (!unchanged()) return { status: 'skipped', detail: CHANGED_SINCE, left: true };
         const content = fs.readFileSync(copy);
         fs.mkdirSync(path.dirname(file.path), { recursive: true });
-        writeFileAtomic(file.path, content);
+        writeFileAtomic(file.path, content, file.mode);
         if (file.mode !== undefined) fs.chmodSync(file.path, file.mode);
         return { status: 'restored', detail: 'put back its content from before that run' };
       },
