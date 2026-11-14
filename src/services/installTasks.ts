@@ -39,6 +39,7 @@ import {
   shellInstallSupported,
   verifyStarshipConfig,
 } from './installer.ts';
+import { starshipTooOld, tooOldNote } from './starshipVersion.ts';
 import { TERMINAL_LABELS, type TerminalFontResult, wireTerminalFont } from './terminalFont.ts';
 
 export interface InstallTaskDeps {
@@ -335,7 +336,10 @@ export async function runInstallTasks(
       if (check.installed) {
         return {
           status: 'skipped',
-          patch: { label: `Starship (${check.version ?? 'installed'})` },
+          patch: {
+            label: `Starship (${check.version ?? 'installed'})`,
+            ...(starshipTooOld(check.version) ? { note: tooOldNote(check.version!) } : {}),
+          },
         };
       }
       // An earlier script install off PATH still counts; the rc PATH line reaches it.
@@ -346,7 +350,7 @@ export async function runInstallTasks(
           status: 'skipped',
           patch: {
             label: `Starship (${version ?? 'installed'})`,
-            note: `already in ${existingDir}`,
+            note: starshipTooOld(version) ? tooOldNote(version!) : `already in ${existingDir}`,
           },
         };
       }

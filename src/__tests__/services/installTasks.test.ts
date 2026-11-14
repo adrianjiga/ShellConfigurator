@@ -34,6 +34,19 @@ describe('runInstallTasks', () => {
     expect(starship?.label).toContain('starship 1.20');
   });
 
+  it('says when the installed Starship is too old for the config', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi
+        .fn()
+        .mockResolvedValue({ installed: true, version: 'starship 1.16.0' }),
+    });
+    const results = await runInstallTasks(state(), deps, vi.fn());
+
+    expect(results.find((t) => t.id === 'starship')?.note).toBe(
+      'starship 1.16.0 is older than 1.20.0, which the generated config needs: upgrade Starship, or the prompt may not load'
+    );
+  });
+
   it('passes the cancel signal to the install steps', async () => {
     const controller = new AbortController();
     const deps = fakeDeps();

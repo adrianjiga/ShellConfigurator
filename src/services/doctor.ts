@@ -38,6 +38,7 @@ import {
   readStarshipVersion,
   verifyStarshipConfig,
 } from './installer.ts';
+import { starshipTooOld, tooOldNote } from './starshipVersion.ts';
 import { readTerminalFontFamily, TERMINAL_LABELS } from './terminalFont.ts';
 
 export type DoctorStatus = 'pass' | 'warn' | 'fail';
@@ -199,6 +200,14 @@ async function probeStarship(deps: DoctorDeps): Promise<StarshipProbe> {
 }
 
 function checkStarship(probe: StarshipProbe, state: WizardState | null): DoctorFinding {
+  if (probe.installed && starshipTooOld(probe.version)) {
+    return {
+      id: 'starship',
+      title: 'Starship',
+      status: 'warn',
+      detail: tooOldNote(probe.version!),
+    };
+  }
   if (probe.installed) {
     return {
       id: 'starship',

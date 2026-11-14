@@ -36,6 +36,16 @@ the full report.
 
 ---
 
+## "older than 1.20.0, which the generated config needs"
+
+The generated config uses Starship features from version 1.20 (such as
+`prev_bg` for powerline separators). An older Starship that was already
+installed is kept, so the install step and `doctor` say so instead. Upgrade it
+with the package manager that installed it, or with
+`curl -sS https://starship.rs/install.sh | sh`.
+
+---
+
 ## The prompt is slow
 
 Run `shell-configurator timings` in a folder where the prompt feels slow. It

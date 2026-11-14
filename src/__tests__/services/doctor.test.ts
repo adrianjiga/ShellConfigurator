@@ -806,6 +806,20 @@ describe('runDoctor reading the setup the way the shell does', () => {
   });
 });
 
+describe('runDoctor and the Starship version', () => {
+  it('warns about a Starship too old for the generated config', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      isStarshipInstalled: vi
+        .fn()
+        .mockResolvedValue({ installed: true, version: 'starship 1.19.3' }),
+    });
+    expect(find(await runDoctor(baseState(), deps), 'starship')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('older than 1.20.0'),
+    });
+  });
+});
+
 describe('runDoctor reading files', () => {
   it('reads each rc once, however many checks look at it', async () => {
     const deps = makeDeps(wired(new Map()));
