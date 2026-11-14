@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { writeFileAtomic } from '../generators/shellRc.ts';
 import type { InstallTask, ShellId, WizardState } from '../types.ts';
+import { isMissingFile } from './errors.ts';
 import { stateDir } from './paths.ts';
 import { parseState, serializeState } from './state.ts';
 
@@ -97,11 +98,6 @@ function ensureTrailingNewline(file: string): void {
   } finally {
     fs.closeSync(fd);
   }
-}
-
-/** True when the failure is simply that the file does not exist yet. */
-function isMissingFile(err: unknown): boolean {
-  return (err as { code?: string }).code === 'ENOENT';
 }
 
 /**

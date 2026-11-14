@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { isMissingFile } from './errors.ts';
 import { cacheDir } from './paths.ts';
 
 /** SHA-256 of a byte buffer as a lowercase hex string. */
@@ -38,11 +39,6 @@ export function fontCachePath(fontId: string): string {
 /** The pin file written beside the archive: <cacheDir>/fonts/<id>.sha256. */
 function pinFilePath(fontId: string): string {
   return path.join(fontsDir(), `${fontId}.sha256`);
-}
-
-/** True when the failure is simply that the file does not exist. */
-function isMissingFile(err: unknown): boolean {
-  return (err as { code?: string }).code === 'ENOENT';
 }
 
 /**

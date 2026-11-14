@@ -31,3 +31,8 @@ export class CliRunError extends Error {
     this.name = 'CliRunError';
   }
 }
+
+/** True when the failure is simply that the file does not exist. */
+export function isMissingFile(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === 'ENOENT';
+}
