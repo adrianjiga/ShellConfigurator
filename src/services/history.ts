@@ -10,7 +10,7 @@ import { parseState, serializeState } from './state.ts';
  * What a recorded run did. `install` is the interactive wizard; `apply` is a
  * headless run; the rest are day-2 lifecycle commands.
  */
-export type HistoryKind = 'install' | 'apply' | 'uninstall' | 'rollback';
+export type HistoryKind = 'install' | 'apply' | 'repair' | 'uninstall' | 'rollback';
 
 /**
  * One entry in history.jsonl: a single JSON object per line. The version field

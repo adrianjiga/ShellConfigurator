@@ -27,7 +27,12 @@ import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './ser
 import { lastRunShells, recordRunSafely } from './services/history.ts';
 import { formatListing, listEntries } from './services/listings.ts';
 import { redactHome } from './services/redact.ts';
-import { formatRepairReport, runRepair } from './services/repair.ts';
+import {
+  DEFAULT_REPAIR_DEPS,
+  formatRepairReport,
+  type RepairDeps,
+  runRepair,
+} from './services/repair.ts';
 import {
   defaultRollbackRun,
   formatRollbackReport,
@@ -161,13 +166,18 @@ doctor options (checks the setup; exits non-zero when a check fails):
   --json               Print the report as JSON instead of the text summary
   --fix                Apply the repairs for failing checks, then re-check (like 'repair')
   --include-warnings   With --fix, also apply the repairs warnings suggest
+  -y, --yes            With --fix, go ahead without asking (required off a terminal)
+  --dry-run            With --fix, print the fixes it would apply; change nothing
+  Without --state it checks the shells that were set up, not every installed one.
 
-repair options (fixes the failing checks; exits non-zero when one still fails):
+repair options (fixes the failing checks; asks first; exits non-zero when one still fails):
   --state <file>       Repair the setup described by a saved state card
+  -y, --yes            Go ahead without asking (required off a terminal)
   --dry-run            Print the fixes it would apply; change nothing
   --include-warnings   Also apply the fixes warnings suggest (e.g. the terminal font);
                        a warning may describe a choice you made on purpose
   --json               Print the report as JSON instead of the text summary
+  rollback puts back the files it changed (not a reinstalled Starship or font).
 
 uninstall options (removes the Starship setup; asks before changing anything):
   --shells <id,...>    Only these shells (default: every shell it set up)
@@ -348,9 +358,13 @@ function warnIgnoredFlags(flags: CliFlags, subcommand: string): void {
  * output. `--json` swaps the human summary for the report object, and `--fix`
  * upgrades the run into a repair.
  */
-export async function runDoctorCommand(flags: CliFlags): Promise<void> {
+export async function runDoctorCommand(
+  flags: CliFlags,
+  command: string,
+  io: PromptIo = DEFAULT_PROMPT_IO
+): Promise<void> {
   if (flags.fix) {
-    await runRepairCommand(flags);
+    await runRepairCommand(flags, command, io);
     return;
   }
   warnIgnoredFlags(flags, 'doctor');
@@ -364,20 +378,51 @@ export async function runDoctorCommand(flags: CliFlags): Promise<void> {
   if (!report.ok) process.exitCode = 1;
 }
 
-/** Runs the doctor's fixes, then re-checks; a still-failing check exits non-zero. */
-export async function runRepairCommand(flags: CliFlags): Promise<void> {
+/**
+ * Runs the doctor's fixes, then re-checks; a still-failing check exits
+ * non-zero. Asks like uninstall, and captures the run so rollback can undo it.
+ */
+export async function runRepairCommand(
+  flags: CliFlags,
+  command: string,
+  io: PromptIo = DEFAULT_PROMPT_IO,
+  deps: RepairDeps = DEFAULT_REPAIR_DEPS
+): Promise<void> {
   warnIgnoredFlags(flags, 'repair');
   const state = flags.stateFile ? stateFromFlags(flags) : null;
-  const report = await runRepair(state, undefined, {
-    dryRun: flags.dryRun,
-    includeWarnings: flags.includeWarnings,
-  });
+  const options = { includeWarnings: flags.includeWarnings };
+  const plan = await runRepair(state, deps, { ...options, dryRun: true });
+  const changes = !flags.dryRun && plan.actions.length > 0;
+  if (changes) {
+    const proceed = await confirmChanges(
+      flags,
+      io,
+      'repair changes files and may install software',
+      () => formatRepairReport(plan),
+      '\nApply these fixes? [y/N] '
+    );
+    if (!proceed) return;
+  }
+
+  const { result: report, runId } = changes
+    ? await captureRun(trackedFiles(), () => runRepair(state, deps, options))
+    : { result: plan, runId: null };
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {
     process.stdout.write(formatRepairReport(report));
+    if (runId) process.stdout.write('\nUndo it with: shell-configurator rollback\n');
   }
   if (!report.ok) process.exitCode = 1;
+  if (changes) {
+    recordRunSafely({
+      kind: 'repair',
+      command,
+      exitCode: report.ok ? 0 : 1,
+      runId,
+      ...(state ? { state } : {}),
+    });
+  }
 }
 
 async function askToProceed(question: string): Promise<boolean> {
@@ -709,8 +754,13 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.includeWarnings && !repairs) {
     throw new CliUsageError('--include-warnings only applies to repair (or doctor --fix).');
   }
-  if (flags.yes && flags.subcommand !== 'uninstall' && flags.subcommand !== 'rollback') {
-    throw new CliUsageError('--yes only applies to uninstall and rollback.');
+  if (
+    flags.yes &&
+    !repairs &&
+    flags.subcommand !== 'uninstall' &&
+    flags.subcommand !== 'rollback'
+  ) {
+    throw new CliUsageError('--yes only applies to repair, doctor --fix, uninstall and rollback.');
   }
   if (flags.starship && flags.subcommand !== 'uninstall') {
     throw new CliUsageError('--starship only applies to uninstall.');
@@ -754,11 +804,11 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
     return true;
   }
   if (flags.subcommand === 'doctor') {
-    await runDoctorCommand(flags);
+    await runDoctorCommand(flags, command);
     return true;
   }
   if (flags.subcommand === 'repair') {
-    await runRepairCommand(flags);
+    await runRepairCommand(flags, command);
     return true;
   }
   // No subcommand: the interactive wizard runs next — silently dropping

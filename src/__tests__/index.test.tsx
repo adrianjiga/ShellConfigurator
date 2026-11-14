@@ -81,6 +81,7 @@ vi.mock('../services/doctor.ts', () => ({
 }));
 
 vi.mock('../services/repair.ts', () => ({
+  DEFAULT_REPAIR_DEPS: {},
   runRepair: mockRunRepair,
   formatRepairReport: mockFormatRepairReport,
 }));
@@ -99,6 +100,7 @@ import {
   runDebugInfoCommand,
   runGlobalFlags,
   runHeadlessCommand,
+  runRepairCommand,
   runRollbackCommand,
   runShareCommand,
   runTimingsCommand,
@@ -567,7 +569,12 @@ describe('index headless routing', () => {
     const routed = await route(['repair']);
 
     expect(routed).toBe(true);
-    expect(mockRunRepair).toHaveBeenCalledWith(null, undefined, { dryRun: undefined });
+    expect(mockRunRepair).toHaveBeenCalledOnce();
+    expect(mockRunRepair).toHaveBeenCalledWith(
+      null,
+      {},
+      { includeWarnings: undefined, dryRun: true }
+    );
     expect(stdoutWrite).toHaveBeenCalledWith('REPAIRED\n');
     expect(mockRunDoctor).not.toHaveBeenCalled();
   });
@@ -579,7 +586,11 @@ describe('index headless routing', () => {
     const routed = await route(['doctor', '--fix']);
 
     expect(routed).toBe(true);
-    expect(mockRunRepair).toHaveBeenCalledWith(null, undefined, { dryRun: undefined });
+    expect(mockRunRepair).toHaveBeenCalledWith(
+      null,
+      {},
+      { includeWarnings: undefined, dryRun: true }
+    );
     expect(mockRunDoctor).not.toHaveBeenCalled();
   });
 
@@ -590,10 +601,12 @@ describe('index headless routing', () => {
     const routed = await route(['repair', '--dry-run']);
 
     expect(routed).toBe(true);
-    expect(mockRunRepair).toHaveBeenCalledWith(null, undefined, {
-      dryRun: true,
-      includeWarnings: undefined,
-    });
+    expect(mockRunRepair).toHaveBeenCalledOnce();
+    expect(mockRunRepair).toHaveBeenCalledWith(
+      null,
+      {},
+      { includeWarnings: undefined, dryRun: true }
+    );
     expect(stdoutWrite).toHaveBeenCalledWith('PLANNED\n');
   });
 
@@ -624,6 +637,69 @@ describe('index headless routing', () => {
     await route(['repair']);
 
     expect(process.exitCode).toBe(1);
+  });
+
+  describe('when there is something to fix', () => {
+    const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
+    const planned = {
+      ok: false,
+      dryRun: true,
+      actions: [{ findingId: 'shell:bash', title: 'Bash', status: 'planned', detail: 'add lines' }],
+    };
+    const done = { ok: true, dryRun: false, actions: [{ ...planned.actions[0], status: 'fixed' }] };
+
+    function io(overrides: Partial<PromptIo> = {}): PromptIo {
+      return { confirm: vi.fn().mockResolvedValue(true), isTerminal: () => true, ...overrides };
+    }
+
+    beforeEach(() => {
+      mockRecordRun.mockReset();
+      mockRunRepair.mockImplementation(async (_state, _deps, options) =>
+        options.dryRun ? planned : done
+      );
+      mockFormatRepairReport.mockImplementation((report) => `REPORT ${report.dryRun}\n`);
+    });
+
+    it('shows the plan and changes nothing when the user says no', async () => {
+      const ask = io({ confirm: vi.fn().mockResolvedValue(false) });
+
+      await runRepairCommand(parseCliArgs(['repair']), 'repair', ask);
+
+      expect(ask.confirm).toHaveBeenCalled();
+      expect(output()).toContain('REPORT true');
+      expect(output()).toContain('Nothing was changed.');
+      expect(mockRunRepair).toHaveBeenCalledOnce();
+      expect(mockRecordRun).not.toHaveBeenCalled();
+    });
+
+    it('refuses off a terminal without --yes', async () => {
+      await expect(
+        runRepairCommand(parseCliArgs(['repair']), 'repair', io({ isTerminal: () => false }))
+      ).rejects.toThrow('repair changes files and may install software; pass --yes');
+      expect(mockRunRepair).toHaveBeenCalledOnce();
+    });
+
+    it('applies the fixes inside a captured run, records it and points at rollback', async () => {
+      vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
+        result: await run(),
+        runId: 'run-7',
+      }));
+      const ask = io();
+
+      await runRepairCommand(parseCliArgs(['repair', '--yes']), 'repair --yes', ask);
+
+      expect(ask.confirm).not.toHaveBeenCalled();
+      expect(captureRun).toHaveBeenCalled();
+      expect(mockRunRepair).toHaveBeenLastCalledWith(null, {}, { includeWarnings: undefined });
+      expect(output()).toContain('REPORT false');
+      expect(output()).toContain('Undo it with: shell-configurator rollback');
+      expect(mockRecordRun).toHaveBeenCalledWith({
+        kind: 'repair',
+        command: 'repair --yes',
+        exitCode: 0,
+        runId: 'run-7',
+      });
+    });
   });
 });
 
@@ -914,8 +990,8 @@ describe('index uninstall command', () => {
   });
 
   it('rejects --yes and --starship outside uninstall', async () => {
-    await expect(runHeadlessCommand(parseCliArgs(['repair', '--yes']), '')).rejects.toThrow(
-      '--yes only applies to uninstall and rollback.'
+    await expect(runHeadlessCommand(parseCliArgs(['doctor', '--yes']), '')).rejects.toThrow(
+      '--yes only applies to repair, doctor --fix, uninstall and rollback.'
     );
     await expect(runHeadlessCommand(parseCliArgs(['doctor', '--starship']), '')).rejects.toThrow(
       '--starship only applies to uninstall.'

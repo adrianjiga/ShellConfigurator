@@ -137,11 +137,19 @@ export const SUBCOMMAND_INFO: Record<Subcommand, SubcommandInfo> = {
   },
   doctor: {
     description: 'Check the setup and report problems',
-    flags: [FLAGS.state, FLAGS.import, FLAGS.json, FLAGS.fix, FLAGS.includeWarnings],
+    flags: [
+      FLAGS.state,
+      FLAGS.import,
+      FLAGS.json,
+      FLAGS.fix,
+      FLAGS.includeWarnings,
+      FLAGS.yes,
+      FLAGS.dryRun,
+    ],
   },
   repair: {
     description: 'Fix the problems doctor finds',
-    flags: [FLAGS.state, FLAGS.import, FLAGS.dryRun, FLAGS.includeWarnings, FLAGS.json],
+    flags: [FLAGS.state, FLAGS.import, FLAGS.yes, FLAGS.dryRun, FLAGS.includeWarnings, FLAGS.json],
   },
   uninstall: {
     description: 'Remove what the wizard set up',
