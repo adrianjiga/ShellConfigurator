@@ -49,6 +49,7 @@ import {
   writeSharedConfig,
   writeShellConfig,
 } from '../../generators/shellRc.ts';
+import { restoreEnv } from '../helpers/env.ts';
 
 const expectedConfigPath = path.join(os.homedir(), '.config', 'starship', 'zsh.toml');
 const expectedConfigDir = path.join(os.homedir(), '.config', 'starship');
@@ -56,7 +57,7 @@ const expectedConfigDir = path.join(os.homedir(), '.config', 'starship');
 describe('getShellConfigPath', () => {
   const savedEnv = { ...process.env };
   afterEach(() => {
-    process.env = { ...savedEnv };
+    restoreEnv(savedEnv);
   });
 
   it('defaults to starship/<shell>.toml inside ~/.config', () => {
@@ -90,7 +91,7 @@ describe('writeShellConfig', () => {
     delete process.env.XDG_CONFIG_HOME;
   });
   afterEach(() => {
-    process.env = { ...savedEnv };
+    restoreEnv(savedEnv);
   });
 
   it('writes toml content to the per-shell config path', () => {
@@ -205,7 +206,7 @@ describe('writeSharedConfig', () => {
     delete process.env.XDG_CONFIG_HOME;
   });
   afterEach(() => {
-    process.env = { ...savedEnv };
+    restoreEnv(savedEnv);
   });
 
   const sharedPath = path.join(os.homedir(), '.config', 'starship.toml');
@@ -1136,7 +1137,7 @@ describe('resetSharedShellConfig', () => {
 describe('backupSharedConfig', () => {
   const savedEnv = { ...process.env };
   afterEach(() => {
-    process.env = { ...savedEnv };
+    restoreEnv(savedEnv);
     vi.resetAllMocks();
   });
 
@@ -1214,7 +1215,7 @@ describe('restoreConfigBackups', () => {
   const readdirSyncMock = fs.readdirSync as unknown as Mock<(dir: string) => string[]>;
 
   afterEach(() => {
-    process.env = { ...savedEnv };
+    restoreEnv(savedEnv);
     vi.resetAllMocks();
   });
 

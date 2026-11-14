@@ -17,3 +17,8 @@ vi.mock('../../services/whatChanged.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/whatChanged.ts')>()),
   writeWhatChangedSafely: vi.fn(() => null),
 }));
+
+vi.mock('../../services/starshipProbe.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../services/starshipProbe.ts')>()),
+  explainPromptAsync: vi.fn(async () => ({ mode: 'unavailable', reason: 'starship-missing' })),
+}));

@@ -4,6 +4,7 @@ import {
   assertDebugInfo,
   assertGenerate,
   assertScriptingSurface,
+  assertShare,
   requireScratchHome,
   runSmoke,
 } from './smokeHome.mjs';
@@ -17,4 +18,5 @@ await runSmoke('Headless generate smoke', () => {
   assertDebugInfo(homeDir);
   assertBashCompletions(homeDir);
   assertScriptingSurface();
+  assertShare(homeDir);
 });

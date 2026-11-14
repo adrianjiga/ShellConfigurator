@@ -100,6 +100,8 @@ import {
   runGlobalFlags,
   runHeadlessCommand,
   runRollbackCommand,
+  runShareCommand,
+  runTimingsCommand,
   runUninstallCommand,
   type UninstallIo,
 } from '../index.tsx';
@@ -114,6 +116,7 @@ import { beginRunCapture, captureRun, finishRunCapture, runDir } from '../servic
 import { serializeState } from '../services/state.ts';
 import type { UninstallDeps } from '../services/uninstall.ts';
 import { DEFAULT_STATE, type InstallTask, type ShellId } from '../types.ts';
+import { restoreEnv } from './helpers/env.ts';
 
 describe('index CLI handling', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
@@ -428,7 +431,7 @@ describe('index headless routing', () => {
 
   it('rejects headless flags that lack a subcommand instead of dropping them', async () => {
     await expect(route(['--preset', 'pure', '-o', 'x.toml'])).rejects.toThrow(
-      /--preset, -o\/--output require a subcommand/
+      /--preset, --output require a subcommand/
     );
     await expect(route(['--json'])).rejects.toThrow(/--json require a subcommand/);
     await expect(route(['--shells', 'zsh'])).rejects.toThrow(/--shells require a subcommand/);
@@ -941,7 +944,7 @@ describe('index rollback command', () => {
 
   afterEach(() => {
     stdoutWrite.mockRestore();
-    process.env = { ...savedEnv };
+    restoreEnv(savedEnv);
     process.exitCode = savedExitCode;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -1292,5 +1295,164 @@ describe('index list flags', () => {
   it('documents the list flags in the help text', () => {
     runGlobalFlags(parseCliArgs(['--help']));
     expect(output()).toContain('--list-presets | --list-modules | --list-fonts [--json]');
+  });
+});
+
+describe('index timings command', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+  const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
+  const TIMINGS = ` Here are the timings of modules in your prompt (>=1ms or output):
+ git_status  -  320ms  -   "[?1] "
+ character   -   <1ms  -   "> "
+`;
+  const deps = (installed = true) => ({
+    isStarshipInstalled: async () => installed,
+    run: vi.fn(async (_command: string, _path: string, configPath: string) => ({
+      stdout: TIMINGS,
+      stderr: `config was ${fs.readFileSync(configPath, 'utf8').length} bytes`,
+    })),
+  });
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+  });
+  afterEach(() => stdoutWrite.mockRestore());
+
+  it('times a config built from the flags in the current folder, with suggestions', async () => {
+    const probe = deps();
+    await runTimingsCommand(parseCliArgs(['timings', '--preset', 'pure-prompt']), probe);
+
+    expect(probe.run).toHaveBeenCalledWith('timings', process.cwd(), expect.any(String));
+    expect(output()).toContain('(config: built from the flags)');
+    expect(output()).toMatch(/git_status\s+320ms {2}slow/);
+    expect(output()).toContain('Suggestions:');
+    expect(output()).toContain('git_status took 320ms');
+  });
+
+  it('times the config Starship loads here when no flags are given', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-active-'));
+    const config = path.join(dir, 'zsh.toml');
+    fs.writeFileSync(config, 'format = "$character"\n');
+    vi.stubEnv('STARSHIP_CONFIG', config);
+    try {
+      const probe = deps();
+      await runTimingsCommand(parseCliArgs(['timings']), probe);
+      expect(output()).toContain(`(config: ${config})`);
+      expect(probe.run).toHaveBeenCalledWith('timings', process.cwd(), config);
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("times Starship's built-in default prompt when the config it would load is missing", async () => {
+    vi.stubEnv('STARSHIP_CONFIG', '/no/such/starship.toml');
+    try {
+      const probe = deps();
+      probe.run.mockImplementationOnce(async () => ({ stdout: TIMINGS, stderr: '' }));
+      await runTimingsCommand(parseCliArgs(['timings']), probe);
+      expect(output()).toContain(
+        "(config: Starship's built-in default prompt, since $STARSHIP_CONFIG (/no/such/starship.toml) does not exist)"
+      );
+      expect(probe.run).toHaveBeenCalledWith('timings', process.cwd(), '/no/such/starship.toml');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('times the file --config names, as JSON with --json', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-timings-'));
+    const config = path.join(dir, 'starship.toml');
+    fs.writeFileSync(config, 'format = "$git_status$character"\n');
+    try {
+      await runTimingsCommand(parseCliArgs(['timings', '--config', config, '--json']), deps());
+      expect(JSON.parse(output())).toMatchObject({ config, slowestMs: 320, slow: true });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    [['--config', 'x', '--preset', 'pure-prompt'], /--config times an existing file, so --preset/],
+    [['--config', '/no/such/file'], /Could not read '\/no\/such\/file'/],
+    [['--shells', 'zsh'], /--shells cannot be used with timings/],
+    [['--yes'], /--yes cannot be used with timings/],
+  ])('rejects %o', async (args, message) => {
+    await expect(runTimingsCommand(parseCliArgs(['timings', ...args]), deps())).rejects.toThrow(
+      message
+    );
+  });
+
+  it('says Starship is needed when it is not installed', async () => {
+    await expect(
+      runTimingsCommand(parseCliArgs(['timings', '--preset', 'pure-prompt']), deps(false))
+    ).rejects.toThrow(/Starship is not installed/);
+  });
+
+  it('documents timings in the help text', () => {
+    runGlobalFlags(parseCliArgs(['--help']));
+    expect(output()).toContain('shell-configurator timings');
+    expect(output()).toContain('--config <file>');
+  });
+
+  it('refuses an adopt-mode card and points at the shared config instead', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-adopt-'));
+    const card = path.join(dir, 'card.json');
+    fs.writeFileSync(card, serializeState({ ...DEFAULT_STATE, keepExistingConfig: true }));
+    try {
+      await expect(
+        runTimingsCommand(parseCliArgs(['timings', '--state', card]), deps())
+      ).rejects.toThrow(/adopt-mode card keeps your own config.*--config .*starship\.toml/);
+      expect(() => runShareCommand(parseCliArgs(['share', '--state', card]))).toThrow(
+        /adopt-mode card keeps your own config, so there is no generated prompt to share/
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects --config outside timings', async () => {
+    await expect(
+      runHeadlessCommand(parseCliArgs(['generate', '--config', 'x']), '')
+    ).rejects.toThrow('--config only applies to timings.');
+  });
+});
+
+describe('index share command', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+  const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+  });
+  afterEach(() => stdoutWrite.mockRestore());
+
+  it('prints the prompt the flags build as Markdown', () => {
+    runShareCommand(parseCliArgs(['share', '--preset', 'pure-prompt']));
+    expect(output()).toMatch(/^# Starship prompt: Pure Prompt\n/);
+    expect(output()).toContain('```toml');
+  });
+
+  it('writes it to the -o file instead', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-share-cli-'));
+    const file = path.join(dir, 'prompt.md');
+    try {
+      runShareCommand(parseCliArgs(['share', '-o', file]));
+      expect(fs.readFileSync(file, 'utf8')).toContain('## starship.toml');
+      expect(output()).toBe(`Wrote ${file}\n`);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    [['--shells', 'zsh'], /--shells cannot be used with share/],
+    [['--json'], /--json cannot be used with share/],
+  ])('rejects %o', (args, message) => {
+    expect(() => runShareCommand(parseCliArgs(['share', ...args]))).toThrow(message);
+  });
+
+  it('documents share in the help text', () => {
+    runGlobalFlags(parseCliArgs(['--help']));
+    expect(output()).toContain('shell-configurator share');
   });
 });

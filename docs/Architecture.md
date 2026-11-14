@@ -279,7 +279,9 @@ src/
     ├── args.ts                Hand-rolled, dependency-free CLI flag parser
     ├── headless.ts            generate/apply implementation + bounded --import-url fetch (routing is runHeadlessCommand in index.tsx)
     ├── fileDiff.ts            Unified diff + plannedFileChanges: the configs and rc files a run would write, diffed against disk
-    ├── preview.ts             Live preview: scratch-dir `starship prompt` + static fallback
+    ├── preview.ts             Live preview: scratch-dir `starship prompt` + static fallback; starshipEnv
+    ├── starshipProbe.ts       starship timings / explain: parsers, fix suggestions, timePrompt, explainPromptAsync
+    ├── share.ts               Markdown to share a prompt: its TOML and a card that rebuilds it
     ├── detector.ts            Async system detection (PM, shells, Starship, terminal, container)
     ├── installer.ts           Install commands (Starship, fonts, shells, chsh) and Starship/font removal
     ├── installTasks.ts        Install task orchestration (buildTaskList, runInstallTasks)

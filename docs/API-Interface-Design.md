@@ -611,6 +611,52 @@ function completionScript(shell: 'bash' | 'zsh' | 'fish'): string;
 // --shells completes a comma-separated list).
 ```
 
+### starshipProbe.ts / share.ts
+
+```typescript
+function timePrompt(toml: string, path: string, deps?: ProbeDeps): Promise<TimingsReport>;
+// Writes `toml` to a temporary folder and runs `starship timings --path <path>`
+// against it (PWD = path, the real HOME), then parses the rows (parseTimings,
+// slowest first) and suggests fixes (suggestFixes): a command that timed out
+// raises command_timeout (at least 1000ms), a timed-out folder scan raises
+// scan_timeout, and each module at or over SLOW_MODULE_MS (50) gets a fix
+// (git_status/git_metrics: core.fsmonitor or disabling it; a language module
+// that runs a version command: disabling it; directory: a slow drive). Modules
+// run in parallel, so `slow` compares the slowest module with SLOW_PROMPT_MS
+// (200). `character`, `line_break` and `fill` never get a fix, and a module
+// that ran into the timeout gets only the command_timeout advice (git_status,
+// git_metrics and directory keep theirs). An existing config is timed where it
+// is, Starship's defaults through the missing path itself, and one built from
+// flags goes to a scratch folder (ScratchDeps). Escapes are stripped with
+// node:util's stripVTControlCharacters; brackets in strings and comments do not
+// count when the top-level timeouts are read. The config's own
+// command_timeout/scan_timeout are read from its top level (past multi-line
+// strings, with `_` digit separators). Rejects with StarshipMissingError without
+// Starship, and with StarshipTimedOutError when Starship is killed after 30s.
+
+function explainPromptAsync(state: WizardState, deps?: ProbeDeps): Promise<ExplainResult>;
+// `starship explain` for the generated config in the preview's sample project:
+// { mode: 'real', items: [{ output, description }] }, or { mode: 'unavailable',
+// reason: 'starship-missing' | 'explain-failed' }. Never throws. Stubbed in
+// setup.ts so no test runs Starship.
+
+function renderShare(state: WizardState): string;
+// Markdown for an issue, a gist or the Starship presets gallery: the generated
+// starship.toml and a state card (serializeState of shareableState, which drops
+// this machine's shells, font install and default shell) that rebuilds exactly
+// that TOML with `apply --state prompt.json --shells <your shells>`. The home
+// folder is shown as `~` (redactHome), and the Markdown says so when it was;
+// with directory substitutions it also says to check those paths before posting.
+
+function withPreviewProject<T>(state, deps: ScratchDeps, run): Promise<T>;
+// preview.ts: a scratch folder with the generated config and the sample project
+// for `run`, removed afterwards; renderPromptAsync and explainPromptAsync use it.
+
+function writeShareFile(state: WizardState, dir?: string): string;
+// Writes renderShare to starship-prompt.md in `dir` (default: the current
+// folder), or starship-prompt-2.md and so on, never over an existing file.
+```
+
 ### debugInfo.ts
 
 ```typescript
@@ -946,6 +992,42 @@ shell, or any other flag, is a usage error. `--help` shows where each shell
 loads the script from: `~/.local/share/bash-completion/completions/`, the
 first `$fpath` directory as `_shell-configurator`, and
 `~/.config/fish/completions/`.
+
+### timings
+
+```
+shell-configurator timings [--config <file> | generate flags] [--json]
+```
+
+Times each module of a config in the current folder with `starship timings`
+and prints them slowest first, how long the prompt waits for its slowest module,
+and suggestions with the TOML to add (`timePrompt` in
+`src/services/starshipProbe.ts`). Without flags it times the config the current
+Starship loads here, by Starship's own rule (`activeStarshipConfig`:
+`$STARSHIP_CONFIG` when set, else the shared `starship.toml`; Starship's
+built-in default prompt, labelled with the reason, when that file is missing). `--config` times an existing file, and the generate flags
+(`--preset`, `--palette`, `--state`, ...) time a config built from them; the two
+cannot be combined. `--json` prints `{ config,
+path, slowestMs, slow, modules: [{ module, ms, output }], suggestions: [{ module?,
+text, toml? }] }`. It changes no config (Starship still writes its own cache and
+logs as it does for every prompt). Without Starship, or when Starship takes longer
+than 30s (a very slow module, usually git_status), it is a run error. An
+adopt-mode card is a usage error that points at `--config` with the shared
+config; `--shells`, `--yes` and other flags are usage errors too. The flags each
+command accepts come from `SUBCOMMAND_INFO`.
+
+### share
+
+```
+shell-configurator share [generate flags] [-o <file>]
+```
+
+Prints the prompt the generate flags (or `--state`) build as Markdown: its
+`starship.toml` and the state card that rebuilds it (`renderShare` in
+`src/services/share.ts`). `-o` writes it to a file instead. The card leaves out
+this machine's shells, font install and default shell, and the home folder is
+shown as `~`. An adopt-mode card is a usage error (there is no generated prompt
+to share); `--shells`, `--json` and other flags are usage errors.
 
 ### Exit Codes
 

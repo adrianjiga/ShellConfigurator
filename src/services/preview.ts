@@ -54,6 +54,20 @@ export interface PreviewDeps {
 
 const SAMPLE_PROJECT_NAME = 'myapp';
 
+export function starshipEnv(configPath: string, home?: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...(home ? { HOME: home } : {}),
+    STARSHIP_CONFIG: configPath,
+  };
+  const pathDir = getMissingStarshipPathDir();
+  if (pathDir) env.PATH = `${pathDir}${nodePath.delimiter}${process.env.PATH ?? ''}`;
+  // Starship formats its output for the calling shell when STARSHIP_SHELL is
+  // set (e.g. bash's literal `\[`/`\]` markers). Raw ANSI output is wanted here.
+  delete env.STARSHIP_SHELL;
+  return env;
+}
+
 export const DEFAULT_PREVIEW_DEPS: PreviewDeps = {
   // A script install off PATH still renders the preview.
   isStarshipInstalled: async () => (await findStarshipAsync()).installed,
@@ -112,24 +126,13 @@ export const DEFAULT_PREVIEW_DEPS: PreviewDeps = {
     }
     return project;
   },
-  runStarshipPrompt: async (scratch, projectDir, width) => {
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      HOME: scratch,
-      PWD: projectDir,
-      STARSHIP_CONFIG: nodePath.join(scratch, STARSHIP_CONFIG_FILE),
-    };
-    const pathDir = getMissingStarshipPathDir();
-    if (pathDir) env.PATH = `${pathDir}${nodePath.delimiter}${process.env.PATH ?? ''}`;
-    // Starship formats its output for the calling shell when STARSHIP_SHELL is
-    // set (e.g. bash's literal `\[`/`\]` markers). Ink needs raw ANSI output.
-    delete env.STARSHIP_SHELL;
-    return runCapture(
-      'starship',
-      ['prompt', '--path', projectDir, '--terminal-width', String(width)],
-      { env }
-    );
-  },
+  runStarshipPrompt: async (scratch, projectDir, width) =>
+    runCapture('starship', ['prompt', '--path', projectDir, '--terminal-width', String(width)], {
+      env: {
+        ...starshipEnv(nodePath.join(scratch, STARSHIP_CONFIG_FILE), scratch),
+        PWD: projectDir,
+      },
+    }),
   cleanup: async (scratch) => {
     try {
       await rm(scratch, { recursive: true, force: true });
@@ -154,16 +157,32 @@ export async function renderPromptAsync(
     return { mode: 'static', reason: 'starship-missing' };
   }
 
-  let scratch: string | null = null;
   try {
-    scratch = await deps.createScratch();
-    await deps.writeConfig(scratch, generateToml(state));
-    const projectDir = await deps.scaffoldProject(scratch);
-    const text = await deps.runStarshipPrompt(scratch, projectDir, width);
+    const text = await withPreviewProject(state, deps, (scratch, projectDir) =>
+      deps.runStarshipPrompt(scratch, projectDir, width)
+    );
     if (text.trim().length === 0) return { mode: 'static', reason: 'render-failed' };
     return { mode: 'real', text };
   } catch {
     return { mode: 'static', reason: 'render-failed' };
+  }
+}
+
+export type ScratchDeps = Pick<
+  PreviewDeps,
+  'createScratch' | 'writeConfig' | 'scaffoldProject' | 'cleanup'
+>;
+
+export async function withPreviewProject<T>(
+  state: WizardState,
+  deps: ScratchDeps,
+  run: (scratch: string, projectDir: string) => Promise<T>
+): Promise<T> {
+  let scratch: string | null = null;
+  try {
+    scratch = await deps.createScratch();
+    await deps.writeConfig(scratch, generateToml(state));
+    return await run(scratch, await deps.scaffoldProject(scratch));
   } finally {
     if (scratch) await deps.cleanup(scratch);
   }

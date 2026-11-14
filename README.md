@@ -28,6 +28,9 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/),
 - **What changed**: after an install or `apply`, `~/.config/starship/WHAT-CHANGED.md` lists what ran, every file it changed, where each shell's Starship lines are, and how to undo it
 - **Scripting**: `--list-presets`, `--list-modules` and `--list-fonts` (with `--json`) list the ids the flags accept, and `apply --dry-run --json` prints the plan, config and file diffs as JSON
 - **Shell completions**: `completions <bash|zsh|fish>` prints a completion script for every subcommand, flag and value (presets, palettes, shells, fonts)
+- **Prompt timings**: `timings` times each module of the config Starship loads in the current folder and suggests fixes for slow ones (`--config` times another `starship.toml`)
+- **Explain**: on the Review step, `e` shows why each part of the prompt appears, from `starship explain`
+- **Share**: `share` prints the prompt as Markdown, with its `starship.toml` and the state card that rebuilds it; `s` on the Done screen saves it as `starship-prompt.md`
 
 ## Requirements
 
@@ -69,6 +72,8 @@ shell-configurator --list-presets [--json]    list the preset ids (also --list-m
 shell-configurator apply --dry-run            show the install plan and a diff of every config and rc file it would change
 shell-configurator apply --dry-run --json     the same plan, config and diffs as JSON
 shell-configurator completions <bash|zsh|fish>  print a completion script (see --help for where each shell loads it from)
+shell-configurator timings --config ~/.config/starship/zsh.toml  time each module of that config here and suggest fixes
+shell-configurator share --preset tokyo-night  print the prompt as Markdown to share, with the card that rebuilds it
 shell-configurator --help                     show usage and exit
 shell-configurator --version                  print the version and exit
 shell-configurator --dry-run                  preview the config without installing (also -d, --no-install)

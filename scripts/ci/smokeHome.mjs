@@ -175,6 +175,40 @@ export function assertUninstalled(homeDir, rcPath, shell, before) {
   );
 }
 
+/** Asserts `share` prints Markdown whose card rebuilds exactly the TOML it shows. */
+export function assertShare(homeDir) {
+  const text = runCli(['share', '--preset', 'tokyo-night', '--character', 'lambda']);
+  const block = (lang) => new RegExp(`\`\`\`${lang}\n([\\s\\S]*?)\n\`\`\``).exec(text)?.[1];
+  const toml = block('toml');
+  const card = block('json');
+  assert.ok(toml && card, `share printed no TOML or card:\n${text}`);
+  const cardFile = nodePath.join(homeDir, 'shared-prompt.json');
+  writeFileSync(cardFile, card);
+  const plan = JSON.parse(
+    runCli(['apply', '--dry-run', '--json', '--state', cardFile, '--shells', 'bash'])
+  );
+  assert.equal(
+    plan.config.toml.trimEnd(),
+    toml,
+    'the shared card does not rebuild the shared TOML'
+  );
+}
+
+/** Asserts `timings` times the config a real apply wrote, as JSON. */
+export function assertTimings(configPath) {
+  const report = JSON.parse(runCli(['timings', '--json', '--config', configPath]));
+  assert.equal(
+    report.config,
+    configPath,
+    `timings timed the wrong config:\n${JSON.stringify(report)}`
+  );
+  assert.ok(
+    Array.isArray(report.modules) && report.modules.some((timing) => timing.module === 'character'),
+    `timings reported no character module:\n${JSON.stringify(report)}`
+  );
+  assert.equal(typeof report.slowestMs, 'number', 'timings reported no slowest module');
+}
+
 /** The WHAT-CHANGED.md path the CLI writes in this scratch home. */
 export function whatChangedPath() {
   return nodePath.join(process.env.XDG_CONFIG_HOME, 'starship', 'WHAT-CHANGED.md');

@@ -5,10 +5,15 @@ import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { posixShellQuote } from './config/shells.ts';
-import { restoreConfigBackups } from './generators/shellRc.ts';
-import type { CliFlags } from './services/args.ts';
-import { parseCliArgs, quoteArgv } from './services/args.ts';
-import { COMPLETION_SHELLS, type CompletionShell } from './services/cliSurface.ts';
+import {
+  getSharedConfigPath,
+  restoreConfigBackups,
+  writeFileAtomic,
+} from './generators/shellRc.ts';
+import { generateToml } from './generators/starship.ts';
+import type { CliFlags, Subcommand } from './services/args.ts';
+import { parseCliArgs, quoteArgv, SUBCOMMANDS } from './services/args.ts';
+import { COMPLETION_SHELLS, type CompletionShell, SUBCOMMAND_INFO } from './services/cliSurface.ts';
 import { completionScript } from './services/completions.ts';
 import {
   collectDebugInfo,
@@ -17,7 +22,7 @@ import {
   formatDebugInfo,
 } from './services/debugInfo.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
-import { CliRunError, CliUsageError } from './services/errors.ts';
+import { CliRunError, CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
 import { lastRunShells, recordRunSafely } from './services/history.ts';
 import { formatListing, listEntries } from './services/listings.ts';
@@ -32,6 +37,16 @@ import {
   runRollback,
 } from './services/rollback.ts';
 import { captureRun, trackedFiles } from './services/runCapture.ts';
+import { renderShare } from './services/share.ts';
+import {
+  type ActiveConfig,
+  activeStarshipConfig,
+  DEFAULT_PROBE_DEPS,
+  formatTimings,
+  type ProbeDeps,
+  type TimingsReport,
+  timePrompt,
+} from './services/starshipProbe.ts';
 import { restoreTty } from './services/tty.ts';
 import {
   DEFAULT_UNINSTALL_DEPS,
@@ -95,6 +110,8 @@ Usage:
   shell-configurator rollback     put back the files the last run changed
   shell-configurator debug-info   print a report of the setup to attach to a bug report
   shell-configurator completions <bash|zsh|fish>   print a shell completion script
+  shell-configurator timings      time each prompt module here and suggest fixes for slow ones
+  shell-configurator share        print the prompt as Markdown to share, with the card that rebuilds it
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
@@ -174,6 +191,20 @@ rollback options (undoes the newest run that changed files; asks first):
 debug-info options (reads only; e.g. shell-configurator debug-info > issue.md):
   --json               Print the report data as JSON instead of Markdown
   Your home directory is shown as ~ so the report does not name you.
+
+timings options (changes no config; times the modules in the current folder):
+  Without flags it times the config Starship loads here: $STARSHIP_CONFIG, else
+  ~/.config/starship.toml, else Starship's built-in default prompt.
+  --config <file>      Time this starship.toml instead
+  --json               Print the timings and suggestions as JSON
+  The generate flags (--preset, --palette, --state, ...) time a config built
+  from them. Modules run in parallel, so the prompt is about as slow as its
+  slowest one.
+
+share options (takes the generate flags, e.g. shell-configurator share --preset tokyo-night):
+  -o, --output <file>  Write the Markdown to this file instead of stdout
+  The card it prints has no shells or font install of this machine; whoever uses
+  it adds --shells (and --font) to apply.
 
 completions (install the script where your shell loads completions from):
   bash   shell-configurator completions bash > ~/.local/share/bash-completion/completions/shell-configurator
@@ -273,7 +304,7 @@ function presentConfigFlags(flags: CliFlags): string[] {
   if (flags.skipStarship) present.push('--skip-starship');
   if (flags.adopt) present.push('--adopt');
   if (flags.importUrl) present.push('--import-url');
-  if (flags.outputFile) present.push('-o/--output');
+  if (flags.outputFile) present.push('--output');
   if (flags.exportFile) present.push('--export');
   return present;
 }
@@ -292,20 +323,15 @@ function presentFlags(flags: CliFlags): string[] {
     [flags.starship, '--starship'],
     [flags.list, '--list'],
     [flags.runId, '--run'],
+    [flags.configFile, '--config'],
   ];
   for (const [value, name] of others) if (value) present.push(name);
   return present;
 }
 
-const UNINSTALL_FLAGS = new Set([
-  '--shells',
-  '--font',
-  '--starship',
-  '--yes',
-  '--dry-run',
-  '--json',
-]);
-const ROLLBACK_FLAGS = new Set(['--list', '--run', '--yes', '--dry-run', '--json']);
+function acceptedFlags(subcommand: Subcommand): Set<string> {
+  return new Set(SUBCOMMAND_INFO[subcommand].flags.map((info) => info.name));
+}
 
 function warnIgnoredFlags(flags: CliFlags, subcommand: string): void {
   if (flags.stateFile) return;
@@ -409,7 +435,8 @@ export async function runUninstallCommand(
   command: string,
   io: UninstallIo = DEFAULT_UNINSTALL_IO
 ): Promise<void> {
-  const unused = presentFlags(flags).filter((flag) => !UNINSTALL_FLAGS.has(flag));
+  const accepted = acceptedFlags('uninstall');
+  const unused = presentFlags(flags).filter((flag) => !accepted.has(flag));
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with uninstall.`);
   }
@@ -481,7 +508,8 @@ export async function runRollbackCommand(
   command: string,
   io: PromptIo = DEFAULT_PROMPT_IO
 ): Promise<void> {
-  const unused = presentFlags(flags).filter((flag) => !ROLLBACK_FLAGS.has(flag));
+  const accepted = acceptedFlags('rollback');
+  const unused = presentFlags(flags).filter((flag) => !accepted.has(flag));
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with rollback.`);
   }
@@ -554,6 +582,87 @@ export async function runRollbackCommand(
   }
 }
 
+export async function runTimingsCommand(
+  flags: CliFlags,
+  deps: ProbeDeps = DEFAULT_PROBE_DEPS
+): Promise<void> {
+  const present = presentFlags(flags);
+  const accepted = acceptedFlags('timings');
+  const unused = present.filter((flag) => !accepted.has(flag));
+  if (unused.length > 0) {
+    throw new CliUsageError(`${unused.join(', ')} cannot be used with timings.`);
+  }
+  const building = present.filter((flag) => flag !== '--config' && flag !== '--json');
+  if (flags.configFile && building.length > 0) {
+    throw new CliUsageError(
+      `--config times an existing file, so ${building.join(', ')} cannot be used with it.`
+    );
+  }
+  let source: { toml: string; path?: string };
+  let config: string;
+  if (building.length > 0) {
+    const state = stateFromFlags(flags);
+    if (state.keepExistingConfig) {
+      throw new CliUsageError(
+        `An adopt-mode card keeps your own config, so there is nothing to build; time it with --config ${getSharedConfigPath()}.`
+      );
+    }
+    source = { toml: generateToml(state) };
+    config = 'built from the flags';
+  } else {
+    const active: ActiveConfig = flags.configFile
+      ? { kind: 'file', path: flags.configFile }
+      : activeStarshipConfig();
+    if (active.kind === 'file') {
+      try {
+        source = { toml: readFileSync(active.path, 'utf8'), path: active.path };
+      } catch (err) {
+        throw new CliUsageError(`Could not read '${active.path}': ${errorMessage(err)}`);
+      }
+      config = active.path;
+    } else {
+      source = { toml: '', path: active.path };
+      config = `Starship's built-in default prompt, since ${active.reason}`;
+    }
+  }
+  let report: TimingsReport;
+  try {
+    report = await timePrompt(source, process.cwd(), deps);
+  } catch (err) {
+    throw new CliRunError(errorMessage(err));
+  }
+  process.stdout.write(
+    flags.json
+      ? `${JSON.stringify({ config, ...report }, null, 2)}\n`
+      : formatTimings(report, config)
+  );
+}
+
+export function runShareCommand(flags: CliFlags): void {
+  const accepted = acceptedFlags('share');
+  const unused = presentFlags(flags).filter((flag) => !accepted.has(flag));
+  if (unused.length > 0) {
+    throw new CliUsageError(`${unused.join(', ')} cannot be used with share.`);
+  }
+  const state = stateFromFlags(flags);
+  if (state.keepExistingConfig) {
+    throw new CliUsageError(
+      `An adopt-mode card keeps your own config, so there is no generated prompt to share; share ${getSharedConfigPath()} itself.`
+    );
+  }
+  const text = renderShare(state);
+  if (!flags.outputFile) {
+    process.stdout.write(text);
+    return;
+  }
+  try {
+    writeFileAtomic(flags.outputFile, text);
+  } catch (err) {
+    throw new CliRunError(`Could not write '${flags.outputFile}': ${errorMessage(err)}`);
+  }
+  process.stdout.write(`Wrote ${flags.outputFile}\n`);
+}
+
 export function runCompletionsCommand(flags: CliFlags): void {
   const unused = presentFlags(flags);
   if (unused.length > 0) {
@@ -589,7 +698,7 @@ export async function runDebugInfoCommand(
 }
 
 /**
- * Runs a headless subcommand (`generate`, `apply`, `doctor`, `repair`, `uninstall`, `rollback` or `debug-info`) to completion,
+ * Runs a headless subcommand (one of SUBCOMMANDS) to completion,
  * returning true when the flags targeted one so the Ink wizard is skipped
  * entirely. Errors propagate for the caller's fatal handler — headless runs
  * never render. `command` is the original invocation line, recorded for
@@ -606,6 +715,9 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.starship && flags.subcommand !== 'uninstall') {
     throw new CliUsageError('--starship only applies to uninstall.');
   }
+  if (flags.configFile && flags.subcommand !== 'timings') {
+    throw new CliUsageError('--config only applies to timings.');
+  }
   if ((flags.list || flags.runId) && flags.subcommand !== 'rollback') {
     throw new CliUsageError(`${flags.list ? '--list' : '--run'} only applies to rollback.`);
   }
@@ -619,6 +731,14 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   }
   if (flags.subcommand === 'completions') {
     runCompletionsCommand(flags);
+    return true;
+  }
+  if (flags.subcommand === 'timings') {
+    await runTimingsCommand(flags);
+    return true;
+  }
+  if (flags.subcommand === 'share') {
+    runShareCommand(flags);
     return true;
   }
   if (flags.subcommand === 'uninstall') {
@@ -655,7 +775,7 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.fix) dropped.push('--fix');
   if (dropped.length > 0) {
     throw new CliUsageError(
-      `${dropped.join(', ')} require a subcommand (generate, apply, doctor, repair, uninstall, rollback, debug-info or completions).`
+      `${dropped.join(', ')} require a subcommand (${SUBCOMMANDS.join(', ')}).`
     );
   }
   return false;

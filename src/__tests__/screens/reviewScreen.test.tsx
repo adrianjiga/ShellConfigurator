@@ -5,6 +5,7 @@ import { cleanup, render } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReviewScreen } from '../../screens/ReviewScreen.tsx';
 import { plannedPathDir } from '../../services/installer.ts';
+import { explainPromptAsync } from '../../services/starshipProbe.ts';
 import { DEFAULT_STATE } from '../../types.ts';
 import { pressEsc } from '../helpers/ink.ts';
 import { flush } from '../helpers/wait.ts';
@@ -270,5 +271,111 @@ describe('ReviewScreen against the files on disk', () => {
     const frame = (instance.lastFrame() ?? '').replace(/\s+/g, ' ');
     expect(frame).toContain('already set up: the file stays as it is');
     expect(frame).toContain('No config or rc file changes.');
+  });
+});
+
+describe('ReviewScreen explain', () => {
+  it('asks Starship once and toggles why each part of the prompt shows with e', async () => {
+    vi.mocked(explainPromptAsync).mockResolvedValueOnce({
+      mode: 'real',
+      items: [
+        { output: '~/projects', description: 'The current working directory' },
+        { output: 'on main', description: 'The active branch of the current Git repo' },
+      ],
+    });
+    const { instance } = setup();
+    await flush();
+    expect(instance.lastFrame()).toContain('explain the prompt');
+    expect(instance.lastFrame()).not.toContain('Why each part');
+
+    instance.stdin.write('e');
+    await flush();
+    const frame = instance.lastFrame() ?? '';
+    expect(frame).toContain('Why each part of the prompt shows');
+    expect(frame).toContain('The current working directory');
+    expect(frame).toContain('hide the explanation');
+
+    instance.stdin.write('e');
+    await flush();
+    expect(instance.lastFrame()).not.toContain('Why each part');
+    instance.stdin.write('e');
+    await flush();
+    expect(instance.lastFrame()).toContain('The active branch');
+    expect(explainPromptAsync).toHaveBeenCalledOnce();
+  });
+
+  it('lines up the descriptions after icons outside the basic plane, and repeated rows', async () => {
+    vi.mocked(explainPromptAsync).mockResolvedValueOnce({
+      mode: 'real',
+      items: [
+        { output: '\u{F024B} x', description: 'First' },
+        { output: 'abc', description: 'Second' },
+        { output: 'abc', description: 'Second' },
+      ],
+    });
+    const { instance } = setup();
+    await flush();
+    instance.stdin.write('e');
+    await flush();
+    const lines = (instance.lastFrame() ?? '').split('\n');
+    const column = (word: string) => {
+      const line = lines.find((candidate) => candidate.includes(word))!;
+      return [...line.slice(0, line.indexOf(word))].length;
+    };
+    expect(column('First')).toBe(column('Second'));
+    expect(lines.filter((line) => line.includes('Second'))).toHaveLength(2);
+  });
+
+  it('hides the explanation on a second e that arrives before the screen re-renders', async () => {
+    const { instance } = setup();
+    await flush();
+    instance.stdin.write('e');
+    instance.stdin.write('e');
+    await flush();
+    expect(instance.lastFrame()).not.toContain('Why each part');
+  });
+
+  it('says why there is no explanation when Starship cannot give one', async () => {
+    const { instance } = setup();
+    await flush();
+    instance.stdin.write('e');
+    await flush();
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
+      'Starship is not installed yet, so it cannot explain the prompt.'
+    );
+  });
+
+  it('asks again after a failed explanation, and survives one that throws', async () => {
+    vi.mocked(explainPromptAsync)
+      .mockRejectedValueOnce(new Error('starship check failed'))
+      .mockResolvedValueOnce({
+        mode: 'real',
+        items: [{ output: '❯', description: 'The prompt character' }],
+      });
+    const { instance } = setup();
+    await flush();
+
+    instance.stdin.write('e');
+    await flush();
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
+      'Starship could not explain this prompt.'
+    );
+
+    instance.stdin.write('e');
+    await flush();
+    instance.stdin.write('e');
+    await flush();
+    expect(instance.lastFrame()).toContain('The prompt character');
+    expect(explainPromptAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers no explanation in adopt mode, where no config is generated', async () => {
+    const { instance } = setup({ keepExistingConfig: true });
+    await flush();
+    instance.stdin.write('e');
+    await flush();
+    expect(instance.lastFrame()).not.toContain('explain the prompt');
+    expect(instance.lastFrame()).not.toContain('Why each part');
+    expect(explainPromptAsync).not.toHaveBeenCalled();
   });
 });

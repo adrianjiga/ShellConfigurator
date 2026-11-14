@@ -18,7 +18,9 @@ export type Subcommand =
   | 'uninstall'
   | 'rollback'
   | 'debug-info'
-  | 'completions';
+  | 'completions'
+  | 'timings'
+  | 'share';
 
 export const SUBCOMMANDS: readonly Subcommand[] = [
   'generate',
@@ -29,6 +31,8 @@ export const SUBCOMMANDS: readonly Subcommand[] = [
   'rollback',
   'debug-info',
   'completions',
+  'timings',
+  'share',
 ];
 
 export interface CliFlags {
@@ -56,6 +60,7 @@ export interface CliFlags {
   importUrl?: string;
   /** Where TOML is written (-o); missing means stdout. */
   outputFile?: string;
+  configFile?: string;
   /** Write the versioned state card here (add -o to keep the TOML too) (--export). */
   exportFile?: string;
   dryRun?: boolean;
@@ -197,6 +202,9 @@ const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
   },
   '--run': (r, v) => {
     r.runId = v;
+  },
+  '--config': (r, v) => {
+    r.configFile = v;
   },
 };
 

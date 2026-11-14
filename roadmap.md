@@ -30,13 +30,13 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 ## At a glance
 
-| Status           | Items                                                                                                                                            |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · P4.1–P4.6 · P4.8 · #1 #2 #4 #5 #7 #8 #9 #10 #11 #12 #13 #14 #17 #18 #19 #20 #22 #23 #24 #26 #27 |
-| TODO             | P4.7 · P4.9–P4.10 · P5.1–P5.3 · #6 #15 #21 #25                                                                                                   |
-| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy)                                                                                         |
-| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                                                          |
-| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title                                  |
+| Status           | Items                                                                                                                                          |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · P4.1–P4.10 · #1 #2 #4 #5 #7 #8 #9 #10 #11 #12 #13 #14 #17 #18 #19 #20 #21 #22 #23 #24 #26 #27 |
+| TODO             | P5.1–P5.3 · #6 #15 #25                                                                                                                         |
+| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy)                                                                                       |
+| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                                                        |
+| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title                                |
 
 ---
 
@@ -284,11 +284,16 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
   lines and config, and `rollback`/`uninstall`/`doctor` to undo or check. The Done screen and `apply` name
   it. Best-effort, so a failed write never fails the run.
 
-**P4.7 — Performance doctor (`--timings`) (#21)** — **TODO**
+**P4.7 — Performance doctor (`--timings`) (#21)** — **DONE**
 
 - `shell-configurator timings` runs `starship prompt --timings` against the generated config and suggests fixes: raise `command_timeout`, disable a slow module, tune `scan_timeout`.
 - **Why.** "My prompt is slow" is its own support class — distinct from health (#10, is it broken?) and correctness (does it work?). Starship ships the measurement; nobody exposes it to the user.
 - **How.** One executor + one table of suggestions, same faked-exec test pattern as the detector; reuse P2.1's scratch-dir harness. **Effort.** S-M. **D:** P2.1.
+- **Shipped:** `shell-configurator timings` (`services/starshipProbe.ts`) runs `starship timings` in the current
+  folder against a config built from the generate flags, or the one `--config` names, and prints each module
+  slowest first with suggestions: `command_timeout` when a tool timed out, `scan_timeout` when the folder scan
+  did, and a fix per module over 50ms. Modules run in parallel, so the slowest one is the prompt's wait.
+  `--json` gives the same data.
 
 **P4.8 — Scripting surface** — **DONE**
 
@@ -299,17 +304,23 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
   `apply --dry-run --json` (`{ dryRun, shells, installStarship, tasks, config, changes }`, where `changes`
   is P4.5's diff against disk).
 
-**P4.9 — `starship explain` in Review** — **TODO**
+**P4.9 — `starship explain` in Review** — **DONE**
 
 - Show _why_ each segment renders in the Review step.
 - **Why.** Free insurance against surprise; starship already explains the modules.
 - **How.** Run `starship explain` against the generated config via P2.1's exec harness; render as a collapsible section. **Effort.** S-M. **D:** P2.1.
+- **Shipped:** `e` on the Review step shows (and hides) why each part of the prompt shows, from
+  `starship explain` run once in the preview's sample project (`explainPromptAsync`).
 
-**P4.10 — "Share my prompt"** — **TODO**
+**P4.10 — "Share my prompt"** — **DONE**
 
 - Emit a single `starship.toml` (or PR-ready preset snippet) to paste into the starship presets gallery.
 - **Why.** Closes the community loop; `generate` already emits one TOML, so this is the packaging/affordance.
 - **How.** A share renderer over `generateToml`, plus a Done/Review action; no new state. **Effort.** S. **D:** P1.2.
+- **Shipped:** `shell-configurator share` (`services/share.ts`) prints the prompt as Markdown: its
+  `starship.toml` and a state card without this machine's shells, font install or default shell, which
+  rebuilds exactly that TOML with `apply --state`. `-o` writes a file; `s` on the Done screen saves
+  `starship-prompt.md` in the current folder.
 
 **Gate:** full lifecycle e2e in CI (install → doctor → rollback → uninstall) with mock exec.
 
@@ -371,8 +382,7 @@ they can be picked up in parallel with any phase but each stays its own PR.
 
 ## Suggested next order (remaining work)
 
-1. The rest of Phase 4: P4.7 timings, P4.9 explain, P4.10 share.
-2. Then **P5.1 (#6) transient prompt**, **P5.2 (#15) prompt-manager detection**, **P5.3 (#25) bootstrap**.
+1. **P5.1 (#6) transient prompt**, **P5.2 (#15) prompt-manager detection**, **P5.3 (#25) bootstrap**.
 
 ## Merge & verification strategy
 
