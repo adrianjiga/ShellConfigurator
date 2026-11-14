@@ -88,6 +88,37 @@ describe('SegmentsScreen', () => {
     });
   });
 
+  it('puts a module back on the right when it is unticked on the left again', async () => {
+    let state: WizardState = {
+      ...DEFAULT_STATE,
+      leftModules: ['directory', 'git_branch', 'character'],
+      rightModules: ['username', 'time'],
+    };
+    const onNext = vi.fn();
+    const screen = () => (
+      <SegmentsScreen
+        side="left"
+        state={state}
+        onNext={onNext}
+        onUpdate={(update) => {
+          state = { ...state, ...update };
+          instance.rerender(screen());
+        }}
+        onBack={vi.fn()}
+      />
+    );
+    const instance = render(screen());
+    await flush();
+
+    await press(instance, DOWN, DOWN, ' ');
+    expect(state.rightModules).toEqual(['time']);
+    await press(instance, ' ', '\r');
+
+    expect(onNext).toHaveBeenCalledWith(
+      expect.objectContaining({ rightModules: ['username', 'time'] })
+    );
+  });
+
   it('appends a newly enabled module to the end of the prompt order', async () => {
     const { instance, onUpdate } = setup();
     await flush();

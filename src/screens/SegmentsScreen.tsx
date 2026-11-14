@@ -89,6 +89,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
   }));
   const viewRef = useRef(view);
   const { selected, filter, cursor } = view;
+  const rightOnOpen = useRef(state.rightModules);
 
   const rows = buildRows(selected, filter, takenByLeft);
 
@@ -106,7 +107,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
       side === 'left'
         ? {
             leftModules: modules,
-            rightModules: state.rightModules.filter((id) => !modules.includes(id)),
+            rightModules: rightOnOpen.current.filter((id) => !modules.includes(id)),
           }
         : { rightModules: modules };
     commit(changes);
