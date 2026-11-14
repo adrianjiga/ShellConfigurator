@@ -1,7 +1,7 @@
-import * as fs from 'node:fs';
 import { getShell } from '../config/shells.ts';
 import {
   appliedRcContent,
+  FS_RC_IO,
   getSharedConfigPath,
   getShellConfigPath,
   type RcIo,
@@ -16,11 +16,20 @@ type Op = { kind: ' ' | '-' | '+'; line: string };
 const CONTEXT = 3;
 const MAX_LCS_CELLS = 4_000_000;
 
+const NO_NEWLINE = '\u0000';
+
 function splitLines(text: string): string[] {
   if (text === '') return [];
   const lines = text.split('\n');
   if (lines.at(-1) === '') lines.pop();
+  else lines[lines.length - 1] += NO_NEWLINE;
   return lines;
+}
+
+function opLines(op: Op): string[] {
+  return op.line.endsWith(NO_NEWLINE)
+    ? [`${op.kind}${op.line.slice(0, -1)}`, '\\ No newline at end of file']
+    : [`${op.kind}${op.line}`];
 }
 
 function lineOps(before: string[], after: string[]): Op[] {
@@ -76,14 +85,18 @@ function hunkRange(start: number, length: number): string {
   return `${length === 0 ? start : start + 1},${length}`;
 }
 
-/**
- * A `git diff`-style unified diff from `before` (null when the file does not
- * exist) to `after`, labelled with `file`. Empty when nothing changes.
- */
-export function unifiedDiff(before: string | null, after: string, file: string): string {
+interface Diff {
+  text: string;
+  added: number;
+  removed: number;
+}
+
+function diff(before: string | null, after: string, file: string): Diff {
   const ops = lineOps(splitLines(before ?? ''), splitLines(after));
   const changed = ops.flatMap((op, index) => (op.kind === ' ' ? [] : [index]));
-  if (changed.length === 0) return '';
+  const added = ops.filter((op) => op.kind === '+').length;
+  const removed = ops.filter((op) => op.kind === '-').length;
+  if (changed.length === 0) return { text: '', added, removed };
 
   const out = [before === null ? '--- /dev/null' : `--- ${file}`, `+++ ${file}`];
   let next = 0;
@@ -101,19 +114,27 @@ export function unifiedDiff(before: string | null, after: string, file: string):
     const oldLength = hunk.filter((op) => op.kind !== '+').length;
     const newLength = hunk.filter((op) => op.kind !== '-').length;
     out.push(`@@ -${hunkRange(oldStart, oldLength)} +${hunkRange(newStart, newLength)} @@`);
-    out.push(...hunk.map((op) => `${op.kind}${op.line}`));
+    out.push(...hunk.flatMap(opLines));
   }
-  return `${out.join('\n')}\n`;
+  return { text: `${out.join('\n')}\n`, added, removed };
+}
+
+/**
+ * A `git diff`-style unified diff from `before` (null when the file does not
+ * exist) to `after`, labelled with `file`. Empty when nothing changes.
+ */
+export function unifiedDiff(before: string | null, after: string, file: string): string {
+  return diff(before, after, file).text;
+}
+
+/** The hunks of a `unifiedDiff`, without its two file header lines. */
+export function diffHunkLines(unified: string): string[] {
+  return unified.trimEnd().split('\n').slice(2);
 }
 
 export type FileChange =
   | { path: string; status: 'create' | 'modify'; added: number; removed: number; diff: string }
   | { path: string; status: 'unreadable'; error: string };
-
-const FS_IO: RcIo = {
-  exists: (filePath) => fs.existsSync(filePath),
-  readFile: (filePath) => fs.readFileSync(filePath, 'utf8'),
-};
 
 function change(filePath: string, next: (existing: string) => string, io: RcIo): FileChange | null {
   let before: string | null;
@@ -124,14 +145,13 @@ function change(filePath: string, next: (existing: string) => string, io: RcIo):
   }
   const after = next(before ?? '');
   if (before !== null && after === before) return null;
-  const diff = unifiedDiff(before, after, filePath);
-  const lines = diff.split('\n').slice(2);
+  const { text, added, removed } = diff(before, after, filePath);
   return {
     path: filePath,
     status: before === null ? 'create' : 'modify',
-    added: lines.filter((line) => line.startsWith('+')).length,
-    removed: lines.filter((line) => line.startsWith('-')).length,
-    diff,
+    added,
+    removed,
+    diff: text,
   };
 }
 
@@ -146,7 +166,7 @@ export function plannedFileChanges(
   state: WizardState,
   resetShells: readonly ShellId[],
   pathDir: string | null,
-  io: RcIo = FS_IO
+  io: RcIo = FS_RC_IO
 ): FileChange[] {
   const changes: (FileChange | null)[] = [];
 

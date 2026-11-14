@@ -274,7 +274,7 @@ export interface RcIo {
   readFile: (path: string) => string;
 }
 
-const FS_RC_IO: RcIo = {
+export const FS_RC_IO: RcIo = {
   exists: (filePath) => fs.existsSync(filePath),
   readFile: (filePath) => fs.readFileSync(filePath, 'utf8'),
 };

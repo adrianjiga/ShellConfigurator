@@ -67,6 +67,12 @@ describe('unifiedDiff', () => {
     );
   });
 
+  it('marks a last line without a newline the way git does', () => {
+    expect(unifiedDiff('a\nb', 'a\nb\n', 'f')).toBe(
+      '--- f\n+++ f\n@@ -1,2 +1,2 @@\n a\n-b\n\\ No newline at end of file\n+b\n'
+    );
+  });
+
   it('produces patches that `patch` applies to get the new file back', () => {
     let seed = 7;
     const random = (n: number) => {
@@ -82,8 +88,9 @@ describe('unifiedDiff', () => {
         if (random(2) === 0 && after.length > 0) after.splice(at, 1);
         else after.splice(at, 0, words[random(words.length)]);
       }
-      const beforeText = before.length ? `${before.join('\n')}\n` : '';
-      const afterText = after.length ? `${after.join('\n')}\n` : '';
+      const ending = () => (random(4) === 0 ? '' : '\n');
+      const beforeText = before.length ? `${before.join('\n')}${ending()}` : '';
+      const afterText = after.length ? `${after.join('\n')}${ending()}` : '';
       const diff = unifiedDiff(beforeText, afterText, 'f');
       if (beforeText === afterText) {
         expect(diff).toBe('');
@@ -171,6 +178,13 @@ describe('plannedFileChanges', () => {
   it('changes no rc file when the Starship install is skipped', () => {
     const changes = plannedFileChanges(state({ skipStarshipInstall: true }), [], null);
     expect(changes.map((c) => c.path)).toEqual([getShellConfigPath('zsh')]);
+  });
+
+  it('shows a config that differs only in its final newline as a one-line edit', () => {
+    write(getShellConfigPath('zsh'), `${generateToml(state())}\n`);
+    const config = plannedFileChanges(state(), [], null)[0];
+    expect(config).toMatchObject({ path: getShellConfigPath('zsh'), added: 1, removed: 1 });
+    expect(config.status !== 'unreadable' && config.diff).toContain('\\ No newline at end of file');
   });
 
   it('reports a file it cannot read instead of throwing', () => {
