@@ -7,8 +7,10 @@ import {
   getSharedConfigPath,
   getShellConfigPath,
   hasManagedConfigExport,
+  hasManagedRcBlock,
   initReachable,
   manualSetupAppliedWith,
+  startsStarship,
 } from '../generators/shellRc.ts';
 import { fontIdToInstall, type ShellId, type TerminalId, type WizardState } from '../types.ts';
 import { cachedStarshipVersion } from './cache.ts';
@@ -21,6 +23,7 @@ import {
 } from './detector.ts';
 import { errorMessage } from './errors.ts';
 import { runCapture } from './exec.ts';
+import { lastRunShells } from './history.ts';
 import {
   fontLabel,
   getFontFamily,
@@ -64,6 +67,8 @@ export interface DoctorDeps {
   /** The starship version the last install/apply recorded, or null. */
   readCachedStarshipVersion: () => string | null;
   detectInstalledShells: typeof detectInstalledShellsAsync;
+  /** The shells the last recorded run set up, or null. */
+  lastRunShells: () => ShellId[] | null;
   detectTerminal: typeof detectTerminalAsync;
   readFontFamily: typeof readTerminalFontFamily;
   /** Terminals that render Nerd Font symbols without one installed. */
@@ -83,6 +88,7 @@ export const DEFAULT_DOCTOR_DEPS: DoctorDeps = {
   detectCurrentShell: detectCurrentShellAsync,
   readCachedStarshipVersion: () => cachedStarshipVersion(),
   detectInstalledShells: detectInstalledShellsAsync,
+  lastRunShells,
   detectTerminal: detectTerminalAsync,
   readFontFamily: readTerminalFontFamily,
   hasBundledNerdFonts: hasBundledNerdFonts,
@@ -652,14 +658,33 @@ async function checkFontSelected(
 }
 
 /**
- * Runs every health check against the machine. Without a state card the
- * wiring mode of each present shell is read from its rc.
+ * The installed shells that were set up: the last recorded run chose them, or
+ * they start Starship or carry a ShellConfigurator block. A shell nobody set up
+ * is not checked, so a bash that was never chosen is no failure.
+ */
+async function shellsSetUp(deps: DoctorDeps): Promise<ShellId[]> {
+  const lastRun = deps.lastRunShells() ?? [];
+  return (await deps.detectInstalledShells()).filter(
+    (id) => lastRun.includes(id) || startsStarship(id, false, deps) || hasManagedRcBlock(id, deps)
+  );
+}
+
+const NO_SHELL_SET_UP: DoctorFinding = {
+  id: 'shells',
+  title: 'Shells',
+  status: 'warn',
+  detail: 'no installed shell starts Starship — run shell-configurator to set one up',
+};
+
+/**
+ * Runs every health check against the machine. Without a state card it checks
+ * the shells that were set up, reading each one's wiring mode from its rc.
  */
 export async function runDoctor(
   state: WizardState | null,
   deps: DoctorDeps = DEFAULT_DOCTOR_DEPS
 ): Promise<DoctorReport> {
-  const shellIds = state ? state.selectedShells : await deps.detectInstalledShells();
+  const shellIds = state ? state.selectedShells : await shellsSetUp(deps);
   const wiring: ShellWiring[] = shellIds.map((id) => ({
     id,
     pointAtShared: state ? state.keepExistingConfig : shellPointsAtShared(id, deps),
@@ -670,6 +695,7 @@ export async function runDoctor(
   const findings: DoctorFinding[] = [
     checkStarship(probe, state),
     checkLocale(deps),
+    ...(shellIds.length === 0 ? [NO_SHELL_SET_UP] : []),
     ...wiring.map((w) => checkShellWiring(w.id, w.pointAtShared, state !== null, deps)),
     await checkConfigs(wiring, probe, deps, state === null),
     await checkFontInstalled(state, deps),

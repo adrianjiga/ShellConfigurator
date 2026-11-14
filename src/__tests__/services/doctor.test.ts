@@ -31,6 +31,7 @@ function makeDeps(
     detectCurrentShell: vi.fn().mockResolvedValue('zsh'),
     readCachedStarshipVersion: vi.fn().mockReturnValue(null),
     detectInstalledShells: vi.fn().mockResolvedValue(['zsh']),
+    lastRunShells: vi.fn().mockReturnValue(null),
     detectTerminal: vi.fn().mockResolvedValue('kitty'),
     readFontFamily: vi.fn().mockReturnValue('JetBrainsMono Nerd Font'),
     hasBundledNerdFonts: vi.fn().mockResolvedValue(false),
@@ -425,12 +426,46 @@ describe('runDoctor', () => {
     expect(find(report, 'font-selected').detail).toMatch(/no supported terminal/);
   });
 
-  it('detects installed shells when no state card is given', async () => {
+  it('checks only the installed shells that were set up when no state card is given', async () => {
     const deps = makeDeps(wired(new Map()), {
+      detectInstalledShells: vi.fn().mockResolvedValue(['zsh', 'bash']),
+    });
+    const report = await runDoctor(null, deps);
+    expect(find(report, 'shell:zsh').status).toBe('pass');
+    expect(report.findings.some((f) => f.id === 'shell:bash')).toBe(false);
+    expect(report.ok).toBe(true);
+  });
+
+  it('checks a shell the last run set up even after its init line is gone', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      detectInstalledShells: vi.fn().mockResolvedValue(['zsh', 'bash']),
+      lastRunShells: vi.fn().mockReturnValue(['bash']),
+    });
+    const report = await runDoctor(null, deps);
+    expect(find(report, 'shell:bash')).toMatchObject({
+      status: 'fail',
+      fix: { kind: 'configure-shell', shellId: 'bash' },
+    });
+  });
+
+  it('checks a shell with a ShellConfigurator block but no init line', async () => {
+    const bashrc = getShell('bash')!.rcFile!;
+    const files = wired(
+      new Map([[bashrc, '# Added by ShellConfigurator\nunset STARSHIP_CONFIG\n']])
+    );
+    const deps = makeDeps(files, {
+      detectInstalledShells: vi.fn().mockResolvedValue(['zsh', 'bash']),
+    });
+    expect(find(await runDoctor(null, deps), 'shell:bash').status).toBe('fail');
+  });
+
+  it('warns when no installed shell was set up', async () => {
+    const deps = makeDeps(new Map(), {
       detectInstalledShells: vi.fn().mockResolvedValue(['bash']),
     });
     const report = await runDoctor(null, deps);
-    expect(report.findings.some((f) => f.id === 'shell:bash')).toBe(true);
+    expect(find(report, 'shells').status).toBe('warn');
+    expect(report.findings.some((f) => f.id.startsWith('shell:'))).toBe(false);
   });
 
   it('reads the wiring mode from the rc instead of assuming per-shell', async () => {
