@@ -47,6 +47,22 @@ describe('parseTimings', () => {
 });
 
 describe('parseExplain', () => {
+  it('joins a description Starship wrapped onto the next line', () => {
+    const wrapped = `
+ Here's a breakdown of your prompt:
+ ~/proj   -  The current working directory, shortened to the
+             repository root
+ ❯        -  The prompt character
+`;
+    expect(parseExplain(wrapped)).toEqual([
+      {
+        output: '~/proj',
+        description: 'The current working directory, shortened to the repository root',
+      },
+      { output: '❯', description: 'The prompt character' },
+    ]);
+  });
+
   it('reads what each segment shows and why', () => {
     expect(parseExplain(EXPLAIN)).toEqual([
       {
@@ -111,6 +127,15 @@ describe('suggestFixes', () => {
 
   it('never suggests turning off the modules every prompt needs', () => {
     expect(suggestFixes([timing('character', 90), timing('line_break', 70)], '', '')).toEqual([]);
+  });
+
+  it('gives a module whose tool timed out only the timeout advice', () => {
+    const warnings = 'Executing command "/usr/bin/node" timed out.';
+    const suggestions = suggestFixes([timing('nodejs', 500), timing('aws', 80)], warnings, '');
+    expect(suggestions.map((s) => s.module ?? 'command_timeout')).toEqual([
+      'command_timeout',
+      'aws',
+    ]);
   });
 
   it('raises scan_timeout when the folder scan timed out', () => {

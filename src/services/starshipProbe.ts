@@ -56,15 +56,19 @@ export interface Explanation {
 
 /** The rows of `starship explain`: what each segment shows, and why. */
 export function parseExplain(text: string): Explanation[] {
-  return stripAnsi(text)
-    .split('\n')
-    .flatMap((line) => {
-      const at = line.indexOf('  -  ');
-      if (at === -1) return [];
-      const output = line.slice(0, at).trim();
-      const description = line.slice(at + 5).trim();
-      return output && description ? [{ output, description }] : [];
-    });
+  const items: Explanation[] = [];
+  for (const line of stripAnsi(text).split('\n')) {
+    const at = line.indexOf('  -  ');
+    if (at === -1) {
+      const last = items.at(-1);
+      if (last && /^\s/.test(line) && line.trim()) last.description += ` ${line.trim()}`;
+      continue;
+    }
+    const output = line.slice(0, at).trim();
+    const description = line.slice(at + 5).trim();
+    if (output && description) items.push({ output, description });
+  }
+  return items;
 }
 
 /** A module slower than this gets a suggestion. */
@@ -130,6 +134,26 @@ function topLevelNumber(toml: string, key: string): number | null {
 
 const ALWAYS_ON = new Set(['character', 'line_break', 'fill']);
 
+const TOOL_OF: Record<string, readonly string[]> = {
+  nodejs: ['node'],
+  python: ['python', 'python3', 'pyenv'],
+  rust: ['rustc', 'rustup'],
+  golang: ['go'],
+  ruby: ['ruby'],
+  java: ['java'],
+  php: ['php'],
+  deno: ['deno'],
+  bun: ['bun'],
+  dotnet: ['dotnet'],
+  git_status: ['git'],
+  git_metrics: ['git'],
+  git_branch: ['git'],
+  git_commit: ['git'],
+  aws: ['aws'],
+  docker_context: ['docker'],
+  kubernetes: ['kubectl'],
+};
+
 function moduleSuggestion(timing: ModuleTiming): Suggestion {
   const took = `${timing.module} took ${Math.round(timing.ms)}ms`;
   if (timing.module === 'git_status' || timing.module === 'git_metrics') {
@@ -186,8 +210,14 @@ export function suggestFixes(
       toml: `scan_timeout = ${Math.max(scanTimeout * 2, 100)}`,
     });
   }
+  const timedOutTool = (module: string) =>
+    timedOut.some((command) => command === module || TOOL_OF[module]?.includes(command));
   for (const timing of timings) {
-    if (timing.ms >= SLOW_MODULE_MS && !ALWAYS_ON.has(timing.module)) {
+    if (
+      timing.ms >= SLOW_MODULE_MS &&
+      !ALWAYS_ON.has(timing.module) &&
+      !timedOutTool(timing.module)
+    ) {
       suggestions.push(moduleSuggestion(timing));
     }
   }
