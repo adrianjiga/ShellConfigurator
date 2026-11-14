@@ -438,10 +438,10 @@ Keys are bold cyan, labels are gray. Each screen customizes its hints to match a
 
 ## Interaction Patterns
 
-| Pattern                        | Screens                       | Implementation                                        |
-| ------------------------------ | ----------------------------- | ----------------------------------------------------- |
+| Pattern                                                           | Screens                                | Implementation                                                     |
+| ----------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------ |
 | **SelectInput** (`ink-select-input`, wrapped by `AppSelectInput`) | Welcome, FontCheck, FontSelect, Preset | `<AppSelectInput>` with `onSelect`; Preset also uses `onHighlight` |
-| **Custom checklist**           | Segments, Shell               | `PickerRow` rows + `useInput` with `↑↓ Space`         |
-| **Multi-section focus**        | Style                         | `Tab` switches focus, `↑↓` navigates within section   |
-| **Async detection**            | Welcome, Shell                | Async `useEffect` with `cancelled` flag; non-blocking |
-| **Auto-advance**               | Installing                    | Only `c` (cancel) is read; advances after task completion + delay |
+| **Custom checklist**                                              | Segments, Shell                        | `PickerRow` rows + `useInput` with `↑↓ Space`                      |
+| **Multi-section focus**                                           | Style                                  | `Tab` switches focus, `↑↓` navigates within section                |
+| **Async detection**                                               | Welcome, Shell                         | Async `useEffect` with `cancelled` flag; non-blocking              |
+| **Auto-advance**                                                  | Installing                             | Only `c` (cancel) is read; advances after task completion + delay  |
