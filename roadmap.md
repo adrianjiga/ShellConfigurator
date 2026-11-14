@@ -30,13 +30,13 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 ## At a glance
 
-| Status           | Items                                                                                                           |
-| ---------------- | --------------------------------------------------------------------------------------------------------------- |
-| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · #1 #2 #4 #5 #7 #8 #10 #11 #17 #19 #20 #22 #24 #26 #27          |
-| TODO             | P4.1–P4.10 · P5.1–P5.3 · #6 #9 #12 #13 #15 #18 #21 #23 #25                                                      |
-| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy) · #14 (snapshots written, no rollback)                 |
-| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                         |
-| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title |
+| Status           | Items                                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · P4.1 · #1 #2 #4 #5 #7 #8 #10 #11 #12 #17 #19 #20 #22 #24 #26 #27 |
+| TODO             | P4.2–P4.10 · P5.1–P5.3 · #6 #9 #13 #15 #18 #21 #23 #25                                                            |
+| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy) · #14 (snapshots written, no rollback)                   |
+| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                           |
+| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title   |
 
 ---
 
@@ -208,12 +208,20 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 ## Phase 4 — Lifecycle commands (the moat)
 
-**P4.1 — `uninstall` (#12)** — **TODO**
+**P4.1 — `uninstall` (#12)** — **DONE**
 
 - `shell-configurator uninstall --shells zsh,fish --font`: remove rc blocks, per-shell configs, starship via the detected PM, and optionally the font — reverse install order. `--restore` puts back backups; `--dry-run` previews the plan.
 - **Why.** Everything is installed in one command; nothing is uninstalled cleanly. `resetSharedShellConfig` already knows how to remove the tool's own rc blocks, so a full teardown is the natural sibling and builds trust with experimenters.
 - **How.** Build the plan from `buildTaskList`'s mirror image; reuse `resetSharedShellConfig`, `restoreConfigBackups`, and the PM uninstall channel from `installer.ts`; ask for confirmation.
 - **Effort.** S-M. **D:** P0.3, P0.4, P1.1.
+- **Shipped:** `shell-configurator uninstall [--shells …] [--starship] [--font <id>] [--yes] [--dry-run] [--json]`
+  (`services/uninstall.ts`). It strips every ShellConfigurator rc block (rc backed up first; a carried PATH
+  line stays when the user's own init line does) and moves per-shell configs to `.bak-*`, so `--restore`
+  brings them back. Starship and the font are opt-in rather than default, since either may predate the
+  wizard: the script binary or the pacman/apk/Homebrew package is removed, and font files are listed from
+  the cached archive. It asks on a terminal and needs `--yes` elsewhere, and records an `uninstall` run in
+  history. The headless apply smoke now runs a real uninstall, a no-op second uninstall and a restore
+  on every distro cell. Not reverted: the terminal font setting and `chsh`.
 
 **P4.2 — Rollback snapshots (#14)** — **TODO (partial foundation)**
 
@@ -329,10 +337,9 @@ they can be picked up in parallel with any phase but each stays its own PR.
 
 ## Suggested next order (remaining work)
 
-1. **P4.1 (#12) uninstall** — completes the lifecycle story with doctor/repair.
-2. **P4.2 (#14) rollback** — builds on the history/snapshot foundation.
-3. Then the small wins: **P4.3 `debug-info`**, **P4.4 `completions`**, **P4.6 `WHAT-CHANGED.md`**, **P4.8 list flags**.
-4. Then **P5.1 (#6) transient prompt**, **P5.2 (#15) prompt-manager detection**, **P5.3 (#25) bootstrap**.
+1. **P4.2 (#14) rollback** — builds on the history/snapshot foundation.
+2. Then the small wins: **P4.3 `debug-info`**, **P4.4 `completions`**, **P4.6 `WHAT-CHANGED.md`**, **P4.8 list flags**.
+3. Then **P5.1 (#6) transient prompt**, **P5.2 (#15) prompt-manager detection**, **P5.3 (#25) bootstrap**.
 
 ## Merge & verification strategy
 
