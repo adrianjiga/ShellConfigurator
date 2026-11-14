@@ -336,6 +336,30 @@ describe('ReviewScreen explain', () => {
     );
   });
 
+  it('asks again after a failed explanation, and survives one that throws', async () => {
+    vi.mocked(explainPromptAsync)
+      .mockRejectedValueOnce(new Error('starship check failed'))
+      .mockResolvedValueOnce({
+        mode: 'real',
+        items: [{ output: '❯', description: 'The prompt character' }],
+      });
+    const { instance } = setup();
+    await flush();
+
+    instance.stdin.write('e');
+    await flush();
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
+      'Starship could not explain this prompt.'
+    );
+
+    instance.stdin.write('e');
+    await flush();
+    instance.stdin.write('e');
+    await flush();
+    expect(instance.lastFrame()).toContain('The prompt character');
+    expect(explainPromptAsync).toHaveBeenCalledTimes(2);
+  });
+
   it('offers no explanation in adopt mode, where no config is generated', async () => {
     const { instance } = setup({ keepExistingConfig: true });
     await flush();
