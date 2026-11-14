@@ -390,6 +390,16 @@ export async function runInstallTasks(
     });
   }
 
+  /** Best-effort backup of the shared config; a failure must not stop the config step. */
+  function snapshotSharedConfig(notes: string[]) {
+    try {
+      const sharedBackup = deps.backupSharedConfig();
+      if (sharedBackup) notes.push(`shared config saved to ${sharedBackup}`);
+    } catch {
+      // The config step goes on with whatever protection exists.
+    }
+  }
+
   // --- Config: write per-shell starship configs, or adopt an existing one ---
   const configWritten = new Set<ShellId>();
   const configStatus = await runTask(TASK_IDS.config, async () => {
@@ -412,12 +422,7 @@ export async function runInstallTasks(
         notes.push(`no shared config at ${getSharedConfigPath()} — Starship will use its defaults`);
       } else {
         // Point at what is already there; snapshot it so a re-run can restore it.
-        try {
-          const sharedBackup = deps.backupSharedConfig();
-          if (sharedBackup) notes.push(`shared config saved to ${sharedBackup}`);
-        } catch {
-          // Non-fatal — the existing config is left untouched regardless.
-        }
+        snapshotSharedConfig(notes);
         notes.push('keeping the existing config untouched');
       }
       return { status: 'done', patch: { note: notes.join('; ') } };
@@ -432,14 +437,8 @@ export async function runInstallTasks(
     const notes: string[] = [];
 
     // Snapshot the shared starship.toml before per-shell configs shadow it, so a
-    // re-run can restore the pre-wizard prompt. Best-effort: a backup failure
-    // must not stop the config write.
-    try {
-      const sharedBackup = deps.backupSharedConfig();
-      if (sharedBackup) notes.push(`shared config saved to ${sharedBackup}`);
-    } catch {
-      // Non-fatal — the install still proceeds with whatever protection exists.
-    }
+    // re-run can restore the pre-wizard prompt.
+    snapshotSharedConfig(notes);
 
     const writeErrors: string[] = [];
     for (const shellId of state.selectedShells) {
