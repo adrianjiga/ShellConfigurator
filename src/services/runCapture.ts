@@ -205,9 +205,26 @@ export class CapturedRunError extends Error {
 
 function finishSafely(capture: RunCapture): string | null {
   try {
-    return finishRunCapture(capture)?.runId ?? null;
+    const runId = finishRunCapture(capture)?.runId ?? null;
+    pruneRuns();
+    return runId;
   } catch {
     return null;
+  }
+}
+
+/** How many captured runs rollback keeps; older ones are deleted. */
+export const KEPT_RUNS = 50;
+
+/** Deletes all but the newest `keep` run folders. */
+export function pruneRuns(keep: number = KEPT_RUNS): void {
+  const runs = fs
+    .readdirSync(runsDir(), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  for (const runId of runs.slice(0, Math.max(0, runs.length - keep))) {
+    fs.rmSync(runDir(runId), { recursive: true, force: true });
   }
 }
 

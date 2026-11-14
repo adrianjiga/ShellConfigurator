@@ -26,6 +26,8 @@ import {
   CapturedRunError,
   captureRun,
   finishRunCapture,
+  KEPT_RUNS,
+  pruneRuns,
   readRunManifest,
   runDir,
   runsDir,
@@ -190,6 +192,40 @@ describe('captureRun', () => {
 
     expect(result).toBe('ran');
     expect(runId).toBeNull();
+  });
+});
+
+describe('pruneRuns', () => {
+  it('keeps only the newest runs', () => {
+    for (const day of ['01', '02', '03', '04']) {
+      fs.mkdirSync(runDir(`2026-11-${day}T10-00-00.000Z`), { recursive: true });
+    }
+    fs.writeFileSync(path.join(runsDir(), 'stray-file'), '');
+
+    pruneRuns(2);
+
+    expect(fs.readdirSync(runsDir()).sort()).toEqual([
+      '2026-11-03T10-00-00.000Z',
+      '2026-11-04T10-00-00.000Z',
+      'stray-file',
+    ]);
+  });
+
+  it('runs after every capture, keeping 50 runs', async () => {
+    for (let i = 0; i < KEPT_RUNS; i++) {
+      fs.mkdirSync(runDir(`2000-01-01T00-00-00.000Z-${String(i).padStart(3, '0')}`), {
+        recursive: true,
+      });
+    }
+
+    const { runId } = await captureRun([file('rc')], async () => {
+      fs.writeFileSync(file('rc'), 'x');
+    });
+
+    const kept = fs.readdirSync(runsDir());
+    expect(kept).toHaveLength(KEPT_RUNS);
+    expect(kept).toContain(runId);
+    expect(kept).not.toContain('2000-01-01T00-00-00.000Z-000');
   });
 });
 
