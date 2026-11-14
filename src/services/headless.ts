@@ -147,37 +147,35 @@ export function stateFromFlags(flags: CliFlags): WizardState {
   }
 
   if (flags.preset) {
-    const preset = PRESETS.find((p) => p.id === flags.preset);
-    if (preset) {
-      state = {
-        ...state,
-        preset: preset.id,
-        leftModules: [...preset.leftModules],
-        rightModules: [...preset.rightModules],
-        palette: preset.palette,
-        powerline: preset.powerline,
-      };
-      // A preset that needs Nerd Font glyphs implies the machine renders them —
-      // the wizard only offers those presets to users who already have a font.
-      // An explicit --has-nerd-font / --no-nerd-font (or a later --font) still wins.
-      if (flags.hasNerdFont === undefined && !flags.stateFile) {
-        state = { ...state, hasNerdFont: preset.requiresNerdFont };
-      }
-      if (
-        preset.requiresNerdFont &&
-        flags.hasNerdFont === undefined &&
-        flags.font === undefined &&
-        !flags.stateFile
-      ) {
-        state = { ...state, nerdFontToInstall: { kind: 'install', id: NERD_FONTS[0].id } };
-      }
+    const preset = PRESETS.find((p) => p.id === flags.preset)!;
+    state = {
+      ...state,
+      preset: preset.id,
+      leftModules: [...preset.leftModules],
+      rightModules: [...preset.rightModules],
+      palette: preset.palette,
+      powerline: preset.powerline,
+    };
+    // A preset that needs Nerd Font glyphs implies the machine renders them —
+    // the wizard only offers those presets to users who already have a font.
+    // An explicit --has-nerd-font / --no-nerd-font (or a later --font) still wins.
+    if (flags.hasNerdFont === undefined && !flags.stateFile) {
+      state = { ...state, hasNerdFont: preset.requiresNerdFont };
+    }
+    if (
+      preset.requiresNerdFont &&
+      flags.hasNerdFont === undefined &&
+      flags.font === undefined &&
+      !flags.stateFile
+    ) {
+      state = { ...state, nerdFontToInstall: { kind: 'install', id: NERD_FONTS[0].id } };
     }
   }
 
   if (flags.palette) state = { ...state, palette: flags.palette as WizardState['palette'] };
   if (flags.powerline !== undefined) state = { ...state, powerline: flags.powerline };
   if (flags.shells) {
-    const shells = [...new Set(flags.shells.filter((id) => SHELL_IDS.has(id)))] as ShellId[];
+    const shells = [...new Set(flags.shells)] as ShellId[];
     state = { ...state, selectedShells: shells };
   }
   if (flags.characterSymbol) {
