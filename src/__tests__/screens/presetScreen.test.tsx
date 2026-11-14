@@ -107,7 +107,7 @@ describe('PresetScreen', () => {
 
     expect(onNext).toHaveBeenCalledWith({
       preset: 'no-nerd-font',
-      leftModules: PRESETS.find((p) => p.id === 'no-nerd-font')!.leftModules,
+      leftModules: ['directory', 'git_branch', 'git_status', 'character'],
       rightModules: ['cmd_duration'],
       palette: 'terminal',
       powerline: false,
@@ -126,7 +126,7 @@ describe('PresetScreen', () => {
 
     expect(onNext).toHaveBeenCalledWith({
       preset: 'nerd-font-symbols',
-      leftModules: PRESETS.find((p) => p.id === 'nerd-font-symbols')!.leftModules,
+      leftModules: ['username', 'hostname', 'directory', 'git_branch', 'git_status', 'character'],
       rightModules: ['nodejs', 'python', 'rust', 'cmd_duration'],
       palette: 'vivid',
       powerline: false,
@@ -177,7 +177,7 @@ describe('PresetScreen', () => {
     expect(onNext).toHaveBeenCalledTimes(1);
     expect(onNext).toHaveBeenCalledWith({
       preset: 'nerd-font-symbols',
-      leftModules: PRESETS.find((p) => p.id === 'nerd-font-symbols')!.leftModules,
+      leftModules: ['username', 'hostname', 'directory', 'git_branch', 'git_status', 'character'],
       rightModules: ['nodejs', 'python', 'rust', 'cmd_duration'],
       palette: 'vivid',
       powerline: false,
