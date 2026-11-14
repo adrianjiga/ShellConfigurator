@@ -226,6 +226,28 @@ describe('DoneScreen over real install results', () => {
     expect(frame).toContain('shared: /home/u/.config/starship.toml (from');
   });
 
+  it('restores only once when r is pressed again', async () => {
+    mocks.restoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
+    const instance = render(<DoneScreen state={DEFAULT_STATE} />);
+    await flush();
+
+    instance.stdin.write('r');
+    await flush();
+    instance.stdin.write('r');
+    await flush();
+
+    expect(mocks.restoreConfigBackups).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells a run that skipped Starship how to install it before re-running', () => {
+    const { lastFrame } = render(
+      <DoneScreen state={{ ...DEFAULT_STATE, skipStarshipInstall: true, installResults: [] }} />
+    );
+    const text = (lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(text).toContain('Starship is not installed, so shell init lines were not added');
+    expect(text).toContain('curl -sS https://starship.rs/install.sh | sh');
+  });
+
   it('lists restore failures instead of hiding them', async () => {
     mocks.restoreConfigBackups.mockReturnValue({
       restored: [
