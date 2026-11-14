@@ -108,9 +108,19 @@ describe('extractFontFiles', () => {
   });
 
   it('refuses a font entry that would expand past the size cap', async () => {
-    const zip = zipSync({ 'Huge.ttf': new Uint8Array(65 * 1024 * 1024) }, { level: 9 });
+    const zip = zipSync({ 'Huge.ttf': new Uint8Array(2048) });
 
-    await expect(extractFontFiles(zipBytes(zip))).rejects.toThrow('Huge.ttf expands past');
+    await expect(
+      extractFontFiles(zipBytes(zip), { maxEntryBytes: 1024, maxTotalBytes: 4096 })
+    ).rejects.toThrow('Huge.ttf expands past');
+  });
+
+  it('refuses fonts that together expand past the total cap', async () => {
+    const zip = zipSync({ 'A.ttf': new Uint8Array(800), 'B.ttf': new Uint8Array(800) });
+
+    await expect(
+      extractFontFiles(zipBytes(zip), { maxEntryBytes: 1024, maxTotalBytes: 1200 })
+    ).rejects.toThrow('the font files expand past');
   });
 
   it('keeps the first of two same-named fonts and drops unsafe names', async () => {

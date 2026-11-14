@@ -64,7 +64,20 @@ try {
 }
 `;
 
-export async function extractFontFiles(zipBytes: Uint8Array): Promise<ExtractedFontFile[]> {
+export interface ExtractLimits {
+  maxEntryBytes: number;
+  maxTotalBytes: number;
+}
+
+const DEFAULT_LIMITS: ExtractLimits = {
+  maxEntryBytes: MAX_FONT_FILE_BYTES,
+  maxTotalBytes: MAX_EXTRACTED_BYTES,
+};
+
+export async function extractFontFiles(
+  zipBytes: Uint8Array,
+  limits: ExtractLimits = DEFAULT_LIMITS
+): Promise<ExtractedFontFile[]> {
   // Own copy, so transferring it to the worker detaches neither the caller's
   // buffer nor a shared Buffer pool segment.
   const bytes = new Uint8Array(zipBytes);
@@ -75,8 +88,8 @@ export async function extractFontFiles(zipBytes: Uint8Array): Promise<ExtractedF
       workerData: {
         fflatePath: FFLATE_ENTRY,
         zipBytes: bytes,
-        maxEntryBytes: MAX_FONT_FILE_BYTES,
-        maxTotalBytes: MAX_EXTRACTED_BYTES,
+        maxEntryBytes: limits.maxEntryBytes,
+        maxTotalBytes: limits.maxTotalBytes,
       },
       transferList: [bytes.buffer],
     });
