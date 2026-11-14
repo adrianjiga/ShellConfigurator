@@ -116,6 +116,7 @@ import { beginRunCapture, captureRun, finishRunCapture, runDir } from '../servic
 import { serializeState } from '../services/state.ts';
 import type { UninstallDeps } from '../services/uninstall.ts';
 import { DEFAULT_STATE, type InstallTask, type ShellId } from '../types.ts';
+import { restoreEnv } from './helpers/env.ts';
 
 describe('index CLI handling', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
@@ -943,7 +944,7 @@ describe('index rollback command', () => {
 
   afterEach(() => {
     stdoutWrite.mockRestore();
-    process.env = { ...savedEnv };
+    restoreEnv(savedEnv);
     process.exitCode = savedExitCode;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -1328,6 +1329,34 @@ describe('index timings command', () => {
     expect(output()).toContain('git_status took 320ms');
   });
 
+  it('times the config the current shell loads when no flags are given', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-active-'));
+    const config = path.join(dir, 'zsh.toml');
+    fs.writeFileSync(config, 'format = "$character"\n');
+    vi.stubEnv('STARSHIP_CONFIG', config);
+    try {
+      await runTimingsCommand(parseCliArgs(['timings']), deps(), async () => 'zsh');
+      expect(output()).toContain(`(config: ${config})`);
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to the default prompt, and says so, when no config is found', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-active-'));
+    vi.stubEnv('STARSHIP_CONFIG', undefined);
+    vi.stubEnv('HOME', dir);
+    vi.stubEnv('XDG_CONFIG_HOME', undefined);
+    try {
+      await runTimingsCommand(parseCliArgs(['timings']), deps(), async () => null);
+      expect(output()).toContain('(config: the default prompt; no config of yours was found)');
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('times the file --config names, as JSON with --json', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-timings-'));
     const config = path.join(dir, 'starship.toml');
@@ -1352,9 +1381,9 @@ describe('index timings command', () => {
   });
 
   it('says Starship is needed when it is not installed', async () => {
-    await expect(runTimingsCommand(parseCliArgs(['timings']), deps(false))).rejects.toThrow(
-      /Starship is not installed/
-    );
+    await expect(
+      runTimingsCommand(parseCliArgs(['timings', '--preset', 'pure-prompt']), deps(false))
+    ).rejects.toThrow(/Starship is not installed/);
   });
 
   it('documents timings in the help text', () => {

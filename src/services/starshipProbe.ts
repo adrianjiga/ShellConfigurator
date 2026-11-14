@@ -1,5 +1,7 @@
+import * as fs from 'node:fs';
 import * as nodePath from 'node:path';
-import type { WizardState } from '../types.ts';
+import { getSharedConfigPath, getShellConfigPath } from '../generators/shellRc.ts';
+import type { ShellId, WizardState } from '../types.ts';
 import { findStarshipAsync } from './detector.ts';
 import { CAPTURE_TIMEOUT_MS, runCaptureBoth } from './exec.ts';
 import {
@@ -68,7 +70,6 @@ export function parseExplain(text: string): Explanation[] {
 }
 
 export const SLOW_MODULE_MS = 50;
-/** Starship runs modules in parallel, so a prompt is about as slow as its slowest module. */
 export const SLOW_PROMPT_MS = 200;
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 500;
@@ -111,43 +112,37 @@ export interface Suggestion {
   toml?: string;
 }
 
+const bracketBalance = (text: string) =>
+  (text.match(/[[{]/g)?.length ?? 0) - (text.match(/[\]}]/g)?.length ?? 0);
+
 function topLevelNumber(toml: string, key: string): number | null {
   let openString: string | null = null;
+  let depth = 0;
   for (const line of toml.split('\n')) {
     if (openString) {
       if (line.includes(openString)) openString = null;
       continue;
     }
     const trimmed = line.trim();
+    if (depth > 0) {
+      depth += bracketBalance(trimmed);
+      continue;
+    }
     if (trimmed.startsWith('[')) return null;
-    const match = new RegExp(`^${key}\\s*=\\s*(\\d[\\d_]*)\\s*(?:#.*)?$`).exec(trimmed);
-    if (match) return Number(match[1].replaceAll('_', ''));
-    openString = ['"""', "'''"].find((quote) => line.split(quote).length % 2 === 0) ?? null;
+    const assignment = /^(?:"([^"]+)"|'([^']+)'|([\w-]+))\s*=\s*(.*)$/.exec(trimmed);
+    if (!assignment) continue;
+    const value = assignment[4];
+    if ((assignment[1] ?? assignment[2] ?? assignment[3]) === key) {
+      const number = /^(\d[\d_]*)\s*(?:#.*)?$/.exec(value);
+      return number ? Number(number[1].replaceAll('_', '')) : null;
+    }
+    openString = ['"""', "'''"].find((quote) => value.split(quote).length % 2 === 0) ?? null;
+    if (!openString && /^[[{]/.test(value)) depth = bracketBalance(value);
   }
   return null;
 }
 
 const ALWAYS_ON = new Set(['character', 'line_break', 'fill']);
-
-const TOOL_OF: Record<string, readonly string[]> = {
-  nodejs: ['node'],
-  python: ['python', 'python3', 'pyenv'],
-  rust: ['rustc', 'rustup'],
-  golang: ['go'],
-  ruby: ['ruby'],
-  java: ['java'],
-  php: ['php'],
-  deno: ['deno'],
-  bun: ['bun'],
-  dotnet: ['dotnet'],
-  git_status: ['git'],
-  git_metrics: ['git'],
-  git_branch: ['git'],
-  git_commit: ['git'],
-  aws: ['aws'],
-  docker_context: ['docker'],
-  kubernetes: ['kubectl'],
-};
 
 function moduleSuggestion(timing: ModuleTiming): Suggestion {
   const took = `${timing.module} took ${Math.round(timing.ms)}ms`;
@@ -204,14 +199,10 @@ export function suggestFixes(
       toml: `scan_timeout = ${Math.max(scanTimeout * 2, 100)}`,
     });
   }
-  const timedOutTool = (module: string) =>
-    timedOut.some((command) => command === module || TOOL_OF[module]?.includes(command));
+  const hitTimeout = (timing: ModuleTiming) =>
+    timedOut.length > 0 && timing.ms >= commandTimeout * 0.9;
   for (const timing of timings) {
-    if (
-      timing.ms >= SLOW_MODULE_MS &&
-      !ALWAYS_ON.has(timing.module) &&
-      !timedOutTool(timing.module)
-    ) {
+    if (timing.ms >= SLOW_MODULE_MS && !ALWAYS_ON.has(timing.module) && !hitTimeout(timing)) {
       suggestions.push(moduleSuggestion(timing));
     }
   }
@@ -228,7 +219,6 @@ export interface TimingsReport {
 
 export interface ProbeDeps {
   isStarshipInstalled(): Promise<boolean>;
-  /** Runs `starship <command>` for `path` (passed as --path and PWD) against `configPath`. */
   run(
     command: 'timings' | 'explain',
     path: string,
@@ -262,10 +252,21 @@ export class StarshipMissingError extends Error {
 }
 
 /**
- * Times every module of the config `toml` with `starship timings` in the folder
- * `path`, with the real HOME so modules see what they would in a real prompt.
- * Reads only: the config goes to a temporary folder.
+ * The config a shell started here loads: $STARSHIP_CONFIG, else the shell's
+ * per-shell config, else the shared one. Null when none of them exists.
  */
+export function activeConfigPath(
+  shell: ShellId | null,
+  exists: (file: string) => boolean = fs.existsSync
+): string | null {
+  const candidates = [
+    process.env.STARSHIP_CONFIG,
+    shell ? getShellConfigPath(shell) : undefined,
+    getSharedConfigPath(),
+  ];
+  return candidates.find((file): file is string => Boolean(file) && exists(file as string)) ?? null;
+}
+
 export async function timePrompt(
   toml: string,
   path: string,

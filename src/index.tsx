@@ -21,6 +21,7 @@ import {
   type DebugInfoDeps,
   formatDebugInfo,
 } from './services/debugInfo.ts';
+import { detectCurrentShellAsync } from './services/detector.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
 import { CliRunError, CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
@@ -39,6 +40,7 @@ import {
 import { captureRun, trackedFiles } from './services/runCapture.ts';
 import { renderShare } from './services/share.ts';
 import {
+  activeConfigPath,
   DEFAULT_PROBE_DEPS,
   formatTimings,
   type ProbeDeps,
@@ -190,11 +192,14 @@ debug-info options (reads only; e.g. shell-configurator debug-info > issue.md):
   --json               Print the report data as JSON instead of Markdown
   Your home directory is shown as ~ so the report does not name you.
 
-timings options (reads only; times the modules in the current folder):
-  --config <file>      Time this starship.toml instead of one built from the
-                       generate flags (--preset, --palette, --state, ...)
+timings options (changes no config; times the modules in the current folder):
+  Without flags it times the config your shell loads: $STARSHIP_CONFIG, else
+  the shell's per-shell config, else ~/.config/starship.toml.
+  --config <file>      Time this starship.toml instead
   --json               Print the timings and suggestions as JSON
-  Modules run in parallel, so the prompt is about as slow as its slowest one.
+  The generate flags (--preset, --palette, --state, ...) time a config built
+  from them. Modules run in parallel, so the prompt is about as slow as its
+  slowest one.
 
 share options (takes the generate flags, e.g. shell-configurator share --preset tokyo-night):
   -o, --output <file>  Write the Markdown to this file instead of stdout
@@ -577,7 +582,8 @@ export async function runRollbackCommand(
 
 export async function runTimingsCommand(
   flags: CliFlags,
-  deps: ProbeDeps = DEFAULT_PROBE_DEPS
+  deps: ProbeDeps = DEFAULT_PROBE_DEPS,
+  currentShell: () => Promise<ShellId | null> = detectCurrentShellAsync
 ): Promise<void> {
   const present = presentFlags(flags);
   const accepted = acceptedFlags('timings');
@@ -593,13 +599,15 @@ export async function runTimingsCommand(
   }
   let toml: string;
   let config: string;
-  if (flags.configFile) {
+  const file =
+    flags.configFile ?? (building.length === 0 ? activeConfigPath(await currentShell()) : null);
+  if (file) {
     try {
-      toml = readFileSync(flags.configFile, 'utf8');
+      toml = readFileSync(file, 'utf8');
     } catch (err) {
-      throw new CliUsageError(`Could not read '${flags.configFile}': ${errorMessage(err)}`);
+      throw new CliUsageError(`Could not read '${file}': ${errorMessage(err)}`);
     }
-    config = flags.configFile;
+    config = file;
   } else {
     const state = stateFromFlags(flags);
     if (state.keepExistingConfig) {
@@ -608,7 +616,10 @@ export async function runTimingsCommand(
       );
     }
     toml = generateToml(state);
-    config = 'built from the flags';
+    config =
+      building.length > 0
+        ? 'built from the flags'
+        : 'the default prompt; no config of yours was found';
   }
   let report: TimingsReport;
   try {

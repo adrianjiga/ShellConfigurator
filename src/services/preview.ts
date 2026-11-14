@@ -54,10 +54,6 @@ export interface PreviewDeps {
 
 const SAMPLE_PROJECT_NAME = 'myapp';
 
-/**
- * The environment `starship` runs in against `configPath`: a script install
- * off PATH on PATH, and `home` as HOME when given.
- */
 export function starshipEnv(configPath: string, home?: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,

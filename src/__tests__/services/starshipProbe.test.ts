@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.unmock('../../services/starshipProbe.ts');
 
+import { getSharedConfigPath, getShellConfigPath } from '../../generators/shellRc.ts';
 import { generateToml } from '../../generators/starship.ts';
 import {
+  activeConfigPath,
   explainPromptAsync,
   type ProbeDeps,
   parseExplain,
@@ -122,6 +124,21 @@ describe('suggestFixes', () => {
     const toml =
       'format = """\n[](fg:red)\n$directory\n"""\ncommand_timeout = 2_000 # ms\n[nodejs]\n';
     expect(suggestFixes([], warnings, toml)[0]).toMatchObject({ toml: 'command_timeout = 4000' });
+  });
+
+  it('reads a quoted command_timeout, and one after a multi-line array', () => {
+    const warnings = 'Executing command "/usr/bin/node" timed out.';
+    const quoted = '"command_timeout" = 2000\n';
+    const afterArray = 'palettes_order = [\n  ["a", "b"],\n  ["c"],\n]\ncommand_timeout = 3000\n';
+    expect(suggestFixes([], warnings, quoted)[0].toml).toBe('command_timeout = 4000');
+    expect(suggestFixes([], warnings, afterArray)[0].toml).toBe('command_timeout = 6000');
+  });
+
+  it('gives any module that ran into the timeout only the timeout advice', () => {
+    const warnings = 'Executing command "/usr/bin/gcc" timed out.';
+    expect(suggestFixes([timing('c', 480)], warnings, '').map((s) => s.module)).toEqual([
+      undefined,
+    ]);
   });
 
   it('never suggests turning off the modules every prompt needs', () => {
@@ -258,5 +275,28 @@ describe('explainPromptAsync', () => {
       reason: 'explain-failed',
     });
     expect(scratch.cleanup).toHaveBeenCalledWith('/scratch');
+  });
+});
+
+describe('activeConfigPath', () => {
+  const existing =
+    (...files: string[]) =>
+    (file: string) =>
+      files.includes(file);
+
+  it('prefers STARSHIP_CONFIG, then the shell config, then the shared config', () => {
+    vi.stubEnv('STARSHIP_CONFIG', '/env/starship.toml');
+    try {
+      const shell = getShellConfigPath('zsh');
+      const shared = getSharedConfigPath();
+      expect(activeConfigPath('zsh', existing('/env/starship.toml', shell, shared))).toBe(
+        '/env/starship.toml'
+      );
+      expect(activeConfigPath('zsh', existing(shell, shared))).toBe(shell);
+      expect(activeConfigPath('zsh', existing(shared))).toBe(shared);
+      expect(activeConfigPath(null, existing())).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
