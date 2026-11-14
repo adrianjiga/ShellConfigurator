@@ -575,10 +575,6 @@ export async function runRollbackCommand(
   }
 }
 
-/**
- * Times every module of a config in the current folder: the one --config names,
- * or one built from the config flags like generate. Changes nothing.
- */
 export async function runTimingsCommand(
   flags: CliFlags,
   deps: ProbeDeps = DEFAULT_PROBE_DEPS
@@ -627,10 +623,6 @@ export async function runTimingsCommand(
   );
 }
 
-/**
- * Prints the prompt the config flags build as Markdown to share: its TOML and
- * the state card that rebuilds it. -o writes it to a file instead.
- */
 export function runShareCommand(flags: CliFlags): void {
   const unused = presentFlags(flags).filter((flag) => !acceptedFlags('share').has(flag));
   if (unused.length > 0) {

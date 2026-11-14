@@ -9,7 +9,6 @@ import { serializeState } from './state.ts';
 
 const PROJECT_URL = 'https://github.com/adrianjiga/ShellConfigurator';
 
-/** The state with only what shapes the prompt: no shells, font install or default shell of this machine. */
 export function shareableState(state: WizardState): WizardState {
   return {
     ...state,
@@ -26,10 +25,6 @@ function promptName(state: WizardState): string {
   return label.replace(/\s*\(.*\)$/, '');
 }
 
-/**
- * The prompt as Markdown to paste into an issue, a gist or the Starship presets
- * gallery: the starship.toml, and the state card that rebuilds it here.
- */
 export function renderShare(state: WizardState): string {
   const shared = shareableState(state);
   const glyphs = rendersGlyphs(shared);
@@ -61,7 +56,6 @@ export function renderShare(state: WizardState): string {
   return redactHome(text);
 }
 
-/** Writes the share text to `starship-prompt.md` in `dir`, or the first free numbered name. */
 export function writeShareFile(state: WizardState, dir: string = process.cwd()): string {
   for (let n = 1; ; n++) {
     const file = path.join(dir, n === 1 ? 'starship-prompt.md' : `starship-prompt-${n}.md`);

@@ -35,7 +35,6 @@ function parseDuration(text: string): number | null {
   return match ? Number(match[1]) * DURATION_MS[match[2]] : null;
 }
 
-/** The rows of `starship timings`, slowest first. */
 export function parseTimings(text: string): ModuleTiming[] {
   return stripAnsi(text)
     .split('\n')
@@ -52,7 +51,6 @@ export interface Explanation {
   description: string;
 }
 
-/** The rows of `starship explain`: what each segment shows, and why. */
 export function parseExplain(text: string): Explanation[] {
   const items: Explanation[] = [];
   for (const line of stripAnsi(text).split('\n')) {
@@ -69,7 +67,6 @@ export function parseExplain(text: string): Explanation[] {
   return items;
 }
 
-/** A module slower than this gets a suggestion. */
 export const SLOW_MODULE_MS = 50;
 /** Starship runs modules in parallel, so a prompt is about as slow as its slowest module. */
 export const SLOW_PROMPT_MS = 200;
@@ -181,7 +178,6 @@ function moduleSuggestion(timing: ModuleTiming): Suggestion {
   };
 }
 
-/** What to change, from the timings, Starship's warnings and the config's own timeouts. */
 export function suggestFixes(
   timings: ModuleTiming[],
   warnings: string,
@@ -307,10 +303,6 @@ export type ExplainResult =
   | { mode: 'real'; items: Explanation[] }
   | { mode: 'unavailable'; reason: 'starship-missing' | 'explain-failed' };
 
-/**
- * Runs `starship explain` for the generated config in the preview's sample
- * project, so the Review step can say why each segment shows.
- */
 export async function explainPromptAsync(
   state: WizardState,
   deps: ProbeDeps = DEFAULT_PROBE_DEPS,
@@ -332,7 +324,6 @@ export async function explainPromptAsync(
   }
 }
 
-/** The timings report as text: each module and its time, then what to change. */
 export function formatTimings(report: TimingsReport, config: string): string {
   const width = Math.max(0, ...report.modules.map((timing) => timing.module.length));
   const ms = (value: number) => (value < 1 ? '<1ms' : `${Math.round(value)}ms`);

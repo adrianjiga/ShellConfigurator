@@ -177,10 +177,6 @@ export type ScratchDeps = Pick<
   'createScratch' | 'writeConfig' | 'scaffoldProject' | 'cleanup'
 >;
 
-/**
- * Runs `run` with a scratch folder holding the generated config for `state`
- * and the sample project, and removes the folder afterwards.
- */
 export async function withPreviewProject<T>(
   state: WizardState,
   deps: ScratchDeps,

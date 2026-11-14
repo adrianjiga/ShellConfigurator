@@ -60,7 +60,6 @@ export interface CliFlags {
   importUrl?: string;
   /** Where TOML is written (-o); missing means stdout. */
   outputFile?: string;
-  /** An existing starship.toml for `timings` to time. */
   configFile?: string;
   /** Write the versioned state card here (add -o to keep the TOML too) (--export). */
   exportFile?: string;
