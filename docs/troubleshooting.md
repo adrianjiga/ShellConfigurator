@@ -202,5 +202,28 @@ to remove Starship too, and `--font <id>` to remove a Nerd Font it installed.
 - **A config was "left in place"**: its rc could not be cleaned (read-only, or
   a broken symlink), so the config it points at was kept. Fix the rc and run
   uninstall again.
-- **Changed your mind**: the report ends with the `cp` commands that copy each
-  backup back; run them to undo the uninstall.
+- **Changed your mind**: run `shell-configurator rollback`, as the report says.
+  If the run could not be recorded, the report lists `cp` commands that copy
+  each backup back instead.
+
+---
+
+## Undoing a run with rollback
+
+Every wizard install, `apply` and `uninstall` keeps a copy of the rc files,
+per-shell configs, shared config and terminal configs it changes.
+`shell-configurator rollback --list` shows those runs, newest first, and
+`shell-configurator rollback` puts the newest one back (asking first; `--yes`
+off a terminal). Run it again to undo the run before; `--run <id>` picks one.
+
+- **"changed since that run, so it is left as it is"**: you (or a later run)
+  edited that file after the run, and rollback never overwrites a later edit.
+  Roll back the later run first, or fix the file by hand.
+- **"Nothing to roll back."**: no recorded run changed any file, or every run
+  has been rolled back already. Runs made before rollback existed kept no
+  copies.
+- **Rolled back too far**: a rollback is a run too, so
+  `rollback --run <that rollback's id>` (see `--list`) redoes what it undid.
+- **The font or Starship is still there**: rollback only covers files, not the
+  font, the Starship binary or the login shell (`chsh`). Use `uninstall
+  --font <id> --starship` for those.
