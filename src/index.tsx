@@ -31,6 +31,7 @@ import {
   DEFAULT_REPAIR_DEPS,
   formatRepairReport,
   type RepairDeps,
+  type RepairReport,
   runRepair,
 } from './services/repair.ts';
 import {
@@ -42,6 +43,7 @@ import {
   runRollback,
 } from './services/rollback.ts';
 import {
+  CapturedRunError,
   captureRun,
   interruptedRunCount,
   recoverInterruptedRuns,
@@ -434,15 +436,23 @@ export async function runRepairCommand(
     if (!proceed) return;
   }
 
-  const { result: report, runId } = changes
-    ? await captureRun(
-        trackedFiles(),
-        () => runRepair(state, deps, { ...options, before: plan.before }),
-        {
-          record: { kind: 'repair', command },
-        }
-      )
-    : { result: plan, runId: null };
+  const record = (exitCode: number, runId: string | null) =>
+    recordRunSafely({ kind: 'repair', command, exitCode, runId, ...(state ? { state } : {}) });
+  let captured: { result: RepairReport; runId: string | null };
+  try {
+    captured = changes
+      ? await captureRun(
+          trackedFiles(),
+          () => runRepair(state, deps, { ...options, before: plan.before }),
+          { record: { kind: 'repair', command, ...(state ? { state } : {}) } }
+        )
+      : { result: plan, runId: null };
+  } catch (err) {
+    if (!(err instanceof CapturedRunError)) throw err;
+    record(1, err.runId);
+    throw err.cause;
+  }
+  const { result: report, runId } = captured;
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {
@@ -450,15 +460,7 @@ export async function runRepairCommand(
     if (runId) process.stdout.write('\nUndo it with: shell-configurator rollback\n');
   }
   if (!report.ok) process.exitCode = 1;
-  if (changes) {
-    recordRunSafely({
-      kind: 'repair',
-      command,
-      exitCode: report.ok ? 0 : 1,
-      runId,
-      ...(state ? { state } : {}),
-    });
-  }
+  if (changes) record(report.ok ? 0 : 1, runId);
 }
 
 async function askToProceed(question: string): Promise<boolean> {

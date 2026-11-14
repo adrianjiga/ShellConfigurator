@@ -21,7 +21,7 @@ vi.mock('node:fs', async (importOriginal) => {
 import { getShell } from '../../config/shells.ts';
 import { getSharedConfigPath, getShellConfigPath } from '../../generators/shellRc.ts';
 import { sha256Digest } from '../../services/cache.ts';
-import { readHistory } from '../../services/history.ts';
+import { lastRunShells, readHistory } from '../../services/history.ts';
 import { listRollbackRuns } from '../../services/rollback.ts';
 import {
   beginRunCapture,
@@ -38,6 +38,7 @@ import {
   trackedFiles,
   UNREADABLE_AFTER,
 } from '../../services/runCapture.ts';
+import { DEFAULT_STATE } from '../../types.ts';
 import { restoreEnv } from '../helpers/env.ts';
 
 let tmpDir: string;
@@ -392,6 +393,39 @@ describe('recoverInterruptedRuns', () => {
       expect.not.objectContaining({ rewritable: true }),
       expect.objectContaining({ path: summary, rewritable: true }),
     ]);
+  });
+
+  it('recovers a pending run over a day old, whatever process has its pid now', () => {
+    const rc = file('zshrc');
+    fs.writeFileSync(rc, 'before\n');
+    const live = beginRunCapture([rc]);
+    const old = '2000-01-01T00-00-00.000Z';
+    fs.cpSync(live.dir, runDir(old), { recursive: true });
+    const pendingFile = path.join(runDir(old), 'pending.json');
+    const pending = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
+    fs.writeFileSync(
+      pendingFile,
+      JSON.stringify({ ...pending, startedAt: Date.now() - 2 * 864e5 })
+    );
+    fs.writeFileSync(rc, 'after\n');
+
+    expect(recoverInterruptedRuns(() => true)).toEqual([old]);
+    finishRunCapture(live);
+  });
+
+  it("records a recovered run with its state card, so its shells count as the last run's", () => {
+    const rc = file('zshrc');
+    fs.writeFileSync(rc, 'before\n');
+    beginRunCapture([rc], {
+      kind: 'install',
+      state: { ...DEFAULT_STATE, selectedShells: ['fish'] },
+    });
+    fs.writeFileSync(rc, 'after\n');
+
+    recoverInterruptedRuns(dead);
+
+    expect(readHistory()[0]?.snapshotId).toBeDefined();
+    expect(lastRunShells()).toEqual(['fish']);
   });
 
   it('removes the folder of a run that died before changing anything', () => {

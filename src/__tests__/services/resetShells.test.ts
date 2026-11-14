@@ -7,7 +7,9 @@ import {
   applyShellConfig,
   getShellConfigPath,
   keepsOwnConfig,
+  removeManagedRcBlocks,
   resetRcContent,
+  resetSharedShellConfig,
   writeShellConfig,
 } from '../../generators/shellRc.ts';
 import { DEFAULT_INSTALL_TASK_DEPS, plannedResetShells } from '../../services/installTasks.ts';
@@ -144,5 +146,25 @@ describe("a setting of the user's own", () => {
     fs.writeFileSync(path.join(home, '.zshenv'), '# export STARSHIP_CONFIG=~/old.toml\n');
 
     expect(guarded(init)).toBe(true);
+  });
+});
+
+describe('the blocks of many runs in a row', () => {
+  it('stay whole, so uninstall takes every line it wrote back out', () => {
+    const zshrc = path.join(home, '.zshrc');
+    fs.writeFileSync(zshrc, 'export EDITOR=vim\n');
+    writeShellConfig('format = "$character"\n', 'zsh');
+
+    applyShellConfig('zsh');
+    resetSharedShellConfig('zsh');
+    applyShellConfig('zsh', { pointAtSharedConfig: true });
+    resetSharedShellConfig('zsh');
+    applyShellConfig('zsh');
+    resetSharedShellConfig('zsh');
+    applyShellConfig('zsh', { ensurePathDir: path.join(home, '.local', 'bin') });
+
+    removeManagedRcBlocks('zsh');
+
+    expect(fs.readFileSync(zshrc, 'utf8')).toBe('export EDITOR=vim\n');
   });
 });

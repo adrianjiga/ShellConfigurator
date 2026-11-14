@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { SHELLS } from '../config/shells.ts';
 import { bashLoginFiles, getSharedConfigPath, getShellConfigPath } from '../generators/shellRc.ts';
+import type { WizardState } from '../types.ts';
 import { sha256Digest } from './cache.ts';
 import { errorMessage, isMissingFile } from './errors.ts';
 import { type HistoryKind, recordRun } from './history.ts';
@@ -101,18 +102,23 @@ export interface InterruptedRecord {
   kind: HistoryKind;
   command?: string;
   rollbackOf?: string;
+  state?: WizardState;
 }
 
 /** Written when a capture starts and removed once its manifest is, so a run that dies can be finished later. */
 interface PendingCapture {
   version: typeof RUN_MANIFEST_VERSION;
   pid: number;
+  startedAt?: number;
   files: CapturedFile[];
   record?: InterruptedRecord;
   rewritable?: string[];
 }
 
 const PENDING = 'pending.json';
+
+/** No run takes this long, so a pending run this old died, whatever process has its pid now. */
+const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 /** The captures this process has started and not finished. */
 const activeCaptures = new Set<string>();
@@ -140,6 +146,7 @@ export function beginRunCapture(
     const pending: PendingCapture = {
       version: RUN_MANIFEST_VERSION,
       pid: process.pid,
+      startedAt: Date.now(),
       files: capture.files,
       ...(record ? { record } : {}),
       ...(rewritable.length > 0 ? { rewritable: [...rewritable] } : {}),
@@ -279,7 +286,8 @@ function deadRuns(isAlive: (pid: number, runId: string) => boolean): DeadRun[] {
         fs.readFileSync(path.join(dir, PENDING), 'utf8')
       ) as PendingCapture;
       if (pending.version !== RUN_MANIFEST_VERSION || !Array.isArray(pending.files)) return [];
-      return isAlive(pending.pid, runId) ? [] : [{ runId, dir, pending }];
+      const stale = Date.now() - (pending.startedAt ?? Date.now()) > PENDING_MAX_AGE_MS;
+      return !stale && isAlive(pending.pid, runId) ? [] : [{ runId, dir, pending }];
     } catch {
       return [];
     }

@@ -114,7 +114,13 @@ import { CliRunError, CliUsageError } from '../services/errors.ts';
 import { appendHistory } from '../services/history.ts';
 import { formatListing, listEntries } from '../services/listings.ts';
 import { homeDir } from '../services/paths.ts';
-import { beginRunCapture, captureRun, finishRunCapture, runDir } from '../services/runCapture.ts';
+import {
+  beginRunCapture,
+  CapturedRunError,
+  captureRun,
+  finishRunCapture,
+  runDir,
+} from '../services/runCapture.ts';
 import { serializeState } from '../services/state.ts';
 import type { UninstallDeps } from '../services/uninstall.ts';
 import { DEFAULT_STATE, type InstallTask, type ShellId } from '../types.ts';
@@ -680,6 +686,22 @@ describe('index headless routing', () => {
         runRepairCommand(parseCliArgs(['repair']), 'repair', io({ isTerminal: () => false }))
       ).rejects.toThrow('repair changes files and may install software; pass --yes');
       expect(mockRunRepair).toHaveBeenCalledOnce();
+    });
+
+    it('still records a repair that throws partway, so rollback can undo it', async () => {
+      vi.mocked(captureRun).mockRejectedValueOnce(
+        new CapturedRunError('run-3', new Error('starship install broke'))
+      );
+
+      await expect(
+        runRepairCommand(parseCliArgs(['repair', '--yes']), 'repair --yes', io())
+      ).rejects.toThrow('starship install broke');
+      expect(mockRecordRun).toHaveBeenCalledWith({
+        kind: 'repair',
+        command: 'repair --yes',
+        exitCode: 1,
+        runId: 'run-3',
+      });
     });
 
     it('applies the fixes inside a captured run, records it and points at rollback', async () => {
