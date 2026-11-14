@@ -24,6 +24,7 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/),
 - **Doctor / repair**: a read-only day-2 health check (Starship, locale, shell wiring, config validity, font installed + selected, version drift, the shell you are running) and a mode that applies fixes and re-checks
 - **Uninstall**: remove the rc lines and per-shell configs the wizard wrote (backed up first), and optionally the Nerd Font and Starship itself
 - **Rollback**: every install, apply and uninstall keeps a copy of the files it changes, so `rollback` can put a whole run back, one run at a time
+- **Debug info**: `debug-info` prints a Markdown report of the setup (detection, Starship, shells, PATH, doctor) to paste into a bug report, with your home directory shown as `~`
 
 ## Requirements
 
@@ -60,6 +61,7 @@ shell-configurator uninstall                  remove the rc lines and per-shell 
 shell-configurator uninstall --starship --font <id>  also remove Starship and that Nerd Font (--shells to limit, --dry-run to only list)
 shell-configurator rollback                   put back the files the newest run changed, after asking (--yes, --dry-run, --json)
 shell-configurator rollback --list            list the runs that changed files; --run <id> rolls back a specific one
+shell-configurator debug-info > issue.md      write a report of the setup for a bug report (--json for the raw data)
 shell-configurator --help                     show usage and exit
 shell-configurator --version                  print the version and exit
 shell-configurator --dry-run                  preview the config without installing (also -d, --no-install)
