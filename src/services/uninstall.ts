@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import { getShell, SHELLS } from '../config/shells.ts';
 import { statusLine } from '../config/status.ts';
 import {
+  bashLoginBlockFiles,
   getShellConfigPath,
   hasManagedRcBlock,
   type RemovalResult,
@@ -132,7 +133,13 @@ function shellSteps(facts: ShellFacts, explicit: boolean, deps: UninstallDeps): 
       steps.push({
         id: `rc_${shellId}`,
         title: `${shell.label} rc`,
-        detail: `remove the ShellConfigurator lines from ${rc}`,
+        detail: `remove the ShellConfigurator lines from ${rc}${
+          shellId === 'bash'
+            ? bashLoginBlockFiles()
+                .map((file) => ` and the line in ${file} that loads it`)
+                .join('')
+            : ''
+        }`,
         run: async () =>
           describeRemoval(deps.removeManagedRcBlocks(shellId), `the lines from ${rc}`, rc),
       });

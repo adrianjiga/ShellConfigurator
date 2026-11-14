@@ -168,8 +168,10 @@ to undo the later run.
 Terminal and iTerm start Bash as a login shell, which reads `~/.bash_profile`
 (or `~/.bash_login`, or `~/.profile`) and not `~/.bashrc`. When ShellConfigurator
 sets up Bash on macOS, it adds a line that loads `~/.bashrc` to the first of
-those files that exists, or creates `~/.bash_profile`. `doctor` fails Bash when
-that line is missing, and `repair` adds it.
+those files that exists, or creates `~/.bash_profile`. The line only runs in
+Bash, since `sh` and other login shells read `~/.profile` too. `doctor` fails
+Bash when that line is missing, and `repair` adds it. `uninstall` takes it back
+out, and deletes a login file that held nothing else.
 
 ---
 

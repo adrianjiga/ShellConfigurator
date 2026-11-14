@@ -710,6 +710,9 @@ const BASH_LOGIN_FILES = ['.bash_profile', '.bash_login', '.profile'];
 
 export const LOGIN_MARKER = '# Added by ShellConfigurator (login shells read this, not ~/.bashrc)';
 
+/** Only Bash sources ~/.bashrc: sh, dash and ksh login shells read ~/.profile too. */
+const LOGIN_LINE = '[ -n "$BASH_VERSION" ] && [ -f ~/.bashrc ] && . ~/.bashrc';
+
 /** The file a Bash login shell reads: the first of these that exists, else ~/.bash_profile. */
 export function bashLoginFile(io: RcIo = FS_RC_IO): string {
   const files = BASH_LOGIN_FILES.map((name) => path.join(homeDir(), name));
@@ -745,7 +748,7 @@ export function loginLoadsBashrc(
 export function bashLoginContent(existing: string, io: RcIo = FS_RC_IO): string {
   return loginLoadsBashrc(existing, io)
     ? existing
-    : appendManagedBlock(existing, LOGIN_MARKER, ['[ -f ~/.bashrc ] && . ~/.bashrc']);
+    : appendManagedBlock(existing, LOGIN_MARKER, [LOGIN_LINE]);
 }
 
 /** Makes the Bash login file load ~/.bashrc where it must. The file it changed, or null. */
@@ -781,13 +784,52 @@ export function applyShellConfig(
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
   const { content, ...result } = appliedRcContent(shellId, existing, options)!;
   if (content !== existing) writeFileAtomic(rcPath, content);
-  const login = shellId === 'bash' ? ensureBashLogin() : null;
-  if (!login) return result;
-  const loginNote = `${path.basename(login)} now loads .bashrc`;
+  if (shellId !== 'bash') return result;
+  let loginNote: string;
+  try {
+    const login = ensureBashLogin();
+    if (!login) return result;
+    loginNote = `${path.basename(login)} now loads .bashrc`;
+  } catch (err) {
+    loginNote = `could not make ${path.basename(bashLoginFile())} load .bashrc (${errorMessage(err)}), so macOS terminals may not show the prompt`;
+    if (!result.applied) return { applied: false, note: loginNote };
+  }
   return {
     applied: true,
     note: result.applied && result.note ? `${result.note}; ${loginNote}` : loginNote,
   };
+}
+
+/** The Bash login files that hold the block that loads ~/.bashrc. */
+export function bashLoginBlockFiles(io: RcIo = FS_RC_IO): string[] {
+  return bashLoginFiles().filter((file) => {
+    try {
+      return io.exists(file) && hasLine(io.readFile(file), LOGIN_MARKER);
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
+ * Takes the block that loads ~/.bashrc back out of every Bash login file, and
+ * deletes a login file that held nothing else. The files it changed.
+ */
+export function removeBashLoginBlocks(): string[] {
+  return bashLoginFiles().flatMap((file) => {
+    if (!fs.existsSync(file)) return [];
+    const existing = fs.readFileSync(file, 'utf8');
+    const lines = existing.split('\n');
+    const at = lines.findIndex((line) => line.trim() === LOGIN_MARKER);
+    if (at === -1) return [];
+    const end = lines[at + 1]?.trim() === LOGIN_LINE ? at + 2 : at + 1;
+    const start = at > 0 && lines[at - 1].trim() === '' ? at - 1 : at;
+    lines.splice(start, end - start);
+    const content = lines.join('\n');
+    if (content.trim() === '') fs.rmSync(file);
+    else writeFileAtomic(file, content);
+    return [file];
+  });
 }
 
 /** Appends a managed block at the end, after a blank line unless the file is empty. */
@@ -1045,7 +1087,9 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
 
   const backedUpTo = backupIfExists(rcPath);
   writeFileAtomic(rcPath, lines.join('\n'));
+  const logins = shellId === 'bash' ? removeBashLoginBlocks() : [];
   const notes = [
+    ...logins.map((file) => `took the line that loads .bashrc out of ${path.basename(file)}`),
     ...(ownInit ? ['your own Starship init line stays'] : []),
     ...(otherInit
       ? [
