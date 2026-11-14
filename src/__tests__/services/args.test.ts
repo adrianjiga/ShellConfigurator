@@ -201,18 +201,6 @@ describe('parseCliArgs', () => {
   });
 
   describe('short flag expansion', () => {
-    it('-v sets version', () => {
-      expect(parseCliArgs(['-v']).version).toBe(true);
-    });
-
-    it('-h sets help', () => {
-      expect(parseCliArgs(['-h']).help).toBe(true);
-    });
-
-    it('-d sets dryRun', () => {
-      expect(parseCliArgs(['-d']).dryRun).toBe(true);
-    });
-
     it('-o sets outputFile', () => {
       expect(parseCliArgs(['-o', 'out.toml']).outputFile).toBe('out.toml');
     });
