@@ -29,7 +29,10 @@ Two defensive layers, in order, inside `installNerdFont`:
    publishes in the release asset metadata (`releases/latest`, matched by the
    asset's `zipName`). Any of three conditions — digest mismatch, no digest for
    the asset, or a failed/aborted lookup — refuses to install with its own
-   error.
+   error. The one exception is the font cache: a verified archive cached by an
+   earlier run is reused without a download when its digest still matches the
+   latest release, or when the lookup fails (but is not cancelled), so an
+   offline re-run keeps working.
 2. **Sandboxed extraction** — decompression moves to an `eval`-script `Worker`
    (`src/services/fontExtractor.ts`) that returns `{ name, bytes }` entries for
    the _main thread_ to write. A hostile archive can only crash the throwaway
@@ -62,8 +65,9 @@ Two defensive layers, in order, inside `installNerdFont`:
   tampered or truncated archive is rejected with an actionable message.
 - Font parsers can no longer take down the wizard; worst case is a dead worker
   and a clear error, while the TUI keeps rendering.
-- The release.json metadata call adds a second network round-trip (with its own
-  timeout) after every font download.
+- The `releases/latest` API lookup adds a second network round-trip (with its
+  own timeout) before every font download; a matching cached archive skips the
+  download but not the lookup.
 - A Nerd Font release without published asset digests becomes uninstallable by
   design — correct, because fail-closed is the point; the error message tells
   the user exactly why.
