@@ -83,8 +83,10 @@ export const SHELLS: ShellDef[] = [
     // Run from Bash: the Nushell program is one POSIX-quoted argument to `nu -c`.
     // The config path is written in literally, so it is the file the wizard wrote.
     get initLine() {
-      const pin = `export-env { $env.STARSHIP_CONFIG = "${perShellConfigPath('nushell')}" }`;
-      return nushellAutoloadCommand(`'${pin}' | save -f ($d | path join starship-config.nu)`);
+      const pin = `export-env { $env.STARSHIP_CONFIG = ${nuString(perShellConfigPath('nushell'))} }`;
+      return nushellAutoloadCommand(
+        `${nuString(pin)} | save -f ($d | path join starship-config.nu)`
+      );
     },
     get adoptInitLine() {
       return nushellAutoloadCommand('rm -f ($d | path join starship-config.nu)');
@@ -121,6 +123,11 @@ function perShellConfigPath(id: ShellId): string {
 }
 
 /** Nushell's `$nu.data-dir`. */
+/** A Nushell double-quoted string literal holding `value` exactly. */
+function nuString(value: string): string {
+  return `"${value.replace(/[\\"]/g, '\\$&')}"`;
+}
+
 /** `nu -c` writing Starship's autoload file, then `configStep` with `$d` as the autoload folder. */
 function nushellAutoloadCommand(configStep: string): string {
   return `nu -c ${posixShellQuote(

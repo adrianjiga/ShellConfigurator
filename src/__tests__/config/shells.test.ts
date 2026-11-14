@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -47,5 +48,21 @@ describe('STARSHIP_CONFIG syntax', () => {
     for (const shell of SHELLS) {
       expect(Boolean(shell.configEnv), shell.id).toBe(shell.rcFile !== null);
     }
+  });
+});
+
+describe('Nushell setup command', () => {
+  it('hands Nushell the exact config path, even one with quotes and backslashes', () => {
+    vi.stubEnv('XDG_CONFIG_HOME', "/home/o'brien\\x/.config");
+    const command = getShell('nushell')!.initLine;
+    expect(command.startsWith('nu -c ')).toBe(true);
+
+    const program = execFileSync('bash', ['-c', command.replace(/^nu -c /, 'printf %s ')], {
+      encoding: 'utf8',
+    });
+
+    expect(program).toContain(
+      `"export-env { $env.STARSHIP_CONFIG = \\"/home/o'brien\\\\\\\\x/.config/starship/nushell.toml\\" }"`
+    );
   });
 });
