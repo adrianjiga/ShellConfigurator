@@ -4,7 +4,7 @@ import { MODULES } from '../config/modules.ts';
 import { PALETTES } from '../config/palettes.ts';
 import { PRESETS, powerlineDroppedReason } from '../config/presets.ts';
 import { SHELLS } from '../config/shells.ts';
-import { statusMark } from '../config/status.ts';
+import { statusLine, statusMark } from '../config/status.ts';
 import { getSharedConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import {
@@ -257,15 +257,9 @@ export function runGenerate(flags: CliFlags): void {
   }
 }
 
-/** ONE-line status marks, padded for the plain-text headless summary. */
-function statusWord(status: InstallTask['status'] | 'unknown'): string {
-  const icon = statusMark(status).icon;
-  return `${icon} ${status.toUpperCase().padEnd(7)}`;
-}
-
 function formatTask(t: InstallTask): string {
   const suffix = t.error ? ` — ${t.error}` : t.note ? ` (${t.note})` : '';
-  return `${statusWord(t.status)} ${t.label}${suffix}`;
+  return `${statusMark(t.status).icon} ${statusLine(t.status, `${t.label}${suffix}`)}`;
 }
 
 /** The plain-text plan/applied view `apply` prints to stdout. */

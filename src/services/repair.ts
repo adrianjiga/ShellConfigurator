@@ -1,3 +1,4 @@
+import { statusLine } from '../config/status.ts';
 import { applyShellConfig, writeShellConfig } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import type { PackageManager, ShellId, TerminalId, WizardState } from '../types.ts';
@@ -221,7 +222,7 @@ export function formatRepairReport(report: RepairReport): string {
     lines.push('Nothing to repair.');
   } else {
     for (const action of report.actions) {
-      lines.push(`${action.status.toUpperCase().padEnd(7)} ${action.title} — ${action.detail}`);
+      lines.push(statusLine(action.status, `${action.title} — ${action.detail}`));
     }
   }
   if (!report.dryRun) {

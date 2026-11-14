@@ -271,7 +271,7 @@ describe('formatRepairReport', () => {
     });
     expect(text).toContain('FIXED   Zsh — rewired');
     expect(text).toContain('After repair:');
-    expect(text).toContain('PASS  Starship — starship 1.20');
+    expect(text).toContain('PASS    Starship — starship 1.20');
   });
 
   it('says there is nothing to repair when no action ran', () => {

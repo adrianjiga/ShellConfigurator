@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getShell } from '../config/shells.ts';
+import { statusLine } from '../config/status.ts';
 import {
   fishInitFile,
   getSharedConfigPath,
@@ -671,13 +672,11 @@ export async function runDoctor(
   return { ok: findings.every((f) => f.status !== 'fail'), findings };
 }
 
-const STATUSBAR: Record<DoctorStatus, string> = { pass: 'PASS', warn: 'WARN', fail: 'FAIL' };
-
 /** Human-readable report; `--json` serializes the report object directly. */
 export function formatDoctorReport(report: DoctorReport): string {
   const lines = ['Starship health check', ''];
   for (const finding of report.findings) {
-    lines.push(`${STATUSBAR[finding.status]}  ${finding.title} — ${finding.detail}`);
+    lines.push(statusLine(finding.status, `${finding.title} — ${finding.detail}`));
   }
   const count = (status: DoctorStatus) => report.findings.filter((f) => f.status === status).length;
   lines.push('');

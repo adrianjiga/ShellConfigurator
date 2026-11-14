@@ -523,8 +523,8 @@ describe('formatDoctorReport', () => {
         { id: 'b', title: 'B', status: 'fail', detail: 'broken' },
       ],
     });
-    expect(text).toContain('PASS  A — fine');
-    expect(text).toContain('FAIL  B — broken');
+    expect(text).toContain('PASS    A — fine');
+    expect(text).toContain('FAIL    B — broken');
     expect(text).toContain('1 passed, 0 warning(s), 1 failed');
   });
 });
