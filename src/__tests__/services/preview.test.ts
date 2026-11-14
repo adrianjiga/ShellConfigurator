@@ -49,6 +49,7 @@ import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 const SCRATCH = '/tmp/scratch/preview-abc';
 const PROJECT = nodePath.join(SCRATCH, 'projects', 'myapp');
 const originalStarshipShell = process.env.STARSHIP_SHELL;
+const originalXdgCache = process.env.XDG_CACHE_HOME;
 
 function execFileSucceeds(stdout = '~/projects/myapp on  main \n❯') {
   mockExecFile.mockImplementation((...args: unknown[]) => {
@@ -87,7 +88,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete process.env.XDG_CACHE_HOME;
+  if (originalXdgCache === undefined) delete process.env.XDG_CACHE_HOME;
+  else process.env.XDG_CACHE_HOME = originalXdgCache;
   if (originalStarshipShell === undefined) delete process.env.STARSHIP_SHELL;
   else process.env.STARSHIP_SHELL = originalStarshipShell;
 });
