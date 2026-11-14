@@ -4,7 +4,7 @@
 
 `src/index.tsx` first parses the argv (`parseCliArgs` in `src/services/args.ts`).
 Global flags (`--help`/`--version`/`--restore`) and the headless subcommands
-(`generate`/`apply`/`doctor`/`repair`/`uninstall`, routed via `runHeadlessCommand`) exit
+(`generate`/`apply`/`doctor`/`repair`/`uninstall`/`rollback`, routed via `runHeadlessCommand`) exit
 before Ink ever renders; parser warnings (unknown/malformed flags) go to stderr.
 Only when no subcommand consumed the args does the app render the root `App`
 component using Ink's renderer. Ink is a React-based framework for building interactive CLI
@@ -287,6 +287,8 @@ src/
     ├── doctor.ts              Day-2 health check (read-only) with pass/warn/fail findings
     ├── repair.ts              Applies doctor fixes, then re-runs the doctor
     ├── uninstall.ts           Plans and runs the teardown (rc lines, configs, font, Starship)
+    ├── runCapture.ts          Copies the files a run may change and keeps a manifest of what it changed
+    ├── rollback.ts            Puts a captured run's files back (skipping files changed since)
     ├── state.ts               State card serialization (serializeState / parseState)
     ├── history.ts             history.jsonl ledger + snapshot writes
     ├── cache.ts               Font archive cache (pin + sha256) + recorded starship version
