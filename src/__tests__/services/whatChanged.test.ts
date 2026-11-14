@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('../../services/whatChanged.ts');
 
 import { getShell } from '../../config/shells.ts';
-import { getShellConfigPath } from '../../generators/shellRc.ts';
+import { getSharedConfigPath, getShellConfigPath } from '../../generators/shellRc.ts';
 import {
   renderWhatChanged,
   type WhatChangedRun,
@@ -83,6 +83,17 @@ describe('renderWhatChanged', () => {
     expect(text).toContain('Wizard install on 2026-11-14T10:00:00.000Z.');
     expect(text).toContain('this run cannot be rolled back');
     expect(text).not.toContain('`shell-configurator rollback`');
+  });
+
+  it('names the shared config in adopt mode, where no per-shell config is written', () => {
+    const text = renderWhatChanged(
+      run({ state: { ...run().state, keepExistingConfig: true, selectedShells: ['zsh'] } })
+    );
+    expect(text).toContain(
+      `reads the shared config \`${getSharedConfigPath().replace(os.homedir(), '~')}\``
+    );
+    expect(text).not.toContain('; config `');
+    expect(text).toContain('`shell-configurator uninstall` removes the Starship lines;');
   });
 
   it('shows the home directory as ~', () => {

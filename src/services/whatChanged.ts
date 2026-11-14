@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getShell, setupCommand } from '../config/shells.ts';
 import { statusMark } from '../config/status.ts';
-import { getShellConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
+import { getSharedConfigPath, getShellConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
 import { fontIdToInstall, type InstallTask, type WizardState } from '../types.ts';
 import { redactHome } from './debugInfo.ts';
 import { configHome } from './paths.ts';
@@ -31,7 +31,9 @@ function fileChange(file: RunManifest['files'][number]): string {
 function shellLine(run: WhatChangedRun, shellId: WizardState['selectedShells'][number]): string {
   const shell = getShell(shellId);
   if (!shell) return `- ${shellId}`;
-  const config = `config \`${getShellConfigPath(shellId)}\``;
+  const config = run.state.keepExistingConfig
+    ? `reads the shared config \`${getSharedConfigPath()}\``
+    : `config \`${getShellConfigPath(shellId)}\``;
   if (shell.rcFile) {
     return `- ${shell.label}: Starship lines in \`${shell.rcFile}\`, in the block under \`# Added by ShellConfigurator\`; ${config}`;
   }
@@ -68,7 +70,7 @@ export function renderWhatChanged(run: WhatChangedRun): string {
     ...(run.manifest
       ? ['- `shell-configurator rollback` puts the files above back as they were before this run.']
       : []),
-    `- \`shell-configurator uninstall\` removes the Starship lines and per-shell configs${fontId ? `; add \`--font ${fontId}\` to remove the font` : ''}, and \`--starship\` to remove Starship.`,
+    `- \`shell-configurator uninstall\` removes the Starship lines${run.state.keepExistingConfig ? '' : ' and per-shell configs'}${fontId ? `; add \`--font ${fontId}\` to remove the font` : ''}, and \`--starship\` to remove Starship.`,
     '- `shell-configurator doctor` checks the setup.',
   ];
   return redactHome(`${lines.join('\n')}\n`);
