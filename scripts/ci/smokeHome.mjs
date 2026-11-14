@@ -160,3 +160,20 @@ export function assertUninstalled(homeDir, rcPath, shell) {
   assert.ok(!rcAfter.includes('ShellConfigurator'), `rolling back the apply left:\n${rcAfter}`);
   assert.ok(!existsSync(configPath), `rolling back the apply left ${configPath}`);
 }
+
+/** Runs the real `debug-info` and asserts the Markdown and JSON reports, with HOME hidden. */
+export function assertDebugInfo(homeDir) {
+  const report = runCli(['debug-info']);
+  assert.match(report, /^# shell-configurator debug info\n/, `debug-info printed:\n${report}`);
+  for (const section of ['## Starship', '## Shells', '## PATH', '## Doctor']) {
+    assert.ok(report.includes(section), `debug-info is missing ${section}:\n${report}`);
+  }
+  assert.ok(!report.includes(homeDir), `debug-info shows the home directory:\n${report}`);
+
+  const info = JSON.parse(runCli(['debug-info', '--json']));
+  assert.equal(typeof info.packageManager, 'string', 'debug-info --json has no package manager');
+  assert.ok(
+    Array.isArray(info.shells) && info.shells.length > 0,
+    'debug-info --json has no shells'
+  );
+}
