@@ -241,10 +241,24 @@ export function assertScriptingSurface() {
   );
   assert.match(runCli(['--list-fonts']), /^JetBrainsMono\s+JetBrains Mono$/m, '--list-fonts text');
 
+  const bashrc = nodePath.join(process.env.HOME, '.bashrc');
+  const bashrcBefore = existsSync(bashrc) ? readFileSync(bashrc, 'utf8') : null;
   const plan = JSON.parse(
     runCli(['apply', '--dry-run', '--json', '--shells', 'bash', '--no-nerd-font'])
   );
   assert.equal(plan.dryRun, true, 'apply --dry-run --json is not a dry-run plan');
   assert.deepEqual(plan.shells, ['bash'], 'apply --dry-run --json has the wrong shells');
   assert.equal(plan.config.kind, 'per-shell', 'apply --dry-run --json has no generated config');
+  const rcChange = plan.changes.find((change) => change.path === bashrc);
+  assert.ok(rcChange, `apply --dry-run --json has no change for ${bashrc}`);
+  assert.match(
+    rcChange.diff,
+    /^\+eval "\$\(starship init bash\)"$/m,
+    'the dry-run diff of .bashrc does not add the init line'
+  );
+  assert.equal(
+    existsSync(bashrc) ? readFileSync(bashrc, 'utf8') : null,
+    bashrcBefore,
+    'apply --dry-run changed .bashrc'
+  );
 }
