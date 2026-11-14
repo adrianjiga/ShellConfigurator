@@ -25,7 +25,20 @@ export interface ShellDef {
    * the shared starship.toml instead of pinning a per-shell config.
    */
   adoptInitLine?: string;
+  /** For shells with an rc file: how it exports and clears STARSHIP_CONFIG. */
+  configEnv?: ConfigEnvSyntax;
 }
+
+export interface ConfigEnvSyntax {
+  /** Text the export starts with; the quoted config path follows it. */
+  exportPrefix: string;
+  unsetLine: string;
+}
+
+const POSIX_CONFIG_ENV: ConfigEnvSyntax = {
+  exportPrefix: 'export STARSHIP_CONFIG=',
+  unsetLine: 'unset STARSHIP_CONFIG',
+};
 
 export const SHELLS: ShellDef[] = [
   {
@@ -38,6 +51,7 @@ export const SHELLS: ShellDef[] = [
     },
     initLine: 'eval "$(starship init zsh)"',
     pathLine: (dir) => `export PATH=${posixShellQuote(dir)}:"$PATH"`,
+    configEnv: POSIX_CONFIG_ENV,
   },
   {
     id: 'bash',
@@ -48,6 +62,7 @@ export const SHELLS: ShellDef[] = [
     },
     initLine: 'eval "$(starship init bash)"',
     pathLine: (dir) => `export PATH=${posixShellQuote(dir)}:"$PATH"`,
+    configEnv: POSIX_CONFIG_ENV,
   },
   {
     id: 'fish',
@@ -58,6 +73,7 @@ export const SHELLS: ShellDef[] = [
     },
     initLine: 'starship init fish | source',
     pathLine: (dir) => `fish_add_path ${posixShellQuote(dir)}`,
+    configEnv: { exportPrefix: 'set -gx STARSHIP_CONFIG ', unsetLine: 'set -e STARSHIP_CONFIG' },
   },
   {
     id: 'nushell',

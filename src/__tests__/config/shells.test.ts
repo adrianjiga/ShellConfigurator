@@ -1,7 +1,7 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getShell, setupCommand } from '../../config/shells.ts';
+import { getShell, SHELLS, setupCommand } from '../../config/shells.ts';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -39,5 +39,13 @@ describe('setupCommand', () => {
   it('keeps the rc init line for shells with an rc file', () => {
     const zsh = getShell('zsh')!;
     expect(setupCommand(zsh, true)).toBe(zsh.initLine);
+  });
+});
+
+describe('STARSHIP_CONFIG syntax', () => {
+  it('is defined for exactly the shells with an rc file', () => {
+    for (const shell of SHELLS) {
+      expect(Boolean(shell.configEnv), shell.id).toBe(shell.rcFile !== null);
+    }
   });
 });

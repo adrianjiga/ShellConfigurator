@@ -398,17 +398,9 @@ function isPathLine(shell: ShellDef, line: string): boolean {
  */
 function isManagedLine(shell: ShellDef, line: string): boolean {
   const t = line.trim();
-  if (t === shell.initLine) return true;
-  if (shell.id === 'fish') {
-    return (
-      t.startsWith('set -gx STARSHIP_CONFIG ') ||
-      t === 'set -e STARSHIP_CONFIG' ||
-      isPathLine(shell, t)
-    );
-  }
-  return (
-    t.startsWith('export STARSHIP_CONFIG=') || t === 'unset STARSHIP_CONFIG' || isPathLine(shell, t)
-  );
+  if (t === shell.initLine || isPathLine(shell, t)) return true;
+  const env = shell.configEnv;
+  return Boolean(env && (t.startsWith(env.exportPrefix) || t === env.unsetLine));
 }
 
 /** Matches a managed line by its trimmed text, so CRLF files and stray spaces still match. */
@@ -421,9 +413,8 @@ function lineMatches(line: string, needle: LineNeedle): boolean {
 
 /** Any per-shell STARSHIP_CONFIG export, whatever path an earlier run wrote. */
 function isConfigExport(shell: ShellDef): LineNeedle {
-  return shell.id === 'fish'
-    ? (t) => t.startsWith('set -gx STARSHIP_CONFIG ')
-    : (t) => t.startsWith('export STARSHIP_CONFIG=');
+  const prefix = shell.configEnv?.exportPrefix;
+  return (t) => prefix !== undefined && t.startsWith(prefix);
 }
 
 /**
@@ -484,13 +475,9 @@ export interface ApplyShellConfigOptions {
  * shells without a script rc file (nushell, powershell).
  */
 export function starshipConfigLine(shellId: ShellId): string | null {
-  const shell = getShell(shellId);
-  if (!shell?.rcFile) return null;
-  const configPath = getShellConfigPath(shellId);
-  if (shellId === 'fish') {
-    return `set -gx STARSHIP_CONFIG ${posixShellQuote(configPath)}`;
-  }
-  return `export STARSHIP_CONFIG=${posixShellQuote(configPath)}`;
+  const env = getShell(shellId)?.configEnv;
+  if (!env) return null;
+  return `${env.exportPrefix}${posixShellQuote(getShellConfigPath(shellId))}`;
 }
 
 /** Creates the rc file's parent directory (important for fish) when missing. */
@@ -631,9 +618,7 @@ export function applyShellConfig(
  * leaked export from a configured parent shell. Null for shells without an rc file.
  */
 function starshipUnsetLine(shellId: ShellId): string | null {
-  const shell = getShell(shellId);
-  if (!shell?.rcFile) return null;
-  return shellId === 'fish' ? 'set -e STARSHIP_CONFIG' : 'unset STARSHIP_CONFIG';
+  return getShell(shellId)?.configEnv?.unsetLine ?? null;
 }
 
 /** True when the line sets STARSHIP_CONFIG, in any form a user or an earlier run wrote. */
