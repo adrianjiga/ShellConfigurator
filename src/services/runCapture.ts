@@ -65,7 +65,8 @@ function readOrNull(file: string): Buffer | null {
   }
 }
 
-function hashOf(file: string): string | null {
+/** SHA-256 of the file, or null when it does not exist. */
+export function hashOf(file: string): string | null {
   const content = readOrNull(file);
   return content === null ? null : sha256Digest(content);
 }
