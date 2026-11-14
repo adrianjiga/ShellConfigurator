@@ -101,6 +101,21 @@ describe('runRepair', () => {
     expect(result.actions[0]).toMatchObject({ status: 'fixed' });
   });
 
+  it('adds the PATH line for a script install that PATH cannot reach', async () => {
+    const deps = makeDeps(
+      report([finding({ kind: 'configure-shell', shellId: 'zsh' })]),
+      undefined,
+      {
+        getMissingStarshipPathDir: vi.fn().mockReturnValue('/home/u/.local/bin'),
+      }
+    );
+    await runRepair(null, deps);
+    expect(deps.applyShellConfig).toHaveBeenCalledWith('zsh', {
+      pointAtSharedConfig: false,
+      ensurePathDir: '/home/u/.local/bin',
+    });
+  });
+
   it('passes adopt mode through to the rc writer', async () => {
     const deps = makeDeps(report([finding({ kind: 'configure-shell', shellId: 'fish' })]));
     await runRepair(state({ keepExistingConfig: true }), deps);

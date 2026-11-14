@@ -115,7 +115,11 @@ async function applyFix(
     }
     case 'configure-shell': {
       const shared = pointAtShared ?? deps.shellPointsAtShared(fix.shellId);
-      const result = deps.applyShellConfig(fix.shellId, { pointAtSharedConfig: shared });
+      const pathDir = deps.getMissingStarshipPathDir();
+      const result = deps.applyShellConfig(fix.shellId, {
+        pointAtSharedConfig: shared,
+        ...(pathDir ? { ensurePathDir: pathDir } : {}),
+      });
       return result.applied
         ? { detail: `added the missing Starship lines to the ${fix.shellId} rc`, status: 'fixed' }
         : { detail: result.note ?? 'already configured', status: 'skipped' };
