@@ -54,6 +54,20 @@ describe('renderShare', () => {
   });
 });
 
+describe('renderShare and the home folder', () => {
+  it('shows the home folder in directory substitutions as ~, and says so', () => {
+    const home = os.homedir();
+    const text = renderShare({
+      ...tokyo,
+      directorySubstitutions: [{ from: `${home}/work/acme`, to: 'acme' }],
+    });
+    expect(text).not.toContain(home);
+    expect(text).toContain('~/work/acme');
+    expect(text).toContain('Your home folder is shown as `~`.');
+    expect(renderShare(tokyo)).not.toContain('home folder');
+  });
+});
+
 describe('writeShareFile', () => {
   let dir: string;
   beforeEach(() => {

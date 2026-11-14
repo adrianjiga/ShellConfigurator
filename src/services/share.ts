@@ -4,6 +4,7 @@ import { PRESETS, rendersGlyphs } from '../config/presets.ts';
 import { generateToml } from '../generators/starship.ts';
 import { NO_NERD_FONT, type WizardState } from '../types.ts';
 import { NERD_FONTS } from './installer.ts';
+import { redactHome } from './redact.ts';
 import { serializeState } from './state.ts';
 
 const PROJECT_URL = 'https://github.com/adrianjiga/ShellConfigurator';
@@ -33,10 +34,12 @@ export function renderShare(state: WizardState): string {
   const shared = shareableState(state);
   const glyphs = rendersGlyphs(shared);
   const toml = generateToml(shared);
-  return [
+  const card = serializeState(shared);
+  const home = redactHome(`${toml}\n${card}`) !== `${toml}\n${card}`;
+  const text = [
     `# Starship prompt: ${promptName(shared)}`,
     '',
-    `Made with [ShellConfigurator](${PROJECT_URL}).${glyphs ? ' Its icons need a [Nerd Font](https://www.nerdfonts.com/) in the terminal.' : ''}`,
+    `Made with [ShellConfigurator](${PROJECT_URL}).${glyphs ? ' Its icons need a [Nerd Font](https://www.nerdfonts.com/) in the terminal.' : ''}${home ? ' Your home folder is shown as `~`.' : ''}`,
     '',
     '## starship.toml',
     '',
@@ -51,10 +54,11 @@ export function renderShare(state: WizardState): string {
     `Save this card as \`prompt.json\`, then run \`shell-configurator apply --state prompt.json --shells <your shells>\`${glyphs ? ` (add \`--font ${NERD_FONTS[0].id}\` to install a Nerd Font, or \`--no-nerd-font\` for a version without icons)` : ''}:`,
     '',
     '```json',
-    serializeState(shared).trimEnd(),
+    card.trimEnd(),
     '```',
     '',
   ].join('\n');
+  return redactHome(text);
 }
 
 /** Writes the share text to `starship-prompt.md` in `dir`, or the first free numbered name. */
