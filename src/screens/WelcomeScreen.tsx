@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppSelectInput } from '../components/AppSelectInput.tsx';
+import { AppSelectInput, type SelectItem } from '../components/AppSelectInput.tsx';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
@@ -28,8 +28,6 @@ interface Detection {
 
 type InstallChoice = 'auto' | 'manual';
 type ManualChoice = 'recheck' | 'continue';
-type Item<V> = { label: string; value: V };
-
 const PM_LABELS: Record<PackageManager, string> = {
   pacman: 'pacman (Arch)',
   apt: 'apt (Debian/Ubuntu)',
@@ -90,17 +88,17 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
     if (key.return && detection?.starship.installed) proceed(detection, false);
   });
 
-  const installItems: Item<InstallChoice>[] = [
+  const installItems: SelectItem<InstallChoice>[] = [
     { label: 'Install automatically', value: 'auto' },
     { label: "I'll install it manually", value: 'manual' },
   ];
 
-  const manualItems: Item<ManualChoice>[] = [
+  const manualItems: SelectItem<ManualChoice>[] = [
     { label: 'Re-check (I installed it)', value: 'recheck' },
     { label: 'Continue without Starship', value: 'continue' },
   ];
 
-  function handleInstallChoice(item: Item<InstallChoice>) {
+  function handleInstallChoice(item: SelectItem<InstallChoice>) {
     if (!detection) return;
     switch (item.value) {
       case 'auto':
@@ -112,7 +110,7 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
     }
   }
 
-  async function handleManualChoice(item: Item<ManualChoice>) {
+  async function handleManualChoice(item: SelectItem<ManualChoice>) {
     if (!detection) return;
     switch (item.value) {
       case 'recheck': {

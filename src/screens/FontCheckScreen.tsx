@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from 'ink';
-import { AppSelectInput } from '../components/AppSelectInput.tsx';
+import { AppSelectInput, type SelectItem } from '../components/AppSelectInput.tsx';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
@@ -13,9 +13,7 @@ interface FontCheckScreenProps {
 }
 
 type FontChoice = 'have' | 'install' | 'none';
-type Item<V> = { label: string; value: V };
-
-const items: Item<FontChoice>[] = [
+const items: SelectItem<FontChoice>[] = [
   {
     label: 'Yes, I already have one',
     value: 'have',
@@ -44,7 +42,7 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
     if (key.escape) onBack();
   });
 
-  function handleSelect(item: Item<FontChoice>) {
+  function handleSelect(item: SelectItem<FontChoice>) {
     switch (item.value) {
       case 'have':
         onNext({ hasNerdFont: true, nerdFontToInstall: NO_NERD_FONT });
