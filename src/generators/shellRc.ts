@@ -812,6 +812,32 @@ function setsStarshipConfig(shell: ShellDef, line: string): boolean {
     : /^(?:(?:export|(?:typeset|declare)\s+-\w*x\w*)\s+)?STARSHIP_CONFIG=/.test(t);
 }
 
+/** The value a STARSHIP_CONFIG line sets, without its quotes. */
+function starshipConfigValue(shell: ShellDef, line: string): string {
+  const t = line.trim();
+  const raw =
+    shell.id === 'fish'
+      ? t.replace(/^set(\s+-\S+)*\s+STARSHIP_CONFIG\s*/, '')
+      : t.slice(t.indexOf('=') + 1);
+  const value = raw.trim();
+  const quoted = /^(["'])(.*)\1$/.exec(value);
+  return quoted ? quoted[2] : value;
+}
+
+/**
+ * The STARSHIP_CONFIG value the rc text sets, read line by line the way the
+ * shell runs it (comments skipped, the last setting wins), or null.
+ */
+export function rcStarshipConfig(shellId: ShellId, content: string): string | null {
+  const shell = getShell(shellId);
+  if (!shell) return null;
+  const setting = content
+    .split('\n')
+    .filter((line) => setsStarshipConfig(shell, line))
+    .at(-1);
+  return setting === undefined ? null : starshipConfigValue(shell, setting);
+}
+
 /** The startup files the shell reads before or beside its rc. */
 function startupFiles(shell: ShellDef): string[] {
   const home = homeDir();
