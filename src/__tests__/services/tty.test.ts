@@ -13,6 +13,51 @@ beforeEach(() => resetUiSuspension());
 afterEach(() => resetUiSuspension());
 
 describe('suspendUi / resumeUi', () => {
+  it('stops Node reading the terminal while a child owns it, and starts it again after', () => {
+    const handle = { reading: true, readStop: vi.fn(() => 0), readStart: vi.fn(() => 0) };
+    const realStdin = process.stdin;
+    Object.defineProperty(process, 'stdin', {
+      configurable: true,
+      value: { isTTY: true, setRawMode: vi.fn(), _handle: handle },
+    });
+
+    try {
+      suspendUi();
+      suspendUi();
+
+      expect(handle.readStop).toHaveBeenCalledOnce();
+      expect(handle.reading).toBe(false);
+
+      resumeUi();
+      expect(handle.readStart).not.toHaveBeenCalled();
+      resumeUi();
+
+      expect(handle.readStart).toHaveBeenCalledOnce();
+      expect(handle.reading).toBe(true);
+    } finally {
+      Object.defineProperty(process, 'stdin', { configurable: true, value: realStdin });
+    }
+  });
+
+  it('leaves a handle that is not reading alone', () => {
+    const handle = { reading: false, readStop: vi.fn(() => 0), readStart: vi.fn(() => 0) };
+    const realStdin = process.stdin;
+    Object.defineProperty(process, 'stdin', {
+      configurable: true,
+      value: { isTTY: true, setRawMode: vi.fn(), _handle: handle },
+    });
+
+    try {
+      suspendUi();
+      resumeUi();
+
+      expect(handle.readStop).not.toHaveBeenCalled();
+      expect(handle.readStart).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(process, 'stdin', { configurable: true, value: realStdin });
+    }
+  });
+
   it('notifies and disables raw mode on the first suspend', () => {
     const setRawMode = vi.fn();
     const realStdin = process.stdin;

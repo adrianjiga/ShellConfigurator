@@ -12,6 +12,8 @@ const listeners = new Set<SuspendListener>();
 let depth = 0;
 /** Raw mode is only re-armed for a UI that had it: headless runs never do. */
 let rawBeforeSuspend = false;
+/** The terminal read suspendUi stopped, which resumeUi must start again. */
+let stoppedRead: StdinHandle | null = null;
 
 export function isUiSuspended(): boolean {
   return depth > 0;
@@ -43,12 +45,49 @@ function setRawModeStandard(enabled: boolean): void {
   }
 }
 
+interface StdinHandle {
+  reading?: boolean;
+  readStop?: () => number;
+  readStart?: () => number;
+}
+
+/**
+ * Stops Node reading the terminal, so a line typed at the child's password
+ * prompt reaches the child instead of Node's input buffer. A removed input
+ * listener alone does not stop the read, and Node does not start a read it did
+ * not stop itself, so resumeUi starts it again.
+ */
+function stopReadingStdin(): void {
+  try {
+    const handle = (process.stdin as unknown as { _handle?: StdinHandle })._handle;
+    if (!process.stdin.isTTY || !handle?.reading || !handle.readStop || !handle.readStart) return;
+    handle.reading = false;
+    handle.readStop();
+    stoppedRead = handle;
+  } catch {
+    // No handle to stop: nothing is reading.
+  }
+}
+
+function restartReadingStdin(): void {
+  const handle = stoppedRead;
+  stoppedRead = null;
+  if (!handle || handle.reading) return;
+  try {
+    handle.reading = true;
+    handle.readStart?.();
+  } catch {
+    // The terminal is gone; there is nothing left to read.
+  }
+}
+
 /** Hands the terminal to a child process. Nestable; resume the same number of times. */
 export function suspendUi(): void {
   depth += 1;
   if (depth === 1) {
     rawBeforeSuspend = process.stdin.isTTY === true && process.stdin.isRaw === true;
     setRawModeStandard(false);
+    stopReadingStdin();
     notify();
   }
 }
@@ -57,6 +96,7 @@ export function resumeUi(): void {
   if (depth === 0) return;
   depth -= 1;
   if (depth === 0) {
+    restartReadingStdin();
     if (rawBeforeSuspend) setRawModeStandard(true);
     notify();
   }
@@ -80,4 +120,5 @@ export function resetUiSuspension(): void {
   listeners.clear();
   depth = 0;
   rawBeforeSuspend = false;
+  stoppedRead = null;
 }

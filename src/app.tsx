@@ -57,9 +57,12 @@ export function App({ dryRun = false, onInstallOutcome }: AppProps) {
   // Ink's own Ctrl+C exit is off (see index.tsx) so the install can cancel
   // cleanly instead; every other step still exits on it.
   const { exit } = useApp();
-  useInput((char, key) => {
-    if (key.ctrl && char === 'c' && state.step !== 'installing') exit();
-  });
+  useInput(
+    (char, key) => {
+      if (key.ctrl && char === 'c') exit();
+    },
+    { isActive: state.step !== 'installing' }
+  );
 
   switch (state.step) {
     case 'welcome':
