@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getShell } from '../../config/shells.ts';
 import {
   getSharedConfigPath,
@@ -8,6 +10,7 @@ import {
 import { type DoctorDeps, formatDoctorReport, runDoctor } from '../../services/doctor.ts';
 import { type RepairDeps, runRepair } from '../../services/repair.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
+import { stubPlatform } from '../helpers/platform.ts';
 
 const ZSH_RC = getShell('zsh')!.rcFile!;
 const ZSH_CONFIG = getShellConfigPath('zsh');
@@ -668,6 +671,12 @@ describe('repair against the real doctor', () => {
 });
 
 describe('runDoctor with an init in a sourced file', () => {
+  let restorePlatform: () => void;
+  beforeEach(() => {
+    restorePlatform = stubPlatform('linux');
+  });
+  afterEach(() => restorePlatform());
+
   it('passes a shell whose rc starts Starship through a file it sources', async () => {
     const bashrc = getShell('bash')!.rcFile!;
     const files = new Map([
@@ -681,6 +690,42 @@ describe('runDoctor with an init in a sourced file', () => {
         detectInstalledShells: vi.fn().mockResolvedValue(['bash']),
         env: { LANG: 'en_US.UTF-8', OMARCHY_PATH: '/opt/omarchy' },
       })
+    );
+    expect(find(report, 'shell:bash').status).toBe('pass');
+  });
+});
+
+describe('runDoctor for Bash on macOS', () => {
+  const bashrc = getShell('bash')!.rcFile!;
+  const profile = path.join(os.homedir(), '.bash_profile');
+  let restorePlatform: () => void;
+  beforeEach(() => {
+    restorePlatform = stubPlatform('darwin');
+  });
+  afterEach(() => restorePlatform());
+
+  function check(files: Map<string, string>) {
+    return runDoctor(
+      baseState({ selectedShells: ['bash'], keepExistingConfig: true }),
+      makeDeps(files, { detectInstalledShells: vi.fn().mockResolvedValue(['bash']) })
+    );
+  }
+
+  it('fails when no login file loads ~/.bashrc, since Terminal starts login shells', async () => {
+    const report = await check(new Map([[bashrc, 'eval "$(starship init bash)"\n']]));
+    expect(find(report, 'shell:bash')).toMatchObject({
+      status: 'fail',
+      fix: { kind: 'configure-shell', shellId: 'bash' },
+    });
+    expect(find(report, 'shell:bash').detail).toContain('does not load');
+  });
+
+  it('passes when ~/.bash_profile loads ~/.bashrc', async () => {
+    const report = await check(
+      new Map([
+        [bashrc, 'eval "$(starship init bash)"\n'],
+        [profile, 'if [ -f ~/.bashrc ]; then . ~/.bashrc; fi\n'],
+      ])
     );
     expect(find(report, 'shell:bash').status).toBe('pass');
   });

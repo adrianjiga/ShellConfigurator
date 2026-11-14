@@ -3,12 +3,15 @@ import * as path from 'node:path';
 import { getShell } from '../config/shells.ts';
 import { statusLine } from '../config/status.ts';
 import {
+  bashLoginFile,
+  bashNeedsLoginFile,
   fishInitFile,
   getSharedConfigPath,
   getShellConfigPath,
   hasManagedConfigExport,
   hasManagedRcBlock,
   initReachable,
+  loginLoadsBashrc,
   manualSetupAppliedWith,
   startsStarship,
 } from '../generators/shellRc.ts';
@@ -387,6 +390,18 @@ function checkShellWiring(
       detail: `${shell.rcFile} has no starship init line`,
       fix,
     };
+  }
+  if (shellId === 'bash' && bashNeedsLoginFile()) {
+    const loginFile = bashLoginFile(deps);
+    if (!loginLoadsBashrc(readRc(loginFile, deps), deps, deps.env)) {
+      return {
+        id: `shell:${shellId}`,
+        title: shell.label,
+        status: 'fail',
+        detail: `${loginFile} does not load ${shell.rcFile}, so the login shells macOS terminals start never run it`,
+        fix,
+      };
+    }
   }
   if (!hasConfig) {
     return {
