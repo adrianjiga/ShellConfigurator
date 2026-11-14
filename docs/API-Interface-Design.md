@@ -375,11 +375,16 @@ function hasManagedRcBlock(shellId: ShellId, io?: RcIo): boolean;
 function removeManagedRcBlocks(shellId: ShellId): RemovalResult;
 // uninstall: backs up the rc, then drops every ShellConfigurator block. When the
 // user's own starship init line remains, the PATH line a block carried is kept
-// above it. { removed: false, note } when there was nothing to remove.
+// above it (for fish's conf.d init, at the end). { removed: false, note } when
+// there was nothing to remove.
+
+function startsStarship(shellId: ShellId, withoutManagedBlocks: boolean, io?: RcIo): boolean;
+// Whether the shell starts Starship from its rc (ignoring ShellConfigurator's
+// blocks when withoutManagedBlocks), fish's conf.d file, or a hand-applied
+// Nushell/PowerShell setup. uninstall keeps Starship while any shell does.
 
 function removeShellConfigFile(shellId: ShellId): RemovalResult;
-// uninstall: renames ~/.config/starship/<shell>.toml to a .bak-* backup, which
-// --restore copies back.
+// uninstall: renames ~/.config/starship/<shell>.toml to a .bak-* backup.
 // RemovalResult = { removed: boolean; backedUpTo?: string; note?: string }
 ```
 
@@ -453,18 +458,20 @@ function getMissingStarshipPathDir(): string | null;
 // the binary there and the shell can't reach it, or null when starship is already
 // reachable.
 
-function plannedStarshipRemoval(pm: PackageManager): StarshipRemoval;
+function plannedStarshipRemoval(pm: PackageManager): Promise<StarshipRemoval>;
 // How uninstall --starship would remove Starship: { kind: 'script', path } for the
-// install script's ~/.local/bin binary, { kind: 'package', pm, command } for a
-// pacman/apk/brew package, { kind: 'manual', path } for a binary no package
-// manager here ships, { kind: 'absent' } when it is not installed.
+// install script's ~/.local/bin binary, { kind: 'package', pm, command } when
+// pacman (-Qqo), apk (--who-owns) or brew (list) says it owns the binary on PATH,
+// { kind: 'manual', path } for any other binary, { kind: 'absent' } when it is
+// not installed.
 
 function removeStarship(plan: StarshipRemoval, signal?: AbortSignal): Promise<void>;
 // Deletes the script binary or runs the package manager's remove command.
 
 function installedFontFiles(fontId: string): Promise<string[] | null>;
-// The installed files of a Nerd Font, listed from its verified cached archive;
-// null when nothing is cached, so its files cannot be told apart.
+// The installed files of a Nerd Font, listed from its verified cached archive's
+// entry headers (fontFileNames, nothing is decompressed); null when nothing is
+// cached, so its files cannot be told apart.
 
 function removeFontFiles(files: string[]): Promise<void>;
 // Deletes the files, then refreshes fc-cache off macOS.
@@ -477,14 +484,18 @@ function planUninstall(options: UninstallOptions, deps?: UninstallDeps): Promise
 // Read-only plan in reverse install order: each shell's rc lines and per-shell
 // config, then the font (options.fontId), then Starship (options.starship).
 // options.shells defaults to every shell with an rc block or a config. A step
-// without run() has nothing to do and its detail says why.
+// without run() has nothing to do and its detail says why. The Starship step
+// has no run() while a shell would still start Starship after the cleanup, and
+// the font step names any terminal still set to the font.
 
 function runUninstall(
   steps: UninstallStep[],
   opts?: { dryRun?: boolean }
 ): Promise<UninstallReport>;
-// Runs each step; a failure does not stop the rest. Statuses: removed | skipped
-// | failed | planned. ok is false when any step failed.
+// Runs each step; a failure does not stop the rest, but a step whose `after`
+// step failed (a shell's config, after its rc) is skipped. Statuses: removed |
+// skipped | failed | planned; a removal that made a backup carries
+// backup: { file, backup }. ok is false when any step failed.
 
 function formatUninstallReport(report: UninstallReport): string;
 // The text report; --json prints the report object.
@@ -705,8 +716,12 @@ per-shell config) it backs up and strips every `# Added by ShellConfigurator`
 block from the rc, and moves `~/.config/starship/<shell>.toml` to a `.bak-*`
 backup. Nushell and PowerShell were set up by hand, so their step only names
 the file to clean. `--font <id>` deletes that Nerd Font's files, listed from its
-cached archive; `--starship` deletes the script install's binary or removes the
-pacman/apk/Homebrew package, and forgets the recorded version. Without
+cached archive, and names any terminal still set to it. `--starship` deletes
+the script install's binary, or removes the pacman/apk/Homebrew package when
+that package manager owns the binary, and forgets the recorded version; it is
+held back while any shell would still start Starship. A shell's config stays
+when its rc could not be cleaned. After a real run the text report ends with
+the `cp` commands that copy each backup back. Without
 `--yes` it prints the plan and asks on a terminal; off a terminal, or with
 `--json`, a run that would change something is a `CliUsageError`. `--dry-run`
 only prints the plan. A failed step does not stop the rest and sets exit code
@@ -776,9 +791,9 @@ the Config task: before per-shell configs shadow it, or before adopt mode points
 shells at it (an `--import-url` overwrite is backed up by `writeSharedConfig`
 itself). `restoreConfigBackups()` copies the newest `.bak-*` files back over the
 shared and per-shell configs (`--restore`). `uninstall` backs up each rc file
-before editing it and moves per-shell configs to `.bak-*` backups, so
-`--restore` undoes the config half of an uninstall; the rc backups are copied
-back by hand.
+before editing it and moves per-shell configs to `.bak-*` backups, and prints
+the `cp` commands that put each one back; `--restore` would also roll the
+shared config back, so it is not the uninstall undo.
 
 ---
 
