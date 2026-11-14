@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 import * as nodePath from 'node:path';
-import { assertApplyVerified, requireScratchHome, runCli, runSmoke } from './smokeHome.mjs';
+import {
+  assertApplyVerified,
+  assertRcWired,
+  assertUninstalled,
+  requireScratchHome,
+  runCli,
+  runSmoke,
+} from './smokeHome.mjs';
 
 // Headless-apply CI leg: drive the real `apply` subcommand and assert the
 // post-install `Verify config` task actually ran and succeeded.
@@ -14,4 +21,8 @@ await runSmoke('Headless apply smoke', () => {
   const out = runCli(['apply', '--shells', 'bash', '--no-nerd-font']);
 
   assertApplyVerified(out);
+
+  const bashrc = nodePath.join(homeDir, '.bashrc');
+  assertRcWired(bashrc, 'bash');
+  assertUninstalled(homeDir, bashrc, 'bash');
 });

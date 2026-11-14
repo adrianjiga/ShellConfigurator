@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 import { parse } from '@iarna/toml';
 
@@ -112,4 +112,35 @@ export function assertRcWired(rcPath, shell) {
   assert.ok(content.includes('export STARSHIP_CONFIG='), `${name} missing STARSHIP_CONFIG`);
   assert.ok(content.includes(`eval "$(starship init ${shell})"`), `${name} missing the init line`);
   return content;
+}
+
+/**
+ * Runs a real `uninstall --yes` for one shell after an apply, then asserts the
+ * rc lost every managed line, the per-shell config moved to a backup, a second
+ * run finds nothing, and `--restore` brings the config back.
+ */
+export function assertUninstalled(homeDir, rcPath, shell) {
+  const configPath = nodePath.join(process.env.XDG_CONFIG_HOME, 'starship', `${shell}.toml`);
+  assert.ok(existsSync(configPath), `apply did not write ${configPath}`);
+
+  const out = runCli(['uninstall', '--yes', '--shells', shell]);
+  assert.match(
+    out,
+    new RegExp(`REMOVED .*${nodePath.basename(rcPath)}`),
+    `uninstall left the rc:\n${out}`
+  );
+  const rc = readFileSync(rcPath, 'utf8');
+  assert.ok(!rc.includes('ShellConfigurator'), `uninstall left the banner in the rc:\n${rc}`);
+  assert.ok(!rc.includes('starship'), `uninstall left Starship lines in the rc:\n${rc}`);
+  assert.ok(!existsSync(configPath), `uninstall left ${configPath}`);
+  const rcBackups = readdirSync(homeDir).filter((f) =>
+    f.startsWith(`${nodePath.basename(rcPath)}.bak-`)
+  );
+  assert.ok(rcBackups.length > 0, 'uninstall did not back up the rc');
+
+  const again = runCli(['uninstall', '--yes', '--shells', shell]);
+  assert.ok(!again.includes('REMOVED'), `a second uninstall removed something:\n${again}`);
+
+  runCli(['--restore']);
+  assertStarshipConfig(configPath, '--restore after uninstall');
 }
