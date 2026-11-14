@@ -158,6 +158,28 @@ describe('wireTerminalFont', () => {
     expect(read('foot/foot.ini')).toBe('[main]\nfont=Hack Nerd Font\n');
   });
 
+  it('adds font= to a foot [main] that has none, once', () => {
+    write('foot/foot.ini', '[main]\nterm=xterm-256color\n\n[colors]\nalpha=0.9\n');
+
+    wireTerminalFont('foot', 'Hack Nerd Font');
+    const again = wireTerminalFont('foot', 'Hack Nerd Font');
+
+    expect(read('foot/foot.ini')).toBe(
+      '[main]\nfont=Hack Nerd Font\nterm=xterm-256color\n\n[colors]\nalpha=0.9\n'
+    );
+    expect(again.applied).toBe(false);
+  });
+
+  it('edits a CRLF foot.ini in place and only once', () => {
+    write('foot/foot.ini', '[main]\r\nfont=Old:size=11\r\n');
+
+    wireTerminalFont('foot', 'Hack Nerd Font');
+    const again = wireTerminalFont('foot', 'Hack Nerd Font');
+
+    expect(read('foot/foot.ini')).toBe('[main]\r\nfont=Hack Nerd Font:size=11\r\n');
+    expect(again.applied).toBe(false);
+  });
+
   it('creates a foot [main] section when missing', () => {
     wireTerminalFont('foot', 'Hack Nerd Font');
 
@@ -281,6 +303,20 @@ describe('wireTerminalFont', () => {
 
     expect(read('alacritty/alacritty.toml')).toBe('[font.normal]\r\nfamily = "Hack Nerd Font"\r\n');
     expect(again.applied).toBe(false);
+  });
+
+  it('fills an empty or family-less inline font table', () => {
+    write('alacritty/alacritty.toml', '[font]\nnormal = {}\n');
+    wireTerminalFont('alacritty', 'Hack Nerd Font');
+    expect(read('alacritty/alacritty.toml')).toBe(
+      '[font]\nnormal = { family = "Hack Nerd Font" }\n'
+    );
+
+    write('alacritty/alacritty.toml', '[font]\nnormal = { style = "Regular" }\n');
+    wireTerminalFont('alacritty', 'Hack Nerd Font');
+    expect(read('alacritty/alacritty.toml')).toBe(
+      '[font]\nnormal = { family = "Hack Nerd Font", style = "Regular" }\n'
+    );
   });
 
   it('keeps blank lines and indentation before the family key', () => {
@@ -426,6 +462,18 @@ describe('readTerminalFontFamily', () => {
       '[csd]\nfont=Title\n[main]\nfont=Fira Code:size=11,Symbols Nerd Font:size=11\n'
     );
     expect(readTerminalFontFamily('foot')).toBe('Fira Code, Symbols Nerd Font');
+  });
+
+  it('reads the family from a legacy alacritty.yml', () => {
+    write('alacritty/alacritty.yml', 'font:\n  normal:\n    family: Hack Nerd Font\n  size: 12\n');
+    expect(readTerminalFontFamily('alacritty')).toBe('Hack Nerd Font');
+  });
+
+  it('runs ghostty twice without a second change', () => {
+    write('ghostty/config', 'font-family = Old\n');
+    expect(wireTerminalFont('ghostty', 'Hack Nerd Font').applied).toBe(true);
+    expect(wireTerminalFont('ghostty', 'Hack Nerd Font').applied).toBe(false);
+    expect(read('ghostty/config')).toBe('font-family = Hack Nerd Font\n');
   });
 
   it('returns null when nothing is configured', () => {
