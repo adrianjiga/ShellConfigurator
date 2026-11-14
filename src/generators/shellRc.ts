@@ -820,8 +820,8 @@ function starshipConfigValue(shell: ShellDef, line: string): string {
       ? t.replace(/^set(\s+-\S+)*\s+STARSHIP_CONFIG\s*/, '')
       : t.slice(t.indexOf('=') + 1);
   const value = raw.trim();
-  const quoted = /^(["'])(.*)\1$/.exec(value);
-  return quoted ? quoted[2] : value;
+  const quoted = /^(["'])(.*?)\1/.exec(value);
+  return quoted ? quoted[2] : (/^[^\s;&|]*/.exec(value)?.[0] ?? '');
 }
 
 /**

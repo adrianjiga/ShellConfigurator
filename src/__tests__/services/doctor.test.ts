@@ -738,6 +738,20 @@ describe('runDoctor for Bash on macOS', () => {
 });
 
 describe('runDoctor reading the setup the way the shell does', () => {
+  it.each([
+    'export STARSHIP_CONFIG="/dots/s.toml" # mine',
+    "export STARSHIP_CONFIG='/dots/s.toml'; export EDITOR=vim",
+    'export STARSHIP_CONFIG=/dots/s.toml # mine',
+  ])('reads only the value of %s', async (line) => {
+    const files = new Map([
+      [ZSH_RC, `${line}\n${ZSH_INIT}\n`],
+      ['/dots/s.toml', 'add_newline = true\n'],
+    ]);
+    const report = await runDoctor(null, makeDeps(files));
+    expect(find(report, 'shell:zsh').detail).toContain('/dots/s.toml');
+    expect(find(report, 'shell:zsh').detail).not.toContain('mine');
+  });
+
   it('ignores a commented-out STARSHIP_CONFIG line', async () => {
     const files = new Map([
       [ZSH_RC, `# export STARSHIP_CONFIG=/nope/old.toml\n${ZSH_INIT}\n`],
@@ -803,5 +817,39 @@ describe('DEFAULT_DOCTOR_DEPS', () => {
       vi.unstubAllEnvs();
       fs.rmSync(cache, { recursive: true, force: true });
     }
+  });
+});
+
+describe('DEFAULT_DOCTOR_DEPS.hasNerdFonts', () => {
+  let data: string;
+  let restorePlatform: () => void;
+  beforeEach(() => {
+    data = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-fonts-'));
+    vi.stubEnv('XDG_DATA_HOME', data);
+    restorePlatform = stubPlatform('linux');
+    fs.mkdirSync(path.join(data, 'fonts', 'nerd'), { recursive: true });
+  });
+  afterEach(() => {
+    restorePlatform();
+    vi.unstubAllEnvs();
+    fs.rmSync(data, { recursive: true, force: true });
+  });
+  const add = (name: string) => fs.writeFileSync(path.join(data, 'fonts', 'nerd', name), '');
+
+  it('counts only font files, not a leftover archive or license', () => {
+    add('FiraCodeNerdFont.zip');
+    add('FiraCodeNerdFont-LICENSE.txt');
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('FiraCode')).toBe(false);
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts()).toBe(false);
+
+    add('FiraCodeNerdFont-Regular.ttf');
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('FiraCode')).toBe(true);
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts()).toBe(true);
+  });
+
+  it('looks for the requested font, not any Nerd Font', () => {
+    add('JetBrainsMonoNerdFont-Regular.ttf');
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('FiraCode')).toBe(false);
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('JetBrainsMono')).toBe(true);
   });
 });

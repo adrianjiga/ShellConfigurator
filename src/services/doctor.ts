@@ -126,7 +126,7 @@ async function hasBundledNerdFonts(terminalId: TerminalId): Promise<boolean> {
   }
 }
 
-const NERD_FONT_FILE = /nerd ?font/i;
+const NERD_FONT_FILE = /nerd ?font.*\.(ttf|otf)$/i;
 
 function fontDirs(): string[] {
   return process.platform === 'darwin'
@@ -138,7 +138,8 @@ function fontDirs(): string[] {
 function nerdFontFile(fontId?: string | null): RegExp {
   const family = NERD_FONTS.find((font) => font.id === fontId)?.family;
   if (!family) return NERD_FONT_FILE;
-  return new RegExp(family.replace(/\s+/g, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  const name = family.replace(/\s+/g, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`${name}.*\\.(ttf|otf)$`, 'i');
 }
 
 /** Any font file under `dir` whose name matches `pattern`, at any nesting depth. */
