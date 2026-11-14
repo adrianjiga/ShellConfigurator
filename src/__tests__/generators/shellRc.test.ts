@@ -38,7 +38,6 @@ import {
   getShellConfigPath,
   hasManagedRcBlock,
   hasStarshipInit,
-  plannedRcBlock,
   removeManagedRcBlocks,
   removeShellConfigFile,
   resetRcContent,
@@ -1366,32 +1365,6 @@ describe('backupPath', () => {
     vi.mocked(fs.existsSync).mockReturnValueOnce(true).mockReturnValueOnce(false);
 
     expect(backupPath('/home/u/.zshrc')).toMatch(/\.zshrc\.bak-[\dT-]+Z-2$/);
-  });
-});
-
-describe('plannedRcBlock', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it.each([
-    ['zsh', false, null],
-    ['bash', false, '/home/u/.local/bin'],
-    ['zsh', true, '/home/u/.local/bin'],
-  ] as const)(
-    'matches what %s gets on an empty rc (adopt %s, PATH %s)',
-    (shellId, adopt, pathDir) => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockImplementation(() => '');
-
-      applyShellConfig(shellId, { pointAtSharedConfig: adopt, ensurePathDir: pathDir });
-
-      const block = plannedRcBlock(shellId, adopt, pathDir);
-      expect(block).toContain(getShell(shellId)!.initLine);
-      expect(lastWrittenContent()).toContain(block.join('\n'));
-    }
-  );
-
-  it('is empty for a shell without an rc file', () => {
-    expect(plannedRcBlock('nushell', false, null)).toEqual([]);
   });
 });
 

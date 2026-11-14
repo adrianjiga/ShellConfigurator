@@ -506,19 +506,6 @@ function buildAdditionLines(
   };
 }
 
-/** The block a run appends to an rc file that has no Starship lines yet; empty for shells without one. */
-export function plannedRcBlock(
-  shellId: ShellId,
-  pointAtSharedConfig: boolean,
-  pathDir: string | null
-): string[] {
-  const shell = getShell(shellId);
-  if (!shell?.rcFile) return [];
-  const configLine = pointAtSharedConfig ? null : starshipConfigLine(shellId);
-  const { lines } = buildAdditionLines(shell, '', pathDir, configLine, false);
-  return [pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER, ...lines];
-}
-
 /**
  * Puts `lines` just above the first init line: PATH must be set before
  * `starship init` runs, and zsh/bash read the config at init time for the
