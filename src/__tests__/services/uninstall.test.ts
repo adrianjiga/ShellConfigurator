@@ -236,6 +236,26 @@ describe('runUninstall', () => {
     expect(deps.removeStarship).not.toHaveBeenCalled();
   });
 
+  it('checks again before removing Starship that no shell still starts it', async () => {
+    const deps = makeDeps(['zsh'], [], {
+      removeManagedRcBlocks: vi.fn(() => ({ removed: false, note: 'no ShellConfigurator lines' })),
+      startsStarship: vi.fn(
+        (id: ShellId, withoutBlocks: boolean) => id === 'zsh' && !withoutBlocks
+      ),
+    });
+
+    const report = await runUninstall(await planUninstall({ starship: true }, deps));
+
+    expect(report.actions.at(-1)).toEqual({
+      id: 'starship',
+      title: 'Starship',
+      status: 'skipped',
+      detail:
+        'kept: Zsh would still start it; remove those init lines (or add the shells to --shells) first',
+    });
+    expect(deps.removeStarship).not.toHaveBeenCalled();
+  });
+
   it('keeps Starship recorded when its removal fails', async () => {
     const deps = makeDeps([], [], { removeStarship: vi.fn().mockRejectedValue(new Error('no')) });
     await runUninstall(await planUninstall({ starship: true }, deps));

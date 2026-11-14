@@ -36,6 +36,8 @@ export interface UninstallBackup {
 export interface StepOutcome {
   detail: string;
   backup?: UninstallBackup;
+  /** Set when the step found, as it ran, that it had to leave things alone. */
+  status?: 'skipped';
 }
 
 /** One step of the plan; a step without `run` has nothing to do and says why. */
@@ -193,16 +195,17 @@ async function fontStep(fontId: string, deps: UninstallDeps): Promise<UninstallS
   };
 }
 
+const keptBecause = (shells: string[]) =>
+  `kept: ${shells.join(', ')} would still start it; remove those init lines (or add the shells to --shells) first`;
+
 async function starshipStep(stillStarting: string[], deps: UninstallDeps): Promise<UninstallStep> {
   const plan = await deps.plannedStarshipRemoval(await deps.detectPackageManager());
   if ((plan.kind === 'script' || plan.kind === 'package') && stillStarting.length > 0) {
-    return {
-      id: 'starship',
-      title: 'Starship',
-      detail: `kept: ${stillStarting.join(', ')} would still start it; remove those init lines (or add the shells to --shells) first`,
-    };
+    return { id: 'starship', title: 'Starship', detail: keptBecause(stillStarting) };
   }
-  const remove = (done: string) => async () => {
+  const remove = (done: string) => async (): Promise<StepOutcome> => {
+    const starting = SHELLS.filter((s) => deps.startsStarship(s.id, false)).map((s) => s.label);
+    if (starting.length > 0) return { detail: keptBecause(starting), status: 'skipped' };
     await deps.removeStarship(plan);
     deps.forgetStarshipVersion();
     return { detail: done };
@@ -283,7 +286,8 @@ export async function runUninstall(
       actions.push({ id, title, status: 'planned', detail });
     } else {
       try {
-        actions.push({ id, title, status: 'removed', ...(await run()) });
+        const { status = 'removed', ...outcome } = await run();
+        actions.push({ id, title, status, ...outcome });
       } catch (err) {
         actions.push({ id, title, status: 'failed', detail: errorMessage(err) });
       }
