@@ -87,10 +87,7 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   sharedConfigExists: () => fs.existsSync(getSharedConfigPath()),
   applyShellConfig,
   resetSharedShellConfig,
-  getShellsUsingStarship: async () =>
-    shellsWithStarshipInit(await detectInstalledShellsAsync()).filter(
-      (shellId) => !keepsOwnConfig(shellId)
-    ),
+  getShellsUsingStarship: async () => shellsToGuard(await detectInstalledShellsAsync()),
   getMissingStarshipPathDir,
   readStarshipVersion,
   verifyConfig: (configPath, pathDir) => verifyStarshipConfig(configPath, pathDir ?? null),
@@ -176,9 +173,14 @@ export function sharedConfigNote(shellIds: readonly ShellId[], done: boolean): s
  */
 export function plannedResetShells(state: WizardState): ShellId[] {
   if (state.skipStarshipInstall) return [];
-  return shellsWithStarshipInit(
+  return shellsToGuard(
     state.installedShells.filter((shellId) => !state.selectedShells.includes(shellId))
-  ).filter((shellId) => !keepsOwnConfig(shellId));
+  );
+}
+
+/** Of `shells`, the ones that start Starship without a working setup of their own. */
+export function shellsToGuard(shells: ShellId[]): ShellId[] {
+  return shellsWithStarshipInit(shells).filter((shellId) => !keepsOwnConfig(shellId));
 }
 
 export function buildTaskList(
