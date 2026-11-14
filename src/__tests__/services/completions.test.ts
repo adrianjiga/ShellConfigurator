@@ -100,6 +100,18 @@ t shell-configurator --list-presets --js`,
     ]);
   });
 
+  it('offers the shell only once after completions, and keeps file names with spaces whole, in bash', () => {
+    fs.mkdirSync(path.join(dir, 'my dir'), { recursive: true });
+    const out = run('bash', [
+      '-c',
+      `source ./c.bash
+t() { COMP_WORDS=("$@"); COMP_CWORD=$(( $# - 1 )); COMPREPLY=(); _shell_configurator; printf '%s|' "\${COMPREPLY[@]}"; echo; }
+t shell-configurator completions bash ""
+t shell-configurator generate -o my`,
+    ]);
+    expect(out.split('\n')).toEqual(['|', 'my dir|', '']);
+  });
+
   it.skipIf(!has('zsh'))('parses and completes in zsh', () => {
     expect(() => run('zsh', ['-n', 'c.zsh'])).not.toThrow();
     const out = run('zsh', [
@@ -110,9 +122,13 @@ compadd() { print -r -- "$*"; }
 _values() { print -r -- "$*"; }
 source ./c.zsh
 words=(shell-configurator generate --character ""); CURRENT=4; _shell-configurator
-words=(shell-configurator apply --shells ""); CURRENT=4; _shell-configurator`,
+words=(shell-configurator apply --shells ""); CURRENT=4; _shell-configurator
+_describe() { print -r -- "describe \${(j: :)\${(P)4}}"; }
+words=(shell-configurator completions zsh ""); CURRENT=4; _shell-configurator`,
     ]);
-    expect(out).toBe('-- arrow lambda dollar\n-s , shell zsh bash fish nushell powershell\n');
+    expect(out).toBe(
+      '-- arrow lambda dollar\n-s , shell zsh bash fish nushell powershell\ndescribe \n'
+    );
   });
 
   it.skipIf(!has('zsh'))('completes on the first Tab when zsh autoloads it from $fpath', () => {

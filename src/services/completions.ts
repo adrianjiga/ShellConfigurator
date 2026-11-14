@@ -34,7 +34,7 @@ function bash(): string {
         .map((s) => `${sub ?? ''}:${s}`)
         .join('|');
       if (flag.values === 'file') {
-        return `    ${pattern}) compopt -o filenames 2>/dev/null; COMPREPLY=($(compgen -f -- "$cur")); return ;;`;
+        return `    ${pattern}) compopt -o filenames 2>/dev/null; local IFS=$'\\n'; COMPREPLY=($(compgen -f -- "$cur")); return ;;`;
       }
       if (flag.values === 'text') return `    ${pattern}) COMPREPLY=(); return ;;`;
       const words = (flag.values as readonly string[]).join(' ');
@@ -46,8 +46,10 @@ function bash(): string {
   );
   const wordCases = SUBCOMMANDS.map((sub) => {
     const info = SUBCOMMAND_INFO[sub];
-    const words = info.argument ?? flagsOf(sub).flatMap(spellings);
-    return `    ${sub}) words="${words.join(' ')}" ;;`;
+    if (info.argument) {
+      return `    ${sub}) words=""; (( COMP_CWORD - i == 1 )) && words="${info.argument.join(' ')}" ;;`;
+    }
+    return `    ${sub}) words="${flagsOf(sub).flatMap(spellings).join(' ')}" ;;`;
   });
   const top = [...SUBCOMMANDS, ...flagsOf(null).flatMap(spellings)].join(' ');
   return `# bash completion for ${COMMAND}
@@ -92,9 +94,13 @@ function zsh(): string {
   );
   const itemCases = SUBCOMMANDS.map((sub) => {
     const info = SUBCOMMAND_INFO[sub];
-    const items = info.argument
-      ? info.argument.map((value) => zshItem(value, `completion script for ${value}`))
-      : flagsOf(sub).flatMap((flag) => spellings(flag).map((s) => zshItem(s, flag.description)));
+    if (info.argument) {
+      const items = info.argument.map((value) => zshItem(value, `completion script for ${value}`));
+      return `    (${sub}) (( CURRENT - i == 1 )) && items=(${items.join(' ')}) ;;`;
+    }
+    const items = flagsOf(sub).flatMap((flag) =>
+      spellings(flag).map((s) => zshItem(s, flag.description))
+    );
     return `    (${sub}) items=(${items.join(' ')}) ;;`;
   });
   const top = [
