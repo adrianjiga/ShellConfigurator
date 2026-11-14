@@ -57,11 +57,15 @@ vi.mock('fs', () => ({
 import {
   getMissingStarshipPathDir,
   getNerdFontsDir,
+  installedFontFiles,
   installNerdFont,
   installShell,
   installStarship,
   NERD_FONTS,
   plannedPathDir,
+  plannedStarshipRemoval,
+  removeFontFiles,
+  removeStarship,
   scriptInstallBinDir,
   setDefaultShell,
   shellInstallSupported,
@@ -992,5 +996,107 @@ describe('plannedPathDir', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+});
+
+describe('plannedStarshipRemoval', () => {
+  const scriptBinary = path.join(scriptInstallBinDir(), 'starship');
+
+  it('deletes the script install binary', () => {
+    mockExistsSync.mockImplementation((p: string) => p === scriptBinary);
+    expect(plannedStarshipRemoval('apt')).toEqual({ kind: 'script', path: scriptBinary });
+  });
+
+  it('has nothing to remove when Starship is not installed', () => {
+    mockExistsSync.mockReturnValue(false);
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error('not found');
+    });
+    expect(plannedStarshipRemoval('pacman')).toEqual({ kind: 'absent' });
+  });
+
+  it('removes a package through the package manager, with sudo where it needs it', () => {
+    mockExistsSync.mockReturnValue(false);
+    mockExecFileSync.mockReturnValue('/usr/bin/starship\n');
+    const getuid = vi.spyOn(process, 'getuid').mockReturnValue(1000);
+    try {
+      expect(plannedStarshipRemoval('pacman')).toEqual({
+        kind: 'package',
+        pm: 'pacman',
+        command: ['sudo', 'pacman', '-R', '--noconfirm', 'starship'],
+      });
+      expect(plannedStarshipRemoval('apk')).toMatchObject({
+        command: ['sudo', 'apk', 'del', 'starship'],
+      });
+      expect(plannedStarshipRemoval('brew')).toMatchObject({
+        command: ['brew', 'uninstall', 'starship'],
+      });
+    } finally {
+      getuid.mockRestore();
+    }
+  });
+
+  it('leaves a binary no package manager here shipped to whatever installed it', () => {
+    mockExistsSync.mockReturnValue(false);
+    mockExecFileSync.mockReturnValue('/usr/local/bin/starship\n');
+    expect(plannedStarshipRemoval('apt')).toEqual({
+      kind: 'manual',
+      path: '/usr/local/bin/starship',
+    });
+  });
+});
+
+describe('removeStarship', () => {
+  it('deletes the script binary without running a command', async () => {
+    await removeStarship({ kind: 'script', path: '/h/.local/bin/starship' });
+    expect(mockRmSync).toHaveBeenCalledWith('/h/.local/bin/starship', { force: true });
+    expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
+  it('runs the package manager command', async () => {
+    await removeStarship({
+      kind: 'package',
+      pm: 'brew',
+      command: ['brew', 'uninstall', 'starship'],
+    });
+    expect(mockSpawn).toHaveBeenCalledWith('brew', ['uninstall', 'starship'], { stdio: 'inherit' });
+  });
+
+  it('rejects when the package manager fails', async () => {
+    spawnOutcome({ status: 1 });
+    await expect(
+      removeStarship({ kind: 'package', pm: 'brew', command: ['brew', 'uninstall', 'starship'] })
+    ).rejects.toThrow(/exit code 1/);
+  });
+});
+
+describe('installedFontFiles', () => {
+  it('is null without a cached archive to list the files from', async () => {
+    expect(await installedFontFiles('FiraCode')).toBeNull();
+  });
+
+  it('lists the cached archive files that are installed', async () => {
+    const zip = Buffer.from(zipWith({ 'A.ttf': 'a', 'sub/B.ttf': 'b', 'README.md': 'r' }));
+    const digest = createHash('sha256').update(zip).digest('hex');
+    mockReadFileSync.mockImplementation((file: string) =>
+      file.endsWith('.sha256') ? `${digest}\n` : zip
+    );
+    const fontsDir = getNerdFontsDir();
+    mockExistsSync.mockImplementation((p: string) => p === path.join(fontsDir, 'A.ttf'));
+
+    expect(await installedFontFiles('FiraCode')).toEqual([path.join(fontsDir, 'A.ttf')]);
+  });
+});
+
+describe('removeFontFiles', () => {
+  it('deletes every file', async () => {
+    await removeFontFiles(['/f/A.ttf', '/f/B.ttf']);
+    expect(mockRmSync).toHaveBeenCalledWith('/f/A.ttf', { force: true });
+    expect(mockRmSync).toHaveBeenCalledWith('/f/B.ttf', { force: true });
+  });
+
+  it('survives a missing fc-cache', async () => {
+    mockRunCapture.mockRejectedValue(new Error('ENOENT'));
+    await expect(removeFontFiles(['/f/A.ttf'])).resolves.toBeUndefined();
   });
 });

@@ -456,6 +456,61 @@ export async function installNerdFont(
   return undefined;
 }
 
+const REMOVE_CMDS: Partial<Record<PackageManager, string[]>> = {
+  pacman: ['pacman', '-R', '--noconfirm', 'starship'],
+  brew: ['brew', 'uninstall', 'starship'],
+  apk: ['apk', 'del', 'starship'],
+};
+
+export type StarshipRemoval =
+  | { kind: 'script'; path: string }
+  | { kind: 'package'; pm: PackageManager; command: string[] }
+  | { kind: 'manual'; path: string }
+  | { kind: 'absent' };
+
+/**
+ * How Starship would be removed: the script install's binary is deleted, a
+ * package goes through the package manager that ships one, and a binary from
+ * anywhere else is left for whatever installed it.
+ */
+export function plannedStarshipRemoval(pm: PackageManager): StarshipRemoval {
+  const scriptBinary = path.join(scriptInstallBinDir(), 'starship');
+  if (fs.existsSync(scriptBinary)) return { kind: 'script', path: scriptBinary };
+  const onPath = commandPath('starship');
+  if (!onPath) return { kind: 'absent' };
+  const remove = REMOVE_CMDS[pm];
+  if (!remove) return { kind: 'manual', path: onPath };
+  return { kind: 'package', pm, command: pm === 'brew' ? remove : [...sudo(), ...remove] };
+}
+
+export async function removeStarship(plan: StarshipRemoval, signal?: AbortSignal): Promise<void> {
+  if (plan.kind === 'script') fs.rmSync(plan.path, { force: true });
+  else if (plan.kind === 'package') await runCommand(plan.command, { signal });
+}
+
+/**
+ * The files of an installed Nerd Font, listed from its cached archive. Null when
+ * no verified archive is cached, so the files cannot be told apart from others.
+ */
+export async function installedFontFiles(fontId: string): Promise<string[] | null> {
+  const cached = cachedFont(fontId);
+  if (!cached) return null;
+  const fontsDir = getNerdFontsDir();
+  const files = await extractFontFiles(cached.buffer);
+  return files.map((file) => path.join(fontsDir, file.name)).filter((f) => fs.existsSync(f));
+}
+
+export async function removeFontFiles(files: string[]): Promise<void> {
+  for (const file of files) fs.rmSync(file, { force: true });
+  if (process.platform !== 'darwin') {
+    try {
+      await runCapture('fc-cache', ['-f', getNerdFontsDir()]);
+    } catch {
+      // fc-cache may be absent on minimal systems, as on install.
+    }
+  }
+}
+
 function listedLoginShells(): string[] {
   try {
     return fs

@@ -109,6 +109,11 @@ export function cachedStarshipVersion(): string | null {
   }
 }
 
+/** Drops the recorded version once Starship is uninstalled, so doctor reports no drift. */
+export function forgetStarshipVersion(): void {
+  fs.rmSync(starshipVersionFilePath(), { force: true });
+}
+
 /** Records the starship version an install run produced. */
 export function recordStarshipVersion(version: string): void {
   fs.mkdirSync(cacheDir(), { recursive: true });
