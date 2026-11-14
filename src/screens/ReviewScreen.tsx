@@ -7,10 +7,10 @@ import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { getShell, setupCommand } from '../config/shells.ts';
 import { getSharedConfigPath } from '../generators/shellRc.ts';
-import { type FileChange, plannedFileChanges } from '../services/fileDiff.ts';
+import { diffHunkLines, type FileChange, plannedFileChanges } from '../services/fileDiff.ts';
 import { fontLabel, plannedPathDir } from '../services/installer.ts';
 import { buildTaskList, plannedFont, plannedResetShells } from '../services/installTasks.ts';
-import { homeDir } from '../services/paths.ts';
+import { redactHome } from '../services/paths.ts';
 import type { ShellId, WizardState } from '../types.ts';
 
 interface ReviewScreenProps {
@@ -35,15 +35,8 @@ function diffLineColor(line: string): string | undefined {
   return undefined;
 }
 
-function tilde(filePath: string): string {
-  const home = homeDir();
-  return home.length > 1 && filePath.startsWith(`${home}/`)
-    ? `~${filePath.slice(home.length)}`
-    : filePath;
-}
-
 function changeSummary(change: FileChange): string {
-  const file = tilde(change.path);
+  const file = redactHome(change.path);
   if (change.status === 'unreadable') return `cannot read ${file}: ${change.error}`;
   const counts = `+${change.added} -${change.removed}`;
   return `${change.status === 'create' ? 'create' : 'edit  '} ${file} (${counts})`;
@@ -64,11 +57,7 @@ function RcWiring({ change }: { change: FileChange | undefined }) {
       </Box>
     );
   }
-  const lines = change.diff
-    .trimEnd()
-    .split('\n')
-    .slice(2)
-    .map((text, position) => ({ text, position }));
+  const lines = diffHunkLines(change.diff).map((text, position) => ({ text, position }));
   return (
     <Box flexDirection="column" marginLeft={2}>
       {lines.map((line) => (

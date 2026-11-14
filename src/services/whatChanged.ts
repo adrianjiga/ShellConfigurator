@@ -4,8 +4,7 @@ import { getShell, setupCommand } from '../config/shells.ts';
 import { statusMark } from '../config/status.ts';
 import { getSharedConfigPath, getShellConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
 import { fontIdToInstall, type InstallTask, type WizardState } from '../types.ts';
-import { redactHome } from './debugInfo.ts';
-import { configHome } from './paths.ts';
+import { configHome, redactHome } from './paths.ts';
 import type { RunManifest } from './runCapture.ts';
 
 /** ~/.config/starship/WHAT-CHANGED.md, rewritten by every install and apply. */

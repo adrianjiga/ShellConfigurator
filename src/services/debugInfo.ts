@@ -17,7 +17,7 @@ import {
 import { type DoctorReport, formatDoctorReport, runDoctor } from './doctor.ts';
 import { commandPath } from './exec.ts';
 import { type HistoryRecord, readHistory } from './history.ts';
-import { homeDir } from './paths.ts';
+import { redactHome } from './paths.ts';
 
 export interface DebugShell {
   id: ShellId;
@@ -209,13 +209,6 @@ export function redactUrls(command: string): string {
 
 function redactUrlText(text: string): string {
   return text.replace(/(\b[a-z][a-z0-9+.-]*:\/\/)([^/\s'"]*@)?([^\s'"?#]*)[^\s'"]*/gi, '$1$3');
-}
-
-/** Shows the home directory as `~`, so a pasted report does not name the user. */
-export function redactHome(text: string, home: string = homeDir()): string {
-  if (home.length <= 1) return text;
-  const escaped = home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return text.replace(new RegExp(`${escaped}(?![^/\\s\`'":,)\\]])`, 'g'), '~');
 }
 
 const yesNo = (value: boolean) => (value ? 'yes' : 'no');

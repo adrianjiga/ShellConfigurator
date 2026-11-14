@@ -52,7 +52,10 @@ vi.mock('../generators/shellRc.ts', () => ({
 
 vi.mock('../services/fileDiff.ts', async () => {
   const { getShell } = await import('../config/shells.ts');
+  const actual =
+    await vi.importActual<typeof import('../services/fileDiff.ts')>('../services/fileDiff.ts');
   return {
+    diffHunkLines: actual.diffHunkLines,
     plannedFileChanges: (state: { selectedShells: string[] }) =>
       state.selectedShells.flatMap((shellId) => {
         const rc = getShell(shellId as 'zsh')?.rcFile;

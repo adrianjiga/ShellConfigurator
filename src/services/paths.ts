@@ -9,6 +9,13 @@ export function homeDir(): string {
   return os.homedir() || os.userInfo().homedir;
 }
 
+/** Shows the home directory as `~`, so a pasted report does not name the user. */
+export function redactHome(text: string, home: string = homeDir()): string {
+  if (home.length <= 1) return text;
+  const escaped = home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(`${escaped}(?![^/\\s\`'":,)\\]])`, 'g'), '~');
+}
+
 /**
  * Resolves an XDG base directory, favouring the live environment over the
  * spec fallback. Resolved per call so env changes are seen immediately, which

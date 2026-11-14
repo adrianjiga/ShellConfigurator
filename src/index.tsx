@@ -15,13 +15,13 @@ import {
   DEFAULT_DEBUG_INFO_DEPS,
   type DebugInfoDeps,
   formatDebugInfo,
-  redactHome,
 } from './services/debugInfo.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
 import { CliRunError, CliUsageError } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
 import { lastRunShells, recordRunSafely } from './services/history.ts';
 import { formatListing, listEntries } from './services/listings.ts';
+import { redactHome } from './services/paths.ts';
 import { formatRepairReport, runRepair } from './services/repair.ts';
 import {
   defaultRollbackRun,

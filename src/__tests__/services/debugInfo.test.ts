@@ -19,10 +19,9 @@ import {
   DEFAULT_DEBUG_INFO_DEPS,
   type DebugInfoDeps,
   formatDebugInfo,
-  redactHome,
   redactUrls,
 } from '../../services/debugInfo.ts';
-import { homeDir } from '../../services/paths.ts';
+import { homeDir, redactHome } from '../../services/paths.ts';
 import type { ShellId } from '../../types.ts';
 
 const home = homeDir();
