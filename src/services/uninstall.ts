@@ -30,6 +30,8 @@ export interface UninstallStep {
   title: string;
   detail: string;
   run?: () => Promise<string>;
+  /** A step that must not fail first; when it does, this one is skipped. */
+  after?: string;
 }
 
 export interface UninstallAction {
@@ -131,6 +133,7 @@ function shellSteps(facts: ShellFacts, explicit: boolean, deps: UninstallDeps): 
       title: `${shell.label} config`,
       detail: `move ${config} aside to a backup`,
       run: async () => describeRemoval(deps.removeShellConfigFile(shellId), config),
+      ...(shell.rcFile && facts.managedRc ? { after: `rc_${shellId}` } : {}),
     });
   }
   return steps;
@@ -219,8 +222,16 @@ export async function runUninstall(
   options: { dryRun?: boolean } = {}
 ): Promise<UninstallReport> {
   const actions: UninstallAction[] = [];
-  for (const { id, title, detail, run } of steps) {
-    if (!run) {
+  for (const { id, title, detail, run, after } of steps) {
+    const blocker = actions.find((a) => a.id === after && a.status === 'failed');
+    if (blocker) {
+      actions.push({
+        id,
+        title,
+        status: 'skipped',
+        detail: `left in place: ${blocker.title} failed and still points at it`,
+      });
+    } else if (!run) {
       actions.push({ id, title, status: 'skipped', detail });
     } else if (options.dryRun) {
       actions.push({ id, title, status: 'planned', detail });

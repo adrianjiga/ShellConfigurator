@@ -155,6 +155,26 @@ describe('runUninstall', () => {
     expect(report.actions[0]!.detail).toBe('read-only');
   });
 
+  it("leaves a shell's config in place when its rc could not be cleaned", async () => {
+    const deps = makeDeps(['zsh', 'bash'], ['zsh', 'bash'], {
+      removeManagedRcBlocks: vi.fn((id: ShellId) => {
+        if (id === 'zsh') throw new Error('read-only');
+        return { removed: true };
+      }),
+    });
+
+    const report = await runUninstall(await planUninstall({}, deps));
+
+    expect(report.actions.map((a) => [a.id, a.status])).toEqual([
+      ['rc_zsh', 'failed'],
+      ['config_zsh', 'skipped'],
+      ['rc_bash', 'removed'],
+      ['config_bash', 'removed'],
+    ]);
+    expect(report.actions[1]!.detail).toBe('left in place: Zsh rc failed and still points at it');
+    expect(deps.removeShellConfigFile).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps Starship recorded when its removal fails', async () => {
     const deps = makeDeps([], [], { removeStarship: vi.fn().mockRejectedValue(new Error('no')) });
     await runUninstall(await planUninstall({ starship: true }, deps));
