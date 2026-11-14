@@ -16,7 +16,7 @@ import {
 import { type DoctorReport, formatDoctorReport, runDoctor } from './doctor.ts';
 import { commandPath } from './exec.ts';
 import { type HistoryRecord, readHistory } from './history.ts';
-import { redactHome, redactUrls } from './redact.ts';
+import { redactPersonal, redactUrls } from './redact.ts';
 
 export interface DebugShell {
   id: ShellId;
@@ -228,5 +228,5 @@ export function formatDebugInfo(info: DebugInfo): string {
     formatDoctorReport(info.doctor).trimEnd(),
     '```',
   ];
-  return redactHome(`${lines.join('\n')}\n`);
+  return redactPersonal(`${lines.join('\n')}\n`);
 }

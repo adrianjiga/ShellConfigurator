@@ -26,7 +26,7 @@ import { CliRunError, CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
 import { lastRunShells, recordRunSafely } from './services/history.ts';
 import { formatListing, listEntries } from './services/listings.ts';
-import { redactHome } from './services/redact.ts';
+import { redactPersonal } from './services/redact.ts';
 import {
   DEFAULT_REPAIR_DEPS,
   formatRepairReport,
@@ -96,7 +96,7 @@ export function reportFatal(prefix: string, err: unknown): void {
     process.exitCode = err instanceof CliUsageError ? 2 : 1;
     return;
   }
-  const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  const message = redactPersonal(err instanceof Error ? (err.stack ?? err.message) : String(err));
   process.stderr.write(`\n${prefix}: ${message}\n`);
   process.exitCode = 1;
 }
@@ -750,7 +750,7 @@ export async function runDebugInfoCommand(
   }
   const info = await collectDebugInfo(VERSION, deps);
   process.stdout.write(
-    flags.json ? redactHome(`${JSON.stringify(info, null, 2)}\n`) : formatDebugInfo(info)
+    flags.json ? redactPersonal(`${JSON.stringify(info, null, 2)}\n`) : formatDebugInfo(info)
   );
 }
 

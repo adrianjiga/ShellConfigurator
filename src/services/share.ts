@@ -4,7 +4,7 @@ import { PRESETS, rendersGlyphs } from '../config/presets.ts';
 import { generateToml } from '../generators/starship.ts';
 import { NO_NERD_FONT, type WizardState } from '../types.ts';
 import { NERD_FONTS } from './installer.ts';
-import { redactHome } from './redact.ts';
+import { redactPersonal } from './redact.ts';
 import { serializeState } from './state.ts';
 
 const PROJECT_URL = 'https://github.com/adrianjiga/ShellConfigurator';
@@ -46,7 +46,7 @@ export function renderShare(state: WizardState): string {
     '```',
     '',
   ].join('\n');
-  const redacted = redactHome(body);
+  const redacted = redactPersonal(body);
   const notes = [
     ...(glyphs
       ? ['Its icons need a [Nerd Font](https://www.nerdfonts.com/) in the terminal.']

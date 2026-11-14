@@ -750,6 +750,13 @@ describe('index reportFatal', () => {
     expect(process.exitCode).toBe(1);
   });
 
+  it('shows the home folder as ~ in a crash it reports', () => {
+    reportFatal('prefix', `EISDIR: ${path.join(os.homedir(), '.cache', 'x')}`);
+    expect(stderrWrite).toHaveBeenCalledWith(
+      `\nprefix: EISDIR: ${path.join('~', '.cache', 'x')}\n`
+    );
+  });
+
   it('stringifies non-Error values', () => {
     reportFatal('prefix', 'some string');
     expect(stderrWrite).toHaveBeenCalledWith('\nprefix: some string\n');

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { quoteArgv } from '../../services/args.ts';
-import { redactHome, redactUrls } from '../../services/redact.ts';
+import { redactHome, redactPersonal, redactUrls } from '../../services/redact.ts';
 
 describe('redactUrls', () => {
   it('drops the credentials, query and fragment of a URL', () => {
@@ -39,6 +39,10 @@ describe('redactUrls', () => {
 });
 
 describe('redactHome', () => {
+  it('replaces the home directory when HOME ends in a slash', () => {
+    expect(redactHome('/home/ana/.zshrc and /home/ana', '/home/ana/')).toBe('~/.zshrc and ~');
+  });
+
   it('replaces every occurrence of the home directory', () => {
     expect(redactHome('/home/ana/.zshrc and /home/ana/.bashrc', '/home/ana')).toBe(
       '~/.zshrc and ~/.bashrc'
@@ -54,5 +58,27 @@ describe('redactHome', () => {
 
   it('leaves text alone when home is the root directory', () => {
     expect(redactHome('/etc/shells', '/')).toBe('/etc/shells');
+  });
+});
+
+describe('redactPersonal', () => {
+  it('also shows the user name as <user> where it names another home folder', () => {
+    expect(
+      redactPersonal(
+        'PATH /home/ana/bin:/mnt/c/Users/ana/AppData:/opt/ana-tools /srv/ana /data/home/ana',
+        '/home/ana',
+        'ana'
+      )
+    ).toBe('PATH ~/bin:/mnt/c/Users/<user>/AppData:/opt/ana-tools /srv/ana /data/home/<user>');
+  });
+
+  it('leaves a folder named like the user elsewhere alone', () => {
+    expect(
+      redactPersonal('/usr/local/bin https://github.com/local/x', '/home/local', 'local')
+    ).toBe('/usr/local/bin https://github.com/local/x');
+  });
+
+  it('leaves a one-letter user name alone, which would match too much', () => {
+    expect(redactPersonal('/a/b', '/home/a', 'a')).toBe('/a/b');
   });
 });

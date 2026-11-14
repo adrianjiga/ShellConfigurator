@@ -1,11 +1,44 @@
+import * as os from 'node:os';
 import { quoteArgv, splitQuotedArgv } from './args.ts';
 import { homeDir } from './paths.ts';
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** Shows the home directory as `~`, so a pasted report does not name the user. */
 export function redactHome(text: string, home: string = homeDir()): string {
-  if (home.length <= 1) return text;
-  const escaped = home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return text.replace(new RegExp(`${escaped}(?![^/\\s\`'":,)\\]])`, 'g'), '~');
+  const trimmed = home.replace(/\/+$/, '');
+  if (trimmed.length <= 1) return text;
+  return text.replace(
+    new RegExp(`(?<![^\\s\`'"=:,(\\[])${escapeRegExp(trimmed)}(?![^/\\s\`'":,)\\]])`, 'g'),
+    '~'
+  );
+}
+
+function currentUser(): string {
+  try {
+    return os.userInfo().username;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Shows the user name as `<user>` where it names a home folder other than this
+ * one, such as WSL's `/mnt/c/Users/<name>` or a second `/home/<name>`.
+ */
+export function redactUser(text: string, user: string = currentUser()): string {
+  if (user.length < 2) return text;
+  return text.replace(
+    new RegExp(`(?<=/(?:[Uu]sers|home)/)${escapeRegExp(user)}(?=/|$|[\\s\`'":,)\\]])`, 'gm'),
+    '<user>'
+  );
+}
+
+/** The home folder as `~` and the user name as `<user>`, for text meant for a public issue. */
+export function redactPersonal(text: string, home?: string, user?: string): string {
+  return redactUser(redactHome(text, home), user);
 }
 
 /** One URL without its credentials, query and fragment. */
