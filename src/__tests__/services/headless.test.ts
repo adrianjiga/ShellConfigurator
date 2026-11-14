@@ -10,11 +10,15 @@ const {
   mockDetectPackageManager,
   mockDetectContainer,
   mockDetectTerminal,
-  mockIsStarshipInstalled,
+  mockFindStarship,
   mockRunInstallTasks,
   mockRecordRun,
 } = vi.hoisted(() => ({
-  mockIsStarshipInstalled: vi.fn(async () => ({ installed: false })),
+  mockFindStarship: vi.fn(
+    async (): Promise<{ installed: boolean; pathDir?: string }> => ({
+      installed: false,
+    })
+  ),
   mockDetectInstalledShells: vi.fn(),
   mockDetectPackageManager: vi.fn(),
   mockDetectContainer: vi.fn(),
@@ -33,7 +37,7 @@ vi.mock('../../services/detector.ts', async () => {
     detectPackageManagerAsync: mockDetectPackageManager,
     detectContainerAsync: mockDetectContainer,
     detectTerminalAsync: mockDetectTerminal,
-    isStarshipInstalledAsync: mockIsStarshipInstalled,
+    findStarshipAsync: mockFindStarship,
   };
 });
 
@@ -1009,10 +1013,11 @@ describe('runApply', () => {
   });
 
   it.each([
-    [true, 'Starship is already installed'],
-    [false, 'will install Starship'],
-  ])('says what detection found about Starship (installed: %s)', async (installed, text) => {
-    mockIsStarshipInstalled.mockResolvedValueOnce({ installed });
+    [{ installed: true }, 'Starship is already installed'],
+    [{ installed: true, pathDir: '/home/u/.local/bin' }, 'Starship is already installed'],
+    [{ installed: false }, 'will install Starship'],
+  ])('says what detection found about Starship (%o)', async (found, text) => {
+    mockFindStarship.mockResolvedValueOnce(found);
 
     await runApply(flags({ subcommand: 'apply', shells: ['zsh'], dryRun: true }));
 

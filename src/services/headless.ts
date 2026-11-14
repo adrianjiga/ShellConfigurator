@@ -22,7 +22,7 @@ import {
   detectPackageManagerAsync,
   detectRemoteSessionAsync,
   detectTerminalAsync,
-  isStarshipInstalledAsync,
+  findStarshipAsync,
 } from './detector.ts';
 import { CliRunError, CliUsageError, errorMessage } from './errors.ts';
 import { type FileChange, plannedFileChanges } from './fileDiff.ts';
@@ -595,8 +595,7 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
   const tasks = buildTaskList(state, resetShells);
 
   if (flags.dryRun) {
-    const starshipInstalled =
-      !state.skipStarshipInstall && (await isStarshipInstalledAsync()).installed;
+    const starshipInstalled = !state.skipStarshipInstall && (await findStarshipAsync()).installed;
     const plan = dryRunPlan(state, tasks, resetShells, starshipInstalled);
     if (flags.json) {
       process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
