@@ -152,6 +152,26 @@ describe('planRollback / runRollback', () => {
     expect(read('b')).toBe('b1');
   });
 
+  it('plans the other files when a saved copy cannot be read', async () => {
+    fs.writeFileSync(file('a'), 'a1');
+    fs.writeFileSync(file('b'), 'b1');
+    const manifest = await capturedRun(['a', 'b'], () => {
+      fs.writeFileSync(file('a'), 'a2');
+      fs.writeFileSync(file('b'), 'b2');
+    });
+    fs.writeFileSync(file('a'), 'a3');
+    const copy = path.join(runDir(manifest.runId), 'files', '0');
+    fs.rmSync(copy);
+    fs.mkdirSync(copy);
+
+    const report = runRollback(manifest.runId, planRollback(manifest));
+
+    expect(report.actions[0]).toMatchObject({ status: 'skipped', left: true });
+    expect(report.actions[0]!.detail).toMatch(/^its saved copy cannot be read: /);
+    expect(report.actions[1]!.status).toBe('restored');
+    expect(read('b')).toBe('b1');
+  });
+
   it('only plans in a dry run', async () => {
     fs.writeFileSync(file('rc'), 'one');
     const manifest = await capturedRun(['rc'], () => fs.writeFileSync(file('rc'), 'two'));

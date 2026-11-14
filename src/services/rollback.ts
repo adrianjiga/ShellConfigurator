@@ -117,7 +117,17 @@ export function planRollback(manifest: RunManifest): RollbackStep[] {
     }
     if (current !== file.after) {
       const copy = file.before ? path.join(runDir(manifest.runId), 'files', file.before) : null;
-      if (current === (copy ? hashOf(copy) : null)) {
+      let before: string | null;
+      try {
+        before = copy ? hashOf(copy) : null;
+      } catch (err) {
+        return {
+          path: file.path,
+          detail: `its saved copy cannot be read: ${errorMessage(err)}`,
+          left: true,
+        };
+      }
+      if (current === before) {
         return { path: file.path, detail: 'already as it was before that run' };
       }
       return { path: file.path, detail: CHANGED_SINCE, left: true };
