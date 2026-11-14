@@ -981,10 +981,11 @@ describe('runApply', () => {
 
     await fetchImportedConfig('https://example.com/fast', { timeoutMs: 5 });
 
-    expect(fetchSpy).toHaveBeenCalledWith(
-      'https://example.com/fast',
-      expect.objectContaining({ signal: expect.any(AbortSignal) })
-    );
+    const signal = (fetchSpy.mock.calls[0]![1] as RequestInit).signal!;
+    expect(signal.aborted).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(signal.aborted).toBe(true);
+    expect((signal.reason as Error).name).toBe('TimeoutError');
   });
 
   it('reports a network failure when fetching an imported config', async () => {
