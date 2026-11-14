@@ -40,8 +40,8 @@ export interface ModuleDef {
   defaultLeft: boolean;
   defaultRight: boolean;
   // Returns a short colored preview string for the prompt preview.
-  // Only modules whose symbol is a genuine Nerd Font glyph branch on hasNerdFont;
-  // emoji and plain Unicode render without one, so those symbols are unconditional.
+  // Modules whose preview symbol is a Nerd Font glyph branch on hasNerdFont; emoji
+  // and plain Unicode render without one (battery previews its emoji either way).
   previewSegment: (hasNerdFont: boolean, sample: PreviewSample) => string;
   /** The plain-prompt preview, where starship's default format adds words
    *  or brackets the powerline content leaves out. */

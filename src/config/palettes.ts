@@ -4,10 +4,10 @@ import type { ConfigurableModuleId } from './modules.ts';
  * Named colour palettes — one per preset, so no two presets render alike, plus
  * accessibility palettes (`high-contrast`, `colorblind`) that any preset can use.
  *
- * A palette gives every module its own colour rather than grouping modules into
- * shared roles. That costs a wider table here, but it is what makes a powerline
- * prompt read as distinct blocks (adjacent segments sharing a colour would merge
- * into one), and it is the only way "Gruvbox Rainbow" can actually rainbow.
+ * A palette gives every module its own colour entry rather than grouping modules
+ * into shared roles (entries may still share a value). That costs a wider table
+ * here, but it lets a powerline preset keep neighbouring segments apart, and it
+ * is the only way "Gruvbox Rainbow" can actually rainbow.
  *
  * The generator emits the chosen palette as a starship `[palettes.<id>]` table and
  * refers to colours by name, so the generated config stays readable and a user can

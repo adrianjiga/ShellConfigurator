@@ -149,13 +149,13 @@ export function getShell(id: ShellId): ShellDef | undefined {
   return SHELLS.find((s) => s.id === id);
 }
 
-/** Executable name for a shell, e.g. 'nu' for nushell. */
 const SHELL_IDS: readonly ShellId[] = SHELLS.map((s) => s.id);
 
 export function isShellId(id: unknown): id is ShellId {
   return typeof id === 'string' && (SHELL_IDS as readonly string[]).includes(id);
 }
 
+/** Executable name for a shell, e.g. 'nu' for nushell. */
 export function getShellBinary(id: ShellId): string {
   const shell = getShell(id);
   if (!shell) throw new Error(`Unknown shell: ${id}`);

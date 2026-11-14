@@ -22,9 +22,9 @@ export function getShellConfigPath(shellId: ShellId): string {
 }
 
 /**
- * The shared config the wizard never writes but shadows with per-shell configs:
- * ~/.config/starship.toml. Copied aside before an install so it can be restored
- * (see backupSharedConfig / restoreConfigBackups).
+ * The shared config, ~/.config/starship.toml: per-shell configs shadow it, and
+ * only an adopt run with an imported config writes it. Copied aside before an
+ * install so it can be restored (see backupSharedConfig / restoreConfigBackups).
  */
 export function getSharedConfigPath(): string {
   // Starship's own default ignores XDG_CONFIG_HOME.
@@ -342,8 +342,8 @@ export function manualSetupApplied(shell: ShellDef, pointAtSharedConfig = false)
 }
 
 /**
- * Writes one shell's config, backing up any existing file first (overwriting is
- * the one irreversible step). Never touches the shared starship.toml.
+ * Writes one shell's config, backing up any existing file first. Never touches
+ * the shared starship.toml.
  */
 export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigResult {
   const configPath = getShellConfigPath(shellId);
