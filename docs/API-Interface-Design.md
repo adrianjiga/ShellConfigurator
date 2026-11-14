@@ -521,7 +521,10 @@ function captureRun<T>(
 // run changed nothing. Each run gets its own folder (created exclusively), and
 // each file's mode is kept so a restore gets it back. A throwing run rejects
 // with a CapturedRunError carrying its runId, which apply and the wizard still
-// record. Tests get a stub from setup.ts.
+// record. A capture that fails partway removes its folder; a file the run left
+// unreadable is kept with after: 'unreadable' (UNREADABLE_AFTER); only the
+// newest 50 run folders are kept (pruneRuns, KEPT_RUNS). Tests get a stub from
+// setup.ts.
 
 function readRunManifest(runId: string): RunManifest | null;
 ```
@@ -532,7 +535,8 @@ function readRunManifest(runId: string): RunManifest | null;
 function listRollbackRuns(records?: HistoryRecord[]): RollbackRun[];
 // The recorded runs with a manifest, newest first, each marked rolledBack while
 // a complete rollback of it stands (one that was not itself rolled back; a
-// rollback recorded `partial` left some changes and does not count).
+// rollback recorded `partial` left some changes and does not count; one whose
+// own capture failed, with no runId, counts and can never be undone).
 
 function defaultRollbackRun(runs: RollbackRun[]): RollbackRun | null;
 // The newest non-rollback run that still stands: what a plain `rollback` undoes.
@@ -541,7 +545,8 @@ function planRollback(manifest: RunManifest): RollbackStep[];
 // Per file: put back the copy's exact bytes and mode, or delete a file the run
 // created. A file whose hash no longer matches the run's `after` changed since,
 // and is left alone (checked again right before each change); one already back
-// to its copy needs nothing.
+// to its copy needs nothing. A file whose copy cannot be read, or that the run
+// left unreadable, is skipped and left in place; the other files still go.
 
 function runRollback(
   runId: string,
@@ -789,7 +794,10 @@ held back while any shell would still start Starship. A shell's config stays
 when its rc could not be cleaned. A real run is captured like any other, so
 the text report ends with `Undo it with: shell-configurator rollback` (or, when
 the capture could not be written, the `cp` commands that copy each backup
-back). Without
+back). Rollback only puts files back, so when Starship or a font was removed the
+report adds that they need reinstalling with `apply` or `repair`. The Starship
+step re-checks just before it deletes anything that no shell still starts it.
+Without
 `--yes` it prints the plan and asks on a terminal; off a terminal, or with
 `--json`, a run that would change something is a `CliUsageError`. `--dry-run`
 only prints the plan. A failed step does not stop the rest and sets exit code
@@ -849,7 +857,7 @@ tarball stays self-contained and nothing is written next to the binary:
 | Path                                                                                | Contents                                                                                                                                                                                                                                                 |
 | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `$XDG_STATE_HOME` or `~/.local/state`/`shell-configurator/history.jsonl`            | Append-only ledger; one JSON `HistoryRecord` per run (`install`/`apply`/`uninstall`/`rollback`; `runId` names its captured files, `rollbackOf` the run a rollback undid), in file order = chronological order.                                           |
-| `…/runs/<runId>/manifest.json` + `files/<n>`                                        | The files a run changed: a copy of each from before the run (`0600`, in a `0700` folder) and its hash after. `rollback` reads it.                                                                                                                        |
+| `…/runs/<runId>/manifest.json` + `files/<n>`                                        | The files a run changed: a copy of each from before the run (`0600`, in a `0700` folder) and its hash after. Only the newest 50 runs are kept. `rollback` reads it.                                                                                      |
 | `…/snapshots/<iso-timestamp>.json`                                                  | The versioned state card each wizard install or headless `apply` applied; the id is the ISO timestamp with `:` replaced by `-`. The ledger's `snapshotId` points at it, and `--restore` reads the newest one to learn which shells the last run touched. |
 | `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/fonts/<id>.zip` + `<id>.sha256` | Font cache: the verified archive plus its pinned SHA-256 pin file. A cached archive is reused offline only while its bytes still match the pin.                                                                                                          |
 | `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/starship.version`               | The starship version recorded by the last run that freshly installed Starship (`recordStarshipVersion`). Feeds the doctor's `version-drift` check.                                                                                                       |
