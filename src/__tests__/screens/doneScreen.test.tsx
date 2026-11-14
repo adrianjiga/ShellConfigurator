@@ -1,5 +1,6 @@
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getShell } from '../../config/shells.ts';
 import { getShellConfigPath } from '../../generators/shellRc.ts';
 import { DoneScreen } from '../../screens/DoneScreen.tsx';
 import { type InstallTaskDeps, runInstallTasks } from '../../services/installTasks.ts';
@@ -56,17 +57,14 @@ describe('DoneScreen over real install results', () => {
     const frame = await runAndRender(
       { selectedShells: ['nushell'], installedShells: ['nushell'] },
       fakeDeps({
-        applyShellConfig: vi.fn(() => ({
-          applied: false,
-          note: 'Run the above command once in Nushell to set up Starship.',
-        })),
+        applyShellConfig: vi.fn(() => ({ applied: false, note: getShell('nushell')!.manualNote })),
       })
     );
     const row = rowFor(frame, 'Nushell');
 
     expect(row).not.toContain('✓');
     expect(row).not.toContain('init line added');
-    expect(frame).toContain('Run the above command once in Nushell');
+    expect(frame.replace(/\s+/g, ' ')).toContain(getShell('nushell')!.manualNote);
     // The command the user has to run must be on screen, not just described.
     // Whitespace is dropped so the narrow test frame's wrapping does not matter.
     const flat = frame.replace(/\s+/g, '');
