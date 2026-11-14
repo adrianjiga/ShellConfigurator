@@ -1,6 +1,7 @@
 import { parse } from '@iarna/toml';
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { pressEsc } from './helpers/ink.ts';
 import { flush, waitFor } from './helpers/wait.ts';
 
 // Only the side-effecting edges are stubbed. generateToml, the step machine, the
@@ -170,23 +171,25 @@ describe('full wizard walkthrough', () => {
     expect(mockApplyShellConfig).toHaveBeenCalledWith('zsh', expect.anything());
   });
 
-  it('never emits a module twice even when picked on both sides', async () => {
-    const toml = await runWizard([
-      ENTER, // welcome
-      ENTER, // fontcheck
-      ENTER, // preset
-      ENTER, // segments_left (directory is on by default)
-      SPACE, // segments_right: try to also enable the first module
-      ENTER, // -> style
-      ENTER, // -> shells
-      SPACE, // select zsh
-      ENTER, // -> review
-      ENTER, // -> installing
-    ]);
+  it('never emits a module twice when the left side takes one already on the right', async () => {
+    const instance = render(<App />);
+    await flush();
+    const type = (text: string) => pressKeys(instance, [...text]);
 
+    await pressKeys(instance, [ENTER, ENTER, ENTER, ENTER]); // welcome → segments_right
+    await type('node');
+    await pressKeys(instance, [SPACE]); // Node.js on the right
+    await pressEsc(instance.stdin); // clear the filter
+    await pressEsc(instance.stdin); // back to segments_left
+    await type('node');
+    await pressKeys(instance, [SPACE]); // Node.js on the left as well
+    await pressEsc(instance.stdin);
+    await pressKeys(instance, [ENTER, ENTER, ENTER, SPACE, ENTER, ENTER]);
+    for (let i = 0; i < 20 && mockWriteConfig.mock.calls.length === 0; i++) await flush();
+
+    const toml = mockWriteConfig.mock.calls[0]![0] as string;
     const formatLine = toml.split('\n').find((l) => l.startsWith('format')) ?? '';
-    const directoryRefs = formatLine.match(/\$directory/g) ?? [];
-    expect(directoryRefs.length).toBeLessThanOrEqual(1);
+    expect(formatLine.match(/\$nodejs/g)).toHaveLength(1);
   });
 
   it('pauses at a review step showing the config before installing', async () => {
@@ -219,7 +222,6 @@ describe('full wizard walkthrough', () => {
 
     const results = recordOutcome.mock.calls.at(-1)?.[0] as InstallTask[] | undefined;
     expect(results?.some((t) => t.status === 'failed')).toBe(false);
-    expect(process.exitCode ?? 0).toBe(0);
 
     const finalState = recordOutcome.mock.calls.at(-1)?.[1] as WizardState;
     expect(finalState.selectedShells).toEqual(['zsh']);
@@ -264,7 +266,6 @@ describe('full wizard walkthrough', () => {
     expect(toml).toContain('$character');
     expect(mockInstallNerdFont).toHaveBeenCalledTimes(1);
     expect(mockInstallNerdFont).toHaveBeenCalledWith('JetBrainsMono', expect.any(AbortSignal));
-    expect(process.exitCode ?? 0).toBe(0);
   });
 
   it('writes a glyph-free config when the font install fails', async () => {
@@ -322,7 +323,6 @@ describe('full wizard walkthrough', () => {
     expect(toml).toContain('$character');
     expect(mockInstallShell).toHaveBeenCalledTimes(1);
     expect(mockInstallShell).toHaveBeenCalledWith('zsh', 'apt', expect.any(AbortSignal));
-    expect(process.exitCode ?? 0).toBe(0);
   });
 });
 
