@@ -6,6 +6,7 @@ import {
   fishInitFile,
   getSharedConfigPath,
   getShellConfigPath,
+  hasManagedConfigExport,
   hasStarshipInit,
   manualSetupAppliedWith,
 } from '../generators/shellRc.ts';
@@ -391,12 +392,15 @@ function checkShellWiring(
     };
   }
   if (fromState && pointAtShared && setsOwnConfig(content)) {
+    const managed = hasManagedConfigExport(shellId, content);
     return {
       id: `shell:${shellId}`,
       title: shell.label,
       status: 'warn',
-      detail: `${shell.rcFile} still sets its own STARSHIP_CONFIG, which overrides the shared config`,
-      fix,
+      detail: managed
+        ? `${shell.rcFile} still sets its own STARSHIP_CONFIG, which overrides the shared config`
+        : `${shell.rcFile} sets STARSHIP_CONFIG itself, which overrides the shared config — remove that line to use it`,
+      ...(managed ? { fix } : {}),
     };
   }
   if (!deps.exists(configPath)) {

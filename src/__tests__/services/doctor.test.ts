@@ -188,15 +188,26 @@ describe('runDoctor', () => {
     expect(find(report, 'shell:zsh').status).toBe('pass');
   });
 
-  it('flags a leftover per-shell export in adopt mode', async () => {
+  it('flags a leftover per-shell export in adopt mode and offers to remove it', async () => {
     const files = new Map<string, string>();
-    files.set(ZSH_RC, `${ZSH_INIT}\n${ZSH_CONFIG_LINE}\n`);
+    files.set(ZSH_RC, `# Added by ShellConfigurator\n${ZSH_CONFIG_LINE}\n${ZSH_INIT}\n`);
     files.set(getSharedConfigPath(), 'x\n');
     const report = await runDoctor(baseState({ keepExistingConfig: true }), makeDeps(files));
     expect(find(report, 'shell:zsh')).toMatchObject({
       status: 'warn',
       fix: { kind: 'configure-shell', shellId: 'zsh' },
     });
+  });
+
+  it('asks the user to remove their own export in adopt mode, which repair cannot', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `export STARSHIP_CONFIG=~/mine.toml\n${ZSH_INIT}\n`);
+    files.set(getSharedConfigPath(), 'x\n');
+    const report = await runDoctor(baseState({ keepExistingConfig: true }), makeDeps(files));
+    const finding = find(report, 'shell:zsh');
+    expect(finding.status).toBe('warn');
+    expect(finding.detail).toMatch(/remove that line/);
+    expect(finding.fix).toBeUndefined();
   });
 
   it('passes a shell that points at the shared config in adopt mode', async () => {

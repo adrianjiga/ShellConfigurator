@@ -450,6 +450,13 @@ function removeShellConfiguratorBlocks(
   return removed ? out.join('\n') : content;
 }
 
+/** Whether a ShellConfigurator block in `content` exports STARSHIP_CONFIG (an adopt run removes it). */
+export function hasManagedConfigExport(shellId: ShellId, content: string): boolean {
+  const shell = getShell(shellId);
+  if (!shell) return false;
+  return removeShellConfiguratorBlocks(content, shell, [isConfigExport(shell)]) !== content;
+}
+
 export interface ApplyShellConfigOptions {
   /** Directory to prepend to PATH ahead of the init line, when starship is not reachable. */
   ensurePathDir?: string | null;
