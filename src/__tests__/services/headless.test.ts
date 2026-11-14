@@ -589,6 +589,57 @@ describe('runApply', () => {
     expect(output).toContain('Generated starship.toml');
   });
 
+  it('prints the dry-run plan and config as JSON with --json', async () => {
+    await runApply(
+      flags({
+        subcommand: 'apply',
+        shells: ['bash'],
+        preset: 'pure-prompt',
+        dryRun: true,
+        json: true,
+      })
+    );
+
+    expect(mockRunInstallTasks).not.toHaveBeenCalled();
+    const output = stdoutWrite.mock.calls
+      .map((call: [string, ...unknown[]]) => String(call[0]))
+      .join('');
+    const plan = JSON.parse(output);
+    expect(plan).toMatchObject({ dryRun: true, shells: ['bash'], installStarship: true });
+    expect(plan.tasks.map((t: { id: string }) => t.id)).toContain('rc_bash');
+    expect(plan.config.kind).toBe('per-shell');
+    expect(plan.config.toml).toMatch(/^format\s+= "/m);
+  });
+
+  it('describes the kept shared config in an --adopt --dry-run --json plan', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    const previous = process.env.HOME;
+    process.env.HOME = dir;
+    try {
+      await runApply(
+        flags({ subcommand: 'apply', shells: ['bash'], adopt: true, dryRun: true, json: true })
+      );
+      const output = stdoutWrite.mock.calls
+        .map((call: [string, ...unknown[]]) => String(call[0]))
+        .join('');
+      expect(JSON.parse(output).config).toEqual({
+        kind: 'kept',
+        path: path.join(dir, '.config', 'starship.toml'),
+        exists: false,
+      });
+    } finally {
+      process.env.HOME = previous;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses --json on a real apply', async () => {
+    await expect(
+      runApply(flags({ subcommand: 'apply', shells: ['bash'], json: true }))
+    ).rejects.toThrow(/apply --json only prints a plan, with --dry-run/);
+    expect(mockRunInstallTasks).not.toHaveBeenCalled();
+  });
+
   it('says plainly when --adopt --dry-run finds no config to keep', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
     const previous = process.env.HOME;

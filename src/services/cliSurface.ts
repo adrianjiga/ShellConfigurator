@@ -122,7 +122,7 @@ export const SUBCOMMAND_INFO: Record<Subcommand, SubcommandInfo> = {
   },
   apply: {
     description: 'Run a full install headlessly',
-    flags: [...CONFIG_FLAGS, FLAGS.adopt, FLAGS.importUrl, FLAGS.dryRun],
+    flags: [...CONFIG_FLAGS, FLAGS.adopt, FLAGS.importUrl, FLAGS.dryRun, FLAGS.json],
   },
   doctor: {
     description: 'Check the setup and report problems',

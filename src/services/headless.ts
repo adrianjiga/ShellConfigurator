@@ -407,11 +407,36 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
  * written without touching the system; a real run records itself in history.
  * `command` is the original invocation line stored for reproducibility.
  */
+/** The `apply --dry-run --json` report: the plan and the config a real run would write. */
+export function dryRunPlan(state: WizardState, tasks: InstallTask[]) {
+  const shared = getSharedConfigPath();
+  return {
+    dryRun: true,
+    shells: state.selectedShells,
+    installStarship: !state.skipStarshipInstall,
+    tasks,
+    config: state.keepExistingConfig
+      ? state.sharedConfigToml
+        ? { kind: 'imported', path: shared, toml: state.sharedConfigToml }
+        : { kind: 'kept', path: shared, exists: fs.existsSync(shared) }
+      : { kind: 'per-shell', toml: generateToml(state) },
+  };
+}
+
 export async function runApply(flags: CliFlags, command?: string): Promise<void> {
+  if (flags.json && !flags.dryRun) {
+    throw new CliUsageError(
+      'apply --json only prints a plan, with --dry-run; a real apply reports its tasks as text.'
+    );
+  }
   const state = await prepareApplyState(flags);
 
   const tasks = buildTaskList(state, plannedResetShells(state));
 
+  if (flags.dryRun && flags.json) {
+    process.stdout.write(`${JSON.stringify(dryRunPlan(state, tasks), null, 2)}\n`);
+    return;
+  }
   if (flags.dryRun) {
     process.stdout.write('shell-configurator apply (dry run) — nothing will be changed.\n\n');
     process.stdout.write(
