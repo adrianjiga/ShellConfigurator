@@ -147,6 +147,12 @@ describe('runUninstall', () => {
       ['font', 'removed', 'deleted 2 font files'],
       ['starship', 'removed', 'removed the brew package'],
     ]);
+    expect(report.actions.map((a) => a.backup)).toEqual([
+      { file: getShell('zsh')!.rcFile, backup: '/h/.zshrc.bak-1' },
+      { file: getShellConfigPath('zsh'), backup: '/h/zsh.toml.bak-1' },
+      undefined,
+      undefined,
+    ]);
     expect(deps.removeFontFiles).toHaveBeenCalledWith(['/f/A.ttf', '/f/B.ttf']);
     expect(deps.forgetStarshipVersion).toHaveBeenCalled();
   });

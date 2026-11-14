@@ -4,6 +4,7 @@ import { createInterface } from 'node:readline/promises';
 import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
+import { posixShellQuote } from './config/shells.ts';
 import { restoreConfigBackups } from './generators/shellRc.ts';
 import type { CliFlags } from './services/args.ts';
 import { parseCliArgs, quoteArgv } from './services/args.ts';
@@ -317,8 +318,12 @@ export async function runUninstallCommand(
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {
     process.stdout.write(formatUninstallReport(report));
-    if (report.actions.some((a) => a.id.startsWith('config_') && a.status === 'removed')) {
-      process.stdout.write('\nRun shell-configurator --restore to bring the configs back.\n');
+    const backups = report.actions.flatMap((a) => (a.backup ? [a.backup] : []));
+    if (backups.length > 0) {
+      process.stdout.write('\nTo undo, copy the backups back:\n');
+      for (const { file, backup } of backups) {
+        process.stdout.write(`  cp ${posixShellQuote(backup)} ${posixShellQuote(file)}\n`);
+      }
     }
   }
   if (!report.ok) process.exitCode = 1;

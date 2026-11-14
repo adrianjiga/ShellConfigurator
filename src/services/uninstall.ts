@@ -25,12 +25,23 @@ import {
 
 export type UninstallStatus = 'removed' | 'skipped' | 'failed' | 'planned';
 
+/** A file a step changed, and the backup that holds its previous content. */
+export interface UninstallBackup {
+  file: string;
+  backup: string;
+}
+
+export interface StepOutcome {
+  detail: string;
+  backup?: UninstallBackup;
+}
+
 /** One step of the plan; a step without `run` has nothing to do and says why. */
 export interface UninstallStep {
   id: string;
   title: string;
   detail: string;
-  run?: () => Promise<string>;
+  run?: () => Promise<StepOutcome>;
   /** A step that must not fail first; when it does, this one is skipped. */
   after?: string;
 }
@@ -40,6 +51,7 @@ export interface UninstallAction {
   title: string;
   status: UninstallStatus;
   detail: string;
+  backup?: UninstallBackup;
 }
 
 export interface UninstallReport {
@@ -86,11 +98,14 @@ export const DEFAULT_UNINSTALL_DEPS: UninstallDeps = {
   removeFontFiles,
 };
 
-function describeRemoval(result: RemovalResult, what: string): string {
+function describeRemoval(result: RemovalResult, what: string, file: string): StepOutcome {
   const parts = [result.removed ? `removed ${what}` : (result.note ?? `left ${what} alone`)];
   if (result.removed && result.backedUpTo) parts.push(`backup: ${result.backedUpTo}`);
   if (result.removed && result.note) parts.push(result.note);
-  return parts.join('; ');
+  const detail = parts.join('; ');
+  return result.removed && result.backedUpTo
+    ? { detail, backup: { file, backup: result.backedUpTo } }
+    : { detail };
 }
 
 /** What a shell has on disk, read once per plan. */
@@ -113,7 +128,7 @@ function shellSteps(facts: ShellFacts, explicit: boolean, deps: UninstallDeps): 
         title: `${shell.label} rc`,
         detail: `remove the ShellConfigurator lines from ${rc}`,
         run: async () =>
-          describeRemoval(deps.removeManagedRcBlocks(shellId), `the lines from ${rc}`),
+          describeRemoval(deps.removeManagedRcBlocks(shellId), `the lines from ${rc}`, rc),
       });
     } else if (explicit) {
       steps.push({
@@ -135,7 +150,7 @@ function shellSteps(facts: ShellFacts, explicit: boolean, deps: UninstallDeps): 
       id: `config_${shellId}`,
       title: `${shell.label} config`,
       detail: `move ${config} aside to a backup`,
-      run: async () => describeRemoval(deps.removeShellConfigFile(shellId), config),
+      run: async () => describeRemoval(deps.removeShellConfigFile(shellId), config, config),
       ...(shell.rcFile && facts.managedRc ? { after: `rc_${shellId}` } : {}),
     });
   }
@@ -159,7 +174,7 @@ async function fontStep(fontId: string, deps: UninstallDeps): Promise<UninstallS
     detail: `delete ${files.length} font file${files.length === 1 ? '' : 's'} from ${getNerdFontsDir()}`,
     run: async () => {
       await deps.removeFontFiles(files);
-      return `deleted ${files.length} font file${files.length === 1 ? '' : 's'}`;
+      return { detail: `deleted ${files.length} font file${files.length === 1 ? '' : 's'}` };
     },
   };
 }
@@ -176,7 +191,7 @@ async function starshipStep(stillStarting: string[], deps: UninstallDeps): Promi
   const remove = (done: string) => async () => {
     await deps.removeStarship(plan);
     deps.forgetStarshipVersion();
-    return done;
+    return { detail: done };
   };
   switch (plan.kind) {
     case 'absent':
@@ -252,7 +267,7 @@ export async function runUninstall(
       actions.push({ id, title, status: 'planned', detail });
     } else {
       try {
-        actions.push({ id, title, status: 'removed', detail: await run() });
+        actions.push({ id, title, status: 'removed', ...(await run()) });
       } catch (err) {
         actions.push({ id, title, status: 'failed', detail: errorMessage(err) });
       }

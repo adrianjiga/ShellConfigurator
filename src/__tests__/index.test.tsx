@@ -86,6 +86,8 @@ vi.mock('../services/repair.ts', () => ({
 }));
 
 import { render } from 'ink';
+import { getShell } from '../config/shells.ts';
+import { getShellConfigPath } from '../generators/shellRc.ts';
 import {
   applyInstallOutcomeExitCode,
   crash,
@@ -737,15 +739,24 @@ describe('index uninstall command', () => {
     expect(mockRecordRun).not.toHaveBeenCalled();
   });
 
-  it('removes everything once confirmed, records the run and points at --restore', async () => {
-    const io = fakeIo();
+  it('removes everything once confirmed, records the run and prints how to undo it', async () => {
+    const io = fakeIo(
+      {},
+      {
+        removeManagedRcBlocks: vi.fn(() => ({ removed: true, backedUpTo: '/h/.zshrc.bak-1' })),
+        removeShellConfigFile: vi.fn(() => ({ removed: true, backedUpTo: "/h/it's.toml.bak-1" })),
+      }
+    );
 
     await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);
 
     expect(io.deps.removeManagedRcBlocks).toHaveBeenCalledWith('zsh');
     expect(io.deps.removeShellConfigFile).toHaveBeenCalledWith('zsh');
     expect(output()).toContain('REMOVED Zsh config');
-    expect(output()).toContain('shell-configurator --restore');
+    expect(output()).toContain('To undo, copy the backups back:');
+    expect(output()).toContain(`  cp '/h/.zshrc.bak-1' '${getShell('zsh')!.rcFile}'`);
+    expect(output()).toContain(`  cp '/h/it'\\''s.toml.bak-1' '${getShellConfigPath('zsh')}'`);
+    expect(output()).not.toContain('--restore');
     expect(mockRecordRun).toHaveBeenCalledWith({
       kind: 'uninstall',
       command: 'uninstall',
