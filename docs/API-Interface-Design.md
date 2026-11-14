@@ -557,6 +557,20 @@ function runRollback(
 // while a change of the run stays in place (left: true on that action).
 ```
 
+### cliSurface.ts / completions.ts
+
+```typescript
+const SUBCOMMAND_INFO: Record<Subcommand, SubcommandInfo>;
+// Each subcommand's description and flags (FLAGS), and completions' positional
+// shell argument. A test keeps FLAGS in step with the parser's KNOWN_FLAGS, so
+// a new flag must be described here.
+
+function completionScript(shell: 'bash' | 'zsh' | 'fish'): string;
+// A completion script generated from SUBCOMMAND_INFO: subcommands, each one's
+// flags, and flag values (preset, palette, shell, font and character ids, files;
+// --shells completes a comma-separated list).
+```
+
 ### debugInfo.ts
 
 ```typescript
@@ -685,7 +699,7 @@ function runInstallTasks(
 
 ## Headless CLI & Run Data
 
-The public flag surface in `src/index.tsx`/`src/services/args.ts`, in eight groups.
+The public flag surface in `src/index.tsx`/`src/services/args.ts`, in nine groups.
 
 ### Interactive
 
@@ -840,6 +854,19 @@ shells, the PATH entries and the full doctor report, plus the last recorded run.
 both, and URL credentials, queries and fragments are dropped from the recorded
 command. It reads only, so a failing doctor check does not change its exit
 code. Config flags, `--state`, `--fix` and `--dry-run` are usage errors.
+
+### completions
+
+```
+shell-configurator completions <bash|zsh|fish>
+```
+
+Prints a completion script for the shell (`src/services/completions.ts`). It
+is the only subcommand that takes a positional argument. A missing or unknown
+shell, or any other flag, is a usage error. `--help` shows where each shell
+loads the script from: `~/.local/share/bash-completion/completions/`, the
+first `$fpath` directory as `_shell-configurator`, and
+`~/.config/fish/completions/`.
 
 ### Exit Codes
 
