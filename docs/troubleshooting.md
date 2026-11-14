@@ -19,9 +19,12 @@ shell-configurator doctor
 ```
 
 `doctor --fix` (or `repair`) applies the fix each failing check carries and
-re-runs the checks: it re-adds the init line, reinstalls Starship via the
-detected package manager, reinstalls the font from cache, or wires the terminal
-font. It never touches anything that passed. `--json` prints the full report.
+re-runs the checks: it re-adds the init line, rewrites a per-shell config,
+reinstalls Starship via the detected package manager, or reinstalls the font
+(from cache when a verified copy is there, otherwise by downloading it). It
+never touches anything that passed, and warnings are left alone unless you add
+`--include-warnings`. Without `--state` it checks every installed shell, so the
+fixes can reach all of them. `--json` prints the full report.
 
 ---
 
@@ -35,10 +38,14 @@ When the wizard (or `apply`) detects a supported terminal — Alacritty, kitty,
 WezTerm, Ghostty, or foot — it edits the terminal's config to select the
 installed font automatically (`Set <terminal> font` task). WezTerm's Lua config
 is never edited; the exact `config.font = wezterm.font(...)` line is printed for
-you instead. This only runs on a real machine, not inside a container.
+you instead. This only runs on a real machine: it is skipped inside a
+container and whenever a CI or dev-container variable such as `CI` or
+`CODESPACES` is set.
 
-Run `shell-configurator doctor --fix` to (re)wire the terminal font at any time
-if the boxes persist.
+If the boxes persist, `shell-configurator repair --state <card> --include-warnings`
+(re)wires the terminal font. The terminal-font check is a warning, so plain
+`doctor --fix` leaves it alone, and the fix only exists when the state card
+names a font.
 
 **macOS (iTerm2, Alacritty, Kitty, Ghostty, WezTerm, Terminal.app):**
 
@@ -127,22 +134,34 @@ For Nushell, the wizard prints a Bash-compatible command that invokes `nu` and
 creates the two files Nushell auto-sources at startup
 (`starship-config.nu` pinning `$env.STARSHIP_CONFIG`, and `starship.nu` with the
 `starship init` output) in `$nu.data-dir/vendor/autoload` — by default
-`~/.local/share/nushell/vendor/autoload/`. Run it from Bash as shown, then verify
-the files exist:
+`~/.local/share/nushell/vendor/autoload/` on Linux and
+`~/Library/Application Support/nushell/vendor/autoload/` on macOS. Run it from
+Bash as shown, then verify the files exist:
 
 ```bash
 ls ~/.local/share/nushell/vendor/autoload/
+ls ~/Library/Application\ Support/nushell/vendor/autoload/   # macOS
 ```
 
 ---
 
-## Wizard exits with "shell not found"
+## A shell install fails
 
-This means the wizard tried to install a shell (e.g. fish) and the package
-install failed. Check that:
+When the wizard tries to install a shell (e.g. fish) and cannot, the
+`Install <shell>` task fails and the run carries on; that shell's `Configure`
+task (and `chsh`, if it was the default shell) fails with it. The task shows
+one of:
+
+- `Cannot auto-install <shell>: no package manager detected` or
+  `No package for <shell> on <manager>` — install the shell yourself, then re-run
+- `Command failed with exit code <n>: ...` — the package install itself failed
+- `<binary> not found in PATH` — from `chsh`, when the shell is still missing
+
+For a failed package install, check that:
 
 1. Your system has internet access
-2. You have `sudo` privileges (required for `apt`, `dnf`, and `pacman`)
+2. You have `sudo` privileges (required for `apt`, `dnf`, `pacman`, and `apk`
+   unless you run as root)
 3. Your package manager is working — try running the install command manually
 
 If you're on a minimal image (Alpine, Arch, Fedora Docker), the shell package
