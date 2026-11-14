@@ -89,6 +89,14 @@ describe('renderWhatChanged', () => {
     expect(renderWhatChanged(run({ results: inContainer }))).not.toContain('--font');
   });
 
+  it('offers no Starship removal when the run did not install Starship', () => {
+    const skipped = run().results.map((task) =>
+      task.id === 'starship' ? { ...task, status: 'skipped' as const } : task
+    );
+    expect(renderWhatChanged(run())).toContain('add `--starship` to remove Starship');
+    expect(renderWhatChanged(run({ results: skipped }))).not.toContain('--starship');
+  });
+
   it('says a later uninstall or rollback may have undone the run', () => {
     expect(renderWhatChanged(run())).toContain(
       'A later `uninstall` or `rollback` may have undone it since; `shell-configurator rollback --list`'

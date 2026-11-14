@@ -50,7 +50,10 @@ export function renderWhatChanged(run: WhatChangedRun): string {
   const installed = (taskId: string) =>
     run.results.some((task) => task.id === taskId && task.status === 'done');
   const fontId = installed(TASK_IDS.font) ? fontIdToInstall(run.state.nerdFontToInstall) : null;
-  const removals = [...(fontId ? [`add \`--font ${fontId}\` to remove the font`] : [])];
+  const removals = [
+    ...(fontId ? [`add \`--font ${fontId}\` to remove the font`] : []),
+    ...(installed(TASK_IDS.starship) ? ['add `--starship` to remove Starship'] : []),
+  ];
   const lines = [
     '# What ShellConfigurator changed',
     '',
@@ -76,7 +79,7 @@ export function renderWhatChanged(run: WhatChangedRun): string {
     '## Undo',
     '',
     '- `shell-configurator rollback` puts the files above back as they were before this run.',
-    `- \`shell-configurator uninstall\` removes the Starship lines${run.state.keepExistingConfig ? '' : ' and per-shell configs'}${removals.map((removal) => `; ${removal}`).join('')}, and \`--starship\` to remove Starship.`,
+    `- \`shell-configurator uninstall\` removes the Starship lines${run.state.keepExistingConfig ? '' : ' and per-shell configs'}${removals.map((removal) => `; ${removal}`).join('')}.`,
     '- `shell-configurator doctor` checks the setup.',
   ];
   return redactHome(`${lines.join('\n')}\n`);
