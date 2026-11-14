@@ -84,6 +84,23 @@ describe('planRollback / runRollback', () => {
     expect(read('rc')).toBe('three');
   });
 
+  it('checks each file again just before changing it', async () => {
+    fs.writeFileSync(file('rc'), 'one');
+    const manifest = await capturedRun(['rc', 'new'], () => {
+      fs.writeFileSync(file('rc'), 'two');
+      fs.writeFileSync(file('new'), 'created');
+    });
+    const steps = planRollback(manifest);
+    fs.writeFileSync(file('rc'), 'edited while the prompt was open');
+    fs.writeFileSync(file('new'), 'edited too');
+
+    const report = runRollback(manifest.runId, steps);
+
+    expect(report.actions.map((a) => a.status)).toEqual(['skipped', 'skipped']);
+    expect(read('rc')).toBe('edited while the prompt was open');
+    expect(read('new')).toBe('edited too');
+  });
+
   it('only plans in a dry run', async () => {
     fs.writeFileSync(file('rc'), 'one');
     const manifest = await capturedRun(['rc'], () => fs.writeFileSync(file('rc'), 'two'));

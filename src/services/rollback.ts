@@ -68,7 +68,7 @@ export interface RollbackStep {
   path: string;
   detail: string;
   /** Changes the file; a step without one is skipped. */
-  run?: () => { status: 'restored' | 'removed'; detail: string };
+  run?: () => { status: 'restored' | 'removed' | 'skipped'; detail: string };
 }
 
 export interface RollbackAction {
@@ -89,8 +89,11 @@ export interface RollbackReport {
  * alone, so a rollback never overwrites later edits; roll back the later run
  * first.
  */
+const CHANGED_SINCE = 'changed since that run, so it is left as it is';
+
 export function planRollback(manifest: RunManifest): RollbackStep[] {
   return manifest.files.map((file) => {
+    const unchanged = () => hashOf(file.path) === file.after;
     let current: string | null;
     try {
       current = hashOf(file.path);
@@ -98,13 +101,14 @@ export function planRollback(manifest: RunManifest): RollbackStep[] {
       return { path: file.path, detail: `cannot be read: ${errorMessage(err)}` };
     }
     if (current !== file.after) {
-      return { path: file.path, detail: 'changed since that run, so it is left as it is' };
+      return { path: file.path, detail: CHANGED_SINCE };
     }
     if (file.before === null) {
       return {
         path: file.path,
         detail: 'delete it: that run created it',
         run: () => {
+          if (!unchanged()) return { status: 'skipped', detail: CHANGED_SINCE };
           fs.rmSync(file.path, { force: true });
           return { status: 'removed', detail: 'deleted it: that run created it' };
         },
@@ -115,6 +119,7 @@ export function planRollback(manifest: RunManifest): RollbackStep[] {
       path: file.path,
       detail: 'put back its content from before that run',
       run: () => {
+        if (!unchanged()) return { status: 'skipped', detail: CHANGED_SINCE };
         const content = fs.readFileSync(copy, 'utf8');
         fs.mkdirSync(path.dirname(file.path), { recursive: true });
         writeFileAtomic(file.path, content);
