@@ -7,9 +7,9 @@ import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { posixShellQuote } from './config/shells.ts';
 import { restoreConfigBackups, writeFileAtomic } from './generators/shellRc.ts';
 import { generateToml } from './generators/starship.ts';
-import type { CliFlags } from './services/args.ts';
+import type { CliFlags, Subcommand } from './services/args.ts';
 import { parseCliArgs, quoteArgv, SUBCOMMANDS } from './services/args.ts';
-import { COMPLETION_SHELLS, type CompletionShell } from './services/cliSurface.ts';
+import { COMPLETION_SHELLS, type CompletionShell, SUBCOMMAND_INFO } from './services/cliSurface.ts';
 import { completionScript } from './services/completions.ts';
 import {
   collectDebugInfo,
@@ -320,28 +320,14 @@ function presentFlags(flags: CliFlags): string[] {
   return present;
 }
 
-const LOOK_FLAGS = [
-  '--preset',
-  '--palette',
-  '--powerline',
-  '--no-powerline',
-  '--font',
-  '--has-nerd-font',
-  '--no-nerd-font',
-  '--character',
-  '--state',
-];
-const TIMINGS_FLAGS = new Set([...LOOK_FLAGS, '--config', '--json']);
-const SHARE_FLAGS = new Set([...LOOK_FLAGS, '-o/--output']);
-const UNINSTALL_FLAGS = new Set([
-  '--shells',
-  '--font',
-  '--starship',
-  '--yes',
-  '--dry-run',
-  '--json',
-]);
-const ROLLBACK_FLAGS = new Set(['--list', '--run', '--yes', '--dry-run', '--json']);
+/** The flags SUBCOMMAND_INFO describes for `subcommand`, as presentFlags names them. */
+function acceptedFlags(subcommand: Subcommand): Set<string> {
+  return new Set(
+    SUBCOMMAND_INFO[subcommand].flags.flatMap((info) =>
+      info.name === '--output' ? ['-o/--output'] : info.name === '--import' ? [] : [info.name]
+    )
+  );
+}
 
 function warnIgnoredFlags(flags: CliFlags, subcommand: string): void {
   if (flags.stateFile) return;
@@ -445,7 +431,7 @@ export async function runUninstallCommand(
   command: string,
   io: UninstallIo = DEFAULT_UNINSTALL_IO
 ): Promise<void> {
-  const unused = presentFlags(flags).filter((flag) => !UNINSTALL_FLAGS.has(flag));
+  const unused = presentFlags(flags).filter((flag) => !acceptedFlags('uninstall').has(flag));
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with uninstall.`);
   }
@@ -517,7 +503,7 @@ export async function runRollbackCommand(
   command: string,
   io: PromptIo = DEFAULT_PROMPT_IO
 ): Promise<void> {
-  const unused = presentFlags(flags).filter((flag) => !ROLLBACK_FLAGS.has(flag));
+  const unused = presentFlags(flags).filter((flag) => !acceptedFlags('rollback').has(flag));
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with rollback.`);
   }
@@ -599,11 +585,12 @@ export async function runTimingsCommand(
   deps: ProbeDeps = DEFAULT_PROBE_DEPS
 ): Promise<void> {
   const present = presentFlags(flags);
-  const unused = present.filter((flag) => !TIMINGS_FLAGS.has(flag));
+  const accepted = acceptedFlags('timings');
+  const unused = present.filter((flag) => !accepted.has(flag));
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with timings.`);
   }
-  const building = present.filter((flag) => LOOK_FLAGS.includes(flag));
+  const building = present.filter((flag) => flag !== '--config' && flag !== '--json');
   if (flags.configFile && building.length > 0) {
     throw new CliUsageError(
       `--config times an existing file, so ${building.join(', ')} cannot be used with it.`
@@ -640,7 +627,7 @@ export async function runTimingsCommand(
  * the state card that rebuilds it. -o writes it to a file instead.
  */
 export function runShareCommand(flags: CliFlags): void {
-  const unused = presentFlags(flags).filter((flag) => !SHARE_FLAGS.has(flag));
+  const unused = presentFlags(flags).filter((flag) => !acceptedFlags('share').has(flag));
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with share.`);
   }
