@@ -60,6 +60,7 @@ vi.mock('../../services/history.ts', async () => {
 });
 
 import type { ModuleId } from '../../config/modules.ts';
+import { getShell } from '../../config/shells.ts';
 import type { CliFlags } from '../../services/args.ts';
 import { CliRunError, CliUsageError } from '../../services/errors.ts';
 import {
@@ -936,6 +937,25 @@ describe('runApply', () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('prints the setup command of a shell set up by hand', async () => {
+    mockRunInstallTasks.mockResolvedValue([
+      {
+        id: 'rc_nushell',
+        label: 'Configure nushell',
+        status: 'skipped',
+        note: getShell('nushell')!.manualNote,
+      },
+    ] as never);
+
+    await runApply(flags({ subcommand: 'apply', shells: ['nushell'] }));
+
+    const output = stdoutWrite.mock.calls
+      .map((call: [string, ...unknown[]]) => String(call[0]))
+      .join('');
+    expect(output).toContain('Nushell is set up by hand.');
+    expect(output).toContain(`  ${getShell('nushell')!.initLine}\n`);
   });
 
   it('refuses a dry run with no shells, as the real run does', async () => {

@@ -92,7 +92,7 @@ export const SHELLS: ShellDef[] = [
     get adoptInitLine() {
       return nushellAutoloadCommand('rm -f ($d | path join starship-config.nu)');
     },
-    manualNote: 'Run the command above from Bash (it invokes Nushell to write its autoload files).',
+    manualNote: 'Run its setup command from Bash (it invokes Nushell to write its autoload files).',
     get initPath() {
       return path.join(nushellDataDir(), 'vendor', 'autoload', 'starship.nu');
     },
@@ -111,7 +111,7 @@ export const SHELLS: ShellDef[] = [
       return `$env:STARSHIP_CONFIG = '${configPath}'; Invoke-Expression (&starship init powershell)`;
     },
     adoptInitLine: 'Invoke-Expression (&starship init powershell)',
-    manualNote: 'Add the above line to your $PROFILE file in PowerShell.',
+    manualNote: 'Add its setup line to your $PROFILE file in PowerShell.',
     get initPath() {
       return path.join(configHome(), 'powershell', 'Microsoft.PowerShell_profile.ps1');
     },
@@ -179,10 +179,11 @@ function nushellAutoloadCommand(configStep: string): string {
 
 /** Nushell's `$nu.data-dir`. */
 function nushellDataDir(): string {
-  if (process.platform === 'darwin') {
-    return path.join(homeDir(), 'Library', 'Application Support', 'nushell');
-  }
-  return path.join(xdgBaseDir('XDG_DATA_HOME', path.join(homeDir(), '.local', 'share')), 'nushell');
+  const fallback =
+    process.platform === 'darwin'
+      ? path.join(homeDir(), 'Library', 'Application Support')
+      : path.join(homeDir(), '.local', 'share');
+  return path.join(xdgBaseDir('XDG_DATA_HOME', fallback), 'nushell');
 }
 
 export function posixShellQuote(value: string): string {

@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { MODULES } from '../config/modules.ts';
 import { PALETTES } from '../config/palettes.ts';
 import { PRESETS, powerlineDroppedReason } from '../config/presets.ts';
-import { SHELLS } from '../config/shells.ts';
+import { getShell, SHELLS, type ShellDef, setupCommand } from '../config/shells.ts';
 import { statusLine, statusMark } from '../config/status.ts';
 import { getSharedConfigPath, getShellConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
@@ -263,6 +263,18 @@ function formatTask(t: InstallTask): string {
 /** The plain-text plan/applied view `apply` prints to stdout. */
 function printTasks(tasks: InstallTask[]): void {
   for (const task of tasks) process.stdout.write(`  ${formatTask(task)}\n`);
+}
+
+/** The setup command of each selected shell that is set up by hand. */
+function printManualSetup(state: WizardState): void {
+  const manual = state.selectedShells
+    .map((id) => getShell(id))
+    .filter((shell): shell is ShellDef => Boolean(shell && !shell.rcFile));
+  for (const shell of manual) {
+    process.stdout.write(
+      `\n${shell.label} is set up by hand. ${shell.manualNote ?? ''}\n  ${setupCommand(shell, state.keepExistingConfig)}\n`
+    );
+  }
 }
 
 /** Cap on how long an --import-url fetch may hang before it is aborted. */
@@ -536,6 +548,7 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
         `${plan.installStarship ? 'will install Starship' : starshipInstalled ? 'Starship is already installed' : 'will skip Starship'}\n`
     );
     printTasks(plan.tasks);
+    printManualSetup(state);
     const config = plan.config;
     if (config.kind === 'per-shell') {
       process.stdout.write(`\nGenerated starship.toml:\n\n${config.toml}`);
@@ -608,6 +621,7 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
   const { result: results, runId } = captured;
   const failed = results.some((t) => t.status === 'failed');
   printTasks(results);
+  printManualSetup(state);
 
   const exitCode = cancelledBy ? signalExitCode(cancelledBy) : failed ? 1 : 0;
   if (exitCode !== 0) process.exitCode = exitCode;

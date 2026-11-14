@@ -70,8 +70,22 @@ describe('planUninstall', () => {
     const steps = await planUninstall({}, makeDeps([], ['nushell']));
     expect(ids(steps)).toEqual(['rc_nushell', 'config_nushell']);
     expect(steps[0]!.run).toBeUndefined();
-    expect(steps[0]!.detail).toContain(getShell('nushell')!.initPath!);
+    expect(steps[0]!.detail).toBe(
+      `set up by hand: delete ${getShell('nushell')!.initPath} and ${getShell('nushell')!.additionalInitPaths![0]} yourself`
+    );
     expect(steps[1]!.run).toBeDefined();
+  });
+
+  it('keeps Starship for a hand-set-up shell without telling to add it to --shells', async () => {
+    const deps = makeDeps([], ['nushell'], {
+      startsStarship: vi.fn((id: ShellId) => id === 'nushell'),
+    });
+
+    const steps = await planUninstall({ shells: ['nushell'], starship: true }, deps);
+
+    expect(steps.at(-1)!.detail).toBe(
+      'kept: Nushell would still start it; remove the setup of Nushell by hand first'
+    );
   });
 
   it('removes the font before Starship, after the shells', async () => {

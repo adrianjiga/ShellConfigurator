@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getShell, SHELLS } from '../config/shells.ts';
+import { getShell, SHELLS, type ShellDef } from '../config/shells.ts';
 import { statusLine } from '../config/status.ts';
 import {
   bashLoginBlockFiles,
@@ -154,7 +154,9 @@ function shellSteps(facts: ShellFacts, explicit: boolean, deps: UninstallDeps): 
     steps.push({
       id: `rc_${shellId}`,
       title: `${shell.label} setup`,
-      detail: `set up by hand: remove the Starship lines from ${shell.initPath} yourself`,
+      detail: shell.additionalInitPaths
+        ? `set up by hand: delete ${[shell.initPath, ...shell.additionalInitPaths].join(' and ')} yourself`
+        : `set up by hand: remove the Starship lines from ${shell.initPath} yourself`,
     });
   }
   const config = getShellConfigPath(shellId);
@@ -202,16 +204,28 @@ async function fontStep(fontId: string, deps: UninstallDeps): Promise<UninstallS
   };
 }
 
-const keptBecause = (shells: string[]) =>
-  `kept: ${shells.join(', ')} would still start it; remove those init lines (or add the shells to --shells) first`;
+function keptBecause(shells: ShellDef[]): string {
+  const rc = shells.filter((shell) => shell.rcFile);
+  const byHand = shells.filter((shell) => !shell.rcFile);
+  const remove = [
+    ...(rc.length > 0 ? ['those init lines (or add the shells to --shells)'] : []),
+    ...(byHand.length > 0
+      ? [`the setup of ${byHand.map((shell) => shell.label).join(', ')} by hand`]
+      : []),
+  ];
+  return `kept: ${shells.map((shell) => shell.label).join(', ')} would still start it; remove ${remove.join(' and ')} first`;
+}
 
-async function starshipStep(stillStarting: string[], deps: UninstallDeps): Promise<UninstallStep> {
+async function starshipStep(
+  stillStarting: ShellDef[],
+  deps: UninstallDeps
+): Promise<UninstallStep> {
   const plan = await deps.plannedStarshipRemoval(await deps.detectPackageManager());
   if ((plan.kind === 'script' || plan.kind === 'package') && stillStarting.length > 0) {
     return { id: 'starship', title: 'Starship', detail: keptBecause(stillStarting) };
   }
   const remove = (done: string) => async (): Promise<StepOutcome> => {
-    const starting = SHELLS.filter((s) => deps.startsStarship(s.id, false)).map((s) => s.label);
+    const starting = SHELLS.filter((s) => deps.startsStarship(s.id, false));
     if (starting.length > 0) return { detail: keptBecause(starting), status: 'skipped' };
     await deps.removeStarship(plan);
     deps.forgetStarshipVersion();
@@ -273,9 +287,7 @@ export async function planUninstall(
   if (options.fontId) steps.push(await fontStep(options.fontId, deps));
   if (options.starship) {
     const cleanedIds = new Set(cleaned.map((f) => f.shellId));
-    const stillStarting = SHELLS.filter((s) => deps.startsStarship(s.id, cleanedIds.has(s.id))).map(
-      (s) => s.label
-    );
+    const stillStarting = SHELLS.filter((s) => deps.startsStarship(s.id, cleanedIds.has(s.id)));
     const rcSteps = steps.filter((step) => step.id.startsWith('rc_') && step.run).map((s) => s.id);
     const step = await starshipStep(stillStarting, deps);
     steps.push(step.run && rcSteps.length > 0 ? { ...step, after: rcSteps } : step);

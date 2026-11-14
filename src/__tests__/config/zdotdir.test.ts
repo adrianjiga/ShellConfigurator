@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getShell } from '../../config/shells.ts';
+import { stubPlatform } from '../helpers/platform.ts';
 
 let home: string;
 const zshrc = () => getShell('zsh')!.rcFile;
@@ -42,5 +43,21 @@ describe('the zsh rc file', () => {
   it('falls back to ~/.zshrc when the setting names a variable it cannot know', () => {
     fs.writeFileSync(path.join(home, '.zshenv'), 'ZDOTDIR=$DOTFILES/zsh\n');
     expect(zshrc()).toBe(path.join(home, '.zshrc'));
+  });
+});
+
+describe('the Nushell autoload folder', () => {
+  it('follows XDG_DATA_HOME on macOS too, as Nushell does', () => {
+    const restore = stubPlatform('darwin');
+    try {
+      vi.stubEnv('XDG_DATA_HOME', path.join(home, 'data'));
+      expect(getShell('nushell')!.initPath).toBe(
+        path.join(home, 'data', 'nushell', 'vendor', 'autoload', 'starship.nu')
+      );
+      vi.stubEnv('XDG_DATA_HOME', undefined);
+      expect(getShell('nushell')!.initPath).toContain(path.join('Library', 'Application Support'));
+    } finally {
+      restore();
+    }
   });
 });
