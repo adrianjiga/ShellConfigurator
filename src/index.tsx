@@ -13,6 +13,7 @@ import { CliRunError, CliUsageError } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
 import { lastRunShells, recordRunSafely } from './services/history.ts';
 import { formatRepairReport, runRepair } from './services/repair.ts';
+import { captureRun, trackedFiles } from './services/runCapture.ts';
 import { restoreTty } from './services/tty.ts';
 import {
   DEFAULT_UNINSTALL_DEPS,
@@ -35,7 +36,13 @@ export function recordInstallOutcome(
 ): void {
   installFailed = results?.some((t) => t.status === 'failed') ?? false;
   if (results && state) {
-    recordRunSafely({ kind: 'install', state, results, exitCode: installFailed ? 1 : 0 });
+    recordRunSafely({
+      kind: 'install',
+      state,
+      results,
+      exitCode: installFailed ? 1 : 0,
+      runId: state.runId,
+    });
   }
 }
 
@@ -314,7 +321,9 @@ export async function runUninstallCommand(
     }
   }
 
-  const report = await runUninstall(steps, { dryRun });
+  const { result: report, runId } = changes
+    ? await captureRun(trackedFiles(), () => runUninstall(steps))
+    : { result: await runUninstall(steps, { dryRun }), runId: null };
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {
@@ -328,7 +337,9 @@ export async function runUninstallCommand(
     }
   }
   if (!report.ok) process.exitCode = 1;
-  if (changes) recordRunSafely({ kind: 'uninstall', command, exitCode: report.ok ? 0 : 1 });
+  if (changes) {
+    recordRunSafely({ kind: 'uninstall', command, exitCode: report.ok ? 0 : 1, runId });
+  }
 }
 
 /**

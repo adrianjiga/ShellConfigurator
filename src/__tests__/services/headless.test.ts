@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { captureRun, trackedFiles } from '../../services/runCapture.ts';
 
 const {
   mockDetectInstalledShells,
@@ -640,6 +641,10 @@ describe('runApply', () => {
 
   it('runs the install pipeline and records a successful run in history', async () => {
     mockRunInstallTasks.mockResolvedValue(doneTasks as never);
+    vi.mocked(captureRun).mockImplementationOnce(async (files, run) => {
+      expect(files).toEqual(trackedFiles());
+      return { result: await run(), runId: 'run-3' };
+    });
     await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }), 'apply --shells zsh');
 
     expect(mockRunInstallTasks).toHaveBeenCalled();
@@ -650,6 +655,7 @@ describe('runApply', () => {
         command: 'apply --shells zsh',
         results: doneTasks,
         exitCode: 0,
+        runId: 'run-3',
       })
     );
     expect(process.exitCode).toBeUndefined();

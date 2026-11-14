@@ -70,6 +70,7 @@ function runtimeDefaults(): Pick<
   | 'dryRun'
   | 'installResults'
   | 'sharedConfigToml'
+  | 'runId'
 > {
   return {
     step: 'welcome',
@@ -77,6 +78,7 @@ function runtimeDefaults(): Pick<
     installedShells: [],
     terminal: null,
     container: false,
+    runId: null,
     dryRun: false,
     installResults: [],
     sharedConfigToml: null,

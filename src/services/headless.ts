@@ -30,6 +30,7 @@ import {
   plannedResetShells,
   runInstallTasks,
 } from './installTasks.ts';
+import { captureRun, trackedFiles } from './runCapture.ts';
 import { parseState, serializeState } from './state.ts';
 
 const SHELL_IDS = new Set<string>(SHELLS.map((s) => s.id));
@@ -437,7 +438,9 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
     return;
   }
 
-  const results = await runInstallTasks(state, DEFAULT_INSTALL_TASK_DEPS, () => {});
+  const { result: results, runId } = await captureRun(trackedFiles(), () =>
+    runInstallTasks(state, DEFAULT_INSTALL_TASK_DEPS, () => {})
+  );
   const failed = results.some((t) => t.status === 'failed');
   printTasks(results);
 
@@ -449,5 +452,6 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
     command,
     results,
     exitCode: failed ? 1 : 0,
+    runId,
   });
 }

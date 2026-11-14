@@ -101,6 +101,7 @@ import {
 } from '../index.tsx';
 import { parseCliArgs } from '../services/args.ts';
 import { CliRunError, CliUsageError } from '../services/errors.ts';
+import { captureRun } from '../services/runCapture.ts';
 import { serializeState } from '../services/state.ts';
 import type { UninstallDeps } from '../services/uninstall.ts';
 import { DEFAULT_STATE, type InstallTask, type ShellId } from '../types.ts';
@@ -300,11 +301,13 @@ describe('index wizard history recording', () => {
       ...DEFAULT_STATE,
       preset: 'pure-prompt',
       selectedShells: ['zsh'],
+      runId: 'run-5',
     });
 
     expect(mockRecordRun).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'install',
+        runId: 'run-5',
         state: expect.objectContaining({ preset: 'pure-prompt', selectedShells: ['zsh'] }),
         exitCode: 0,
         results: done,
@@ -741,6 +744,10 @@ describe('index uninstall command', () => {
   });
 
   it('removes everything once confirmed, records the run and prints how to undo it', async () => {
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
+      result: await run(),
+      runId: 'run-9',
+    }));
     const io = fakeIo(
       {},
       {
@@ -762,6 +769,7 @@ describe('index uninstall command', () => {
       kind: 'uninstall',
       command: 'uninstall',
       exitCode: 0,
+      runId: 'run-9',
     });
   });
 
