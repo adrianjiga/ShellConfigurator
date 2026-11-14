@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { colorsEnabled, uiColor } from '../config/colors.ts';
 import {
   getModule,
@@ -129,7 +129,8 @@ export function PromptPreview({
   );
 }
 
-function RealPromptFrame({ text, addNewline }: { text: string; addNewline: boolean }) {
+/** The bordered terminal both previews draw in, below a fake previous command. */
+function PromptFrame({ addNewline, children }: { addNewline: boolean; children: ReactNode }) {
   return (
     <Box
       borderStyle="round"
@@ -138,13 +139,20 @@ function RealPromptFrame({ text, addNewline }: { text: string; addNewline: boole
       flexDirection="column"
       marginTop={1}
     >
-      {/* Simulated previous command output, as in the static frame */}
       <Text color={uiColor('gray')}>$ some-command</Text>
       <Text color={uiColor('gray')}>output line...</Text>
-      {/* The captured output is trimmed, so add_newline's blank line is drawn here. */}
       {addNewline && <Box height={1} />}
-      <Text wrap="wrap">{text}</Text>
+      {children}
     </Box>
+  );
+}
+
+function RealPromptFrame({ text, addNewline }: { text: string; addNewline: boolean }) {
+  // The captured output is trimmed, so add_newline's blank line is drawn by the frame.
+  return (
+    <PromptFrame addNewline={addNewline}>
+      <Text wrap="wrap">{text}</Text>
+    </PromptFrame>
   );
 }
 
@@ -222,18 +230,7 @@ function StaticPromptFrame({ state: chosen }: { state: WizardState }) {
   }
 
   return (
-    <Box
-      borderStyle="round"
-      borderColor={uiColor('gray')}
-      padding={1}
-      flexDirection="column"
-      marginTop={1}
-    >
-      {/* Simulated previous command output */}
-      <Text color={uiColor('gray')}>$ some-command</Text>
-      <Text color={uiColor('gray')}>output line...</Text>
-      {state.addNewline && <Box height={1} />}
-
+    <PromptFrame addNewline={state.addNewline}>
       {/* Left prompt */}
       <Box flexDirection="row" flexWrap="wrap">
         {renderSide(leftModules, 'left')}
@@ -251,6 +248,6 @@ function StaticPromptFrame({ state: chosen }: { state: WizardState }) {
           {renderSide(rightModules, 'right')}
         </Box>
       )}
-    </Box>
+    </PromptFrame>
   );
 }
