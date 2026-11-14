@@ -414,6 +414,32 @@ describe('installShell', () => {
     });
   });
 
+  it.each([
+    ['zsh', 'pacman', ['pacman', '-Sy', '--noconfirm', '--needed', 'zsh']],
+    ['fish', 'dnf', ['dnf', 'install', '-y', 'fish']],
+    ['nushell', 'pacman', ['pacman', '-Sy', '--noconfirm', '--needed', 'nushell']],
+    ['nushell', 'dnf', ['dnf', 'install', '-y', 'nushell']],
+    ['nushell', 'apk', ['apk', 'add', '--no-cache', 'nushell']],
+  ] as const)('installs %s via %s with sudo', async (shell, pm, command) => {
+    await installShell(shell, pm);
+    expect(mockSpawn).toHaveBeenCalledWith('sudo', [...command], { stdio: 'inherit' });
+  });
+
+  it.each([
+    ['nushell', ['install', 'nushell']],
+    ['powershell', ['install', 'powershell']],
+  ] as const)('installs %s via brew', async (shell, args) => {
+    await installShell(shell, 'brew');
+    expect(mockSpawn).toHaveBeenCalledWith('brew', [...args], { stdio: 'inherit' });
+  });
+
+  it.each(['pacman', 'dnf', 'apk'] as const)('has no powershell package on %s', async (pm) => {
+    await expect(installShell('powershell', pm)).rejects.toThrow(
+      `No package for powershell on ${pm}`
+    );
+    expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
   it('throws a clear error on the script fallback (no package manager)', async () => {
     await expect(installShell('zsh', 'script')).rejects.toThrow('Cannot auto-install zsh');
     expect(mockSpawn).not.toHaveBeenCalled();
@@ -523,6 +549,22 @@ describe('installNerdFont', () => {
         expect.anything()
       );
       expect(mockSpawn).not.toHaveBeenCalledWith('fc-cache', expect.anything(), expect.anything());
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
+  it('does not run fc-cache on macOS', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    try {
+      respondWithZip({ 'FiraCodeNerdFont-Regular.ttf': 'font' });
+      await installNerdFont('FiraCode');
+      expect(mockRunCapture).not.toHaveBeenCalledWith(
+        'fc-cache',
+        expect.anything(),
+        expect.anything()
+      );
     } finally {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     }
@@ -714,6 +756,23 @@ describe('installNerdFont checksum verification', () => {
     expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
+  it('refuses a digest in any other format than sha256', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).includes('api.github.com/repos/ryanoasis/nerd-fonts/releases/latest')) {
+          return okResponse({
+            json: async () => ({ assets: [{ name: 'FiraCode.zip', digest: 'md5:abc123' }] }),
+          });
+        }
+        return okResponse({ arrayBuffer: async () => zipWith({ 'a.ttf': 'font' }) });
+      })
+    );
+
+    await expect(installNerdFont('FiraCode')).rejects.toThrow('No sha256 digest');
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+  });
+
   it('fails when the checksum lookup itself cannot be fetched', async () => {
     vi.stubGlobal(
       'fetch',
@@ -801,6 +860,17 @@ describe('setDefaultShell', () => {
 
     expect(String(error)).toContain('Command failed with exit code 1');
     expect(String(error)).not.toContain('/etc/shells');
+  });
+
+  it('keeps the chsh failure as the cause of the error it reports', async () => {
+    mockExecFileSync.mockReturnValue('/bin/zsh\n');
+    mockReadFileSync.mockReturnValue('/bin/zsh\n');
+    spawnOutcome({ status: 1 });
+
+    const error = (await setDefaultShell('zsh').catch((err: Error) => err)) as Error;
+
+    expect(error.message).toMatch(/^Could not set .*zsh as the default shell: /);
+    expect(String(error.cause)).toContain('Command failed with exit code 1');
   });
 
   it('says chsh is missing instead of blaming /etc/shells', async () => {
