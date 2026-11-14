@@ -70,6 +70,7 @@ try {
   assert.ok(review.includes('Write config files'), 'review missing config task');
   assert.ok(review.includes('Configure bash'), 'review missing bash rc task');
 
+  await sleep(600);
   await press(ENTER, 'to exit', 240000);
 
   const done = show();

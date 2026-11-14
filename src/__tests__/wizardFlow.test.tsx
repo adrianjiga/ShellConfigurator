@@ -116,6 +116,8 @@ afterEach(() => {
   mockInstallNerdFont.mockReset().mockResolvedValue(undefined);
 });
 beforeEach(() => {
+  let clock = Date.now();
+  vi.spyOn(Date, 'now').mockImplementation(() => (clock += 1000));
   vi.clearAllMocks();
   setAdvanceDelayForTests(0);
 });

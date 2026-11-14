@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ReviewScreen } from '../../screens/ReviewScreen.tsx';
+import { REVIEW_SETTLE_MS, ReviewScreen } from '../../screens/ReviewScreen.tsx';
 import { plannedPathDir } from '../../services/installer.ts';
 import { explainPromptAsync } from '../../services/starshipProbe.ts';
 import { DEFAULT_STATE } from '../../types.ts';
@@ -154,13 +154,28 @@ describe('ReviewScreen', () => {
     expect(instance.lastFrame()).not.toContain('JetBrains Mono');
   });
 
-  it('confirms with Enter', async () => {
+  it('confirms with Enter once it has been on screen a moment', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     const { instance, onNext } = setup();
     await flush();
 
+    now.mockReturnValue(1_000_000 + REVIEW_SETTLE_MS);
     instance.stdin.write('\r');
     await flush();
     expect(onNext).toHaveBeenCalled();
+    now.mockRestore();
+  });
+
+  it('ignores an Enter held down from the step before', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    const { instance, onNext } = setup();
+    await flush();
+
+    now.mockReturnValue(1_000_000 + REVIEW_SETTLE_MS - 1);
+    instance.stdin.write('\r');
+    await flush();
+    expect(onNext).not.toHaveBeenCalled();
+    now.mockRestore();
   });
 
   it('does not start the run on a stray Space or Tab', async () => {
