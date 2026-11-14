@@ -18,6 +18,7 @@ function makeDeps(
   return {
     hasManagedRcBlock: vi.fn((id: ShellId) => wired.includes(id)),
     hasShellConfig: vi.fn((id: ShellId) => configs.includes(id)),
+    startsStarship: vi.fn(() => false),
     removeManagedRcBlocks: vi.fn(() => ({ removed: true, backedUpTo: '/h/.zshrc.bak-1' })),
     removeShellConfigFile: vi.fn(() => ({ removed: true, backedUpTo: '/h/zsh.toml.bak-1' })),
     detectPackageManager: vi.fn().mockResolvedValue('brew'),
@@ -75,6 +76,23 @@ describe('planUninstall', () => {
     expect(ids(steps)).toEqual(['rc_zsh', 'font', 'starship']);
     expect(steps[1]!.detail).toBe(`delete 2 font files from ${getNerdFontsDir()}`);
     expect(steps[2]!.detail).toBe('run brew uninstall starship');
+  });
+
+  it('keeps Starship while a shell would still start it', async () => {
+    const deps = makeDeps(['zsh', 'bash'], [], {
+      startsStarship: vi.fn((id: ShellId, cleaned: boolean) => id === 'bash' && !cleaned),
+    });
+
+    const steps = await planUninstall({ shells: ['zsh'], starship: true }, deps);
+
+    expect(deps.startsStarship).toHaveBeenCalledWith('zsh', true);
+    expect(deps.startsStarship).toHaveBeenCalledWith('bash', false);
+    expect(steps.at(-1)).toEqual({
+      id: 'starship',
+      title: 'Starship',
+      detail:
+        'kept: Bash would still start it; remove those init lines (or add the shells to --shells) first',
+    });
   });
 
   it('leaves Starship and fonts alone unless asked', async () => {

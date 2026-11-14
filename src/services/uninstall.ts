@@ -7,6 +7,7 @@ import {
   type RemovalResult,
   removeManagedRcBlocks,
   removeShellConfigFile,
+  startsStarship,
 } from '../generators/shellRc.ts';
 import type { PackageManager, ShellId } from '../types.ts';
 import { forgetStarshipVersion } from './cache.ts';
@@ -60,6 +61,7 @@ export interface UninstallOptions {
 export interface UninstallDeps {
   hasManagedRcBlock: (shellId: ShellId) => boolean;
   hasShellConfig: (shellId: ShellId) => boolean;
+  startsStarship: (shellId: ShellId, withoutManagedBlocks: boolean) => boolean;
   removeManagedRcBlocks: (shellId: ShellId) => RemovalResult;
   removeShellConfigFile: (shellId: ShellId) => RemovalResult;
   detectPackageManager: () => Promise<PackageManager>;
@@ -73,6 +75,7 @@ export interface UninstallDeps {
 export const DEFAULT_UNINSTALL_DEPS: UninstallDeps = {
   hasManagedRcBlock: (shellId) => hasManagedRcBlock(shellId),
   hasShellConfig: (shellId) => fs.existsSync(getShellConfigPath(shellId)),
+  startsStarship: (shellId, withoutManagedBlocks) => startsStarship(shellId, withoutManagedBlocks),
   removeManagedRcBlocks,
   removeShellConfigFile,
   detectPackageManager: () => detectPackageManagerAsync(),
@@ -161,8 +164,15 @@ async function fontStep(fontId: string, deps: UninstallDeps): Promise<UninstallS
   };
 }
 
-async function starshipStep(deps: UninstallDeps): Promise<UninstallStep> {
+async function starshipStep(stillStarting: string[], deps: UninstallDeps): Promise<UninstallStep> {
   const plan = deps.plannedStarshipRemoval(await deps.detectPackageManager());
+  if ((plan.kind === 'script' || plan.kind === 'package') && stillStarting.length > 0) {
+    return {
+      id: 'starship',
+      title: 'Starship',
+      detail: `kept: ${stillStarting.join(', ')} would still start it; remove those init lines (or add the shells to --shells) first`,
+    };
+  }
   const remove = (done: string) => async () => {
     await deps.removeStarship(plan);
     deps.forgetStarshipVersion();
@@ -208,11 +218,16 @@ export async function planUninstall(
     managedRc: deps.hasManagedRcBlock(shellId),
     config: deps.hasShellConfig(shellId),
   }));
-  const steps = facts
-    .filter((f) => explicit || f.managedRc || f.config)
-    .flatMap((f) => shellSteps(f, explicit, deps));
+  const cleaned = facts.filter((f) => explicit || f.managedRc || f.config);
+  const steps = cleaned.flatMap((f) => shellSteps(f, explicit, deps));
   if (options.fontId) steps.push(await fontStep(options.fontId, deps));
-  if (options.starship) steps.push(await starshipStep(deps));
+  if (options.starship) {
+    const cleanedIds = new Set(cleaned.map((f) => f.shellId));
+    const stillStarting = SHELLS.filter((s) => deps.startsStarship(s.id, cleanedIds.has(s.id))).map(
+      (s) => s.label
+    );
+    steps.push(await starshipStep(stillStarting, deps));
+  }
   return steps;
 }
 

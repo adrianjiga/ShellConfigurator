@@ -708,6 +708,7 @@ describe('index uninstall command', () => {
       deps: {
         hasManagedRcBlock: (id: ShellId) => id === 'zsh',
         hasShellConfig: (id: ShellId) => id === 'zsh',
+        startsStarship: () => false,
         removeManagedRcBlocks: vi.fn(() => ({ removed: true })),
         removeShellConfigFile: vi.fn(() => ({ removed: true })),
         detectPackageManager: vi.fn().mockResolvedValue('brew'),
