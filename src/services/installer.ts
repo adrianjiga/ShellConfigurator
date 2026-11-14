@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { getShellBinary } from '../config/shells.ts';
+import { getShellBinary, posixShellQuote } from '../config/shells.ts';
 import type { PackageManager, ShellId } from '../types.ts';
 import { cachedFont, cacheFont, sha256Digest } from './cache.ts';
 import { errorMessage } from './errors.ts';
@@ -456,10 +456,6 @@ export async function installNerdFont(
   return undefined;
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
-
 function listedLoginShells(): string[] {
   try {
     return fs
@@ -511,7 +507,7 @@ export async function setDefaultShell(shellId: ShellId, signal?: AbortSignal): P
     }
     throw new Error(
       `Could not set ${binary} as the default shell: ${shellPath} is not listed in ` +
-        `/etc/shells. Add it first (e.g. echo ${shellQuote(shellPath)} | sudo tee -a /etc/shells). ` +
+        `/etc/shells. Add it first (e.g. echo ${posixShellQuote(shellPath)} | sudo tee -a /etc/shells). ` +
         reason,
       { cause: err }
     );

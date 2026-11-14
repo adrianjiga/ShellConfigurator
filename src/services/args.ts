@@ -7,6 +7,7 @@
  * recognize is a usage error rather than a warning — a typo must never start
  * the real installer.
  */
+import { posixShellQuote } from '../config/shells.ts';
 import { CliUsageError } from './errors.ts';
 
 export type Subcommand = 'generate' | 'apply' | 'doctor' | 'repair';
@@ -171,9 +172,7 @@ function parseBooleanValue(raw: string): boolean | undefined {
 
 export function quoteArgv(argv: string[]): string {
   return argv
-    .map((arg) =>
-      arg === '' || /[^\w@%+=:,./-]/.test(arg) ? `'${arg.replaceAll("'", `'\\''`)}'` : arg
-    )
+    .map((arg) => (arg === '' || /[^\w@%+=:,./-]/.test(arg) ? posixShellQuote(arg) : arg))
     .join(' ');
 }
 
