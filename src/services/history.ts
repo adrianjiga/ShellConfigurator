@@ -4,6 +4,7 @@ import { writeFileAtomic } from '../generators/shellRc.ts';
 import type { InstallTask, ShellId, WizardState } from '../types.ts';
 import { errorMessage, isMissingFile } from './errors.ts';
 import { stateDir } from './paths.ts';
+import { redactUrls } from './redact.ts';
 import { parseState, serializeState } from './state.ts';
 
 /**
@@ -71,7 +72,7 @@ export function recordRun(options: RecordRunOptions): void {
     kind: options.kind,
     ...(snapshotId ? { snapshotId } : {}),
     ...(options.results ? { results: options.results } : {}),
-    ...(options.command ? { command: options.command } : {}),
+    ...(options.command ? { command: redactUrls(options.command) } : {}),
     ...(options.exitCode !== undefined ? { exitCode: options.exitCode } : {}),
     ...(options.runId ? { runId: options.runId } : {}),
     ...(options.rollbackOf ? { rollbackOf: options.rollbackOf } : {}),

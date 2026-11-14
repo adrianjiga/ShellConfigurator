@@ -34,6 +34,7 @@ import {
   plannedResetShells,
   runInstallTasks,
 } from './installTasks.ts';
+import { redactUrl, redactUrlText } from './redact.ts';
 import { CapturedRunError, captureRun, trackedFiles } from './runCapture.ts';
 import { parseState, serializeState } from './state.ts';
 import { whatChangedPath, writeWhatChangedSafely } from './whatChanged.ts';
@@ -287,20 +288,26 @@ export async function fetchImportedConfig(
   url: string,
   options: FetchConfigOptions = {}
 ): Promise<string> {
+  const shown = redactUrl(url);
   const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(url)?.[1]?.toLowerCase();
   if (scheme !== 'http' && scheme !== 'https') {
-    throw new CliUsageError(`--import-url expects an http(s) URL, got '${url}'`);
+    throw new CliUsageError(`--import-url expects an http(s) URL, got '${shown}'`);
   }
   if (scheme !== 'https') {
     throw new CliUsageError(
-      `--import-url requires an https URL, got '${url}' — the downloaded config runs ` +
+      `--import-url requires an https URL, got '${shown}' — the downloaded config runs ` +
         'commands on every prompt, so it must not travel over plain http.'
+    );
+  }
+  if (/^https:\/\/[^/?#]*@/i.test(url)) {
+    throw new CliUsageError(
+      `--import-url cannot send a user name or password ('${shown}'); ` +
+        'use a URL that needs none, such as a raw gist link.'
     );
   }
 
   const timeoutMs = options.timeoutMs ?? IMPORT_FETCH_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? IMPORT_FETCH_MAX_BYTES;
-  const shown = url.replace(/\/\/[^/@]*@/, '//');
 
   let response: Response;
   try {
@@ -310,14 +317,14 @@ export async function fetchImportedConfig(
     if (err instanceof DOMException && err.name === 'TimeoutError') {
       throw new CliRunError(`Could not fetch '${shown}': request timed out after ${timeoutMs}ms`);
     }
-    throw new CliRunError(`Could not fetch '${shown}': ${errorMessage(err)}`);
+    throw new CliRunError(`Could not fetch '${shown}': ${redactUrlText(errorMessage(err))}`);
   }
   if (!response.ok) {
     throw new CliRunError(`Could not fetch '${shown}': HTTP ${response.status}`);
   }
   if (response.url && !response.url.toLowerCase().startsWith('https://')) {
     throw new CliRunError(
-      `Could not fetch '${shown}': redirected to a non-https URL ${response.url}`
+      `Could not fetch '${shown}': redirected to a non-https URL ${redactUrl(response.url)}`
     );
   }
 

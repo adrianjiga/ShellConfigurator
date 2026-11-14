@@ -4,6 +4,7 @@ import { statusLine } from '../config/status.ts';
 import { writeFileAtomic } from '../generators/shellRc.ts';
 import { errorMessage } from './errors.ts';
 import { type HistoryKind, type HistoryRecord, readHistory } from './history.ts';
+import { redactUrls } from './redact.ts';
 import {
   hashOf,
   laterRunWrites,
@@ -66,7 +67,7 @@ export function rollbackRunsWithManifests(
         runId: r.runId,
         timestamp: r.timestamp,
         kind: r.kind,
-        ...(r.command ? { command: r.command } : {}),
+        ...(r.command ? { command: redactUrls(r.command) } : {}),
         files: manifest.files.length,
         rolledBack: isRolledBack(r.runId),
         ...(r.interrupted ? { interrupted: true } : {}),

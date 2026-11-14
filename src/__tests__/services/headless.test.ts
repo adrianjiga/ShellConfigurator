@@ -1139,16 +1139,30 @@ describe('runApply', () => {
     );
   });
 
-  it('keeps credentials out of fetch error messages', async () => {
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('boom'));
+  it('refuses a URL with a user name or password before fetching, without printing them', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
-    const error = await fetchImportedConfig('https://user:s3cret@example.com/config.toml').catch(
+    const error = await fetchImportedConfig(
+      'https://user:s3cret@example.com/config.toml?token=abc123'
+    ).catch((err: Error) => err);
+
+    expect(error).toBeInstanceOf(CliUsageError);
+    expect((error as Error).message).toContain('cannot send a user name or password');
+    expect((error as Error).message).not.toMatch(/s3cret|abc123/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('keeps the query out of fetch error messages, also the one fetch gives', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      new Error('failed: https://example.com/config.toml?token=abc123')
+    );
+
+    const error = await fetchImportedConfig('https://example.com/config.toml?token=abc123').catch(
       (err: Error) => err
     );
-    expect(error instanceof Error ? error.message : String(error)).not.toContain('s3cret');
-    expect(error instanceof Error ? error.message : String(error)).toContain(
-      "'https://example.com/config.toml'"
-    );
+
+    expect((error as Error).message).not.toContain('abc123');
+    expect((error as Error).message).toContain("'https://example.com/config.toml'");
   });
 
   it('rejects an HTTP error when fetching an imported config as a run failure', async () => {

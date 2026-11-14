@@ -140,6 +140,15 @@ describe('recordRun', () => {
     expect(run).toMatchObject({ kind: 'apply', command: 'apply --shells zsh', exitCode: 0 });
   });
 
+  it('records the command without URL credentials or tokens', () => {
+    recordRun({
+      kind: 'apply',
+      command: "apply --import-url 'https://alice:s3cret@example.com/cfg.toml?token=abc123'",
+    });
+
+    expect(readLedger()[0]?.command).toBe('apply --import-url https://example.com/cfg.toml');
+  });
+
   it('records no snapshot when the run has no state', () => {
     recordRun({ kind: 'uninstall' });
 

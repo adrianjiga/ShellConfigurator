@@ -8,7 +8,8 @@ export function redactHome(text: string, home: string = homeDir()): string {
   return text.replace(new RegExp(`${escaped}(?![^/\\s\`'":,)\\]])`, 'g'), '~');
 }
 
-function redactUrl(value: string): string {
+/** One URL without its credentials, query and fragment. */
+export function redactUrl(value: string): string {
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value;
   try {
     const url = new URL(value);
@@ -38,6 +39,7 @@ export function redactUrls(command: string): string {
   );
 }
 
-function redactUrlText(text: string): string {
+/** Every URL in free text without its credentials, query and fragment. */
+export function redactUrlText(text: string): string {
   return text.replace(/(\b[a-z][a-z0-9+.-]*:\/\/)([^/\s'"]*@)?([^\s'"?#]*)[^\s'"]*/gi, '$1$3');
 }
