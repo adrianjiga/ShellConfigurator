@@ -20,7 +20,7 @@ interface DoneScreenProps {
 }
 
 /** One scan per task; callers read .status/.error/.note from the same result. */
-function task(state: WizardState, id: string): InstallTask | undefined {
+function findTask(state: WizardState, id: string): InstallTask | undefined {
   return state.installResults.find((t) => t.id === id);
 }
 
@@ -30,17 +30,17 @@ function StatusMark({ status }: { status: ReportedStatus }) {
 }
 
 /** A task's outcome as one row, with its error or note beneath it. */
-function TaskRow({ task: result }: { task: InstallTask }) {
+function TaskRow({ task }: { task: InstallTask }) {
   return (
     <Box flexDirection="column">
       <Box flexDirection="row" gap={1}>
-        <StatusMark status={result.status} />
-        <Text>{result.label}</Text>
+        <StatusMark status={task.status} />
+        <Text>{task.label}</Text>
       </Box>
-      {(result.error || result.note) && (
+      {(task.error || task.note) && (
         <Box marginLeft={3}>
-          <Text color={uiColor(result.error ? 'red' : 'gray')} italic>
-            {result.error ?? result.note}
+          <Text color={uiColor(task.error ? 'red' : 'gray')} italic>
+            {task.error ?? task.note}
           </Text>
         </Box>
       )}
@@ -78,12 +78,12 @@ export function DoneScreen({ state }: DoneScreenProps) {
     }
   });
 
-  const starshipTask = task(state, TASK_IDS.starship);
-  const verifyTask = task(state, TASK_IDS.verify);
-  const configTask = task(state, TASK_IDS.config);
-  const fontTask = task(state, TASK_IDS.font);
-  const terminalTask = task(state, TASK_IDS.terminal);
-  const chshTask = task(state, TASK_IDS.chsh);
+  const starshipTask = findTask(state, TASK_IDS.starship);
+  const verifyTask = findTask(state, TASK_IDS.verify);
+  const configTask = findTask(state, TASK_IDS.config);
+  const fontTask = findTask(state, TASK_IDS.font);
+  const terminalTask = findTask(state, TASK_IDS.terminal);
+  const chshTask = findTask(state, TASK_IDS.chsh);
   const chshOk = chshTask?.status === 'done';
 
   const heading = state.dryRun
@@ -205,11 +205,11 @@ export function DoneScreen({ state }: DoneScreenProps) {
             {state.selectedShells.map((shellId) => {
               const shell = getShell(shellId);
               const wasInstalled = state.installedShells.includes(shellId);
-              const installTask = task(state, `shell_${shellId}`);
+              const installTask = findTask(state, `shell_${shellId}`);
               const installOk = wasInstalled || installTask?.status === 'done';
               // Each shell has its own rc task, so one shell failing no longer
               // marks the others as failed.
-              const rcTask = task(state, rcTaskId(shellId));
+              const rcTask = findTask(state, rcTaskId(shellId));
               const rcNote = rcTask?.note;
               return (
                 <Box key={shellId} flexDirection="column">
