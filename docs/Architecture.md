@@ -268,16 +268,17 @@ src/
 │   ├── SegmentsScreen.tsx     Module toggle list (used for left & right)
 │   ├── StyleScreen.tsx        Character + colour scheme picker
 │   ├── ShellScreen.tsx        Shell toggle list + default shell
-│   ├── ReviewScreen.tsx       Pre-install confirmation (plan + config + rc lines)
+│   ├── ReviewScreen.tsx       Pre-install confirmation (plan + config + files to write + rc diffs)
 │   ├── InstallingScreen.tsx   Renders install progress (runs installTasks service)
 │   └── DoneScreen.tsx         Summary, exit, one-key undo (`r` restores backups)
 ├── generators/
 │   ├── starship.ts            TOML config generation
-│   ├── shellRc.ts             RC file writing (plannedRcBlock) + per-shell/shared config output, backups, restore and removal
+│   ├── shellRc.ts             RC file planning (appliedRcContent/resetRcContent) and writing + per-shell/shared config output, backups, restore and removal
 │   └── toml.ts                TOML escaping helpers
 └── services/
     ├── args.ts                Hand-rolled, dependency-free CLI flag parser
     ├── headless.ts            generate/apply implementation + bounded --import-url fetch (routing is runHeadlessCommand in index.tsx)
+    ├── fileDiff.ts            Unified diff + plannedFileChanges: the configs and rc files a run would write, diffed against disk
     ├── preview.ts             Live preview: scratch-dir `starship prompt` + static fallback
     ├── detector.ts            Async system detection (PM, shells, Starship, terminal, container)
     ├── installer.ts           Install commands (Starship, fonts, shells, chsh) and Starship/font removal

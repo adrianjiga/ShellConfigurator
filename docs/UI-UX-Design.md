@@ -216,11 +216,14 @@ been written yet, so this is the last chance to change things (Esc) before the
 irreversible install/config-write phase.
 
 **Layout**: Install plan from `buildTaskList` (the `TaskPlan` component), the
-config paths with the generated TOML shown once (`ConfigPlan`), then a **Shell
-wiring** section with, per selected shell, the exact block `plannedRcBlock` will
-append (marker, a PATH line when a script install needs one, the
-`STARSHIP_CONFIG` export, and the init line), or the manual setup command for
-nushell/PowerShell. Paths are absolute:
+config paths with the generated TOML shown once (`ConfigPlan`), a **Files on
+disk** list of every config and rc file the run creates or edits with its added
+and removed line counts (paths under home shown as `~/…`), then a **Shell wiring**
+section with, per selected shell, the diff of its rc file against what is on disk
+(`plannedFileChanges`, from the same planner the real write uses: where the block
+goes, a PATH line when a script install needs one, the `STARSHIP_CONFIG` export,
+the init line, and any stale block it removes). An rc that is already set up says
+so; nushell/PowerShell show their manual setup command:
 
 ```
   Review your configuration
@@ -237,11 +240,18 @@ nushell/PowerShell. Paths are absolute:
       format = "$directory$character"
       ...
 
+  Files on disk
+    create ~/.config/starship/zsh.toml (+42 -0)
+    edit   ~/.zshrc (+4 -0)
+
   Shell wiring
     Zsh — /home/me/.zshrc
-      # Added by ShellConfigurator
-      export STARSHIP_CONFIG="/home/me/.config/starship/zsh.toml"
-      eval "$(starship init zsh)"
+      @@ -1,1 +1,5 @@
+       alias ll="ls -l"
+      +
+      +# Added by ShellConfigurator
+      +export STARSHIP_CONFIG='/home/me/.config/starship/zsh.toml'
+      +eval "$(starship init zsh)"
 ```
 
 When a shared `~/.config/starship.toml` already exists, a warning says it stays on

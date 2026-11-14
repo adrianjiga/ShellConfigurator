@@ -356,13 +356,17 @@ function applyShellConfig(
 // of the opposite mode (unset guard, adopt block, or per-shell export), so a
 // re-run can repair a polluted rc file.
 
-function plannedRcBlock(
+function appliedRcContent(
   shellId: ShellId,
-  pointAtSharedConfig: boolean,
-  pathDir: string | null
-): string[];
-// The marker + lines applyShellConfig appends to an rc file with no Starship
-// lines yet (empty for manual-only shells). ReviewScreen shows this exact block.
+  existing: string,
+  opts?: ApplyShellConfigOptions,
+  io?: RcIo
+): { content: string; applied: boolean; note?: string } | null;
+function resetRcContent(shellId: ShellId, existing: string, io?: RcIo): RcPlan | null;
+// What applyShellConfig / resetSharedShellConfig make of the rc text `existing`,
+// without writing: the writers call these and write `content` when it differs.
+// The dry-run diff and ReviewScreen use them too, so a preview never drifts from
+// the real write. Null for manual-only shells.
 
 function resetSharedShellConfig(shellId: ShellId): { applied: boolean; note?: string };
 // Removes a per-shell block an earlier run wrote (keeping its PATH line and the
@@ -766,10 +770,19 @@ shell-configurator apply [--state <file>] [generate flags] [--dry-run [--json]] 
                 response. A non-http(s) URL is a usage error; an HTTP error, an
                 empty or HTML body is a run error)
   --json        with --dry-run, print { dryRun, shells, installStarship, tasks,
-                config } instead of text; config is { kind: 'per-shell', toml },
+                config, changes } instead of text; config is { kind: 'per-shell', toml },
                 { kind: 'imported', path, toml } or { kind: 'kept', path, exists }.
                 A real apply with --json is a usage error
 ```
+
+A dry run also diffs every config and rc file the run would write against what is
+on disk (`plannedFileChanges` in `services/fileDiff.ts`), using the same planners
+as the real writers. The text output ends with `Changes to files on disk:` and a
+`git diff`-style unified diff per file, or `No config or rc file on disk would
+change.` In `--json`, `changes` is a list of `{ path, status: 'create' | 'modify',
+added, removed, diff }`, or `{ path, status: 'unreadable', error }` for a file it
+cannot read; files that would stay as they are are left out. Fonts, the Starship
+binary and terminal configs are not part of it.
 
 A real apply writes `~/.config/starship/WHAT-CHANGED.md` and ends with
 `What changed, and how to undo it: <path>`; the wizard's Done screen shows the

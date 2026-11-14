@@ -30,13 +30,13 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 ## At a glance
 
-| Status           | Items                                                                                                                                                |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · P4.1–P4.4 · P4.6 · P4.8 · #1 #2 #4 #5 #7 #8 #10 #11 #12 #13 #14 #17 #18 #19 #20 #22 #23 #24 #26 #27 |
-| TODO             | P4.5 · P4.7 · P4.9–P4.10 · P5.1–P5.3 · #6 #9 #15 #21 #25                                                                                             |
-| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy)                                                                                             |
-| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                                                              |
-| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title                                      |
+| Status           | Items                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · P4.1–P4.6 · P4.8 · #1 #2 #4 #5 #7 #8 #9 #10 #11 #12 #13 #14 #17 #18 #19 #20 #22 #23 #24 #26 #27 |
+| TODO             | P4.7 · P4.9–P4.10 · P5.1–P5.3 · #6 #15 #21 #25                                                                                                   |
+| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy)                                                                                         |
+| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                                                          |
+| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title                                  |
 
 ---
 
@@ -262,11 +262,16 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
   characters and files. They are tested in real bash, zsh and fish, and the generate smoke loads the bash
   script on every distro cell. `--run` ids are not completed.
 
-**P4.5 — Dry-run diff vs disk (#9)** — **TODO**
+**P4.5 — Dry-run diff vs disk (#9)** — **DONE**
 
 - Compare the would-be generated TOML and rc additions against what is currently on disk (backups already exist via `backupSharedConfig`/`restoreConfigBackups`).
 - **Why.** "Preview" today shows the plan; a diff shows the _consequence_. Turns dry-run into a predictable pre-apply check and gives CI a readable artifact.
 - **How.** Reuse the toml/rc writers in a read-only mode; render a `git diff`-style output in the Review screen and/or `--json`. **Effort.** M. **D:** P1.2, P0.2.
+- **Shipped:** `applyShellConfig`/`resetSharedShellConfig` now write from the pure planners
+  `appliedRcContent`/`resetRcContent`, and `services/fileDiff.ts` (`plannedFileChanges`, a dependency-free
+  unified diff) diffs every config and rc file a run would write against disk. `apply --dry-run` prints a
+  diff per file, `--json` adds `changes`, and the Review screen lists the files and shows each rc file's
+  diff in place of the fixed block it showed before.
 
 **P4.6 — Post-run `WHAT-CHANGED.md` (#18)** — **DONE**
 
@@ -290,8 +295,8 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 - **Why.** Scripting surface that makes #1 a first-class API; also feeds completions.
 - **How.** Read-only renderers over `PRESETS`/`MODULE_DEFS`/`NERD_FONTS`; JSON branch on the dry-run report. **Effort.** S. **D:** P1.2, P4.5.
 - **Shipped:** `--list-presets`, `--list-modules`, `--list-fonts` (text, or data with `--json`) and
-  `apply --dry-run --json` (`{ dryRun, shells, installStarship, tasks, config }`). Done ahead of P4.5: the
-  JSON plan covers the generated config, and P4.5's diff against disk can add to it later.
+  `apply --dry-run --json` (`{ dryRun, shells, installStarship, tasks, config, changes }`, where `changes`
+  is P4.5's diff against disk).
 
 **P4.9 — `starship explain` in Review** — **TODO**
 
@@ -365,7 +370,7 @@ they can be picked up in parallel with any phase but each stays its own PR.
 
 ## Suggested next order (remaining work)
 
-1. **P4.5 (#9) dry-run diff**, then the rest of Phase 4 (P4.7 timings, P4.9 explain, P4.10 share).
+1. The rest of Phase 4: P4.7 timings, P4.9 explain, P4.10 share.
 2. Then **P5.1 (#6) transient prompt**, **P5.2 (#15) prompt-manager detection**, **P5.3 (#25) bootstrap**.
 
 ## Merge & verification strategy
