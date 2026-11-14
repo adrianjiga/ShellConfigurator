@@ -15,6 +15,7 @@ vi.mock('../services/detector.ts', () => ({
   detectCurrentShellAsync: vi.fn().mockResolvedValue('zsh'),
   detectTerminalAsync: vi.fn().mockResolvedValue(null),
   detectContainerAsync: vi.fn().mockResolvedValue(false),
+  detectRemoteSessionAsync: vi.fn().mockResolvedValue(null),
 }));
 
 const mocks = vi.hoisted(() => ({ exit: vi.fn() }));
@@ -109,6 +110,8 @@ describe('App wizard routing', () => {
     await press(instance, ' '); // drop the first segment
 
     const after = instance.lastFrame()?.match(/(\d+) left segments?/)?.[1];
+    expect(before).toMatch(/^\d+$/);
+    expect(after).toMatch(/^\d+$/);
     expect(Number(after)).toBe(Number(before) - 1);
   });
 });
@@ -120,5 +123,7 @@ describe('App Ctrl+C', () => {
     instance.stdin.write('\u0003');
     await flush();
     expect(mocks.exit).toHaveBeenCalled();
+    expect(process.exitCode).toBe(130);
+    process.exitCode = 0;
   });
 });

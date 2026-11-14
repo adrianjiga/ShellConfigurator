@@ -22,13 +22,18 @@ vi.mock('fs', () => ({
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+function expectBefore(text: string, first: string, second: string): void {
+  expect(text.indexOf(first)).toBeGreaterThanOrEqual(0);
+  expect(text.indexOf(second)).toBeGreaterThan(text.indexOf(first));
+}
+
 /** The content of the module's last atomic write (the temp-file write). */
 function lastWrittenContent(): string {
   return vi.mocked(fs.writeFileSync).mock.calls.at(-1)?.[1] as string;
 }
 
 import * as fs from 'node:fs';
-import { getShell } from '../../config/shells.ts';
+import { getShell, posixShellQuote } from '../../config/shells.ts';
 import {
   appliedRcContent,
   applyShellConfig,
@@ -51,10 +56,23 @@ import {
   writeSharedConfig,
   writeShellConfig,
 } from '../../generators/shellRc.ts';
+import { hasBinary } from '../helpers/binaries.ts';
 import { restoreEnv } from '../helpers/env.ts';
+import { stubPlatform } from '../helpers/platform.ts';
 
 const expectedConfigPath = path.join(os.homedir(), '.config', 'starship', 'zsh.toml');
 const expectedConfigDir = path.join(os.homedir(), '.config', 'starship');
+const ownBin = posixShellQuote(path.join(os.homedir(), '.local', 'bin'));
+
+beforeEach(() => {
+  vi.stubEnv('XDG_CONFIG_HOME', undefined);
+  vi.stubEnv('ZDOTDIR', undefined);
+  vi.stubEnv('STARSHIP_CONFIG', undefined);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('getShellConfigPath', () => {
   const savedEnv = { ...process.env };
@@ -88,7 +106,7 @@ describe('getShellConfigPath', () => {
 describe('writeShellConfig', () => {
   const savedEnv = { ...process.env };
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     delete process.env.STARSHIP_CONFIG;
     delete process.env.XDG_CONFIG_HOME;
   });
@@ -203,7 +221,7 @@ describe('writeShellConfig', () => {
 describe('writeSharedConfig', () => {
   const savedEnv = { ...process.env };
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     delete process.env.STARSHIP_CONFIG;
     delete process.env.XDG_CONFIG_HOME;
   });
@@ -253,10 +271,7 @@ describe('writeSharedConfig', () => {
 });
 
 describe('shellsWithStarshipInit', () => {
-  const rcFiles = {
-    zsh: getShell('zsh')?.rcFile ?? '',
-    fish: getShell('fish')?.rcFile ?? '',
-  };
+  const rcFile = (shellId: 'zsh' | 'fish') => getShell(shellId)!.rcFile!;
 
   function io(files: Record<string, string>) {
     return {
@@ -270,8 +285,8 @@ describe('shellsWithStarshipInit', () => {
       shellsWithStarshipInit(
         ['zsh', 'fish'],
         io({
-          [rcFiles.zsh]: 'eval "$(starship init zsh)"\n',
-          [rcFiles.fish]: 'set -gx EDITOR vim\n',
+          [rcFile('zsh')]: 'eval "$(starship init zsh)"\n',
+          [rcFile('fish')]: 'set -gx EDITOR vim\n',
         })
       )
     ).toEqual(['zsh']);
@@ -282,8 +297,8 @@ describe('shellsWithStarshipInit', () => {
       shellsWithStarshipInit(
         ['fish'],
         io({
-          [rcFiles.fish]: '',
-          [path.join(path.dirname(rcFiles.fish), 'conf.d', 'starship.fish')]: '',
+          [rcFile('fish')]: '',
+          [path.join(path.dirname(rcFile('fish')), 'conf.d', 'starship.fish')]: '',
         })
       )
     ).toEqual(['fish']);
@@ -300,7 +315,7 @@ describe('shellsWithStarshipInit', () => {
     expect(
       shellsWithStarshipInit(
         ['zsh', 'bash'],
-        io({ [rcFiles.zsh]: '# eval "$(starship init zsh)"\n' })
+        io({ [rcFile('zsh')]: '# eval "$(starship init zsh)"\n' })
       )
     ).toEqual([]);
   });
@@ -325,7 +340,12 @@ describe('hasStarshipInit', () => {
 });
 
 describe('applyShellConfig', () => {
-  beforeEach(() => vi.clearAllMocks());
+  let restorePlatform: () => void;
+  beforeEach(() => {
+    vi.resetAllMocks();
+    restorePlatform = stubPlatform('linux');
+  });
+  afterEach(() => restorePlatform());
 
   it('appends init line to shell rc file', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
@@ -349,7 +369,7 @@ describe('applyShellConfig', () => {
     const expected = `export STARSHIP_CONFIG='${expectedConfigPath}'`;
     expect(finalContent).toContain(expected);
     // The env must be set before `starship init` runs.
-    expect(finalContent.indexOf(expected)).toBeLessThan(finalContent.indexOf('starship init'));
+    expectBefore(finalContent, expected, 'starship init');
   });
 
   it('drops a stale unset guard from a CRLF rc file', () => {
@@ -409,20 +429,20 @@ describe('applyShellConfig', () => {
 
     applyShellConfig('fish', { ensurePathDir: "/Users/J Doe/$bin/it's" });
 
-    expect(lastWrittenContent()).toContain(`fish_add_path '/Users/J Doe/$bin/it'\\''s'`);
+    expect(lastWrittenContent()).toContain(`fish_add_path '/Users/J Doe/$bin/it\\'s'`);
   });
 
   it('keeps the PATH line of a per-shell block when switching to adopt mode', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(
       () =>
-        `# Added by ShellConfigurator\nexport PATH='/home/u/.local/bin':"$PATH"\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`
+        `# Added by ShellConfigurator\nexport PATH=${ownBin}:"$PATH"\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`
     );
 
     applyShellConfig('zsh', { pointAtSharedConfig: true });
 
     expect(lastWrittenContent()).toBe(
-      `# Added by ShellConfigurator (shared config)\nexport PATH='/home/u/.local/bin':"$PATH"\neval "$(starship init zsh)"\n`
+      `# Added by ShellConfigurator (shared config)\nexport PATH=${ownBin}:"$PATH"\neval "$(starship init zsh)"\n`
     );
   });
 
@@ -520,9 +540,7 @@ describe('applyShellConfig', () => {
 
     expect(result.applied).toBe(true);
     const finalContent = lastWrittenContent();
-    expect(finalContent.indexOf('STARSHIP_CONFIG')).toBeLessThan(
-      finalContent.indexOf('starship init zsh')
-    );
+    expectBefore(finalContent, 'STARSHIP_CONFIG', 'starship init zsh');
   });
 
   it('keeps user lines glued directly under a stale adopt block', () => {
@@ -573,9 +591,7 @@ describe('applyShellConfig', () => {
     applyShellConfig('zsh', { ensurePathDir: '/home/u/.local/bin' });
 
     const content = lastWrittenContent();
-    expect(content.indexOf(`export PATH='/home/u/.local/bin':"$PATH"`)).toBeLessThan(
-      content.indexOf('starship init zsh')
-    );
+    expectBefore(content, `export PATH='/home/u/.local/bin':"$PATH"`, 'starship init zsh');
   });
 
   it('adds a missing export inside its own managed block, above the init line', () => {
@@ -732,23 +748,28 @@ describe('applyShellConfig', () => {
     const result = applyShellConfig('nushell');
 
     expect(result.applied).toBe(false);
-    expect(result.note).toBeTruthy();
+    expect(result.note).toBe(
+      'Run its setup command from Bash (it invokes Nushell to write its autoload files).'
+    );
     expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
-  it('provides a Nushell setup command that Bash can parse', async () => {
-    const { execFileSync } = await import('node:child_process');
-    const command = getShell('nushell')!.initLine;
+  it.skipIf(!hasBinary('bash'))(
+    'provides a Nushell setup command that Bash can parse',
+    async () => {
+      const { execFileSync } = await import('node:child_process');
+      const command = getShell('nushell')!.initLine;
 
-    expect(command).toMatch(/^nu -c '/);
-    expect(() => execFileSync('bash', ['-n', '-c', command])).not.toThrow();
-  });
+      expect(command).toMatch(/^nu -c '/);
+      expect(() => execFileSync('bash', ['-n', '-c', command])).not.toThrow();
+    }
+  );
 
   it('returns manual note for powershell (no rc file)', () => {
     const result = applyShellConfig('powershell');
 
     expect(result.applied).toBe(false);
-    expect(result.note).toBeTruthy();
+    expect(result.note).toBe('Add its setup line to your $PROFILE file in PowerShell.');
     expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
@@ -891,7 +912,7 @@ describe('applyShellConfig', () => {
     const finalContent = lastWrittenContent();
     expect(finalContent).toContain(`export PATH='/home/u/.local/bin':"$PATH"`);
     // Order matters: `starship init` cannot resolve before PATH is set.
-    expect(finalContent.indexOf('export PATH')).toBeLessThan(finalContent.indexOf('starship init'));
+    expectBefore(finalContent, 'export PATH', 'starship init');
     expect(result.note).toContain('/home/u/.local/bin');
   });
 
@@ -954,8 +975,8 @@ describe('applyShellConfig', () => {
 
     const result = applyShellConfig('fish');
 
-    expect(result.applied).toBe(false);
-    expect(result.note).toBe('already configured');
+    expect(result.applied).toBe(true);
+    expect(result.note).toBe('removed a stale ShellConfigurator block');
     const written = lastWrittenContent();
     expect(written).toContain(`set -gx STARSHIP_CONFIG '${fishConfig}'`);
     expect(written).toContain('starship init fish | source');
@@ -987,7 +1008,7 @@ describe('applyShellConfig', () => {
 
     const result = applyShellConfig('zsh');
 
-    expect(result.applied).toBe(false);
+    expect(result.applied).toBe(true);
     const written = lastWrittenContent();
     expect(written).toContain('eval "$(starship init zsh)"');
     expect(written).toContain(`export STARSHIP_CONFIG='${expectedConfigPath}'`);
@@ -997,7 +1018,7 @@ describe('applyShellConfig', () => {
 
 describe('resetSharedShellConfig', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     // Clear any mock implementation left behind by an earlier test (e.g. the
     // applyShellConfig test that makes mkdirSync throw).
     vi.mocked(fs.mkdirSync).mockReset();
@@ -1052,16 +1073,16 @@ describe('resetSharedShellConfig', () => {
   });
 
   it('points a shell an earlier run wired per-shell back at the shared config', () => {
-    const original = `# Existing content\n# Added by ShellConfigurator\nexport PATH='/home/u/.local/bin':"$PATH"\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`;
+    const original = `# Existing content\n# Added by ShellConfigurator\nexport PATH=${ownBin}:"$PATH"\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`;
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() => original);
 
     expect(resetSharedShellConfig('zsh')).toEqual({ applied: true });
     const written = lastWrittenContent();
     expect(written).not.toContain('export STARSHIP_CONFIG');
-    expect(written).toContain(`export PATH='/home/u/.local/bin':"$PATH"`);
+    expect(written).toContain(`export PATH=${ownBin}:"$PATH"`);
     expect(written.match(/starship init zsh/g)).toHaveLength(1);
-    expect(written.indexOf('unset STARSHIP_CONFIG')).toBeLessThan(written.indexOf('starship init'));
+    expectBefore(written, 'unset STARSHIP_CONFIG', 'starship init');
 
     vi.mocked(fs.writeFileSync).mockClear();
     vi.mocked(fs.readFileSync).mockImplementation(() => written);
@@ -1104,7 +1125,7 @@ describe('resetSharedShellConfig', () => {
 
     const result = resetSharedShellConfig('fish');
 
-    expect(result).toEqual({ applied: false, note: 'sets its own STARSHIP_CONFIG' });
+    expect(result).toEqual({ applied: true, note: 'sets its own STARSHIP_CONFIG' });
     const written = lastWrittenContent();
     expect(written).toContain('set -gx STARSHIP_CONFIG ~/mine.toml');
     expect(written).toContain('starship init fish | source');
@@ -1152,6 +1173,7 @@ describe('backupSharedConfig', () => {
 
   it('snapshots the shared config to a stamped backup path', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readdirSync).mockReturnValue([] as unknown as ReturnType<typeof fs.readdirSync>);
 
     const backup = backupSharedConfig();
 
@@ -1192,6 +1214,7 @@ describe('backupSharedConfig', () => {
   it('ignores XDG_CONFIG_HOME for the shared config, as Starship does', () => {
     process.env.XDG_CONFIG_HOME = '/home/u/.dotfiles/config';
     vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readdirSync).mockReturnValue([] as unknown as ReturnType<typeof fs.readdirSync>);
 
     const backup = backupSharedConfig();
 
@@ -1200,6 +1223,7 @@ describe('backupSharedConfig', () => {
 
   it('is best-effort — returns null when the copy fails', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readdirSync).mockReturnValue([] as unknown as ReturnType<typeof fs.readdirSync>);
     vi.mocked(fs.copyFileSync).mockImplementation(() => {
       throw new Error('EACCES');
     });
@@ -1381,7 +1405,7 @@ describe('removing ShellConfigurator lines', () => {
   }
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.mocked(fs.mkdirSync).mockReset();
   });
 
@@ -1436,13 +1460,13 @@ describe('removing ShellConfigurator lines', () => {
 
   it("keeps the user's own init line and the PATH line it needs", () => {
     rcHolds(
-      '# Added by ShellConfigurator\nexport PATH=\'/h/.local/bin\':"$PATH"\nexport STARSHIP_CONFIG=\'/h/s.toml\'\n\neval "$(starship init bash)"\n'
+      `# Added by ShellConfigurator\nexport PATH=${ownBin}:"$PATH"\nexport STARSHIP_CONFIG='/h/s.toml'\n\neval "$(starship init bash)"\n`
     );
 
     const result = removeManagedRcBlocks('bash');
 
     expect(lastWrittenContent()).toBe(
-      'export PATH=\'/h/.local/bin\':"$PATH"\neval "$(starship init bash)"\n'
+      `export PATH=${ownBin}:"$PATH"\neval "$(starship init bash)"\n`
     );
     expect(result.note).toBe('your own Starship init line stays; kept the PATH line it needs');
   });
@@ -1453,13 +1477,62 @@ describe('removing ShellConfigurator lines', () => {
     vi.mocked(fs.existsSync).mockImplementation((p) => p === fishRc || p === confD);
     vi.mocked(fs.readFileSync).mockImplementation(
       () =>
-        "set -g fish_greeting\n\n# Added by ShellConfigurator\nfish_add_path '/h/.local/bin'\nset -gx STARSHIP_CONFIG '/h/fish.toml'\n"
+        `set -g fish_greeting\n\n# Added by ShellConfigurator\nfish_add_path ${ownBin}\nset -gx STARSHIP_CONFIG '/h/fish.toml'\n`
     );
 
     const result = removeManagedRcBlocks('fish');
 
-    expect(lastWrittenContent()).toBe("set -g fish_greeting\nfish_add_path '/h/.local/bin'\n");
+    expect(lastWrittenContent()).toBe(`set -g fish_greeting\nfish_add_path ${ownBin}\n`);
     expect(result.note).toBe('your conf.d/starship.fish init stays; kept the PATH line it needs');
+  });
+
+  it('keeps lines of the user written right under the block', () => {
+    rcHolds(
+      `export EDITOR=vim\n\n# Added by ShellConfigurator\nexport STARSHIP_CONFIG='/h/bash.toml'\neval "$(starship init bash)"\nexport PATH="$HOME/go/bin:$PATH"\nexport PATH="$HOME/.local/bin:$PATH"\nalias gs="git status"\n`
+    );
+
+    removeManagedRcBlocks('bash');
+
+    expect(lastWrittenContent()).toBe(
+      `export EDITOR=vim\n\nexport PATH="$HOME/go/bin:$PATH"\nexport PATH="$HOME/.local/bin:$PATH"\nalias gs="git status"\n`
+    );
+  });
+
+  it("keeps the user's own export and init line right under a block", () => {
+    rcHolds(
+      `# Added by ShellConfigurator\nunset STARSHIP_CONFIG\nexport STARSHIP_CONFIG=~/dots/starship.toml\neval "$(starship init bash)"\n`
+    );
+
+    const result = removeManagedRcBlocks('bash');
+
+    expect(lastWrittenContent()).toBe(
+      `export STARSHIP_CONFIG=~/dots/starship.toml\neval "$(starship init bash)"\n`
+    );
+    expect(result.note).toBe('your own Starship init line stays');
+  });
+
+  it.each([
+    `export PATH='/home/other/.local/bin':"$PATH"`,
+    'export PATH="/home/other/.local/bin:$PATH"',
+  ])('removes a whole block whose PATH line names another home folder: %s', (pathLine) => {
+    rcHolds(
+      `# Added by ShellConfigurator\n${pathLine}\nexport STARSHIP_CONFIG='/h/bash.toml'\neval "$(starship init bash)"\n`
+    );
+
+    removeManagedRcBlocks('bash');
+
+    expect(lastWrittenContent()).toBe('');
+  });
+
+  it('still removes a PATH line written by a version before 1.3.0', () => {
+    const bin = path.join(os.homedir(), '.local', 'bin');
+    rcHolds(
+      `# Added by ShellConfigurator\nexport PATH="${bin}:$PATH"\nexport STARSHIP_CONFIG="/h/bash.toml"\neval "$(starship init bash)"\n`
+    );
+
+    removeManagedRcBlocks('bash');
+
+    expect(lastWrittenContent()).toBe('');
   });
 
   it('writes nothing when the rc has no managed block', () => {
@@ -1501,10 +1574,9 @@ describe('removing ShellConfigurator lines', () => {
 });
 
 describe('startsStarship', () => {
-  const zshrc = getShell('zsh')!.rcFile!;
   const managed = '# Added by ShellConfigurator\neval "$(starship init zsh)"\n';
   const rcIo = (content: string, extra: string[] = []) => ({
-    exists: (p: string) => p === zshrc || extra.includes(p),
+    exists: (p: string) => p === getShell('zsh')!.rcFile! || extra.includes(p),
     readFile: () => content,
   });
 
@@ -1637,8 +1709,16 @@ describe('a Starship init in a sourced file, as on Omarchy', () => {
       ['/x', 'source /y\n'],
       ['/y', 'source /x\n'],
     ]);
-    const loopIo = { exists: (f: string) => loop.has(f), readFile: (f: string) => loop.get(f)! };
+    const reads: string[] = [];
+    const loopIo = {
+      exists: (f: string) => loop.has(f),
+      readFile: (f: string) => {
+        reads.push(f);
+        return loop.get(f)!;
+      },
+    };
     expect(initReachable('source /x\n', 'bash', loopIo, env)).toBe(false);
+    expect(reads).toEqual(['/x', '/y']);
   });
 
   it('counts such a shell as starting Starship, and adds no second init line to it', () => {

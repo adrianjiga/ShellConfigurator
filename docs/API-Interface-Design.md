@@ -51,18 +51,22 @@ interface WizardState {
   vimMode: boolean; // Distinct character in vim normal mode
   directoryTruncationLength: number; // Parent folders shown; 0 means full path
   directorySubstitutions: DirectorySubstitution[]; // Folder-name substitutions
+  keepExistingConfig: boolean; // Adopt mode: keep the shared starship.toml as-is
+  sharedConfigToml: string | null; // Imported shared config (--import-url); runtime-only, never serialized
   selectedShells: ShellId[]; // Shells to configure
   packageManager: PackageManager; // Detected package manager
   installedShells: ShellId[]; // Shells already on system
-  nerdFontToInstall: NerdFontChoice; // {kind:'none'|'select'|'install',id}
-  setDefaultShell: ShellId | null; // Shell to set via chsh
-  skipStarshipInstall: boolean; // "Continue without Starship" — drops the Starship install, Verify and the unset pass; rc tasks stay in the plan, marked skipped
-  keepExistingConfig: boolean; // Adopt mode: keep the shared starship.toml as-is
-  sharedConfigToml: string | null; // Imported shared config (--import-url); runtime-only, never serialized
-  dryRun: boolean; // No install or config-write happens — the wizard only previews
-  installResults: InstallTask[]; // Final task statuses from InstallingScreen
   terminal: TerminalId | null; // Detected terminal emulator; lets the wizard select the font in it
   container: boolean; // True inside a container/CI sandbox — fonts are per-host and chsh is skipped
+  remoteSession: RemoteSession; // 'ssh' | 'wsl' | null — the terminal and its fonts belong to another computer or to Windows
+  nerdFontToInstall: NerdFontChoice; // {kind:'none'|'select'|'install',id}
+  fontAnswer: 'have' | 'install' | 'none' | null; // Nerd Font answer, for a revisit (runtime-only)
+  setDefaultShell: ShellId | null; // Shell to set via chsh
+  skipStarshipInstall: boolean; // "Continue without Starship" — drops the Starship install, Verify and the unset pass; rc tasks stay in the plan, marked skipped
+  dryRun: boolean; // No install or config-write happens — the wizard only previews
+  installResults: InstallTask[]; // Final task statuses from InstallingScreen
+  runId: string | null; // The install's captured run, which rollback can put back; runtime-only
+  summaryPath: string | null; // Where WHAT-CHANGED.md was written; runtime-only
 }
 ```
 
@@ -180,8 +184,6 @@ interface ModuleDef {
   id: ConfigurableModuleId;
   label: string; // Display name in UI
   description: string; // Shown when module is focused
-  defaultLeft: boolean; // Included in left prompt by default
-  defaultRight: boolean; // Included in right prompt by default
   previewSegment: (hasNerdFont: boolean, sample: PreviewSample) => string; // Text for PromptPreview
   plainPreview?: (hasNerdFont: boolean) => string; // Plain-prompt preview, when starship's default format adds words or brackets
   content: string; // Inner format, e.g. '$symbol$version' — what powerline wraps in separators
@@ -199,7 +201,7 @@ customFormat, directoryTruncationLength, directorySubstitutions, styleFor }`
 where `styleFor(name)` builds the style expression for a palette colour — the
 colour on its own in a normal prompt, or an `fg:fg bg:<colour>` pair under
 powerline. Only modules that carry their colour in differently-named keys
-(`username`/`hostname` → `style_user`/`style_root`, `battery` →
+(`username` → `style_user`/`style_root`, `battery` →
 `[[battery.display]]`) need `styleFor`; the generator emits the plain `style` key
 for everyone else.
 
@@ -228,8 +230,6 @@ The `MODULES` array is the single registry. All module-aware code reads from it,
 git_branch: {
   label: 'Git Branch',
   description: 'Active git branch name',
-  defaultLeft: true,
-  defaultRight: false,
   previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.gitBranch : ''}main`,
   plainPreview: (nf) => `on ${nf ? NERD_FONT_SYMBOLS.gitBranch : ''}main`,
   content: '$symbol$branch',
@@ -403,7 +403,10 @@ never leave a half-written file.
 ### detector.ts
 
 All detection is async — there are no sync counterparts, because every function
-runs while the Ink render loop is live and must not block it.
+runs while the Ink render loop is live. When `starship` is not on PATH,
+`findStarshipAsync` only checks for the binary in the script-install bin dir.
+The preview and the Review screen still call `getMissingStarshipPathDir`,
+which runs one short sync `command -v starship`.
 
 ```typescript
 function detectPackageManagerAsync(): Promise<PackageManager>;
@@ -594,7 +597,8 @@ function writeWhatChangedSafely(run: WhatChangedRun): string | null;
 function listEntries(kind: 'presets' | 'modules' | 'fonts'): ListEntry[];
 // The ids --list-presets/--list-modules/--list-fonts print, with label,
 // description and, for --json, the data a script needs (a preset's palette,
-// powerline and modules; a module's default side; a font's family).
+// powerline and modules; whether a module is on the default left or right
+// side, read from DEFAULT_STATE; a font's family).
 ```
 
 ### cliSurface.ts / completions.ts
@@ -614,9 +618,15 @@ function completionScript(shell: 'bash' | 'zsh' | 'fish'): string;
 ### starshipProbe.ts / share.ts
 
 ```typescript
-function timePrompt(toml: string, path: string, deps?: ProbeDeps): Promise<TimingsReport>;
-// Writes `toml` to a temporary folder and runs `starship timings --path <path>`
-// against it (PWD = path, the real HOME), then parses the rows (parseTimings,
+function timePrompt(
+  config: { toml: string; path?: string },
+  folder: string,
+  deps?: ProbeDeps,
+  scratchDeps?: Pick<ScratchDeps, 'createScratch' | 'writeConfig' | 'cleanup'>
+): Promise<TimingsReport>;
+// Times `config.path` when it is given; otherwise writes `config.toml` to a
+// temporary folder and times that. Runs `starship timings --path <folder>`
+// (PWD = folder, the real HOME), then parses the rows (parseTimings,
 // slowest first) and suggests fixes (suggestFixes): a command that timed out
 // raises command_timeout (at least 1000ms), a timed-out folder scan raises
 // scan_timeout, and each module at or over SLOW_MODULE_MS (50) gets a fix
@@ -785,7 +795,7 @@ function runInstallTasks(
 
 ## Headless CLI & Run Data
 
-The public flag surface in `src/index.tsx`/`src/services/args.ts`, in ten groups.
+The public flag surface in `src/index.tsx`/`src/services/args.ts`, in twelve groups.
 
 ### Interactive
 
@@ -797,9 +807,11 @@ shell-configurator --dry-run    preview changes without installing (alias --no-i
 ### lifecycle
 
 ```
---restore / --undo    Copy the newest .bak-* backup over the shared and per-shell
+--restore             Copy the newest .bak-* backup over the shared and per-shell
                       configs created by earlier runs (see restoreConfigBackups);
-                      after an uninstall it brings the configs back
+                      after an uninstall it brings the configs back. rc files
+                      stay as they are; `rollback` undoes a whole run. The old
+                      `--undo` alias is a usage error that says so
 --version / -v        Print the version
 --help / -h           Print usage
 ```
@@ -826,18 +838,22 @@ shell-configurator generate --preset <id> [flags]
 ```
 shell-configurator apply [--state <file>] [generate flags] [--dry-run [--json]] [--adopt] [--import-url <url>]
   --state       the state card to install (also: --import); without it, apply
-                takes the generate flags above and --shells is required
+                takes the generate flags above except -o and --export, and --shells is required
   --adopt       keep the shared ~/.config/starship.toml (never writes per-shell files)
   --import-url  fetch a starship.toml and adopt it (implies --adopt; the fetch is
                 bounded — a 10s timeout and a 1 MB cap reject a hung or oversized
-                response. A non-http(s) URL is a usage error; an HTTP error, an
+                response. Every redirect hop must be https too. Every line that may set a command
+                Starship runs on every prompt (`command`, `when` or `shell` in any form,
+                and `custom` tables) is printed to stderr before anything happens. A non-https URL, or one with a user name or password, is a usage error; an HTTP error, an
                 empty or HTML body is a run error)
   --json        with --dry-run, print { dryRun, shells, installStarship, tasks,
                 config, changes } instead of text; config is { kind: 'per-shell', toml,
                 tomlIfFontFails? } (the glyph-free config written when a planned font
                 install fails),
                 { kind: 'imported', path, toml } or { kind: 'kept', path, exists }.
-                A real apply with --json is a usage error
+                installStarship is false when Starship is already installed.
+                A real apply with --json is a usage error, and a dry run with
+                no shells is one too, as the real run is
 ```
 
 When the run installs a Nerd Font and the config would differ without it, the
@@ -876,8 +892,8 @@ at a time, and only `--json` may go with them; any other flag is a usage error.
 ### doctor / repair (day-2 health)
 
 ```
-shell-configurator doctor [--state <file>] [--json] [--fix [--include-warnings]]
-shell-configurator repair [--state <file>] [--json] [--dry-run] [--include-warnings]
+shell-configurator doctor [--state <file>] [--json] [--fix [--include-warnings] [--yes] [--dry-run]]
+shell-configurator repair [--state <file>] [--json] [--yes] [--dry-run] [--include-warnings]
 ```
 
 `doctor` is read-only and never installs. It checks Starship on `PATH`, a
@@ -886,8 +902,11 @@ shell rc (or the shared config in adopt mode), that the configs load under the
 real `starship print-config`, that a Nerd Font is installed, and that it is
 selected in the detected terminal (`src/services/doctor.ts`). With `--state`
 it checks the card's shells and wiring mode (`keepExistingConfig`); without
-one it checks every installed shell and reads each one's mode (per-shell or
-shared) from its rc. The locale, terminal-font and (without a card)
+one it checks the installed shells that were set up — the last recorded run
+chose them, or they start Starship or carry a ShellConfigurator block — and
+reads each one's mode (per-shell or shared) from its rc. With none set up it
+warns instead. On macOS, Bash fails when its login file does not load
+`~/.bashrc`. The locale, terminal-font and (without a card)
 font-installed checks only ever warn; a font the card asked for that is missing
 fails. Two further checks are also `warn`-only and read the runtime: **version drift** — the installed
 starship binary no longer matches the version the last install/apply recorded,
@@ -905,14 +924,20 @@ doctor and reports the _result_. Warnings are left alone unless
 `--include-warnings` is passed; that also applies the fixes warnings carry, such
 as rewiring the terminal font or adding a missing `STARSHIP_CONFIG` export. The
 font fixes exist only when a `--state` card names a font. `--dry-run` lists the
-planned fixes without applying them. A check that still fails keeps the exit
-code non-zero.
+planned fixes without applying them. Otherwise, with fixes to apply, it shows
+them and asks on a terminal, like `uninstall`; off a terminal, or with
+`--json`, it needs `--yes`. The fixes run inside `captureRun`, so `rollback`
+puts back the files they changed, and the run is recorded in history as
+`repair`. A check that still fails keeps the exit code non-zero.
 
 Flags may appear before or after the subcommand; when a flag is repeated, the
 last one wins. Unknown or malformed flags (a bogus `--name`, an unparseable
 value on a boolean flag, a missing value, a stray positional) throw a
-`CliUsageError`, so a typo can never start the real installer. Config flags
-passed to `doctor`/`repair` without `--state` are ignored with a stderr warning.
+`CliUsageError`, so a typo can never start the real installer. So does a known
+flag the subcommand would ignore (its flags are those `SUBCOMMAND_INFO` lists),
+such as `apply -o`, `generate --json` or `doctor --dry-run` without `--fix`.
+Config flags passed to `doctor`/`repair` without `--state` are ignored with a
+stderr warning.
 
 ### uninstall
 
@@ -927,7 +952,7 @@ block from the rc, and moves `~/.config/starship/<shell>.toml` to a `.bak-*`
 backup. Nushell and PowerShell were set up by hand, so their step only names
 the file to clean. `--font <id>` deletes that Nerd Font's files, listed from its
 cached archive, and names any terminal still set to it. `--starship` deletes
-the script install's binary, or removes the pacman/apk/Homebrew package when
+the binary its own script install put in `~/.local/bin` (recorded by its SHA-256, so another one there is left alone), or removes the pacman/apk/Homebrew package when
 that package manager owns the binary, and forgets the recorded version; it is
 held back while any shell would still start Starship. A shell's config stays
 when its rc could not be cleaned. A real run is captured like any other, so
@@ -941,7 +966,8 @@ Without
 `--json`, a run that would change something is a `CliUsageError`. `--dry-run`
 only prints the plan. A failed step does not stop the rest and sets exit code
 `1`. Config flags other than `--shells` and `--font`, and `--state`, are usage
-errors, as are `--yes` and `--starship` outside `uninstall`.
+errors, as are `--starship` outside `uninstall` and `--yes` outside `repair`,
+`doctor --fix`, `uninstall` and `rollback`.
 
 ### rollback
 
@@ -1083,7 +1109,9 @@ every snapshot use.
 ```
 
 `parseState` starts a parsed card from runtime defaults (`step: 'welcome'`,
-detection-based fields cleared) and re-detects per run.
+detection-based fields cleared) and re-detects per run. A key the card format does not
+have, at the top level or in `wizard`, is a `CliUsageError` that names it, so a
+misspelled `"pallete"` is never silently dropped.
 
 ### Backup/Restore
 
@@ -1105,15 +1133,13 @@ back, so it is not the uninstall undo.
 
 1. **`src/config/modules.ts`** — add the id to `ConfigurableModuleId` and an
    entry to `MODULE_DEFS`. Every module needs `label`, `description`,
-   `defaultLeft`/`defaultRight`, `previewSegment`, and `content` (the format the
+   `previewSegment`, and `content` (the format the
    powerline generator wraps in separators); most also provide `settings`:
 
    ```typescript
    perl: {
      label: 'Perl',
      description: 'Perl version (shown in Perl projects)',
-     defaultLeft: false,
-     defaultRight: false,
      ...symbolModule(() => '🐪 ', '5.38'), // previewSegment + settings
      content: '$symbol$version',
    },
@@ -1181,3 +1207,5 @@ new fixture(s) under `src/__tests__/golden/`.
 4. **`src/services/headless.ts`** and **`src/services/state.ts`** — add to their
    accepted-symbol lists, and to the `--character` line in the `--help` text
    (`src/index.tsx`)
+5. **`src/services/cliSurface.ts`** — add to the value list of `FLAGS.character`,
+   which the shell completions offer

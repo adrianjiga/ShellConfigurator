@@ -19,9 +19,9 @@ interface NavHintsProps {
 
 export function NavHints({ hints }: NavHintsProps) {
   return (
-    <Box marginTop={1}>
+    <Box marginTop={1} flexWrap="wrap">
       {hints.map((h) => (
-        <Box key={h.key + h.label} marginRight={2}>
+        <Box key={h.key + h.label} marginRight={2} flexShrink={0}>
           <Text bold color={uiColor('cyan')}>
             {h.key}
           </Text>

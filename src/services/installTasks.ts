@@ -39,6 +39,7 @@ import {
   shellInstallSupported,
   verifyStarshipConfig,
 } from './installer.ts';
+import { starshipTooOld, tooOldNote } from './starshipVersion.ts';
 import { TERMINAL_LABELS, type TerminalFontResult, wireTerminalFont } from './terminalFont.ts';
 
 export interface InstallTaskDeps {
@@ -87,10 +88,7 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   sharedConfigExists: () => fs.existsSync(getSharedConfigPath()),
   applyShellConfig,
   resetSharedShellConfig,
-  getShellsUsingStarship: async () =>
-    shellsWithStarshipInit(await detectInstalledShellsAsync()).filter(
-      (shellId) => !keepsOwnConfig(shellId)
-    ),
+  getShellsUsingStarship: async () => shellsToGuard(await detectInstalledShellsAsync()),
   getMissingStarshipPathDir,
   readStarshipVersion,
   verifyConfig: (configPath, pathDir) => verifyStarshipConfig(configPath, pathDir ?? null),
@@ -122,10 +120,22 @@ export function shellTaskId(shellId: ShellId): `shell_${ShellId}` {
   return `shell_${shellId}`;
 }
 
-/** The font this run installs: a chosen one, never inside a container. */
+/** Why fonts installed here would not reach the terminal, or null when they would. */
+export function fontsElsewhere(state: WizardState): string | null {
+  if (state.container) return 'inside a container fonts belong to the host terminal';
+  if (state.remoteSession === 'ssh') {
+    return 'over SSH, fonts belong to the computer your terminal runs on';
+  }
+  if (state.remoteSession === 'wsl') {
+    return 'in WSL, Windows Terminal uses fonts installed on Windows';
+  }
+  return null;
+}
+
+/** The font this run installs: a chosen one, never where fonts live elsewhere. */
 export function plannedFont(state: WizardState): string | null {
   const fontId = fontIdToInstall(state.nerdFontToInstall);
-  return fontId && !state.container ? fontId : null;
+  return fontId && !fontsElsewhere(state) ? fontId : null;
 }
 
 export const FONT_FALLBACK_NOTE =
@@ -176,9 +186,13 @@ export function sharedConfigNote(shellIds: readonly ShellId[], done: boolean): s
  */
 export function plannedResetShells(state: WizardState): ShellId[] {
   if (state.skipStarshipInstall) return [];
-  return shellsWithStarshipInit(
+  return shellsToGuard(
     state.installedShells.filter((shellId) => !state.selectedShells.includes(shellId))
-  ).filter((shellId) => !keepsOwnConfig(shellId));
+  );
+}
+
+export function shellsToGuard(shells: ShellId[]): ShellId[] {
+  return shellsWithStarshipInit(shells).filter((shellId) => !keepsOwnConfig(shellId));
 }
 
 export function buildTaskList(
@@ -334,7 +348,10 @@ export async function runInstallTasks(
       if (check.installed) {
         return {
           status: 'skipped',
-          patch: { label: `Starship (${check.version ?? 'installed'})` },
+          patch: {
+            label: `Starship (${check.version ?? 'installed'})`,
+            ...(starshipTooOld(check.version) ? { note: tooOldNote(check.version!) } : {}),
+          },
         };
       }
       // An earlier script install off PATH still counts; the rc PATH line reaches it.
@@ -345,7 +362,7 @@ export async function runInstallTasks(
           status: 'skipped',
           patch: {
             label: `Starship (${version ?? 'installed'})`,
-            note: `already in ${existingDir}`,
+            note: starshipTooOld(version) ? tooOldNote(version!) : `already in ${existingDir}`,
           },
         };
       }
@@ -354,6 +371,11 @@ export async function runInstallTasks(
       // when a later package-manager update moves starship under its nose.
       const after = await deps.isStarshipInstalled();
       const scriptDir = after.version ? null : deps.getMissingStarshipPathDir();
+      if (!after.installed && !scriptDir) {
+        throw new Error(
+          'the install command finished, but starship cannot be found on PATH or in ~/.local/bin'
+        );
+      }
       const version =
         after.version ?? (scriptDir ? await deps.readStarshipVersion(scriptDir) : null);
       if (version) {
@@ -403,9 +425,19 @@ export async function runInstallTasks(
 
   // --- Missing shells ---
   const shellInstallFailures = new Set<ShellId>();
+  const shellsLeftToUser = new Set<ShellId>();
   for (const shellId of state.selectedShells) {
     if (state.installedShells.includes(shellId)) continue;
     const status = await runTask(shellTaskId(shellId), async () => {
+      if (!shellInstallSupported(shellId, state.packageManager)) {
+        shellsLeftToUser.add(shellId);
+        return {
+          status: 'skipped',
+          patch: {
+            note: `${state.packageManager === 'script' ? 'no package manager here' : `no ${state.packageManager} package`}: install ${shellId} yourself; its Starship setup below is ready for it`,
+          },
+        };
+      }
       await deps.installShell(shellId, state.packageManager, signal);
     });
     if (status === 'failed') shellInstallFailures.add(shellId);
@@ -417,6 +449,9 @@ export async function runInstallTasks(
     await runTask(TASK_IDS.chsh, async () => {
       if (shellInstallFailures.has(defaultShell)) {
         throw new Error(`Cannot set ${defaultShell} as the default shell — its install failed`);
+      }
+      if (shellsLeftToUser.has(defaultShell)) {
+        throw new Error(`Cannot set ${defaultShell} as the default shell — install it first`);
       }
       await deps.setDefaultShell(defaultShell, signal);
     });

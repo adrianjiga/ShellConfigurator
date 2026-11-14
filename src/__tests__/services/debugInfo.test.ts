@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockReadFileSync, mockExistsSync } = vi.hoisted(() => ({
   mockReadFileSync: vi.fn(),
@@ -23,6 +23,15 @@ import { homeDir } from '../../services/paths.ts';
 import type { ShellId } from '../../types.ts';
 
 const home = homeDir();
+
+beforeEach(() => {
+  vi.stubEnv('ZDOTDIR', undefined);
+  vi.stubEnv('XDG_CONFIG_HOME', undefined);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 function makeDeps(overrides: Partial<DebugInfoDeps> = {}): DebugInfoDeps {
   return {

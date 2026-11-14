@@ -119,3 +119,49 @@ export function recordStarshipVersion(version: string): void {
   fs.mkdirSync(cacheDir(), { recursive: true });
   fs.writeFileSync(starshipVersionFilePath(), `${version}\n`, 'utf8');
 }
+
+function scriptInstallRecordPath(): string {
+  return path.join(cacheDir(), 'starship.script-install');
+}
+
+/** Notes the binary this tool's script install put in place, by its SHA-256. */
+export function recordScriptInstall(binary: string): void {
+  fs.mkdirSync(cacheDir(), { recursive: true });
+  fs.writeFileSync(scriptInstallRecordPath(), `${sha256Digest(fs.readFileSync(binary))}\n`, 'utf8');
+}
+
+/** Whether `binary` is still the one this tool's script install put in place. */
+export function isRecordedScriptInstall(binary: string): boolean {
+  try {
+    const recorded = fs.readFileSync(scriptInstallRecordPath(), 'utf8').trim();
+    return recorded !== '' && recorded === sha256Digest(fs.readFileSync(binary));
+  } catch {
+    return false;
+  }
+}
+
+export function forgetScriptInstall(): void {
+  fs.rmSync(scriptInstallRecordPath(), { force: true });
+}
+
+function fontFilesListPath(fontId: string): string {
+  return path.join(fontsDir(), `${fontId}.files`);
+}
+
+/** Notes the file names a font install wrote, so the font can be removed without its archive. */
+export function recordFontFiles(fontId: string, names: string[]): void {
+  fs.mkdirSync(fontsDir(), { recursive: true });
+  fs.writeFileSync(fontFilesListPath(fontId), `${JSON.stringify(names)}\n`, 'utf8');
+}
+
+/** The file names a font install wrote, or null when none were recorded. */
+export function recordedFontFiles(fontId: string): string[] | null {
+  try {
+    const names: unknown = JSON.parse(fs.readFileSync(fontFilesListPath(fontId), 'utf8'));
+    return Array.isArray(names) && names.every((name) => typeof name === 'string')
+      ? names.map((name) => path.basename(name))
+      : null;
+  } catch {
+    return null;
+  }
+}

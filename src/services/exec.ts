@@ -151,7 +151,9 @@ export function runCommand(args: string[], options: { signal?: AbortSignal } = {
     child.on('error', (err) => settle(() => reject(err)));
 
     child.on('exit', (status, signal) => {
-      if (cancelled) {
+      if (status === 0 && !signal) {
+        settle(resolve);
+      } else if (cancelled) {
         settle(() => reject(new CommandCancelledError(printable)));
       } else if (signal) {
         settle(() => reject(new Error(`Command killed by signal ${signal}: ${printable}`)));

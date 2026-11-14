@@ -4,8 +4,10 @@
 
 `src/index.tsx` first parses the argv (`parseCliArgs` in `src/services/args.ts`).
 Global flags (`--help`/`--version`/`--restore`) and the headless subcommands
-(`generate`/`apply`/`doctor`/`repair`/`uninstall`/`rollback`/`debug-info`/`completions`, routed via `runHeadlessCommand`) exit
-before Ink ever renders; parser warnings (unknown/malformed flags) go to stderr.
+(`generate`/`apply`/`doctor`/`repair`/`uninstall`/`rollback`/`debug-info`/`completions`/`timings`/`share`, routed via `runHeadlessCommand`) exit
+before Ink ever renders. An unknown or malformed flag is a `CliUsageError` that
+stops the run, and so is a known flag the chosen subcommand does not take
+(`refuseUnusedFlags` in `src/index.tsx`).
 Only when no subcommand consumed the args does the app render the root `App`
 component using Ink's renderer. Ink is a React-based framework for building interactive CLI
 applications — it translates a React component tree into terminal output.
@@ -113,7 +115,7 @@ The same predicate runs in reverse for `getPrevStep()` — if the user never int
 `font_select` skipped:
 
 ```
-● ● ● ◉ ○ ○ ○ ○ ○ ○  4. Preset
+● ● ◉ ○ ○ ○ ○ ○ ○ ○  3. Preset
 ```
 
 - `●` green = completed
@@ -145,18 +147,22 @@ interface WizardState {
   vimMode: boolean;
   directoryTruncationLength: number; // Parent folders shown; 0 means full path
   directorySubstitutions: DirectorySubstitution[]; // Folder-name substitutions
+  keepExistingConfig: boolean; // Adopt mode — keep the shared starship.toml (no per-shell writes)
+  sharedConfigToml: string | null; // Shared config fetched via --import-url (runtime-only, never serialized)
   selectedShells: ShellId[];
   packageManager: PackageManager;
   installedShells: ShellId[];
-  nerdFontToInstall: NerdFontChoice;
-  setDefaultShell: ShellId | null;
-  skipStarshipInstall: boolean; // "Continue without Starship" — skip install + RC steps
-  keepExistingConfig: boolean; // Adopt mode — keep the shared starship.toml (no per-shell writes)
-  sharedConfigToml: string | null; // Shared config fetched via --import-url (runtime-only, never serialized)
-  dryRun: boolean; // When true no install or config-write happens — the wizard only previews
-  installResults: InstallTask[]; // Final task statuses from InstallingScreen
   terminal: TerminalId | null; // Detected terminal, used to wire the Nerd Font into its config
   container: boolean; // True inside a container/CI sandbox — fonts are per-host, chsh skipped
+  remoteSession: RemoteSession; // 'ssh' | 'wsl' | null (runtime-only)
+  nerdFontToInstall: NerdFontChoice;
+  fontAnswer: 'have' | 'install' | 'none' | null; // The Nerd Font question's answer, highlighted on a revisit (runtime-only)
+  setDefaultShell: ShellId | null;
+  skipStarshipInstall: boolean; // "Continue without Starship" — no Starship install, Verify or unset pass; rc tasks stay, marked skipped
+  dryRun: boolean; // When true no install or config-write happens — the wizard only previews
+  installResults: InstallTask[]; // Final task statuses from InstallingScreen
+  runId: string | null; // The install's captured run for rollback (runtime-only)
+  summaryPath: string | null; // Where WHAT-CHANGED.md was written (runtime-only)
 }
 ```
 
@@ -209,8 +215,6 @@ interface ModuleDef {
   id: ConfigurableModuleId;
   label: string;
   description: string;
-  defaultLeft: boolean;
-  defaultRight: boolean;
   previewSegment: (hasNerdFont: boolean, sample: PreviewSample) => string;
   plainPreview?: (hasNerdFont: boolean) => string; // Plain-prompt preview, where starship adds words or brackets
   content: string; // Inner format — what a powerline prompt wraps in separator glyphs
@@ -257,7 +261,7 @@ src/
 │   ├── NavHints.tsx           Keyboard hint bar
 │   ├── PlanSections.tsx       Install plan + config sections (Review and Done screens)
 │   ├── textInput.ts           editedText: one keypress of filter/draft typing
-│   └── ErrorBoundary.tsx      Shows a readable message instead of a stack trace when a screen throws
+│   └── ErrorBoundary.tsx      Shows a readable message in place of the TUI when a screen throws; the error and its stack (home and user name redacted) still go to stderr
 ├── hooks/
 │   └── useUpdateEffect.ts     useEffect that skips the first render (live updates)
 ├── screens/
@@ -285,7 +289,7 @@ src/
     ├── detector.ts            Async system detection (PM, shells, Starship, terminal, container)
     ├── installer.ts           Install commands (Starship, fonts, shells, chsh) and Starship/font removal
     ├── installTasks.ts        Install task orchestration (buildTaskList, runInstallTasks)
-    ├── fontExtractor.ts       Sandboxed worker that decompresses font archives
+    ├── fontExtractor.ts       Worker that decompresses font archives (with size caps)
     ├── terminalFont.ts        Wires a detected terminal's config to a Nerd Font family
     ├── doctor.ts              Day-2 health check (read-only) with pass/warn/fail findings
     ├── repair.ts              Applies doctor fixes, then re-runs the doctor

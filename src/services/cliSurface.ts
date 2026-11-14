@@ -38,7 +38,6 @@ export const FLAGS = {
   listModules: flag('--list-modules', 'List the prompt modules (--json for data)'),
   listFonts: flag('--list-fonts', 'List the Nerd Fonts (--json for data)'),
   listJson: flag('--json', 'With a --list-* flag, print the data as JSON'),
-  undo: flag('--undo', 'Alias for --restore'),
   preset: flag(
     '--preset',
     'Seed modules, palette and powerline from a preset',
@@ -72,7 +71,7 @@ export const FLAGS = {
   uninstallFont: flag('--font', 'Also remove this Nerd Font', FONT_IDS),
   list: flag('--list', 'List the runs that changed files'),
   run: flag('--run', 'Roll back this run (an id from --list)', 'text'),
-  config: flag('--config', 'Time this starship.toml instead of one built from flags', 'file'),
+  config: flag('--config', 'Time this starship.toml instead of the one Starship loads now', 'file'),
 } satisfies Record<string, FlagInfo>;
 
 export const GLOBAL_FLAGS: readonly FlagInfo[] = [FLAGS.help, FLAGS.version];
@@ -81,7 +80,6 @@ export const WIZARD_FLAGS: readonly FlagInfo[] = [
   FLAGS.dryRun,
   FLAGS.noInstall,
   FLAGS.restore,
-  FLAGS.undo,
   FLAGS.listPresets,
   FLAGS.listModules,
   FLAGS.listFonts,
@@ -137,11 +135,19 @@ export const SUBCOMMAND_INFO: Record<Subcommand, SubcommandInfo> = {
   },
   doctor: {
     description: 'Check the setup and report problems',
-    flags: [FLAGS.state, FLAGS.import, FLAGS.json, FLAGS.fix, FLAGS.includeWarnings],
+    flags: [
+      FLAGS.state,
+      FLAGS.import,
+      FLAGS.json,
+      FLAGS.fix,
+      FLAGS.includeWarnings,
+      FLAGS.yes,
+      FLAGS.dryRun,
+    ],
   },
   repair: {
     description: 'Fix the problems doctor finds',
-    flags: [FLAGS.state, FLAGS.import, FLAGS.dryRun, FLAGS.includeWarnings, FLAGS.json],
+    flags: [FLAGS.state, FLAGS.import, FLAGS.yes, FLAGS.dryRun, FLAGS.includeWarnings, FLAGS.json],
   },
   uninstall: {
     description: 'Remove what the wizard set up',

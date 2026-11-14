@@ -79,7 +79,6 @@ describe('parseCliArgs', () => {
       ['--version', 'version', true],
       ['-v', 'version', true],
       ['--restore', 'restore', true],
-      ['--undo', 'restore', true],
       ['--dry-run', 'dryRun', true],
       ['-d', 'dryRun', true],
       ['--no-install', 'dryRun', true],

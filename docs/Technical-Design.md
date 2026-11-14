@@ -60,12 +60,15 @@ symbol = " "
 
 The same module under a powerline prompt, after `directory`. Each module opens
 with its own leading separator styled with starship's `prev_bg`, so a module that
-collapses takes its separator with it:
+collapses takes its separator with it. The module's own colour comes first as
+the fallback, so when nothing was drawn before it (a hidden `username`) the
+separator is a plain cell of its colour rather than an arrow in the terminal's
+default colour:
 
 ```toml
 [git_branch]
 style  = "bold fg:fg bg:git_branch"
-format = "([](fg:prev_bg bg:git_branch)[ $symbol$branch ]($style))"
+format = "([](fg:git_branch fg:prev_bg bg:git_branch)[ $symbol$branch ]($style))"
 symbol = " "
 ```
 
@@ -187,11 +190,12 @@ Normal per-shell setup leaves the shared `~/.config/starship.toml` untouched, so
 
 ```
 # Added by ShellConfigurator
-export STARSHIP_CONFIG="/home/u/.config/starship/zsh.toml"
+export STARSHIP_CONFIG='/home/u/.config/starship/zsh.toml'
 eval "$(starship init zsh)"
 ```
 
-Fish uses `set -gx STARSHIP_CONFIG ...`; nushell and PowerShell have `rcFile: null` and return their
+The path is single-quoted (`starshipConfigLine` via `rcQuote`, which uses `posixShellQuote`).
+Fish uses `set -gx STARSHIP_CONFIG '...'`, quoted by fish's rules (`fishQuote`); nushell and PowerShell have `rcFile: null` and return their
 manual note instead.
 
 **Pipeline**:
@@ -237,17 +241,17 @@ because none exist.
 
 `buildTaskList(state)` creates the task queue from wizard state:
 
-| Task          | Condition                                                                              | Action                                                                                                                                                                                                                                |
-| ------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Starship      | Not `skipStarshipInstall`                                                              | Install if not already present                                                                                                                                                                                                        |
-| Nerd Font     | `nerdFontToInstall.kind === 'install'` and not `container`                             | Download and install font (skipped in containers — fonts belong to the host terminal)                                                                                                                                                 |
-| Terminal font | `nerdFontToInstall.kind === 'install'` and a terminal was detected and not `container` | Wire the font family into the terminal's config (`terminalFont.ts`)                                                                                                                                                                   |
-| Shell(s)      | Selected shell not in `installedShells`                                                | Install via package manager; shells that cannot be installed automatically (`shellInstallSupported` = false: the `script` fallback or no package for that manager) are tagged "(manual)" in the plan so the user knows before the run |
-| Set default   | `setDefaultShell` is set (and not `container`)                                         | Run `chsh -s <path>` (meaningless in a container, skipped)                                                                                                                                                                            |
-| Config        | Always                                                                                 | Write per-shell configs, or keep/adopt the shared config                                                                                                                                                                              |
-| RC files      | Always (marked skipped when `skipStarshipInstall`)                                     | One task per shell: init line + `STARSHIP_CONFIG` pin                                                                                                                                                                                 |
-| Verify config | Not `skipStarshipInstall`                                                              | After the rc steps: run `starship print-config` against each written config                                                                                                                                                           |
-| Unset guard   | Not `skipStarshipInstall`; an installed, unselected shell whose rc loads Starship      | After Verify: `resetSharedShellConfig` adds an `unset STARSHIP_CONFIG` guard (one task per shell)                                                                                                                                     |
+| Task          | Condition                                                                                                | Action                                                                                                                                                                                                                                |
+| ------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Starship      | Not `skipStarshipInstall`                                                                                | Install if not already present                                                                                                                                                                                                        |
+| Nerd Font     | `nerdFontToInstall.kind === 'install'` and not `container`                                               | Download and install font (skipped in containers — fonts belong to the host terminal)                                                                                                                                                 |
+| Terminal font | `nerdFontToInstall.kind === 'install'` and a terminal was detected and not `container`                   | Wire the font family into the terminal's config (`terminalFont.ts`)                                                                                                                                                                   |
+| Shell(s)      | Selected shell not in `installedShells`                                                                  | Install via package manager; shells that cannot be installed automatically (`shellInstallSupported` = false: the `script` fallback or no package for that manager) are tagged "(manual)" in the plan so the user knows before the run |
+| Set default   | `setDefaultShell` is set (and not `container`)                                                           | Run `chsh -s <path>` (meaningless in a container, skipped)                                                                                                                                                                            |
+| Config        | Always                                                                                                   | Write per-shell configs, or keep/adopt the shared config                                                                                                                                                                              |
+| RC files      | Always (marked skipped when `skipStarshipInstall`)                                                       | One task per shell: init line + `STARSHIP_CONFIG` pin                                                                                                                                                                                 |
+| Verify config | Not `skipStarshipInstall`                                                                                | After the rc steps: run `starship print-config` against each written config                                                                                                                                                           |
+| Unset guard   | Not `skipStarshipInstall`; an installed, unselected shell that loads Starship without a setup of its own | After Verify: `resetSharedShellConfig` adds an `unset STARSHIP_CONFIG` guard (one task per shell)                                                                                                                                     |
 
 The Config task writes _per-shell_ configs, one per selected shell, and the shared
 `~/.config/starship.toml` is only snapshotted. In adopt mode the Config task instead either keeps
@@ -255,8 +259,11 @@ the existing shared config or writes the `--import-url` fetch, and the RC tasks 
 `pointAtSharedConfig` so the shells read that shared file with no `STARSHIP_CONFIG` export. The RC step is one task per shell so
 a failure in one does not taint the others. After `Verify config` comes a final
 pass that writes an `unset STARSHIP_CONFIG` guard into every installed shell
-that wasn't selected and whose rc already runs `starship init`
-(`resetSharedShellConfig`). Those shells are found at run time, so their tasks
+that wasn't selected, whose rc already runs `starship init`, and that has no
+setup of its own (`shellsToGuard`, then `resetSharedShellConfig`): a shell whose
+rc still exports `STARSHIP_CONFIG` to its existing per-shell config, or where
+the user sets `STARSHIP_CONFIG` in the rc, a file it sources or another startup
+file, is left alone. Those shells are found at run time, so their tasks
 join the list once the run starts. The guard
 prevents a configured parent's per-shell config from leaking into that shell;
 the existing Starship init line remains in place and uses the shared config.
@@ -332,13 +339,13 @@ All install commands go through `runCommand` in `src/services/exec.ts` — an as
 
 `installer.ts` (Starship/shell installs, `chsh`) composes commands and delegates to `runCommand`; fonts never go through the shell — `installNerdFont` downloads with `fetch` and hands the archive to a worker (below).
 
-### Verified Font Downloads & Sandboxed Extraction
+### Verified Font Downloads & Worker Extraction
 
 `installNerdFont` treats a downloaded archive as hostile input until proven otherwise:
 
 1. **Download guards**: the request carries an `AbortSignal.timeout` (`FONT_DOWNLOAD_TIMEOUT_MS`), so a hung connection can't wedge the install chain, and the archive is refused when the declared `content-length` or the received buffer exceeds `MAX_FONT_ARCHIVE_BYTES`.
 2. **Checksum verification**: before extraction the buffer's SHA-256 is computed (`node:crypto`) and compared with the `sha256:` digest GitHub publishes in the release asset metadata (`GET /repos/ryanoasis/nerd-fonts/releases/latest`, matched by `zipName`). The lookup also has its own `AbortSignal.timeout`. The check fails closed: a mismatched archive, a release without a digest for the asset, or a failed lookup with nothing cached all refuse to install with distinct errors. A verified archive is cached after install and reused, without downloading, when its digest still matches the latest release or the lookup fails.
-3. **Worker-isolated extraction** (`src/services/fontExtractor.ts`): `extractFontFiles()` decompresses in an `eval`-script `Worker` (CommonJS `require` of the resolved fflate path, archive and path passed through `workerData`), so malformed input can only crash the throwaway worker, never the wizard. It refuses an archive whose entries expand past a per-entry or total size cap. The worker filters entries to font files and flattens them to basenames — deliberately structured-cloned back as `{ name, bytes }` while the _writes_ stay on the main thread, keeping path handling and `fs.writeFileSync` in one auditable place. A ~60s timeout terminates a stuck worker.
+3. **Worker-isolated extraction** (`src/services/fontExtractor.ts`): `extractFontFiles()` decompresses in an `eval`-script `Worker` (CommonJS `require` of the resolved fflate path, archive and path passed through `workerData`), so the parsing runs off the main thread and a parser crash ends the worker, not the wizard. The worker is not a security boundary: it runs with the same rights as the wizard. It keeps only font-file entries and refuses an archive that holds too many of them or whose entries expand past a per-entry or total size cap, checked both from the headers and from the bytes really unpacked. Entries come back structured-cloned as `{ name, bytes }` with their names as stored; the main thread then flattens them to basenames and drops hidden, NUL-bearing or repeated names (`fontFiles`), and does the writes, keeping path handling and `fs.writeFileSync` in one place. A ~60s timeout terminates a stuck worker.
 
 ### Platform-Aware Font Installation
 
@@ -434,7 +441,7 @@ because fonts are per-host and `chsh` is meaningless there.
 
 ### Async-Only Detection
 
-Every detection function is async and there are no sync counterparts — they run during the Ink render loop and must not block it. They use `promisify(execFile)` rather than `execFileSync`:
+Every detection function is async and there are no sync counterparts — they run during the Ink render loop. They use `promisify(execFile)` rather than `execFileSync`; when `starship` is not on PATH, `findStarshipAsync` only checks for the binary in the script-install bin dir. Outside detection, the preview and the Review screen still call `getMissingStarshipPathDir`, which runs one short sync `command -v starship` (`probe` in `src/services/exec.ts`):
 
 - **`detectPackageManagerAsync`**: Parallelizes independent checks — `brew` + `pacman` run together, then the os-release read + `apt-get` + `dnf` + `apk` together — while preserving priority order
 - **`detectInstalledShellsAsync`**: Runs all shell checks in parallel via `Promise.all` (biggest performance win — wall-clock time drops from 5 sequential forks to 1 parallel batch)

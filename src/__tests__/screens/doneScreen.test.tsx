@@ -4,7 +4,7 @@ import { getShell } from '../../config/shells.ts';
 import { getShellConfigPath } from '../../generators/shellRc.ts';
 import { DoneScreen } from '../../screens/DoneScreen.tsx';
 import { type InstallTaskDeps, runInstallTasks } from '../../services/installTasks.ts';
-import { DEFAULT_STATE, type WizardState } from '../../types.ts';
+import { DEFAULT_STATE, type InstallTask, type WizardState } from '../../types.ts';
 import { pressEsc } from '../helpers/ink.ts';
 import { fakeDeps as baseFakeDeps } from '../helpers/installTasks.ts';
 import { flush } from '../helpers/wait.ts';
@@ -66,7 +66,7 @@ describe('DoneScreen over real install results', () => {
     const row = rowFor(frame, 'Nushell');
 
     expect(row).not.toContain('✓');
-    expect(row).not.toContain('init line added');
+    expect(row).not.toContain('.zshrc updated');
     expect(frame.replace(/\s+/g, ' ')).toContain(getShell('nushell')!.manualNote);
     // The command the user has to run must be on screen, not just described.
     // Whitespace is dropped so the narrow test frame's wrapping does not matter.
@@ -103,7 +103,7 @@ describe('DoneScreen over real install results', () => {
     const row = rowFor(frame, 'Zsh');
 
     expect(row).toContain('already configured');
-    expect(row).not.toContain('init line added');
+    expect(row).not.toContain('.zshrc updated');
   });
 
   it('gives each shell its own status instead of one shared one', async () => {
@@ -118,7 +118,7 @@ describe('DoneScreen over real install results', () => {
     );
 
     expect(rowFor(frame, 'Zsh')).toContain('✓');
-    expect(rowFor(frame, 'Zsh')).toContain('init line added');
+    expect(rowFor(frame, 'Zsh')).toContain('.zshrc updated');
     expect(rowFor(frame, 'Fish')).toContain('✗');
     expect(frame).toContain('mkdir failed');
   });
@@ -165,7 +165,7 @@ describe('DoneScreen over real install results', () => {
     const frame = await runAndRender({ selectedShells: ['zsh'], installedShells: ['zsh'] });
 
     expect(frame).toContain('All done!');
-    expect(rowFor(frame, 'Zsh')).toContain('init line added');
+    expect(rowFor(frame, 'Zsh')).toContain('.zshrc updated');
   });
 
   it('points at the summary of what changed when one was written', () => {
@@ -233,6 +233,8 @@ describe('DoneScreen over real install results', () => {
 
     instance.stdin.write('r');
     await flush();
+    instance.stdin.write('y');
+    await flush();
 
     const frame = instance.lastFrame() ?? '';
     expect(mocks.exit).not.toHaveBeenCalled();
@@ -249,7 +251,11 @@ describe('DoneScreen over real install results', () => {
 
     instance.stdin.write('r');
     await flush();
+    instance.stdin.write('y');
+    await flush();
     instance.stdin.write('r');
+    await flush();
+    instance.stdin.write('y');
     await flush();
 
     expect(mocks.restoreConfigBackups).toHaveBeenCalledTimes(1);
@@ -282,6 +288,8 @@ describe('DoneScreen over real install results', () => {
 
     instance.stdin.write('r');
     await flush();
+    instance.stdin.write('y');
+    await flush();
 
     const frame = instance.lastFrame() ?? '';
     expect(frame).toContain('Restored configs from their newest backups:');
@@ -296,6 +304,8 @@ describe('DoneScreen over real install results', () => {
     await flush();
 
     instance.stdin.write('r');
+    await flush();
+    instance.stdin.write('y');
     await flush();
 
     expect(instance.lastFrame()).toContain('nothing to restore');
@@ -316,6 +326,8 @@ describe('DoneScreen over real install results', () => {
     await flush();
 
     instance.stdin.write('r');
+    await flush();
+    instance.stdin.write('y');
     await flush();
 
     expect(mocks.restoreConfigBackups).not.toHaveBeenCalled();
@@ -467,25 +479,31 @@ describe('DoneScreen restore failure', () => {
     );
     stdin.write('r');
     await flush();
+    stdin.write('y');
+    await flush();
     expect(lastFrame()).toContain('EACCES: permission denied');
   });
 });
 
 describe('DoneScreen after a failed config write', () => {
   it('does not promise a new prompt after a restart', () => {
-    const { lastFrame } = render(
-      <DoneScreen
-        state={{
-          ...DEFAULT_STATE,
-          selectedShells: ['zsh'],
-          installedShells: ['zsh'],
-          installResults: [
-            { id: 'config', label: 'Write config files', status: 'failed', error: 'EACCES' },
-          ],
-        }}
-      />
+    const frameWith = (configTask: InstallTask) =>
+      render(
+        <DoneScreen
+          state={{
+            ...DEFAULT_STATE,
+            selectedShells: ['zsh'],
+            installedShells: ['zsh'],
+            installResults: [configTask],
+          }}
+        />
+      ).lastFrame();
+    expect(frameWith({ id: 'config', label: 'Write config files', status: 'done' })).toContain(
+      'Restart your terminal'
     );
-    expect(lastFrame()).not.toContain('Restart your terminal');
+    expect(
+      frameWith({ id: 'config', label: 'Write config files', status: 'failed', error: 'EACCES' })
+    ).not.toContain('Restart your terminal');
   });
 });
 
@@ -503,7 +521,11 @@ describe('DoneScreen share', () => {
 
     instance.stdin.write('s');
     await flush();
+    instance.stdin.write('y');
+    await flush();
     instance.stdin.write('s');
+    await flush();
+    instance.stdin.write('y');
     await flush();
 
     expect(mocks.writeShareFile).toHaveBeenCalledOnce();
@@ -521,11 +543,15 @@ describe('DoneScreen share', () => {
     await flush();
     instance.stdin.write('s');
     await flush();
+    instance.stdin.write('y');
+    await flush();
     expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
       'Could not save the prompt: EACCES: permission denied Press s to try again.'
     );
 
     instance.stdin.write('s');
+    await flush();
+    instance.stdin.write('y');
     await flush();
     expect(mocks.writeShareFile).toHaveBeenCalledTimes(2);
     expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
@@ -539,6 +565,8 @@ describe('DoneScreen share', () => {
     instance.stdin.write('s');
     instance.stdin.write('s');
     await flush();
+    instance.stdin.write('y');
+    await flush();
     expect(mocks.writeShareFile).toHaveBeenCalledOnce();
   });
 
@@ -546,6 +574,8 @@ describe('DoneScreen share', () => {
     const instance = done({ keepExistingConfig: true });
     await flush();
     instance.stdin.write('s');
+    await flush();
+    instance.stdin.write('y');
     await flush();
     expect(instance.lastFrame()).not.toContain('save this prompt');
     expect(mocks.writeShareFile).not.toHaveBeenCalled();

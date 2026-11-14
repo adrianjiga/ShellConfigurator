@@ -11,7 +11,7 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/),
 
 - **Live preview**: see your prompt update in real time, rendered by your installed starship binary when available
 - **Cross-shell**: configure zsh, bash, fish, nushell, and PowerShell in one run
-- **Automated installation**: installs Starship, Nerd Fonts (downloads verified against their published SHA-256 digest, extraction sandboxed in a worker), and any missing shells for you
+- **Automated installation**: installs Starship, Nerd Fonts (downloads verified against their published SHA-256 digest, decompressed in a worker with size caps), and any missing shells for you
 - **12 presets**: from minimal plain-text to Tokyo Night, Gruvbox Rainbow, and Catppuccin
 - **14 colour palettes**: one behind every preset, plus high-contrast and colour-blind-safe options; any of them usable with any preset
 - **Powerline prompts**: interlocking coloured blocks with Nerd Font separators
@@ -61,7 +61,7 @@ shell-configurator apply                      run a full install headlessly from
 shell-configurator apply --adopt --shells …   keep the existing shared config and wire shells to it
 shell-configurator apply --import-url <url>   fetch a shared config (https gist/URL) and adopt it (implies --adopt; bounded: 10s timeout, 1 MB max)
 shell-configurator doctor [--state <file>]    run the read-only day-2 health check (--json for machine-readable)
-shell-configurator doctor --fix / repair      apply the fixes for failing checks, then re-run the checks (--dry-run to only list them)
+shell-configurator doctor --fix / repair      apply the fixes for failing checks after asking (--yes to skip the prompt, --dry-run to only list them)
 shell-configurator repair --include-warnings  also apply the fixes warnings suggest (e.g. the terminal font)
 shell-configurator uninstall                  remove the rc lines and per-shell configs it set up, after asking (--yes to skip the prompt)
 shell-configurator uninstall --starship --font <id>  also remove Starship and that Nerd Font (--shells to limit, --dry-run to only list)
@@ -77,12 +77,14 @@ shell-configurator share --preset tokyo-night  print the prompt as Markdown to s
 shell-configurator --help                     show usage and exit
 shell-configurator --version                  print the version and exit
 shell-configurator --dry-run                  preview the config without installing (also -d, --no-install)
-shell-configurator --restore                  restore the shared and per-shell configs from their newest backup (also --undo)
+shell-configurator --restore                  restore the shared and per-shell configs from their newest backup (rc files stay; use rollback to undo a run)
 ```
 
 `--state` also accepts the alias `--import`. Without `--state`, `doctor` and
-`repair` check every installed shell and read each one's wiring (per-shell or
-adopt mode) from its rc file.
+`repair` check the installed shells that were set up (the last run chose them,
+or they start Starship or carry a ShellConfigurator block) and read each one's
+wiring (per-shell or adopt mode) from its rc file. `repair` shows its fixes and
+asks first, like `uninstall`, and `rollback` puts back the files it changed.
 
 `uninstall` removes every `# Added by ShellConfigurator` block from the bash,
 zsh and fish rc files and moves the per-shell configs aside to `.bak-*`
@@ -91,9 +93,9 @@ run could not be recorded, it prints the `cp` commands that do so instead), but
 not a Starship or font it removed: reinstall those with `apply` or `repair`. Your own `starship init` line (or fish's `conf.d` init) stays,
 with the PATH line it needs. Nushell and PowerShell were set up by hand, so it
 names the file to clean instead. Starship is removed only with `--starship`,
-and only once no shell would still start it: the script install's binary, or
+and only once no shell would still start it: the binary its own script install put in `~/.local/bin` (while it is unchanged), or
 the pacman, apk or Homebrew package when that package manager owns the binary.
-A font goes only with `--font <id>`, its files listed from its cached archive;
+A font goes only with `--font <id>`, its files listed from its cached archive or, without one, from the names its install recorded;
 the plan names any terminal still set to it. On a terminal it shows the plan
 and asks first; elsewhere it needs `--yes`.
 
@@ -148,7 +150,9 @@ npm install
 npm run dev
 ```
 
-The wizard exits non-zero if any install step fails, so it can be used in a script.
+The wizard exits non-zero if any install step fails. It needs a terminal for its
+input and output, and refuses to start without one (use `apply` there); it
+draws normally even when `CI` is set.
 
 Exit codes: `0` on success; `1` when an install step failed, `doctor` found a
 failing check, `repair` left one failing, an `uninstall` step failed, a `rollback` could not put a file back, `-o`/`--export` could not be written,
@@ -166,7 +170,9 @@ the TOML to stdout (`-o <file>` writes it to a file instead); `--export <file>`
 writes the versioned state card, and without `-o` nothing is printed. A card
 captures only your choices, so `apply --state /path/to/card.json` reproduces
 the same prompt on any machine. Include `--shells` when generating, or `apply`
-has no shells to configure:
+has no shells to configure. `apply` with a preset that draws Nerd Font icons
+needs `--font <id>` (to install one), `--has-nerd-font` or `--no-nerd-font`;
+it never installs a font on its own:
 
 ```bash
 shell-configurator generate --preset tokyo-night --palette gruvbox --shells zsh,fish -o starship.toml --export my-card.json
@@ -175,8 +181,11 @@ shell-configurator apply --state my-card.json
 
 Every wizard install and real (non-dry-run) `apply` appends one record to
 `history.jsonl` (under the XDG state dir) and snapshots the card it applied; a
-real `uninstall` or `rollback` appends one too, without a card;
-`generate`, `doctor`, `repair` and dry runs record nothing. Each of those runs
+real `repair`, `uninstall` or `rollback` appends one too, with a card only when
+`repair` got one; `generate`, `doctor` and dry runs record nothing. A run that
+is killed before it can record itself (Ctrl+C twice, a closed terminal, a
+`kill`) is recorded as interrupted by the next run or `rollback`, so it can
+still be rolled back. Each of those runs
 also copies the rc files, per-shell configs, shared config and terminal configs
 it is about to change into `runs/<id>/` under the state dir, keeping only the
 ones it changed; the newest 50 runs are kept. `rollback` puts a run's files back to that copy (or deletes the
@@ -213,15 +222,15 @@ All releases, including changelogs and install tarballs, are published on
 
 ## What gets installed / configured
 
-- **Starship**: via `brew`, `pacman` or `apk`; on `apt` and `dnf` systems (which carry no starship package) or with no package manager, via the official install script into `~/.local/bin`
+- **Starship**: via `brew`, `pacman` or `apk` (pacman installs from the package lists it has and never upgrades the system; when they are too old, the error says to run `sudo pacman -Syu` first); on `apt` and `dnf` systems (which carry no starship package) or with no package manager, via the official install script into `~/.local/bin`
 - **Nerd Font**: downloaded from the official nerd-fonts GitHub release, its SHA-256 checked against the digest published for that release, and extracted in an isolated worker before being installed to `~/Library/Fonts/` (macOS) or `~/.local/share/fonts/` (Linux)
 - **Terminal font**: when a supported terminal is detected (Alacritty, kitty, WezTerm, Ghostty, foot), its config is edited to select the installed Nerd Font (WezTerm prints the exact line instead — its config is Lua)
 - **Shells**: installed via your package manager if not already present
 - **Per-shell Starship configs**: `~/.config/starship/<shell>.toml` for every selected shell, so each shell keeps its own prompt; normal per-shell setup leaves the shared `~/.config/starship.toml` untouched
 - **Adopt mode**: `apply --adopt` (or `--import-url`) keeps the shared `~/.config/starship.toml` as the one prompt every shell reads; no per-shell files are written, and the rc blocks carry no `STARSHIP_CONFIG` export
-- **Shell RC files**: each selected shell gets a `STARSHIP_CONFIG` export pointing at its own config plus the `starship init` line (appended idempotently); shells left unselected get an `unset` guard so a configured parent's prompt doesn't leak in
+- **Shell RC files**: each selected shell gets a `STARSHIP_CONFIG` export pointing at its own config plus the `starship init` line (appended idempotently); shells left unselected get an `unset` guard so a configured parent's prompt doesn't leak in, unless they still have a setup of their own. On macOS, where terminals start Bash as a login shell, the first of `~/.bash_profile`, `~/.bash_login` and `~/.profile` that exists (else a new `~/.bash_profile`) also gets a line that loads `~/.bashrc` in Bash only, which `uninstall` removes again
 - **Nushell**: `nu` has no rc file, so its setup command pins `STARSHIP_CONFIG` at startup via a `vendor/autoload` `export-env` file instead
-- **Verification**: after the rc steps, every config written this run is loaded through the real `starship print-config`, so a broken prompt is caught before you restart. Font and `chsh` tasks are skipped in a container, and also when `CODESPACES`, `REMOTE_CONTAINERS`, `DEVCONTAINER`, `CI` or `KUBERNETES_SERVICE_HOST` is set.
+- **Verification**: after the rc steps, every config written this run is loaded through the real `starship print-config`, so a broken prompt is caught before you restart. Font and `chsh` tasks are skipped in a container, and also when `CODESPACES`, `REMOTE_CONTAINERS`, `DEVCONTAINER`, `CI` or `KUBERNETES_SERVICE_HOST` is set. Over SSH (`SSH_CONNECTION`, `SSH_TTY`) and in WSL the font and terminal font steps are skipped too, since the terminal and its fonts are on the other computer or on Windows.
 
 ## Supported Nerd Fonts
 

@@ -21,6 +21,8 @@ import { redactHome } from '../services/redact.ts';
 import { type ExplainResult, explainPromptAsync } from '../services/starshipProbe.ts';
 import type { ShellId, WizardState } from '../types.ts';
 
+export const REVIEW_SETTLE_MS = 500;
+
 interface ReviewScreenProps {
   state: WizardState;
   onNext: (update?: Partial<WizardState>) => void;
@@ -124,6 +126,8 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
   );
 
   const [explainShown, setExplainShown] = useState(false);
+  const [configShown, setConfigShown] = useState(false);
+  const shownAt = useRef(Date.now());
   const [explanation, setExplanation] = useState<ExplainResult | null>(null);
   const explainPending = useRef(false);
   const explainShownNow = useRef(false);
@@ -136,6 +140,10 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
   );
 
   useInput((char, key) => {
+    if (char.toLowerCase() === 't') {
+      setConfigShown((shown) => !shown);
+      return;
+    }
     if (char.toLowerCase() === 'e' && !state.keepExistingConfig) {
       const showing = !explainShownNow.current;
       explainShownNow.current = showing;
@@ -158,7 +166,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
     }
     // Only Enter starts the run: a stray Space or Tab must not.
     if (key.return) {
-      onNext();
+      if (Date.now() - shownAt.current >= REVIEW_SETTLE_MS) onNext();
       return;
     }
   });
@@ -179,7 +187,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
         {sharedConfigNote(resetShells, false) && (
           <Text color={uiColor('yellow')}>{sharedConfigNote(resetShells, false)}</Text>
         )}
-        <ConfigPlan state={state} />
+        <ConfigPlan state={state} expanded={configShown} />
         {fontFallback && <Text color={uiColor('gray')}>{FONT_FALLBACK_NOTE}</Text>}
 
         {explainShown && (
@@ -194,7 +202,8 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
         {sharedConfigShadowed && (
           <Text color={uiColor('yellow')}>
             Your {getSharedConfigPath()} stays on disk (and is backed up), but these shells will
-            read their own configs instead. To keep using it, run shell-configurator apply --adopt.
+            read their own configs instead. To keep using it, run shell-configurator apply --adopt
+            --shells {state.selectedShells.join(',')}.
           </Text>
         )}
 
@@ -259,6 +268,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
           ...(state.keepExistingConfig
             ? []
             : [{ key: 'e', label: explainShown ? 'hide the explanation' : 'explain the prompt' }]),
+          { key: 't', label: configShown ? 'fold config' : 'full config' },
           { key: 'Esc', label: 'back' },
         ]}
       />

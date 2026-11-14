@@ -8,6 +8,7 @@ import type { WizardState } from '../types.ts';
 import { findStarshipAsync } from './detector.ts';
 import { runCapture } from './exec.ts';
 import { getMissingStarshipPathDir } from './installer.ts';
+import { withPathDir } from './paths.ts';
 
 const execFileP = promisify(execFile);
 
@@ -61,7 +62,7 @@ export function starshipEnv(configPath: string, home?: string): NodeJS.ProcessEn
     STARSHIP_CONFIG: configPath,
   };
   const pathDir = getMissingStarshipPathDir();
-  if (pathDir) env.PATH = `${pathDir}${nodePath.delimiter}${process.env.PATH ?? ''}`;
+  if (pathDir) env.PATH = withPathDir(pathDir);
   // Starship formats its output for the calling shell when STARSHIP_SHELL is
   // set (e.g. bash's literal `\[`/`\]` markers). Raw ANSI output is wanted here.
   delete env.STARSHIP_SHELL;

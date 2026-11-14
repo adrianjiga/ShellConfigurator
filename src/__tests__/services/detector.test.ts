@@ -112,8 +112,8 @@ describe('detectPackageManagerAsync', () => {
 
   it('maps a derivative through ID_LIKE', async () => {
     execFileByArg((arg) => arg === 'apt-get' || arg === 'dnf');
-    readFileAsyncReturns('ID=kali\nID_LIKE=debian');
-    expect(await detectPackageManagerAsync()).toBe('apt');
+    readFileAsyncReturns('ID=nobara\nID_LIKE="rhel fedora"');
+    expect(await detectPackageManagerAsync()).toBe('dnf');
   });
 
   it('falls back to /usr/lib/os-release when /etc/os-release is missing', async () => {
@@ -156,14 +156,14 @@ describe('detectPackageManagerAsync', () => {
     expect(await detectPackageManagerAsync()).toBe('script');
   });
 
-  it('returns apt for single-quoted ubuntu ID in os-release', async () => {
-    execFileByArg((arg) => arg === 'apt-get');
-    readFileAsyncReturns("ID='ubuntu'\nNAME='Ubuntu'");
-    expect(await detectPackageManagerAsync()).toBe('apt');
+  it('strips single quotes from the ID in os-release', async () => {
+    execFileByArg((arg) => arg === 'apt-get' || arg === 'dnf');
+    readFileAsyncReturns("ID='fedora'\nNAME='Fedora'");
+    expect(await detectPackageManagerAsync()).toBe('dnf');
   });
 
   it('returns apk for alpine via os-release', async () => {
-    execFileByArg((arg) => arg === 'apk');
+    execFileByArg((arg) => arg === 'apk' || arg === 'apt-get');
     readFileAsyncReturns('ID=alpine\nNAME="Alpine Linux"');
     expect(await detectPackageManagerAsync()).toBe('apk');
   });

@@ -24,6 +24,7 @@ vi.mock('../services/detector.ts', () => ({
   detectCurrentShellAsync: vi.fn().mockResolvedValue(null),
   detectTerminalAsync: vi.fn().mockResolvedValue(null),
   detectContainerAsync: vi.fn().mockResolvedValue(false),
+  detectRemoteSessionAsync: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('../services/exec.ts', async (importOriginal) => {
@@ -47,27 +48,34 @@ vi.mock('../generators/shellRc.ts', () => ({
   backupSharedConfig: vi.fn(() => null),
   shellsWithStarshipInit: () => [],
   getShellConfigPath: () => '/tmp/starship.toml',
+  bashLoginFiles: () => [],
   getSharedConfigPath: () => '/nonexistent/starship.toml',
+}));
+
+const { mockPlannedFileChanges } = vi.hoisted(() => ({
+  mockPlannedFileChanges: vi.fn(),
 }));
 
 vi.mock('../services/fileDiff.ts', async () => {
   const { getShell } = await import('../config/shells.ts');
   const actual =
     await vi.importActual<typeof import('../services/fileDiff.ts')>('../services/fileDiff.ts');
+  mockPlannedFileChanges.mockImplementation((state: { selectedShells: string[] }) =>
+    state.selectedShells.flatMap((shellId) => {
+      const rc = getShell(shellId as 'zsh')?.rcFile;
+      if (!rc) return [];
+      const block = [
+        '+# Added by ShellConfigurator',
+        '+export STARSHIP_CONFIG="/tmp/starship.toml"',
+        `+eval "$(starship init ${shellId})"`,
+      ];
+      const diff = `--- ${rc}\n+++ ${rc}\n@@ -0,0 +1,3 @@\n${block.join('\n')}\n`;
+      return [{ path: rc, status: 'modify', added: 3, removed: 0, diff }];
+    })
+  );
   return {
     diffHunkLines: actual.diffHunkLines,
-    plannedFileChanges: (state: { selectedShells: string[] }) =>
-      state.selectedShells.flatMap((shellId) => {
-        const rc = getShell(shellId as 'zsh')?.rcFile;
-        if (!rc) return [];
-        const block = [
-          '+# Added by ShellConfigurator',
-          '+export STARSHIP_CONFIG="/tmp/starship.toml"',
-          `+eval "$(starship init ${shellId})"`,
-        ];
-        const diff = `--- ${rc}\n+++ ${rc}\n@@ -0,0 +1,3 @@\n${block.join('\n')}\n`;
-        return [{ path: rc, status: 'modify', added: 3, removed: 0, diff }];
-      }),
+    plannedFileChanges: mockPlannedFileChanges,
   };
 });
 
@@ -108,6 +116,8 @@ afterEach(() => {
   mockInstallNerdFont.mockReset().mockResolvedValue(undefined);
 });
 beforeEach(() => {
+  let clock = Date.now();
+  vi.spyOn(Date, 'now').mockImplementation(() => (clock += 1000));
   vi.clearAllMocks();
   setAdvanceDelayForTests(0);
 });
@@ -192,12 +202,10 @@ describe('full wizard walkthrough', () => {
 
     await pressKeys(instance, [ENTER, ENTER, ENTER, ENTER]); // welcome → segments_right
     await type('node');
-    await pressKeys(instance, [SPACE]); // Node.js on the right
-    await pressEsc(instance.stdin); // clear the filter
+    await pressKeys(instance, [ENTER]); // Node.js on the right, filter cleared
     await pressEsc(instance.stdin); // back to segments_left
     await type('node');
-    await pressKeys(instance, [SPACE]); // Node.js on the left as well
-    await pressEsc(instance.stdin);
+    await pressKeys(instance, [ENTER]); // Node.js on the left as well
     await pressKeys(instance, [ENTER, ENTER, ENTER, SPACE, ENTER, ENTER]);
     for (let i = 0; i < 20 && mockWriteConfig.mock.calls.length === 0; i++) await flush();
 
@@ -217,9 +225,12 @@ describe('full wizard walkthrough', () => {
 
     const frame = instance.lastFrame();
     expect(frame).toContain('Review your configuration');
-    // The rc snippet and the generated TOML are shown for the chosen shell.
-    expect(frame).toContain('STARSHIP_CONFIG="/tmp/starship.toml"');
-    expect(frame).toContain('eval "$(starship init zsh)"');
+    expect(mockPlannedFileChanges).toHaveBeenCalledWith(
+      expect.objectContaining({ selectedShells: ['zsh'] }),
+      expect.anything(),
+      null
+    );
+    expect(frame).toMatch(/edit {3}\S*\.zshrc \(\+3 -0\)/);
     expect(frame).toContain('$directory$git_branch$git_status');
     // Reviewing must not have written anything yet.
     expect(mockWriteConfig).not.toHaveBeenCalled();

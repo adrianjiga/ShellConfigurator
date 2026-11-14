@@ -67,6 +67,8 @@ function runtimeDefaults(): Pick<
   | 'installedShells'
   | 'terminal'
   | 'container'
+  | 'remoteSession'
+  | 'fontAnswer'
   | 'dryRun'
   | 'installResults'
   | 'sharedConfigToml'
@@ -79,6 +81,8 @@ function runtimeDefaults(): Pick<
     installedShells: [],
     terminal: null,
     container: false,
+    remoteSession: null,
+    fontAnswer: null,
     runId: null,
     summaryPath: null,
     dryRun: false,
@@ -112,6 +116,39 @@ export function serializeState(state: WizardState): string {
     },
   };
   return `${JSON.stringify(card, null, 2)}\n`;
+}
+
+const CARD_KEYS = new Set(['version', 'wizard']);
+
+const WIZARD_KEYS = new Set<string>([
+  'preset',
+  'leftModules',
+  'rightModules',
+  'characterSymbol',
+  'palette',
+  'powerline',
+  'continuationPrompt',
+  'addNewline',
+  'vimMode',
+  'directoryTruncationLength',
+  'directorySubstitutions',
+  'selectedShells',
+  'nerdFontToInstall',
+  'setDefaultShell',
+  'skipStarshipInstall',
+  'keepExistingConfig',
+  'hasNerdFont',
+] satisfies (keyof StateCard['wizard'])[]);
+
+function refuseUnknownKeys(value: object, known: Set<string>, where: string): void {
+  const unknown = Object.keys(value).filter((key) => !known.has(key));
+  if (unknown.length > 0) {
+    throw new CliUsageError(
+      `Invalid state card: unknown ${unknown.length === 1 ? 'key' : 'keys'} ${unknown
+        .map((key) => `'${key}'`)
+        .join(', ')} in ${where}`
+    );
+  }
 }
 
 const isStringArray = (value: unknown): value is string[] =>
@@ -270,6 +307,8 @@ export function parseState(json: string): WizardState {
   if (!wizard || typeof wizard !== 'object' || Array.isArray(wizard)) {
     throw new CliUsageError('Invalid state card: missing wizard object');
   }
+  refuseUnknownKeys(card as object, CARD_KEYS, 'the card');
+  refuseUnknownKeys(wizard, WIZARD_KEYS, 'wizard');
 
   const selectedShells = parseShellList(wizard.selectedShells);
   const { left: leftModules, right: rightModules } = placedModules(

@@ -18,6 +18,17 @@ const base: WizardState = {
 };
 
 describe('generateToml', () => {
+  it('keeps the brackets of the Bracketed preset when Powerline cannot be drawn without a Nerd Font', () => {
+    const generated = generateToml({
+      ...base,
+      preset: 'bracketed-segments',
+      powerline: true,
+      hasNerdFont: false,
+    });
+    expect(generated).toContain('format = "(\\\\[[');
+    expect(generated).not.toContain('prev_bg');
+  });
+
   it('includes format line with left modules and $fill for right modules', () => {
     const toml = generateToml(base);
     expect(toml).toContain(
@@ -251,9 +262,9 @@ describe('generateToml', () => {
     expect(parsed.add_newline).toBe(false);
   });
 
-  it('adds a vim normal-mode symbol only when vim mode is on', () => {
+  it('shows the vim normal-mode symbol only when vim mode is on', () => {
     const off = generateToml({ ...base, leftModules: ['character'], vimMode: false });
-    expect(off).not.toContain('vimcmd_symbol');
+    expect(off).toContain("vimcmd_symbol  = '[❯](bold ok)'");
 
     const on = generateToml({ ...base, leftModules: ['character'], vimMode: true });
     expect(on).toContain("vimcmd_symbol  = '[❮](bold ok)'");
@@ -267,11 +278,15 @@ describe('generateToml', () => {
     expect(parsed.directory.truncation_length).toBe(1);
   });
 
-  it('emits 0 to disable truncation and show the full path', () => {
+  it('emits 0 to disable truncation and show the full path, also inside a repo', () => {
     const parsed = toml.parse(generateToml({ ...base, directoryTruncationLength: 0 })) as {
-      directory: { truncation_length: number };
+      directory: { truncation_length: number; truncate_to_repo: boolean };
     };
-    expect(parsed.directory.truncation_length).toBe(0);
+    expect(parsed.directory).toMatchObject({ truncation_length: 0, truncate_to_repo: false });
+    const truncated = toml.parse(generateToml({ ...base, directoryTruncationLength: 3 })) as {
+      directory: { truncate_to_repo: boolean };
+    };
+    expect(truncated.directory.truncate_to_repo).toBe(true);
   });
 
   it('omits the substitutions table when there are no substitutions', () => {
@@ -368,7 +383,12 @@ describe('powerline segments', () => {
 
   it('leads left segments with a separator on their own background', () => {
     const generated = generateToml(powerlineState);
-    expect(generated).toContain(`[${SEPARATOR_RIGHT}](fg:prev_bg bg:git_branch)`);
+    expect(generated).toContain(`[${SEPARATOR_RIGHT}](fg:git_branch fg:prev_bg bg:git_branch)`);
+  });
+
+  it('draws a separator with nothing before it in its own colour, not as a stray arrow', () => {
+    const generated = generateToml({ ...powerlineState, leftModules: ['username', 'directory'] });
+    expect(generated).toContain(`[${SEPARATOR_RIGHT}](fg:directory fg:prev_bg bg:directory)`);
   });
 
   it('leaves the first left segment without a separator', () => {

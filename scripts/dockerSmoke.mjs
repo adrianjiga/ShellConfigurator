@@ -273,8 +273,9 @@ await check('applyShellConfig drops a stale fish unset guard and stays configure
   );
 
   const result = applyShellConfig('fish');
-  assert.equal(result.applied, false);
-  assert.equal(result.note, 'already configured');
+  assert.equal(result.applied, true);
+  assert.equal(result.note, 'removed a stale ShellConfigurator block');
+  assert.equal(applyShellConfig('fish').note, 'already configured');
 
   const content = readFileSync(fishRc, 'utf8');
   assert.ok(content.includes('set -gx STARSHIP_CONFIG'), 'per-shell wiring removed');

@@ -34,6 +34,57 @@ describe('runInstallTasks', () => {
     expect(starship?.label).toContain('starship 1.20');
   });
 
+  it('fails the Starship step when the install finished but starship cannot be found', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
+      getMissingStarshipPathDir: vi.fn().mockReturnValue(null),
+    });
+    const results = await runInstallTasks(state(), deps, vi.fn());
+
+    expect(results.find((t) => t.id === 'starship')).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('starship cannot be found'),
+    });
+  });
+
+  it('leaves a shell the package manager has no package for to the user, and still sets it up', async () => {
+    const deps = fakeDeps();
+    const results = await runInstallTasks(
+      state({
+        selectedShells: ['powershell'],
+        installedShells: [],
+        packageManager: 'apt',
+        setDefaultShell: 'powershell',
+      }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.installShell).not.toHaveBeenCalled();
+    expect(results.find((t) => t.id === 'shell_powershell')).toMatchObject({
+      status: 'skipped',
+      note: 'no apt package: install powershell yourself; its Starship setup below is ready for it',
+    });
+    expect(results.find((t) => t.id === 'chsh')).toMatchObject({
+      status: 'failed',
+      error: 'Cannot set powershell as the default shell — install it first',
+    });
+    expect(deps.writeShellConfig).toHaveBeenCalledWith(expect.any(String), 'powershell');
+  });
+
+  it('says when the installed Starship is too old for the config', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi
+        .fn()
+        .mockResolvedValue({ installed: true, version: 'starship 1.16.0' }),
+    });
+    const results = await runInstallTasks(state(), deps, vi.fn());
+
+    expect(results.find((t) => t.id === 'starship')?.note).toBe(
+      'starship 1.16.0 is older than 1.20.0, which the generated config needs: upgrade Starship, or the prompt may not load'
+    );
+  });
+
   it('passes the cancel signal to the install steps', async () => {
     const controller = new AbortController();
     const deps = fakeDeps();
@@ -76,6 +127,7 @@ describe('runInstallTasks', () => {
 
   it('records the version of a script install that PATH cannot see yet', async () => {
     const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
       // Nothing is there before the install; the script then lands it off PATH.
       getMissingStarshipPathDir: vi
         .fn<() => string | null>()
@@ -447,7 +499,7 @@ describe('runInstallTasks', () => {
   });
 
   it('skips verification when starship is not on PATH', async () => {
-    const deps = fakeDeps();
+    const deps = fakeDeps({ isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }) });
     const results = await runInstallTasks(
       state({ selectedShells: ['zsh'], installedShells: ['zsh'] }),
       deps,
@@ -809,6 +861,7 @@ describe('runInstallTasks', () => {
     expect(deps.getShellsUsingStarship).not.toHaveBeenCalled();
     expect(deps.installStarship).not.toHaveBeenCalled();
     expect(deps.writeShellConfig).not.toHaveBeenCalled();
+    expect(results.length).toBeGreaterThan(0);
     expect(results.every((t) => t.status === 'failed' && t.error === 'Cancelled')).toBe(true);
   });
 
@@ -847,7 +900,10 @@ describe('runInstallTasks', () => {
   });
 
   it('verifies through the script install dir and says so', async () => {
-    const deps = fakeDeps({ getMissingStarshipPathDir: vi.fn(() => '/home/u/.local/bin') });
+    const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
+      getMissingStarshipPathDir: vi.fn(() => '/home/u/.local/bin'),
+    });
 
     const results = await runInstallTasks(
       state({ selectedShells: ['zsh'], installedShells: ['zsh'] }),
@@ -981,6 +1037,7 @@ describe('runInstallTasks', () => {
     );
 
     expect(deps.getShellsUsingStarship).not.toHaveBeenCalled();
+    expect(results.length).toBeGreaterThan(0);
     expect(results.every((t) => t.status !== 'pending')).toBe(true);
   });
 

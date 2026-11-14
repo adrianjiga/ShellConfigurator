@@ -14,6 +14,7 @@ import { errorMessage } from '../services/errors.ts';
 import { fontLabel, getFontFamily, MANUAL_STARSHIP_INSTALL } from '../services/installer.ts';
 import {
   buildTaskList,
+  fontsElsewhere,
   plannedResetShells,
   rcTaskId,
   sharedConfigNote,
@@ -76,37 +77,57 @@ export function DoneScreen({ state }: DoneScreenProps) {
     true
   );
   const saved = useRef(false);
+  const restored = useRef(false);
+  const [pending, setPending] = useState<'share' | 'restore' | null>(null);
 
   const failures = state.installResults.filter((t) => t.status === 'failed');
   const hasFailures = failures.length > 0;
   // A dry run never installs, so it has no results to report by design.
   const noResults = !state.dryRun && state.installResults.length === 0;
 
+  function share(): void {
+    if (saved.current) return;
+    try {
+      const file = writeShareFile(state);
+      saved.current = true;
+      setShared({ file });
+    } catch (err) {
+      setShared({ error: errorMessage(err) });
+    }
+  }
+
+  function restore(): void {
+    if (restored.current) return;
+    restored.current = true;
+    try {
+      setOutcome(restoreConfigBackups(state.selectedShells));
+    } catch (err) {
+      setOutcome({
+        restored: [],
+        failed: [{ what: 'shared', restoredFrom: 'the backups', error: errorMessage(err) }],
+      });
+    }
+  }
+
   useInput((char, key) => {
+    if (pending) {
+      setPending(null);
+      if (char.toLowerCase() !== 'y') return;
+      if (pending === 'share') share();
+      else restore();
+      return;
+    }
     if (key.return || key.escape || char.toLowerCase() === 'q') {
       exit();
       return;
     }
     if (char.toLowerCase() === 's' && canShare && !saved.current) {
-      try {
-        const file = writeShareFile(state);
-        saved.current = true;
-        setShared({ file });
-      } catch (err) {
-        setShared({ error: errorMessage(err) });
-      }
+      setPending('share');
       return;
     }
     // No backups were made in a dry run, so restoring would clobber real files.
     if (char.toLowerCase() === 'r' && outcome === null && !state.dryRun) {
-      try {
-        setOutcome(restoreConfigBackups(state.selectedShells));
-      } catch (err) {
-        setOutcome({
-          restored: [],
-          failed: [{ what: 'shared', restoredFrom: 'the backups', error: errorMessage(err) }],
-        });
-      }
+      setPending('restore');
     }
   });
 
@@ -191,15 +212,13 @@ export function DoneScreen({ state }: DoneScreenProps) {
               )}
             </Box>
 
-            {fontId && state.container && (
+            {fontId && fontsElsewhere(state) && (
               <Box flexDirection="row" gap={1}>
                 <StatusMark status="skipped" />
-                <Text>
-                  Nerd Font skipped — inside a container fonts belong to the host terminal
-                </Text>
+                <Text>Nerd Font skipped — {fontsElsewhere(state)}</Text>
               </Box>
             )}
-            {fontId && !state.container && (
+            {fontId && !fontsElsewhere(state) && (
               <Box flexDirection="column">
                 <Box flexDirection="row" gap={1}>
                   <StatusMark status={fontTask?.status ?? 'unknown'} />
@@ -241,7 +260,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
                     )}
                     <Text color={uiColor('gray')}>
                       {rcTask?.status === 'done'
-                        ? `init line added to ${shell?.rcFile}`
+                        ? `${shell?.rcFile} updated`
                         : rcTask?.status === 'skipped'
                           ? shell?.rcFile
                             ? (rcNote ?? 'skipped')
@@ -347,8 +366,8 @@ export function DoneScreen({ state }: DoneScreenProps) {
                 </Text>
               )}
               <Text color={uiColor('gray')}>
-                Run <Text color={uiColor('cyan')}>starship print-config</Text> to view the generated
-                config.
+                After restarting, run <Text color={uiColor('cyan')}>starship print-config</Text> to
+                view the config the shell loads.
               </Text>
               <Text color={uiColor('gray')}>
                 Run <Text color={uiColor('cyan')}>shell-configurator doctor</Text> to check the
@@ -404,6 +423,17 @@ export function DoneScreen({ state }: DoneScreenProps) {
                 <Text color={uiColor('cyan')}>s</Text> to try again.
               </>
             )}
+          </Text>
+        </Box>
+      )}
+
+      {pending !== null && (
+        <Box marginTop={1}>
+          <Text color={uiColor('yellow')}>
+            {pending === 'share'
+              ? 'Save starship-prompt.md in this folder?'
+              : 'Put the Starship configs back from their newest backups, over the ones this run wrote?'}{' '}
+            Press <Text color={uiColor('cyan')}>y</Text> to go ahead, any other key to cancel.
           </Text>
         </Box>
       )}

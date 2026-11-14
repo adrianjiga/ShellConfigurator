@@ -18,7 +18,6 @@ export type PreviewSample = Pick<
 
 export interface ModuleTomlContext {
   hasNerdFont: boolean;
-  powerline: boolean;
   /** The generator writes this module's `format` itself (powerline or brackets). */
   customFormat: boolean;
   /** Starship `directory.truncation_length`; `0` shows the full path. */
@@ -37,8 +36,6 @@ export interface ModuleDef {
   id: ConfigurableModuleId;
   label: string;
   description: string;
-  defaultLeft: boolean;
-  defaultRight: boolean;
   // Returns a short colored preview string for the prompt preview.
   // Modules whose preview symbol is a Nerd Font glyph branch on hasNerdFont; emoji
   // and plain Unicode render without one (battery previews its emoji either way).
@@ -136,8 +133,6 @@ const MODULE_DEFS = {
   username: {
     label: 'Username',
     description: 'Current user (shown when SSH or root)',
-    defaultLeft: false,
-    defaultRight: false,
 
     previewSegment: () => 'user',
     content: '$user',
@@ -152,8 +147,6 @@ style_root  = "${tomlBasic(styleFor('err'))}"
   hostname: {
     label: 'Hostname',
     description: 'Machine hostname (shown when SSH)',
-    defaultLeft: false,
-    defaultRight: false,
 
     previewSegment: () => 'host',
     content: '$ssh_symbol$hostname',
@@ -162,8 +155,6 @@ style_root  = "${tomlBasic(styleFor('err'))}"
   directory: {
     label: 'Directory',
     description: 'Current directory path',
-    defaultLeft: true,
-    defaultRight: false,
 
     // Like starship, substitutions replace matching text anywhere in the path, and
     // truncation keeps the last folders with no marker (the default symbol is empty).
@@ -187,7 +178,7 @@ style_root  = "${tomlBasic(styleFor('err'))}"
     }) => {
       const lines = [
         `truncation_length = ${directoryTruncationLength}`,
-        `truncate_to_repo  = true`,
+        `truncate_to_repo  = ${directoryTruncationLength !== 0}`,
       ];
       if (hasNerdFont && !customFormat) {
         lines.push(
@@ -206,8 +197,6 @@ style_root  = "${tomlBasic(styleFor('err'))}"
   git_branch: {
     label: 'Git Branch',
     description: 'Active git branch name',
-    defaultLeft: true,
-    defaultRight: false,
 
     previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.gitBranch : ''}main`,
     plainPreview: (nf) => `on ${nf ? NERD_FONT_SYMBOLS.gitBranch : ''}main`,
@@ -219,8 +208,6 @@ style_root  = "${tomlBasic(styleFor('err'))}"
   git_status: {
     label: 'Git Status',
     description: 'Staged, modified, and untracked file counts',
-    defaultLeft: true,
-    defaultRight: false,
 
     previewSegment: () => '+1',
     plainPreview: () => '[+1]',
@@ -239,8 +226,6 @@ deleted   = "-\${count}"
   nodejs: {
     label: 'Node.js',
     description: 'Node version (shown in JS/TS projects)',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule((nf) => (nf ? NERD_FONT_SYMBOLS.nodejs : 'node '), 'v22.0.0'),
     content: '$symbol$version',
@@ -248,8 +233,6 @@ deleted   = "-\${count}"
   python: {
     label: 'Python',
     description: 'Python version (shown in Python projects)',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule((nf) => (nf ? NERD_FONT_SYMBOLS.python : 'py '), '3.12.0'),
     content: '$symbol$version( \\($virtualenv\\))',
@@ -257,8 +240,6 @@ deleted   = "-\${count}"
   rust: {
     label: 'Rust',
     description: 'Rust version (shown in Rust projects)',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule((nf) => (nf ? NERD_FONT_SYMBOLS.rust : 'rs '), '1.80.0'),
     content: '$symbol$version',
@@ -266,8 +247,6 @@ deleted   = "-\${count}"
   docker_context: {
     label: 'Docker',
     description: 'Docker context name',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule(() => '🐳 ', 'dev'),
     content: '$symbol$context',
@@ -275,8 +254,6 @@ deleted   = "-\${count}"
   kubernetes: {
     label: 'Kubernetes',
     description: 'K8s cluster context and namespace',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule(() => '☸ ', 'prod'),
     content: '$symbol$context( \\($namespace\\))',
@@ -284,8 +261,6 @@ deleted   = "-\${count}"
   aws: {
     label: 'AWS',
     description: 'AWS region and profile',
-    defaultLeft: false,
-    defaultRight: false,
 
     previewSegment: () => '☁️ us-east-1',
     content: '$symbol($profile )(\\($region\\))',
@@ -298,8 +273,6 @@ disabled = false
   time: {
     label: 'Time',
     description: 'Current time',
-    defaultLeft: false,
-    defaultRight: false,
 
     previewSegment: () => '12:34',
     plainPreview: () => 'at 12:34',
@@ -313,8 +286,6 @@ time_format = "%H:%M"
   battery: {
     label: 'Battery',
     description: 'Battery level (turns red below 30%)',
-    defaultLeft: false,
-    defaultRight: false,
 
     previewSegment: () => '🔋 85%',
     content: '$symbol$percentage',
@@ -345,8 +316,6 @@ style     = "${tomlBasic(styleFor('battery'))}"
   cmd_duration: {
     label: 'Command Duration',
     description: 'Time taken by the last command (when it ran 2s or longer)',
-    defaultLeft: false,
-    defaultRight: true,
 
     previewSegment: () => '2s',
     plainPreview: () => 'took 2s',
@@ -355,8 +324,6 @@ style     = "${tomlBasic(styleFor('battery'))}"
   jobs: {
     label: 'Background Jobs',
     description: 'Number of background jobs',
-    defaultLeft: false,
-    defaultRight: false,
 
     previewSegment: () => '2',
     content: '$symbol$number',
@@ -369,8 +336,6 @@ number_threshold = 1
   status: {
     label: 'Exit Status',
     description: 'Exit code of the previous command (shown on failure)',
-    defaultLeft: false,
-    defaultRight: false,
 
     previewSegment: () => '❌ 127',
     content: '$symbol$status',
@@ -379,8 +344,6 @@ number_threshold = 1
   os: {
     label: 'Operating System',
     description: 'Icon for the current operating system',
-    defaultLeft: false,
-    defaultRight: false,
 
     previewSegment: () => '🐧',
     content: '$symbol',
@@ -389,8 +352,6 @@ number_threshold = 1
   shlvl: {
     label: 'Shell Level',
     description: 'Nested shell depth',
-    defaultLeft: false,
-    defaultRight: false,
 
     previewSegment: () => '↕️ 2',
     content: '$symbol$shlvl',
@@ -403,8 +364,6 @@ threshold = 2
   sudo: {
     label: 'Sudo',
     description: 'Shown while sudo credentials are cached',
-    defaultLeft: false,
-    defaultRight: false,
 
     previewSegment: () => '🧙',
     content: '$symbol',
@@ -413,8 +372,6 @@ threshold = 2
   git_commit: {
     label: 'Git Commit',
     description: 'Current commit hash (shown when HEAD is detached)',
-    defaultLeft: false,
-    defaultRight: false,
 
     previewSegment: () => '(a1b2c3d)',
     content: '\\($hash$tag\\)',
@@ -422,8 +379,6 @@ threshold = 2
   golang: {
     label: 'Go',
     description: 'Go version (shown in Go projects)',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule(() => '🐹 ', 'v1.22'),
     content: '$symbol$version',
@@ -431,8 +386,6 @@ threshold = 2
   java: {
     label: 'Java',
     description: 'Java version (shown in Java projects)',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule(() => '☕ ', 'v21'),
     content: '$symbol$version',
@@ -440,8 +393,6 @@ threshold = 2
   dotnet: {
     label: '.NET',
     description: '.NET SDK version (shown in .NET projects)',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule(() => '.NET ', '8.0'),
     content: '$symbol$version',
@@ -449,8 +400,6 @@ threshold = 2
   ruby: {
     label: 'Ruby',
     description: 'Ruby version (shown in Ruby projects)',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule(() => '💎 ', '3.3'),
     content: '$symbol$version',
@@ -458,8 +407,6 @@ threshold = 2
   php: {
     label: 'PHP',
     description: 'PHP version (shown in PHP projects)',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule(() => '🐘 ', '8.3'),
     content: '$symbol$version',
@@ -467,8 +414,6 @@ threshold = 2
   c: {
     label: 'C',
     description: 'C compiler version (shown in C projects)',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule(() => 'C ', '13.2'),
     content: '$symbol$version',
@@ -476,8 +421,6 @@ threshold = 2
   cpp: {
     label: 'C++',
     description: 'C++ compiler version (shown in C++ projects)',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule(() => 'C++ ', '13.2'),
     content: '$symbol$version',
@@ -485,8 +428,6 @@ threshold = 2
   zig: {
     label: 'Zig',
     description: 'Zig version (shown in Zig projects)',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule(() => '↯ ', '0.13'),
     content: '$symbol$version',
@@ -494,8 +435,6 @@ threshold = 2
   lua: {
     label: 'Lua',
     description: 'Lua version (shown in Lua projects)',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule(() => '🌙 ', '5.4'),
     content: '$symbol$version',
@@ -503,8 +442,6 @@ threshold = 2
   swift: {
     label: 'Swift',
     description: 'Swift version (shown in Swift projects)',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule(() => '🐦 ', '5.10'),
     content: '$symbol$version',
@@ -512,8 +449,6 @@ threshold = 2
   elixir: {
     label: 'Elixir',
     description: 'Elixir version (shown in Elixir projects)',
-    defaultLeft: false,
-    defaultRight: false,
 
     ...symbolModule(() => '💧 ', '1.16'),
     content: '$symbol$version',

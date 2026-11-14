@@ -43,7 +43,8 @@ function buildFormatString(segments: ConfigurableModuleId[]): string {
 
 /**
  * Leading separator styled with starship's `prev_bg` (1.20+) so a collapsed
- * module takes its separator with it.
+ * module takes its separator with it. On the left, the leading `fg:<color>` is
+ * the fallback for when nothing was drawn before it.
  */
 function powerlineFormat(
   content: string,
@@ -53,7 +54,8 @@ function powerlineFormat(
 ): string {
   const block = `[ ${content} ]($style)`;
   if (!separator) return `(${block})`;
-  const separatorStyle = side === 'left' ? `fg:prev_bg bg:${color}` : `fg:${color} bg:prev_bg`;
+  const separatorStyle =
+    side === 'left' ? `fg:${color} fg:prev_bg bg:${color}` : `fg:${color} bg:prev_bg`;
   const glyph = `[${side === 'left' ? SEPARATOR_RIGHT : SEPARATOR_LEFT}](${separatorStyle})`;
   return `(${glyph}${block})`;
 }
@@ -79,7 +81,8 @@ function moduleBlock(id: ModuleId, ctx: BlockContext): string {
     // `vimcmd_symbol` only changes the glyph in normal mode; starship's default
     // character format already reads the `symbol` variable for every mode.
     const vimSymbol = `[${escapeFormatLiteral(symbol.vim)}](${symbol.vimStyle})`;
-    const vim = state.vimMode ? `\nvimcmd_symbol  = ${tomlLiteral(vimSymbol)}` : '';
+    const vimcmd = state.vimMode ? vimSymbol : `[${success}](bold ok)`;
+    const vim = `\nvimcmd_symbol  = ${tomlLiteral(vimcmd)}`;
     return `
 [character]
 success_symbol = ${tomlLiteral(`[${success}](bold ok)`)}
@@ -110,7 +113,6 @@ error_symbol   = ${tomlLiteral(`[${error}](bold err)`)}${vim}
 
   const settings = def.settings?.({
     hasNerdFont: state.hasNerdFont,
-    powerline,
     customFormat: powerline || bracketed,
     styleFor,
     directoryTruncationLength: state.directoryTruncationLength,

@@ -40,12 +40,12 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 
 **Purpose**: Detect system state, gate entry into the wizard.
 
-**Layout**: Full-width (no preview). Shows title, description, and a bordered detection results box.
+**Layout**: Full-width (no preview). Shows title, description, and the detection results below them (no border).
 
 **Flow**:
 
-- On mount, runs async detection: package manager, Starship status (including a script install that PATH does not reach yet), terminal emulator, and container (installed shells are detected later, on the Shell Select step). A detected container shows a note that the font and default-shell steps will be skipped
-- Displays results as they complete
+- On mount, runs async detection: package manager, Starship status (including a script install that PATH does not reach yet), terminal emulator, container, and SSH/WSL session (installed shells are detected later, on the Shell Select step). A detected container shows a note that the font and default-shell steps will be skipped
+- Shows "Detecting system..." until every check is done, then all results at once
 - If Starship is installed: Enter to continue
 - If not: SelectInput with "Install automatically" / "I'll install manually"
   - "Install manually" shows the install-script command (`curl -sS https://starship.rs/install.sh | sh`) and the docs link, and offers:
@@ -90,7 +90,7 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 
 **Purpose**: Choose a starting configuration to customize.
 
-**Layout**: Filtered list of presets. Presets requiring Nerd Fonts are marked `★` and are hidden (with a note saying so) if the user selected "no Nerd Font". The list shows a limited number of rows and scrolls; each preset shows a description below the list when highlighted. Choosing a preset on a revisit asks for confirmation first, since it replaces the segment and style choices.
+**Layout**: Filtered list of presets. Presets requiring Nerd Fonts are marked `★` and are hidden (with a note saying so) if the user selected "no Nerd Font". The list shows a limited number of rows and scrolls; each preset shows a description below the list when highlighted. Choosing a preset on a revisit asks for confirmation first, since it replaces the segment and style choices: `Enter` applies it, `k` keeps the choices made so far and goes on, `Esc` cancels.
 
 **Preview**: The highlighted preset's description updates live below the list; the preview pane itself swaps only once a preset is confirmed with Enter (modules, palette, and powerline are committed together then).
 
@@ -99,6 +99,9 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 ---
 
 ### 5 & 6. Segments (Left / Right)
+
+The list shows 12 rows at a time around the cursor, with `↑ N more` / `↓ N more`
+lines for the rest, so the screen fits a usual terminal.
 
 **Purpose**: Choose and order the modules for each side of the prompt.
 
@@ -220,8 +223,8 @@ is not selected, already starts Starship and has no working setup of its own get
 config" row and a note, from `sharedConfigNote`, that it will use the shared
 `starship.toml` again; Done repeats the note for
 the shells it switched), the
-config paths with the generated TOML shown once (`ConfigPlan`), a **Files on
-files** list of every config and rc file the run creates or edits with its added
+config paths with the generated TOML shown once (`ConfigPlan`: its first 8 lines,
+`t` shows the rest), a **Config and rc files** list of every config and rc file the run creates or edits with its added
 and removed line counts (paths under home shown as `~/…`), then a **Shell wiring**
 section with, per selected shell, the diff of its rc file against what is on disk
 (`plannedFileChanges`, from the same planner the real write uses: where the block
@@ -342,7 +345,7 @@ In `--dry-run` mode the header reads "Dry run — no changes were made" and the 
 shows the same plan sections as Review (`TaskPlan` titled "Tasks that would run",
 plus `ConfigPlan`) and a hint to run without `--dry-run`.
 
-**Keys**: `Enter` / `Esc` / `Q` to exit; `r` runs a one-key undo — it copies the
+**Keys**: `Enter` / `Esc` / `Q` to exit; `r` runs an undo — it copies the
 newest `.bak-*` backups back over the shared and per-shell Starship configs (the
 same code path as the CLI's `--restore`) and prints what was restored. It does not
 undo rc-file edits or terminal font configs, runs at most once, and is disabled in
@@ -351,7 +354,9 @@ dry-run mode (no backups were made). `s` saves the prompt as Markdown to share
 next to an existing one; an exclusive create, so it never overwrites, and it gives
 up after 100 names) and shows where; it works in
 dry-run mode too, where the hint says it still writes the file, saves
-once (after a failure `s` tries again), and is not offered in adopt mode.
+once (after a failure `s` tries again), and is not offered in adopt mode. Both `r` and `s` first ask
+for `y`; any other key cancels the question without exiting, so typing a
+command into the finished screen changes nothing.
 
 ---
 

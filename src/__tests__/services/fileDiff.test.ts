@@ -8,6 +8,7 @@ import { getSharedConfigPath, getShellConfigPath } from '../../generators/shellR
 import { generateToml } from '../../generators/starship.ts';
 import { plannedFileChanges, unifiedDiff } from '../../services/fileDiff.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
+import { hasBinary } from '../helpers/binaries.ts';
 
 let tmpDir: string;
 
@@ -73,35 +74,38 @@ describe('unifiedDiff', () => {
     );
   });
 
-  it('produces patches that `patch` applies to get the new file back', () => {
-    let seed = 7;
-    const random = (n: number) => {
-      seed = (seed * 1103515245 + 12345) % 2 ** 31;
-      return seed % n;
-    };
-    const words = ['a', 'b', 'c', 'd', 'export X=1', ''];
-    for (let round = 0; round < 40; round++) {
-      const before = Array.from({ length: random(25) }, () => words[random(words.length)]);
-      const after = [...before];
-      for (let edit = random(6); edit > 0; edit--) {
-        const at = random(after.length + 1);
-        if (random(2) === 0 && after.length > 0) after.splice(at, 1);
-        else after.splice(at, 0, words[random(words.length)]);
+  it.skipIf(!hasBinary('patch'))(
+    'produces patches that `patch` applies to get the new file back',
+    () => {
+      let seed = 7;
+      const random = (n: number) => {
+        seed = (seed * 1103515245 + 12345) % 2 ** 31;
+        return seed % n;
+      };
+      const words = ['a', 'b', 'c', 'd', 'export X=1', ''];
+      for (let round = 0; round < 40; round++) {
+        const before = Array.from({ length: random(25) }, () => words[random(words.length)]);
+        const after = [...before];
+        for (let edit = random(6); edit > 0; edit--) {
+          const at = random(after.length + 1);
+          if (random(2) === 0 && after.length > 0) after.splice(at, 1);
+          else after.splice(at, 0, words[random(words.length)]);
+        }
+        const ending = () => (random(4) === 0 ? '' : '\n');
+        const beforeText = before.length ? `${before.join('\n')}${ending()}` : '';
+        const afterText = after.length ? `${after.join('\n')}${ending()}` : '';
+        const diff = unifiedDiff(beforeText, afterText, 'f');
+        if (beforeText === afterText) {
+          expect(diff).toBe('');
+          continue;
+        }
+        const file = path.join(tmpDir, `round-${round}`);
+        fs.writeFileSync(file, beforeText);
+        execFileSync('patch', ['-s', file], { input: diff });
+        expect(fs.readFileSync(file, 'utf8')).toBe(afterText);
       }
-      const ending = () => (random(4) === 0 ? '' : '\n');
-      const beforeText = before.length ? `${before.join('\n')}${ending()}` : '';
-      const afterText = after.length ? `${after.join('\n')}${ending()}` : '';
-      const diff = unifiedDiff(beforeText, afterText, 'f');
-      if (beforeText === afterText) {
-        expect(diff).toBe('');
-        continue;
-      }
-      const file = path.join(tmpDir, `round-${round}`);
-      fs.writeFileSync(file, beforeText);
-      execFileSync('patch', ['-s', file], { input: diff });
-      expect(fs.readFileSync(file, 'utf8')).toBe(afterText);
     }
-  });
+  );
 });
 
 function state(overrides: Partial<WizardState> = {}): WizardState {
@@ -128,7 +132,7 @@ describe('plannedFileChanges', () => {
     expect(fs.existsSync(getShellConfigPath('zsh'))).toBe(false);
   });
 
-  it('leaves out files a run would not change', () => {
+  it.skipIf(!hasBinary('patch'))('leaves out files a run would not change', () => {
     write(getShellConfigPath('zsh'), generateToml(state()));
     const rc = getShell('zsh')!.rcFile!;
     expect(plannedFileChanges(state(), [], null).map((c) => c.path)).toEqual([rc]);

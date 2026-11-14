@@ -46,7 +46,9 @@ jobs:
 
       - name: Hand the changes on as a patch
         id: diff
-        run: echo "patch=$(git diff --binary | base64 -w0)" >> "$GITHUB_OUTPUT"
+        run: |
+          patch="$(git diff --binary -- . ':(exclude).github' ':(exclude)scripts/install.sh' | base64 -w0)"
+          echo "patch=$patch" >> "$GITHUB_OUTPUT"
 
   push:
     needs: fix
@@ -56,6 +58,7 @@ jobs:
     permissions:
       contents: write
       actions: write
+      pull-requests: write
     steps:
       - name: Checkout the PR commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,6 +84,12 @@ jobs:
       # Commits pushed with GITHUB_TOKEN do not start new workflow runs;
       # workflow_dispatch is the documented exception. Both required-check
       # workflows are dispatched so every check lands on the new commit.
+      - name: Leave a PR that needed changes to a human
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --disable-auto "$PR_URL" || true
+
       - name: Re-run CI on the new commit
         env:
           GH_TOKEN: ${{ github.token }}

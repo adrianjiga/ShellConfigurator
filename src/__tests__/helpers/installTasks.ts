@@ -4,7 +4,10 @@ import type { InstallTaskDeps } from '../../services/installTasks.ts';
 /** A runInstallTasks deps object that succeeds everywhere; override per test. */
 export function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskDeps {
   return {
-    isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
+    isStarshipInstalled: vi
+      .fn()
+      .mockResolvedValueOnce({ installed: false })
+      .mockResolvedValue({ installed: true, version: 'starship 1.27.0' }),
     installStarship: vi.fn().mockResolvedValue(undefined),
     recordStarshipVersion: vi.fn(),
     installNerdFont: vi.fn().mockResolvedValue(undefined),

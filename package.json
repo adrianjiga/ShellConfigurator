@@ -1,6 +1,6 @@
 {
   "name": "shell-configurator",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Interactive terminal wizard for configuring Starship prompt",
   "license": "MIT",
   "type": "module",
@@ -44,7 +44,7 @@
     "ink-select-input": "^6.2.0",
     "react": "^19.3.1"
   },
-  "bundledDependencies": [
+  "bundleDependencies": [
     "fflate",
     "ink",
     "ink-select-input",
@@ -53,7 +53,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.6.7",
     "@iarna/toml": "^2.2.5",
-    "@types/node": "^26.6.6",
+    "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@vitest/coverage-v8": "^5.1.0",
     "ink-testing-library": "^4.0.0",

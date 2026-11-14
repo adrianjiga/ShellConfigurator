@@ -1,3 +1,4 @@
+import { Text } from 'ink';
 import { cleanup, render } from 'ink-testing-library';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -39,6 +40,7 @@ vi.mock('../../services/tty.ts', () => ({
   subscribeToUiSuspension: (listener: (suspended: boolean) => void) =>
     mocks.subscribeToUiSuspension(listener),
   isUiSuspended: () => mocks.isUiSuspended(),
+  restoreTty: () => {},
 }));
 
 afterEach(() => {
@@ -265,17 +267,81 @@ describe('InstallingScreen SIGINT', () => {
     expect(signal.current?.aborted).toBe(true);
   });
 
-  it('stops listening for SIGINT once the screen is gone', async () => {
+  it('stops listening for SIGINT, SIGTERM and SIGHUP once the screen is gone', async () => {
     mocks.buildTaskList.mockReturnValue(statusFixture());
     captureSignal();
-    const ours = () =>
-      process.listeners('SIGINT').filter((l) => l.toString().includes('setCancelling'));
+    const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+    const before = signals.map((s) => process.listeners(s));
+    const addedSince = () =>
+      signals.map((s, i) => process.listeners(s).filter((l) => !before[i]!.includes(l)).length);
+    const plain = render(<Text>plain</Text>);
+    await flush();
+    const byInk = addedSince();
+    plain.unmount();
+    await flush();
     const { instance } = setup();
     await flush();
-    expect(ours()).toHaveLength(1);
+    expect(addedSince()).toEqual(byInk.map((n) => n + 1));
     instance.unmount();
     await flush();
-    expect(ours()).toHaveLength(0);
+    expect(signals.map((s) => process.listeners(s))).toEqual(before);
+  });
+
+  it('counts a Ctrl+C key as the first cancel, so a following SIGINT exits', async () => {
+    mocks.buildTaskList.mockReturnValue(statusFixture());
+    const signal = captureSignal();
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const { instance } = setup();
+    await flush();
+
+    instance.stdin.write('\u0003');
+    await flush();
+    expect(signal.current?.aborted).toBe(true);
+    process.emit('SIGINT');
+
+    expect(exit).toHaveBeenCalledWith(130);
+    instance.unmount();
+    exit.mockRestore();
+  });
+
+  it('exits on a second signal instead of swallowing it', async () => {
+    mocks.buildTaskList.mockReturnValue(statusFixture());
+    captureSignal();
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const { instance } = setup();
+    await flush();
+
+    process.emit('SIGINT');
+    process.emit('SIGINT');
+
+    expect(exit).toHaveBeenCalledWith(130);
+    instance.unmount();
+    exit.mockRestore();
+  });
+
+  it('records the run and exits after SIGTERM, with no Done screen to wait on', async () => {
+    mocks.buildTaskList.mockReturnValue(statusFixture());
+    const signal: { current?: AbortSignal } = {};
+    mocks.runInstallTasks.mockImplementation(
+      (_state, _deps, _onUpdate, abortSignal) =>
+        new Promise<InstallTask[]>((resolve) => {
+          signal.current = abortSignal;
+          abortSignal?.addEventListener('abort', () =>
+            resolve([{ id: 'starship', label: 'Starship', status: 'failed', error: 'Cancelled' }])
+          );
+        })
+    );
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const { onNext } = setup();
+    await flush();
+
+    process.emit('SIGTERM');
+    await waitFor(() => exit.mock.calls.length > 0);
+
+    expect(signal.current?.aborted).toBe(true);
+    expect(onNext).toHaveBeenCalled();
+    expect(exit).toHaveBeenCalledWith(143);
+    exit.mockRestore();
   });
 });
 
@@ -352,6 +418,7 @@ describe('InstallingScreen after the run', () => {
     const { instance } = setup();
     await flush();
     await flush();
+    expect(instance.lastFrame()).toContain('All done');
     instance.stdin.write('c');
     await flush();
     expect(instance.lastFrame()).not.toContain('Cancelling');

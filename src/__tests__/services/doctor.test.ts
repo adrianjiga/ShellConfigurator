@@ -1,13 +1,22 @@
-import { describe, expect, it, vi } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getShell } from '../../config/shells.ts';
 import {
   getSharedConfigPath,
   getShellConfigPath,
   starshipConfigLine,
 } from '../../generators/shellRc.ts';
-import { type DoctorDeps, formatDoctorReport, runDoctor } from '../../services/doctor.ts';
+import {
+  DEFAULT_DOCTOR_DEPS,
+  type DoctorDeps,
+  formatDoctorReport,
+  runDoctor,
+} from '../../services/doctor.ts';
 import { type RepairDeps, runRepair } from '../../services/repair.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
+import { stubPlatform } from '../helpers/platform.ts';
 
 const ZSH_RC = getShell('zsh')!.rcFile!;
 const ZSH_CONFIG = getShellConfigPath('zsh');
@@ -31,6 +40,7 @@ function makeDeps(
     detectCurrentShell: vi.fn().mockResolvedValue('zsh'),
     readCachedStarshipVersion: vi.fn().mockReturnValue(null),
     detectInstalledShells: vi.fn().mockResolvedValue(['zsh']),
+    lastRunShells: vi.fn().mockReturnValue(null),
     detectTerminal: vi.fn().mockResolvedValue('kitty'),
     readFontFamily: vi.fn().mockReturnValue('JetBrainsMono Nerd Font'),
     hasBundledNerdFonts: vi.fn().mockResolvedValue(false),
@@ -138,6 +148,11 @@ describe('runDoctor', () => {
     );
     expect(find(latin, 'locale').status).toBe('warn');
     expect(find(latin, 'locale').detail).toMatch(/not UTF-8/);
+    const utf8 = await runDoctor(
+      baseState(),
+      makeDeps(wired(new Map()), { env: { LANG: 'en_US.utf8' } })
+    );
+    expect(find(utf8, 'locale')).toMatchObject({ status: 'pass', detail: 'en_US.utf8' });
   });
 
   it('accepts an init line spelled differently', async () => {
@@ -425,12 +440,46 @@ describe('runDoctor', () => {
     expect(find(report, 'font-selected').detail).toMatch(/no supported terminal/);
   });
 
-  it('detects installed shells when no state card is given', async () => {
+  it('checks only the installed shells that were set up when no state card is given', async () => {
     const deps = makeDeps(wired(new Map()), {
+      detectInstalledShells: vi.fn().mockResolvedValue(['zsh', 'bash']),
+    });
+    const report = await runDoctor(null, deps);
+    expect(find(report, 'shell:zsh').status).toBe('pass');
+    expect(report.findings.some((f) => f.id === 'shell:bash')).toBe(false);
+    expect(report.ok).toBe(true);
+  });
+
+  it('checks a shell the last run set up even after its init line is gone', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      detectInstalledShells: vi.fn().mockResolvedValue(['zsh', 'bash']),
+      lastRunShells: vi.fn().mockReturnValue(['bash']),
+    });
+    const report = await runDoctor(null, deps);
+    expect(find(report, 'shell:bash')).toMatchObject({
+      status: 'fail',
+      fix: { kind: 'configure-shell', shellId: 'bash' },
+    });
+  });
+
+  it('checks a shell with a ShellConfigurator block but no init line', async () => {
+    const bashrc = getShell('bash')!.rcFile!;
+    const files = wired(
+      new Map([[bashrc, '# Added by ShellConfigurator\nunset STARSHIP_CONFIG\n']])
+    );
+    const deps = makeDeps(files, {
+      detectInstalledShells: vi.fn().mockResolvedValue(['zsh', 'bash']),
+    });
+    expect(find(await runDoctor(null, deps), 'shell:bash').status).toBe('fail');
+  });
+
+  it('warns when no installed shell was set up', async () => {
+    const deps = makeDeps(new Map(), {
       detectInstalledShells: vi.fn().mockResolvedValue(['bash']),
     });
     const report = await runDoctor(null, deps);
-    expect(report.findings.some((f) => f.id === 'shell:bash')).toBe(true);
+    expect(find(report, 'shells').status).toBe('warn');
+    expect(report.findings.some((f) => f.id.startsWith('shell:'))).toBe(false);
   });
 
   it('reads the wiring mode from the rc instead of assuming per-shell', async () => {
@@ -459,13 +508,41 @@ describe('runDoctor', () => {
     expect(report.ok).toBe(true);
   });
 
-  it('passes a shell that sets its own STARSHIP_CONFIG', async () => {
+  it('passes a shell that sets its own STARSHIP_CONFIG, with $HOME expanded', async () => {
+    const own = path.join(os.homedir(), '.config', 'my', 'starship.toml');
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `${ZSH_INIT}\nexport STARSHIP_CONFIG="$HOME/.config/my/starship.toml"\n`);
+    files.set(own, 'x\n');
+    const report = await runDoctor(null, makeDeps(files));
+    expect(find(report, 'shell:zsh')).toMatchObject({
+      status: 'pass',
+      detail: `configured via ${own}`,
+    });
+    expect(report.ok).toBe(true);
+  });
+
+  it('warns when an expanded STARSHIP_CONFIG names a file that does not exist', async () => {
     const files = new Map<string, string>();
     files.set(ZSH_RC, `${ZSH_INIT}\nexport STARSHIP_CONFIG="$HOME/.config/my/starship.toml"\n`);
     const report = await runDoctor(null, makeDeps(files));
+    expect(find(report, 'shell:zsh')).toMatchObject({ status: 'warn' });
+    expect(find(report, 'shell:zsh').detail).toMatch(/does not exist/);
+  });
+
+  it('passes a STARSHIP_CONFIG set from a variable it cannot know', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `${ZSH_INIT}\nexport STARSHIP_CONFIG="$DOTFILES/starship.toml"\n`);
+    const report = await runDoctor(null, makeDeps(files));
     expect(find(report, 'shell:zsh')).toMatchObject({ status: 'pass' });
     expect(find(report, 'shell:zsh').detail).toMatch(/sets its own STARSHIP_CONFIG/);
-    expect(report.ok).toBe(true);
+  });
+
+  it('reads a STARSHIP_CONFIG assigned without export as not reaching Starship', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `${ZSH_INIT}\nSTARSHIP_CONFIG=${ZSH_CONFIG}\n`);
+    files.set(ZSH_CONFIG, 'x\n');
+    const report = await runDoctor(null, makeDeps(files));
+    expect(find(report, 'shell:zsh').detail).not.toContain(`configured via ${ZSH_CONFIG}`);
   });
 
   it('accepts an export written under a different XDG_CONFIG_HOME', async () => {
@@ -633,6 +710,12 @@ describe('repair against the real doctor', () => {
 });
 
 describe('runDoctor with an init in a sourced file', () => {
+  let restorePlatform: () => void;
+  beforeEach(() => {
+    restorePlatform = stubPlatform('linux');
+  });
+  afterEach(() => restorePlatform());
+
   it('passes a shell whose rc starts Starship through a file it sources', async () => {
     const bashrc = getShell('bash')!.rcFile!;
     const files = new Map([
@@ -648,5 +731,187 @@ describe('runDoctor with an init in a sourced file', () => {
       })
     );
     expect(find(report, 'shell:bash').status).toBe('pass');
+  });
+});
+
+describe('runDoctor for Bash on macOS', () => {
+  const bashrc = getShell('bash')!.rcFile!;
+  const profile = path.join(os.homedir(), '.bash_profile');
+  let restorePlatform: () => void;
+  beforeEach(() => {
+    restorePlatform = stubPlatform('darwin');
+  });
+  afterEach(() => restorePlatform());
+
+  function check(files: Map<string, string>) {
+    return runDoctor(
+      baseState({ selectedShells: ['bash'], keepExistingConfig: true }),
+      makeDeps(files, { detectInstalledShells: vi.fn().mockResolvedValue(['bash']) })
+    );
+  }
+
+  it('fails when no login file loads ~/.bashrc, since Terminal starts login shells', async () => {
+    const report = await check(new Map([[bashrc, 'eval "$(starship init bash)"\n']]));
+    expect(find(report, 'shell:bash')).toMatchObject({
+      status: 'fail',
+      fix: { kind: 'configure-shell', shellId: 'bash' },
+    });
+    expect(find(report, 'shell:bash').detail).toContain('does not load');
+  });
+
+  it('passes when ~/.bash_profile loads ~/.bashrc', async () => {
+    const report = await check(
+      new Map([
+        [bashrc, 'eval "$(starship init bash)"\n'],
+        [profile, 'if [ -f ~/.bashrc ]; then . ~/.bashrc; fi\n'],
+      ])
+    );
+    expect(find(report, 'shell:bash').status).toBe('pass');
+  });
+});
+
+describe('runDoctor reading the setup the way the shell does', () => {
+  it.each([
+    'export STARSHIP_CONFIG="/dots/s.toml" # mine',
+    "export STARSHIP_CONFIG='/dots/s.toml'; export EDITOR=vim",
+    'export STARSHIP_CONFIG=/dots/s.toml # mine',
+  ])('reads only the value of %s', async (line) => {
+    const files = new Map([
+      [ZSH_RC, `${line}\n${ZSH_INIT}\n`],
+      ['/dots/s.toml', 'add_newline = true\n'],
+    ]);
+    const report = await runDoctor(null, makeDeps(files));
+    expect(find(report, 'shell:zsh').detail).toContain('/dots/s.toml');
+    expect(find(report, 'shell:zsh').detail).not.toContain('mine');
+  });
+
+  it('ignores a commented-out STARSHIP_CONFIG line', async () => {
+    const files = new Map([
+      [ZSH_RC, `# export STARSHIP_CONFIG=/nope/old.toml\n${ZSH_INIT}\n`],
+      [getSharedConfigPath(), 'add_newline = true\n'],
+    ]);
+    const report = await runDoctor(null, makeDeps(files));
+    expect(find(report, 'shell:zsh').status).toBe('pass');
+    expect(find(report, 'shell:zsh').detail).not.toContain('/nope/old.toml');
+  });
+
+  it.each([
+    'set -Ux STARSHIP_CONFIG /nope/old.toml',
+    'set --global --export STARSHIP_CONFIG "/nope/old.toml"',
+  ])('reads a fish export written as %s', async (line) => {
+    const fishRc = getShell('fish')!.rcFile!;
+    const files = new Map([[fishRc, `${line}\nstarship init fish | source\n`]]);
+    const report = await runDoctor(
+      null,
+      makeDeps(files, {
+        detectInstalledShells: vi.fn().mockResolvedValue(['fish']),
+        detectCurrentShell: vi.fn().mockResolvedValue('fish'),
+      })
+    );
+    expect(find(report, 'shell:fish').detail).toContain('/nope/old.toml');
+  });
+
+  it('agrees with itself about a shell set up by hand in adopt mode', async () => {
+    const nushell = getShell('nushell')!;
+    const files = new Map([[nushell.initPath!, 'starship init']]);
+    const report = await runDoctor(
+      baseState({ selectedShells: ['nushell'], keepExistingConfig: true }),
+      makeDeps(files, {
+        detectInstalledShells: vi.fn().mockResolvedValue(['nushell']),
+        detectCurrentShell: vi.fn().mockResolvedValue('nushell'),
+      })
+    );
+    expect(find(report, 'shell:nushell').status).toBe('pass');
+    expect(find(report, 'current-shell').status).toBe('pass');
+  });
+
+  it('looks for the Nerd Font the card asked for, not any Nerd Font', async () => {
+    const hasNerdFonts = vi.fn((fontId?: string | null) => fontId !== 'FiraCode');
+    const report = await runDoctor(
+      baseState({ nerdFontToInstall: { kind: 'install', id: 'FiraCode' } }),
+      makeDeps(wired(new Map()), { hasNerdFonts })
+    );
+    expect(hasNerdFonts).toHaveBeenCalledWith('FiraCode');
+    expect(find(report, 'font-installed')).toMatchObject({
+      status: 'fail',
+      fix: { kind: 'reinstall-font', fontId: 'FiraCode' },
+    });
+  });
+});
+
+describe('runDoctor and the Starship version', () => {
+  it('warns about a Starship too old for the generated config', async () => {
+    const deps = makeDeps(wired(new Map()), {
+      isStarshipInstalled: vi
+        .fn()
+        .mockResolvedValue({ installed: true, version: 'starship 1.19.3' }),
+    });
+    expect(find(await runDoctor(baseState(), deps), 'starship')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('older than 1.20.0'),
+    });
+  });
+});
+
+describe('runDoctor reading files', () => {
+  it('reads each rc once, however many checks look at it', async () => {
+    const deps = makeDeps(wired(new Map()));
+    await runDoctor(null, deps);
+    const zshReads = vi.mocked(deps.readFile).mock.calls.filter(([file]) => file === ZSH_RC);
+    expect(zshReads).toHaveLength(1);
+  });
+});
+
+describe('DEFAULT_DOCTOR_DEPS', () => {
+  it('reads an unreadable Starship version record as none instead of throwing', () => {
+    const cache = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-cache-'));
+    vi.stubEnv('XDG_CACHE_HOME', cache);
+    try {
+      fs.mkdirSync(path.join(cache, 'shell-configurator', 'starship.version'), { recursive: true });
+      expect(DEFAULT_DOCTOR_DEPS.readCachedStarshipVersion()).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(cache, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('DEFAULT_DOCTOR_DEPS.hasNerdFonts', () => {
+  let data: string;
+  let restorePlatform: () => void;
+  beforeEach(() => {
+    data = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-fonts-'));
+    vi.stubEnv('XDG_DATA_HOME', data);
+    restorePlatform = stubPlatform('linux');
+    fs.mkdirSync(path.join(data, 'fonts', 'nerd'), { recursive: true });
+  });
+  afterEach(() => {
+    restorePlatform();
+    vi.unstubAllEnvs();
+    fs.rmSync(data, { recursive: true, force: true });
+  });
+  const add = (name: string) => fs.writeFileSync(path.join(data, 'fonts', 'nerd', name), '');
+
+  it('counts only font files, not a leftover archive or license', () => {
+    add('FiraCodeNerdFont.zip');
+    add('FiraCodeNerdFont-LICENSE.txt');
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('FiraCode')).toBe(false);
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts()).toBe(false);
+
+    add('FiraCodeNerdFont-Regular.ttf');
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('FiraCode')).toBe(true);
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts()).toBe(true);
+  });
+
+  it('finds a Nerd Fonts 2 install by its older file names', () => {
+    add('JetBrains Mono Regular Nerd Font Complete.ttf');
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('JetBrainsMono')).toBe(true);
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('FiraCode')).toBe(false);
+  });
+
+  it('looks for the requested font, not any Nerd Font', () => {
+    add('JetBrainsMonoNerdFont-Regular.ttf');
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('FiraCode')).toBe(false);
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('JetBrainsMono')).toBe(true);
   });
 });

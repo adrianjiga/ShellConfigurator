@@ -9,6 +9,10 @@ export function homeDir(): string {
   return os.homedir() || os.userInfo().homedir;
 }
 
+export function scriptInstallBinDir(): string {
+  return path.join(homeDir(), '.local', 'bin');
+}
+
 /**
  * Resolves an XDG base directory, favouring the live environment over the
  * spec fallback. Resolved per call so env changes are seen immediately, which
@@ -42,4 +46,33 @@ export function cacheDir(): string {
     xdgBaseDir('XDG_CACHE_HOME', path.join(homeDir(), '.cache')),
     'shell-configurator'
   );
+}
+
+/** PATH with `dir` in front, for running a script install that PATH lacks. */
+export function withPathDir(dir: string | null): NodeJS.ProcessEnv['PATH'] {
+  const current = process.env.PATH;
+  if (!dir) return current;
+  return current ? `${dir}${path.delimiter}${current}` : dir;
+}
+
+/**
+ * A path as a shell would expand it: surrounding quotes, a leading `~`, and
+ * `$NAME`, `${NAME}` and `${NAME:-default}`. Null when a variable is unset or
+ * the result is not absolute.
+ */
+export function expandShellPath(raw: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  const vars: NodeJS.ProcessEnv = { HOME: homeDir(), XDG_CONFIG_HOME: configHome(), ...env };
+  let unresolved = false;
+  const expand = (word: string): string =>
+    word.replace(
+      /\$\{(\w+):-([^}]*)\}|\$\{(\w+)\}|\$(\w+)/g,
+      (_match, withDefault?: string, fallback?: string, braced?: string, bare?: string) => {
+        if (withDefault) return vars[withDefault] || expand(fallback ?? '');
+        const value = vars[(braced ?? bare) as string];
+        if (value === undefined) unresolved = true;
+        return value ?? '';
+      }
+    );
+  const expanded = expand(raw.replace(/^(["'])(.*)\1$/, '$2').replace(/^~(?=\/|$)/, homeDir()));
+  return !unresolved && path.isAbsolute(expanded) ? expanded : null;
 }

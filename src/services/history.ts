@@ -4,13 +4,14 @@ import { writeFileAtomic } from '../generators/shellRc.ts';
 import type { InstallTask, ShellId, WizardState } from '../types.ts';
 import { errorMessage, isMissingFile } from './errors.ts';
 import { stateDir } from './paths.ts';
+import { redactUrls } from './redact.ts';
 import { parseState, serializeState } from './state.ts';
 
 /**
  * What a recorded run did. `install` is the interactive wizard; `apply` is a
  * headless run; the rest are day-2 lifecycle commands.
  */
-export type HistoryKind = 'install' | 'apply' | 'uninstall' | 'rollback';
+export type HistoryKind = 'install' | 'apply' | 'repair' | 'uninstall' | 'rollback';
 
 /**
  * One entry in history.jsonl: a single JSON object per line. The version field
@@ -36,6 +37,7 @@ export interface HistoryRecord {
   rollbackOf?: string;
   /** For a rollback: some of the run's changes were left in place. */
   partial?: boolean;
+  interrupted?: boolean;
 }
 
 /** The append-only ledger path: <stateDir>/history.jsonl. */
@@ -53,6 +55,7 @@ export interface RecordRunOptions {
   runId?: string | null;
   rollbackOf?: string;
   partial?: boolean;
+  interrupted?: boolean;
 }
 
 /**
@@ -68,11 +71,12 @@ export function recordRun(options: RecordRunOptions): void {
     kind: options.kind,
     ...(snapshotId ? { snapshotId } : {}),
     ...(options.results ? { results: options.results } : {}),
-    ...(options.command ? { command: options.command } : {}),
+    ...(options.command ? { command: redactUrls(options.command) } : {}),
     ...(options.exitCode !== undefined ? { exitCode: options.exitCode } : {}),
     ...(options.runId ? { runId: options.runId } : {}),
     ...(options.rollbackOf ? { rollbackOf: options.rollbackOf } : {}),
     ...(options.partial ? { partial: true } : {}),
+    ...(options.interrupted ? { interrupted: true } : {}),
   });
 }
 

@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getShell, SHELLS, setupCommand } from '../../config/shells.ts';
+import { hasBinary } from '../helpers/binaries.ts';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -52,17 +53,20 @@ describe('STARSHIP_CONFIG syntax', () => {
 });
 
 describe('Nushell setup command', () => {
-  it('hands Nushell the exact config path, even one with quotes and backslashes', () => {
-    vi.stubEnv('XDG_CONFIG_HOME', "/home/o'brien\\x/.config");
-    const command = getShell('nushell')!.initLine;
-    expect(command.startsWith('nu -c ')).toBe(true);
+  it.skipIf(!hasBinary('bash'))(
+    'hands Nushell the exact config path, even one with quotes and backslashes',
+    () => {
+      vi.stubEnv('XDG_CONFIG_HOME', "/home/o'brien\\x/.config");
+      const command = getShell('nushell')!.initLine;
+      expect(command.startsWith('nu -c ')).toBe(true);
 
-    const program = execFileSync('bash', ['-c', command.replace(/^nu -c /, 'printf %s ')], {
-      encoding: 'utf8',
-    });
+      const program = execFileSync('bash', ['-c', command.replace(/^nu -c /, 'printf %s ')], {
+        encoding: 'utf8',
+      });
 
-    expect(program).toContain(
-      `"export-env { $env.STARSHIP_CONFIG = \\"/home/o'brien\\\\\\\\x/.config/starship/nushell.toml\\" }"`
-    );
-  });
+      expect(program).toContain(
+        `"export-env { $env.STARSHIP_CONFIG = \\"/home/o'brien\\\\\\\\x/.config/starship/nushell.toml\\" }"`
+      );
+    }
+  );
 });

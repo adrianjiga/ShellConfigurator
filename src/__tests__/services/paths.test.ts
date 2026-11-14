@@ -1,6 +1,6 @@
 import * as path from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cacheDir, homeDir, stateDir } from '../../services/paths.ts';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cacheDir, expandShellPath, homeDir, stateDir } from '../../services/paths.ts';
 
 vi.mock('node:os', () => ({
   homedir: vi.fn(() => '/real/home'),
@@ -73,5 +73,29 @@ describe('homeDir', () => {
     vi.mocked(os.homedir).mockReturnValue('');
     vi.mocked(os.userInfo).mockReturnValue({ homedir: '/home/from-passwd' } as never);
     expect(homeDir()).toBe('/home/from-passwd');
+  });
+});
+
+describe('expandShellPath', () => {
+  const env = { HOME: '/real/home', DOT: '/dots', EMPTY: '' };
+
+  beforeEach(() => {
+    vi.mocked(os.homedir).mockReturnValue('/real/home');
+    delete process.env.XDG_CONFIG_HOME;
+  });
+
+  it.each([
+    ['~/x', '/real/home/x'],
+    ['"$HOME/x"', '/real/home/x'],
+    ["'${DOT}/zsh'", '/dots/zsh'],
+    ['${UNSET:-/fallback}/x', '/fallback/x'],
+    ['${EMPTY:-$DOT}/x', '/dots/x'],
+    ['${XDG_CONFIG_HOME:-$HOME/.config}/zsh', '/real/home/.config/zsh'],
+  ])('expands %s', (raw, expected) => {
+    expect(expandShellPath(raw, env)).toBe(expected);
+  });
+
+  it.each([['$UNSET/x'], ['relative/x'], ['$EMPTY']])('gives null for %s', (raw) => {
+    expect(expandShellPath(raw, env)).toBeNull();
   });
 });

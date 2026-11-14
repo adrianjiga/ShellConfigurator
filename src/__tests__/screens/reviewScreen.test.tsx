@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ReviewScreen } from '../../screens/ReviewScreen.tsx';
+import { REVIEW_SETTLE_MS, ReviewScreen } from '../../screens/ReviewScreen.tsx';
 import { plannedPathDir } from '../../services/installer.ts';
 import { explainPromptAsync } from '../../services/starshipProbe.ts';
 import { DEFAULT_STATE } from '../../types.ts';
@@ -31,6 +31,9 @@ afterEach(() => {
   fs.rmSync(home, { recursive: true, force: true });
 });
 
+const flat = (frame: string | undefined) => (frame ?? '').replace(/\s+/g, ' ');
+const squashed = (frame: string | undefined) => (frame ?? '').replace(/\s+/g, '');
+
 function setup(overrides: Partial<typeof DEFAULT_STATE> = {}) {
   const state = {
     ...DEFAULT_STATE,
@@ -51,15 +54,16 @@ describe('ReviewScreen', () => {
 
     const frame = instance.lastFrame();
     expect(frame).toContain('Review your configuration');
+    expect(flat(frame)).toContain('Everything below will be installed');
     expect(frame).toContain('This run will');
-    expect(frame).toContain('Starship');
+    expect(frame).toContain('• Starship');
     expect(frame).toContain('Write config files');
     expect(frame).toContain('Configure zsh');
 
     expect(frame).toContain('Configuration to write');
     // The per-shell config path, the rc export, and the generated TOML. Assert on
     // space-free tokens because ink wraps long lines at the narrow test terminal.
-    expect(frame).toContain('starship/zsh.toml (Zsh)');
+    expect(squashed(frame)).toContain('starship/zsh.toml(Zsh)');
     expect(frame).toContain("STARSHIP_CONFIG='");
     expect(frame).toContain('eval "$(starship init zsh)"');
     expect(frame).toContain('$directory$git_branch$git_status');
@@ -85,7 +89,7 @@ describe('ReviewScreen', () => {
     await flush();
 
     const frame = instance.lastFrame();
-    expect(frame).toContain('starship/nushell.toml (Nushell)');
+    expect(squashed(frame)).toContain('starship/nushell.toml(Nushell)');
     // Space-free tokens: the nushell init command is long and gets wrapped.
     expect(frame).toContain('vendor/autoload');
     expect(frame).toContain('$env.STARSHIP_CONFIG');
@@ -101,7 +105,7 @@ describe('ReviewScreen', () => {
     const frame = instance.lastFrame();
     expect(frame).toContain('Config to keep');
     expect(frame).toContain('Keep existing Starship config');
-    expect((frame ?? '').replace(/\s+/g, ' ')).toContain('starship.toml (shared by every shell)');
+    expect(squashed(frame)).toContain('starship.toml(sharedbyeveryshell)');
     expect(frame).toContain('success_symbol = "…"');
     expect(frame).toContain('starship init zsh');
     // Adopt mode wires the shell to the shared config: no per-shell export, and
@@ -150,13 +154,28 @@ describe('ReviewScreen', () => {
     expect(instance.lastFrame()).not.toContain('JetBrains Mono');
   });
 
-  it('confirms with Enter', async () => {
+  it('confirms with Enter once it has been on screen a moment', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     const { instance, onNext } = setup();
     await flush();
 
+    now.mockReturnValue(1_000_000 + REVIEW_SETTLE_MS);
     instance.stdin.write('\r');
     await flush();
     expect(onNext).toHaveBeenCalled();
+    now.mockRestore();
+  });
+
+  it('ignores an Enter held down from the step before', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    const { instance, onNext } = setup();
+    await flush();
+
+    now.mockReturnValue(1_000_000 + REVIEW_SETTLE_MS - 1);
+    instance.stdin.write('\r');
+    await flush();
+    expect(onNext).not.toHaveBeenCalled();
+    now.mockRestore();
   });
 
   it('does not start the run on a stray Space or Tab', async () => {
@@ -194,11 +213,28 @@ describe('ReviewScreen manual shells', () => {
   });
 });
 
+describe('ReviewScreen config', () => {
+  it('shows the first lines of the config and the rest on t', async () => {
+    const { instance } = setup();
+    await flush();
+    const folded = (instance.lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(folded).toMatch(/… \d+ more lines \(press t to show them\)/);
+    expect(folded).not.toContain('[character]');
+    expect((instance.lastFrame() ?? '').split('\n').length).toBeLessThan(60);
+
+    instance.stdin.write('t');
+    await flush();
+    const whole = (instance.lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(whole).not.toContain('more lines');
+    expect(whole).toContain('[character]');
+  });
+});
+
 describe('ReviewScreen dry run', () => {
   it('does not promise an install in the key hint', async () => {
     const { instance } = setup({ dryRun: true });
     await flush();
-    expect(instance.lastFrame()).toContain('finish the dry run');
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain('finish the dry run');
     expect(instance.lastFrame()).not.toMatch(/Enter\s+install/);
   });
 });
@@ -245,7 +281,9 @@ describe('ReviewScreen with an existing shared config', () => {
     fs.writeFileSync(path.join(home, '.config', 'starship.toml'), 'format = "$all"\n');
     const { instance } = setup();
     await flush();
-    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain('apply --adopt');
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
+      'apply --adopt --shells zsh.'
+    );
   });
 });
 
@@ -293,7 +331,7 @@ describe('ReviewScreen explain', () => {
     const frame = instance.lastFrame() ?? '';
     expect(frame).toContain('Why each part of the prompt shows');
     expect(frame).toContain('The current working directory');
-    expect(frame).toContain('hide the explanation');
+    expect(frame.replace(/\s+/g, ' ')).toContain('hide the explanation');
 
     instance.stdin.write('e');
     await flush();

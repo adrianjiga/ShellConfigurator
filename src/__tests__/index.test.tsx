@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('ink', async () => {
@@ -81,6 +82,7 @@ vi.mock('../services/doctor.ts', () => ({
 }));
 
 vi.mock('../services/repair.ts', () => ({
+  DEFAULT_REPAIR_DEPS: {},
   runRepair: mockRunRepair,
   formatRepairReport: mockFormatRepairReport,
 }));
@@ -90,7 +92,9 @@ import { getShell } from '../config/shells.ts';
 import { getShellConfigPath } from '../generators/shellRc.ts';
 import {
   applyInstallOutcomeExitCode,
+  assertWizardTerminal,
   crash,
+  isEntryPoint,
   type PromptIo,
   recordInstallOutcome,
   reportFatal,
@@ -99,6 +103,7 @@ import {
   runDebugInfoCommand,
   runGlobalFlags,
   runHeadlessCommand,
+  runRepairCommand,
   runRollbackCommand,
   runShareCommand,
   runTimingsCommand,
@@ -109,14 +114,35 @@ import { parseCliArgs } from '../services/args.ts';
 import { completionScript } from '../services/completions.ts';
 import type { DebugInfoDeps } from '../services/debugInfo.ts';
 import { CliRunError, CliUsageError } from '../services/errors.ts';
-import { appendHistory } from '../services/history.ts';
+import { appendHistory, writeSnapshot } from '../services/history.ts';
 import { formatListing, listEntries } from '../services/listings.ts';
 import { homeDir } from '../services/paths.ts';
-import { beginRunCapture, captureRun, finishRunCapture, runDir } from '../services/runCapture.ts';
+import {
+  beginRunCapture,
+  CapturedRunError,
+  captureRun,
+  finishRunCapture,
+  runDir,
+} from '../services/runCapture.ts';
 import { serializeState } from '../services/state.ts';
 import type { UninstallDeps } from '../services/uninstall.ts';
 import { DEFAULT_STATE, type InstallTask, type ShellId } from '../types.ts';
 import { restoreEnv } from './helpers/env.ts';
+
+let scratchHome: string;
+
+beforeEach(() => {
+  scratchHome = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-index-home-'));
+  vi.stubEnv('HOME', scratchHome);
+  vi.stubEnv('XDG_STATE_HOME', undefined);
+  vi.stubEnv('XDG_CONFIG_HOME', undefined);
+  vi.stubEnv('ZDOTDIR', undefined);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  fs.rmSync(scratchHome, { recursive: true, force: true });
+});
 
 describe('index CLI handling', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
@@ -158,11 +184,10 @@ describe('index CLI handling', () => {
   it('lists every accepted flag in the help text', () => {
     runGlobalFlags(parseCliArgs(['--help']));
     const help = String(stdoutWrite.mock.calls[0]?.[0]);
-    expect(help).toContain('--restore, --undo');
+    expect(help).toContain('--restore           Copy');
     expect(help).toContain('-o, --output <file>');
     expect(help).toContain('--import, --state <file>');
     expect(help).toContain('--shells is');
-    expect(help).not.toContain('read-only');
   });
 
   it('rejects unknown flags before the global flags run', () => {
@@ -194,8 +219,12 @@ describe('index restore flag', () => {
       failed: [],
     });
 
+    const snapshotId = writeSnapshot({ ...DEFAULT_STATE, selectedShells: ['fish', 'zsh'] });
+    appendHistory({ version: 1, timestamp: new Date().toISOString(), kind: 'apply', snapshotId });
+
     expect(runGlobalFlags(parseCliArgs(['--restore']))).toBe(true);
 
+    expect(mockRestoreConfigBackups).toHaveBeenCalledWith(['fish', 'zsh']);
     expect(stdoutWrite).toHaveBeenCalledWith(
       expect.stringContaining('shared: /home/u/.config/starship.toml')
     );
@@ -232,11 +261,13 @@ describe('index restore flag', () => {
     }
   });
 
-  it('accepts --undo as an alias for --restore', () => {
-    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
-
-    expect(runGlobalFlags(parseCliArgs(['--undo']))).toBe(true);
-    expect(mockRestoreConfigBackups).toHaveBeenCalled();
+  it('points --undo at rollback instead of restoring only the configs', () => {
+    expect(() => parseCliArgs(['--undo'])).toThrow(
+      new CliUsageError(
+        '--undo is gone: shell-configurator rollback undoes the last run, rc lines included. --restore still copies the newest config backups back.'
+      )
+    );
+    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
   });
 
   it('reports when there is nothing to restore', () => {
@@ -439,7 +470,12 @@ describe('index headless routing', () => {
   });
 
   it('surfaces a bogus flag as a CliUsageError', async () => {
-    await expect(route(['apply', '--preset', 'nope'])).rejects.toThrow(CliUsageError);
+    await expect(route(['apply', '--shells', 'zsh', '--preset', 'nope'])).rejects.toThrow(
+      CliUsageError
+    );
+    await expect(route(['apply', '--shells', 'zsh', '--preset', 'nope'])).rejects.toThrow(
+      /preset \(--preset\)/
+    );
     await expect(route(['generate', '--palette', 'nope'])).rejects.toThrow(/palette/);
   });
 
@@ -567,7 +603,12 @@ describe('index headless routing', () => {
     const routed = await route(['repair']);
 
     expect(routed).toBe(true);
-    expect(mockRunRepair).toHaveBeenCalledWith(null, undefined, { dryRun: undefined });
+    expect(mockRunRepair).toHaveBeenCalledOnce();
+    expect(mockRunRepair).toHaveBeenCalledWith(
+      null,
+      {},
+      { includeWarnings: undefined, dryRun: true }
+    );
     expect(stdoutWrite).toHaveBeenCalledWith('REPAIRED\n');
     expect(mockRunDoctor).not.toHaveBeenCalled();
   });
@@ -579,7 +620,11 @@ describe('index headless routing', () => {
     const routed = await route(['doctor', '--fix']);
 
     expect(routed).toBe(true);
-    expect(mockRunRepair).toHaveBeenCalledWith(null, undefined, { dryRun: undefined });
+    expect(mockRunRepair).toHaveBeenCalledWith(
+      null,
+      {},
+      { includeWarnings: undefined, dryRun: true }
+    );
     expect(mockRunDoctor).not.toHaveBeenCalled();
   });
 
@@ -590,10 +635,12 @@ describe('index headless routing', () => {
     const routed = await route(['repair', '--dry-run']);
 
     expect(routed).toBe(true);
-    expect(mockRunRepair).toHaveBeenCalledWith(null, undefined, {
-      dryRun: true,
-      includeWarnings: undefined,
-    });
+    expect(mockRunRepair).toHaveBeenCalledOnce();
+    expect(mockRunRepair).toHaveBeenCalledWith(
+      null,
+      {},
+      { includeWarnings: undefined, dryRun: true }
+    );
     expect(stdoutWrite).toHaveBeenCalledWith('PLANNED\n');
   });
 
@@ -616,6 +663,15 @@ describe('index headless routing', () => {
     );
   });
 
+  it('reports a repair with nothing to fix as a real run, not a dry run', async () => {
+    mockRunRepair.mockResolvedValue({ ok: true, actions: [], dryRun: true });
+    mockFormatRepairReport.mockImplementation((report) => `REPORT ${report.dryRun}\n`);
+
+    await route(['repair']);
+
+    expect(stdoutWrite).toHaveBeenCalledWith('REPORT false\n');
+  });
+
   it('sets a non-zero exit code when a repair still fails a check', async () => {
     process.exitCode = 0;
     mockRunRepair.mockResolvedValue({ ok: false, actions: [] });
@@ -624,6 +680,93 @@ describe('index headless routing', () => {
     await route(['repair']);
 
     expect(process.exitCode).toBe(1);
+  });
+
+  describe('when there is something to fix', () => {
+    const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
+    const planned = {
+      ok: false,
+      dryRun: true,
+      before: { ok: false, findings: [] },
+      actions: [{ findingId: 'shell:bash', title: 'Bash', status: 'planned', detail: 'add lines' }],
+    };
+    const done = { ok: true, dryRun: false, actions: [{ ...planned.actions[0], status: 'fixed' }] };
+
+    function io(overrides: Partial<PromptIo> = {}): PromptIo {
+      return { confirm: vi.fn().mockResolvedValue(true), isTerminal: () => true, ...overrides };
+    }
+
+    beforeEach(() => {
+      mockRecordRun.mockReset();
+      mockRunRepair.mockImplementation(async (_state, _deps, options) =>
+        options.dryRun ? planned : done
+      );
+      mockFormatRepairReport.mockImplementation((report) => `REPORT ${report.dryRun}\n`);
+    });
+
+    it('shows the plan and changes nothing when the user says no', async () => {
+      const ask = io({ confirm: vi.fn().mockResolvedValue(false) });
+
+      await runRepairCommand(parseCliArgs(['repair']), 'repair', ask);
+
+      expect(ask.confirm).toHaveBeenCalled();
+      expect(output()).toContain('REPORT true');
+      expect(output()).toContain('Nothing was changed.');
+      expect(mockRunRepair).toHaveBeenCalledOnce();
+      expect(mockRecordRun).not.toHaveBeenCalled();
+    });
+
+    it('refuses off a terminal without --yes', async () => {
+      await expect(
+        runRepairCommand(parseCliArgs(['repair']), 'repair', io({ isTerminal: () => false }))
+      ).rejects.toThrow('repair changes files and may install software; pass --yes');
+      expect(mockRunRepair).toHaveBeenCalledOnce();
+    });
+
+    it('still records a repair that throws partway, so rollback can undo it', async () => {
+      vi.mocked(captureRun).mockRejectedValueOnce(
+        new CapturedRunError('run-3', new Error('starship install broke'))
+      );
+
+      await expect(
+        runRepairCommand(parseCliArgs(['repair', '--yes']), 'repair --yes', io())
+      ).rejects.toThrow('starship install broke');
+      expect(mockRecordRun).toHaveBeenCalledWith({
+        kind: 'repair',
+        command: 'repair --yes',
+        exitCode: 1,
+        runId: 'run-3',
+      });
+    });
+
+    it('applies the fixes inside a captured run, records it and points at rollback', async () => {
+      vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
+        result: await run(),
+        runId: 'run-7',
+      }));
+      const ask = io();
+
+      await runRepairCommand(parseCliArgs(['repair', '--yes']), 'repair --yes', ask);
+
+      expect(ask.confirm).not.toHaveBeenCalled();
+      expect(captureRun).toHaveBeenCalled();
+      expect(mockRunRepair).toHaveBeenLastCalledWith(
+        null,
+        {},
+        {
+          includeWarnings: undefined,
+          before: planned.before,
+        }
+      );
+      expect(output()).toContain('REPORT false');
+      expect(output()).toContain('Undo it with: shell-configurator rollback');
+      expect(mockRecordRun).toHaveBeenCalledWith({
+        kind: 'repair',
+        command: 'repair --yes',
+        exitCode: 0,
+        runId: 'run-7',
+      });
+    });
   });
 });
 
@@ -653,6 +796,41 @@ describe('index crash handler', () => {
   });
 });
 
+describe('assertWizardTerminal', () => {
+  it.each([
+    [{ isTTY: false }, { isTTY: true }],
+    [{ isTTY: true }, {}],
+  ])('refuses to start the wizard without a terminal (%o, %o)', (stdin, stdout) => {
+    expect(() => assertWizardTerminal(stdin, stdout)).toThrow(
+      new CliUsageError(
+        'The wizard needs a terminal: its input and output cannot be redirected. To set up without one, run shell-configurator apply --shells <id,...> (see --help).'
+      )
+    );
+  });
+
+  it('lets the wizard start on a terminal', () => {
+    expect(() => assertWizardTerminal({ isTTY: true }, { isTTY: true })).not.toThrow();
+  });
+});
+
+describe('isEntryPoint', () => {
+  it('starts the program only when this file is the one being run, also through a symlink', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-entry-'));
+    try {
+      const self = fileURLToPath(new URL('../index.tsx', import.meta.url));
+      const link = path.join(dir, 'shell-configurator');
+      fs.symlinkSync(self, link);
+
+      expect(isEntryPoint(self)).toBe(true);
+      expect(isEntryPoint(link)).toBe(true);
+      expect(isEntryPoint(path.join(dir, 'other.js'))).toBe(false);
+      expect(isEntryPoint(undefined)).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('index reportFatal', () => {
   let stderrWrite: ReturnType<typeof vi.spyOn>;
 
@@ -672,6 +850,13 @@ describe('index reportFatal', () => {
     expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('ShellConfigurator crashed'));
     expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Error: boom'));
     expect(process.exitCode).toBe(1);
+  });
+
+  it('shows the home folder as ~ in a crash it reports', () => {
+    reportFatal('prefix', `EISDIR: ${path.join(os.homedir(), '.cache', 'x')}`);
+    expect(stderrWrite).toHaveBeenCalledWith(
+      `\nprefix: EISDIR: ${path.join('~', '.cache', 'x')}\n`
+    );
   });
 
   it('stringifies non-Error values', () => {
@@ -725,6 +910,8 @@ describe('index uninstall command', () => {
       deps: {
         hasManagedRcBlock: (id: ShellId) => id === 'zsh',
         hasShellConfig: (id: ShellId) => id === 'zsh',
+        bashLoginBlockFiles: () => [],
+        removeBashLoginBlock: () => ({ removed: true }),
         startsStarship: () => false,
         removeManagedRcBlocks: vi.fn(() => ({ removed: true })),
         removeShellConfigFile: vi.fn(() => ({ removed: true })),
@@ -760,7 +947,10 @@ describe('index uninstall command', () => {
       result: await run(),
       runId: 'run-9',
     }));
-    const io = fakeIo();
+    const io = fakeIo(
+      {},
+      { removeManagedRcBlocks: vi.fn(() => ({ removed: true, backedUpTo: '/h/.zshrc.bak-1' })) }
+    );
 
     await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);
 
@@ -902,8 +1092,15 @@ describe('index uninstall command', () => {
     [['--preset', 'pure-prompt'], /--preset cannot be used with uninstall/],
     [['--state', 'card.json'], /--state cannot be used with uninstall/],
     [['--fix'], /--fix cannot be used with uninstall/],
-    [['--include-warnings'], /--include-warnings cannot be used with uninstall/],
+    [['--include-warnings'], /--include-warnings only applies to repair/],
     [['--restore'], /--restore cannot be used with uninstall/],
+  ])('refuses %o before running', async (args, message) => {
+    await expect(
+      runHeadlessCommand(parseCliArgs(['uninstall', ...args]), 'uninstall')
+    ).rejects.toThrow(message);
+  });
+
+  it.each([
     [['--font', 'none'], /not none/],
     [['--font', 'Comic'], /Unknown Nerd Font/],
     [['--shells', 'tcsh'], /Unknown shell id/],
@@ -913,9 +1110,22 @@ describe('index uninstall command', () => {
     ).rejects.toThrow(message);
   });
 
+  it.each([
+    [['apply', '--shells', 'zsh', '--export', 'card.json', '-o', 'out.toml'], '--output, --export'],
+    [['generate', '--json'], '--json'],
+    [['apply', '--shells', 'zsh', '--fix'], '--fix'],
+    [['doctor', '--dry-run'], '--dry-run without --fix'],
+    [['completions', 'bash', '--json'], '--json'],
+  ])('refuses %j instead of ignoring %s', async (argv, flags) => {
+    const subcommand = argv[0];
+    await expect(runHeadlessCommand(parseCliArgs(argv), '')).rejects.toThrow(
+      new CliUsageError(`${flags} cannot be used with ${subcommand}.`)
+    );
+  });
+
   it('rejects --yes and --starship outside uninstall', async () => {
-    await expect(runHeadlessCommand(parseCliArgs(['repair', '--yes']), '')).rejects.toThrow(
-      '--yes only applies to uninstall and rollback.'
+    await expect(runHeadlessCommand(parseCliArgs(['doctor', '--yes']), '')).rejects.toThrow(
+      '--yes only applies to repair, doctor --fix, uninstall and rollback.'
     );
     await expect(runHeadlessCommand(parseCliArgs(['doctor', '--starship']), '')).rejects.toThrow(
       '--starship only applies to uninstall.'
@@ -1002,6 +1212,134 @@ describe('index rollback command', () => {
       rollbackOf: second,
       partial: false,
     });
+  });
+
+  describe('of an interrupted run', () => {
+    function interruptedRun(): string {
+      fs.writeFileSync(rc(), 'zero');
+      const capture = beginRunCapture([rc()]);
+      fs.writeFileSync(rc(), 'one');
+      const runId = finishRunCapture(capture)!.runId;
+      appendHistory({
+        version: 1,
+        timestamp: new Date().toISOString(),
+        kind: 'apply',
+        runId,
+        interrupted: true,
+      });
+      return runId;
+    }
+
+    it('warns that later edits come back too, and asks on a terminal', async () => {
+      interruptedRun();
+      const prompt = io({ confirm: vi.fn().mockResolvedValue(false) });
+
+      await runRollbackCommand(parseCliArgs(['rollback']), 'rollback', prompt);
+
+      expect(output()).toContain('That run was interrupted');
+      expect(prompt.confirm).toHaveBeenCalled();
+      expect(fs.readFileSync(rc(), 'utf8')).toBe('one');
+    });
+
+    it('still warns, but goes ahead without asking, with --yes on a terminal', async () => {
+      interruptedRun();
+      const prompt = io();
+
+      await runRollbackCommand(parseCliArgs(['rollback', '--yes']), 'rollback', prompt);
+
+      expect(output()).toContain('That run was interrupted');
+      expect(prompt.confirm).not.toHaveBeenCalled();
+      expect(fs.readFileSync(rc(), 'utf8')).toBe('zero');
+    });
+
+    it('goes ahead with --yes --json on a terminal, where nothing can be asked', async () => {
+      interruptedRun();
+      const prompt = io();
+
+      await runRollbackCommand(parseCliArgs(['rollback', '--yes', '--json']), 'rollback', prompt);
+
+      expect(prompt.confirm).not.toHaveBeenCalled();
+      expect(fs.readFileSync(rc(), 'utf8')).toBe('zero');
+    });
+
+    it.each([['--list'], ['--dry-run']])(
+      'leaves a dead run unrecorded with %s, and says it is waiting',
+      async (flag) => {
+        fs.writeFileSync(rc(), 'zero');
+        const live = beginRunCapture([rc()]);
+        const dead = path.join(runDir(live.runId), '..', '2000-01-01T00-00-00.000Z');
+        fs.cpSync(runDir(live.runId), dead, { recursive: true });
+        finishRunCapture(live);
+        fs.writeFileSync(rc(), 'one');
+
+        await runRollbackCommand(parseCliArgs(['rollback', flag]), 'rollback', io());
+
+        expect(output()).toContain('1 interrupted run is not listed yet');
+        expect(fs.existsSync(path.join(dead, 'pending.json'))).toBe(true);
+        expect(mockRecordRun).not.toHaveBeenCalled();
+      }
+    );
+
+    it('goes ahead with --yes off a terminal', async () => {
+      interruptedRun();
+
+      await runRollbackCommand(
+        parseCliArgs(['rollback', '--yes']),
+        'rollback',
+        io({ isTerminal: () => false })
+      );
+
+      expect(fs.readFileSync(rc(), 'utf8')).toBe('zero');
+    });
+  });
+
+  it('marks a run whose files are already back as rolled back, without asking', async () => {
+    fs.writeFileSync(rc(), 'zero');
+    const runId = recordedRun('apply', 'one');
+    fs.writeFileSync(rc(), 'zero');
+    const prompt = io();
+
+    await runRollbackCommand(parseCliArgs(['rollback']), 'rollback', prompt);
+
+    expect(prompt.confirm).not.toHaveBeenCalled();
+    expect(output()).toContain('already as it was before that run');
+    expect(output()).toContain('that run now counts as rolled back');
+    expect(mockRecordRun).toHaveBeenCalledWith({
+      kind: 'rollback',
+      command: 'rollback',
+      exitCode: 0,
+      runId: null,
+      rollbackOf: runId,
+      partial: false,
+    });
+  });
+
+  it('records nothing for --run on a run that is already rolled back', async () => {
+    fs.writeFileSync(rc(), 'zero');
+    const runId = recordedRun('apply', 'one');
+    fs.writeFileSync(rc(), 'zero');
+    appendHistory({
+      version: 1,
+      timestamp: new Date().toISOString(),
+      kind: 'rollback',
+      runId: 'later-rollback',
+      rollbackOf: runId,
+    });
+
+    await runRollbackCommand(parseCliArgs(['rollback', '--run', runId]), 'rollback', io());
+
+    expect(output()).not.toContain('now counts as rolled back');
+    expect(mockRecordRun).not.toHaveBeenCalled();
+  });
+
+  it('records nothing for a dry run whose files are already back', async () => {
+    fs.writeFileSync(rc(), 'zero');
+    recordedRun('apply', 'one');
+    fs.writeFileSync(rc(), 'zero');
+
+    await runRollbackCommand(parseCliArgs(['rollback', '--dry-run']), 'rollback', io());
+
+    expect(mockRecordRun).not.toHaveBeenCalled();
   });
 
   it('records a rollback that left a change in place as partial', async () => {
@@ -1098,11 +1436,11 @@ describe('index rollback command', () => {
     [['--preset', 'pure-prompt'], /--preset cannot be used with rollback/],
     [['--state', 'card.json'], /--state cannot be used with rollback/],
     [['--fix'], /--fix cannot be used with rollback/],
-    [['--include-warnings'], /--include-warnings cannot be used with rollback/],
+    [['--include-warnings'], /--include-warnings only applies to repair/],
     [['--restore'], /--restore cannot be used with rollback/],
   ])('rejects %o', async (args, message) => {
     await expect(
-      runRollbackCommand(parseCliArgs(['rollback', ...args]), 'rollback', io())
+      runHeadlessCommand(parseCliArgs(['rollback', ...args]), 'rollback')
     ).rejects.toThrow(message);
   });
 
@@ -1124,9 +1462,11 @@ describe('index rollback command', () => {
 
 describe('index debug-info command', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
-  const home = homeDir();
+  let home: string;
 
   beforeEach(() => {
+    home = homeDir();
+    deps.env = { PATH: `${home}/bin:/usr/bin` };
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
     mockFormatDoctorReport.mockReturnValue('Starship health check\n\nPASS    Starship — ok\n');
   });
@@ -1150,7 +1490,7 @@ describe('index debug-info command', () => {
     history: () => [],
     shellFacts: () => ({ startsStarship: false, managedBlock: false, config: false }),
     hasStarshipIn: () => false,
-    env: { PATH: `${home}/bin:/usr/bin` },
+    env: {},
     os: () => 'Linux 6.1.0 (linux/x64)',
   };
 
@@ -1180,7 +1520,7 @@ describe('index debug-info command', () => {
     [['--state', 'card.json'], /--state cannot be used with debug-info/],
     [['--dry-run'], /--dry-run cannot be used with debug-info/],
   ])('rejects %o', async (args, message) => {
-    await expect(runDebugInfoCommand(parseCliArgs(['debug-info', ...args]), deps)).rejects.toThrow(
+    await expect(runHeadlessCommand(parseCliArgs(['debug-info', ...args]), '')).rejects.toThrow(
       message
     );
   });
@@ -1230,10 +1570,10 @@ describe('index completions command', () => {
         '--starship',
         '--list',
       ],
-      /--include-warnings, --yes, --starship, --list, --run cannot be used with completions/,
+      /--include-warnings only applies to repair/,
     ],
-  ])('rejects %o', (args, message) => {
-    expect(() => runCompletionsCommand(parseCliArgs(args))).toThrow(message);
+  ])('rejects %o', async (args, message) => {
+    await expect(runHeadlessCommand(parseCliArgs(args), '')).rejects.toThrow(message);
   });
 
   it('documents completions and where to install them in the help text', () => {
@@ -1375,10 +1715,17 @@ describe('index timings command', () => {
   it.each([
     [['--config', 'x', '--preset', 'pure-prompt'], /--config times an existing file, so --preset/],
     [['--config', '/no/such/file'], /Could not read '\/no\/such\/file'/],
-    [['--shells', 'zsh'], /--shells cannot be used with timings/],
-    [['--yes'], /--yes cannot be used with timings/],
   ])('rejects %o', async (args, message) => {
     await expect(runTimingsCommand(parseCliArgs(['timings', ...args]), deps())).rejects.toThrow(
+      message
+    );
+  });
+
+  it.each([
+    [['--shells', 'zsh'], /--shells cannot be used with timings/],
+    [['--yes'], /--yes only applies to repair/],
+  ])('refuses %o before timing anything', async (args, message) => {
+    await expect(runHeadlessCommand(parseCliArgs(['timings', ...args]), '')).rejects.toThrow(
       message
     );
   });
@@ -1447,8 +1794,8 @@ describe('index share command', () => {
   it.each([
     [['--shells', 'zsh'], /--shells cannot be used with share/],
     [['--json'], /--json cannot be used with share/],
-  ])('rejects %o', (args, message) => {
-    expect(() => runShareCommand(parseCliArgs(['share', ...args]))).toThrow(message);
+  ])('rejects %o', async (args, message) => {
+    await expect(runHeadlessCommand(parseCliArgs(['share', ...args]), '')).rejects.toThrow(message);
   });
 
   it('documents share in the help text', () => {

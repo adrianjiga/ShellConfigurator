@@ -16,10 +16,10 @@ export default defineConfig({
       // Set just under the measured numbers so a regression trips the gate.
       // Ratchet these up as the untested screens gain tests.
       thresholds: {
-        statements: 90,
-        branches: 81,
-        functions: 91,
-        lines: 93,
+        statements: 95,
+        branches: 91,
+        functions: 96,
+        lines: 96,
         'src/**/*.{ts,tsx}': {
           perFile: true,
           statements: 75,

@@ -1,5 +1,6 @@
 import { MODULES } from '../config/modules.ts';
 import { PRESETS } from '../config/presets.ts';
+import { DEFAULT_STATE } from '../types.ts';
 import { NERD_FONTS } from './installer.ts';
 
 export type ListKind = 'presets' | 'modules' | 'fonts';
@@ -29,8 +30,8 @@ export function listEntries(kind: ListKind): ListEntry[] {
         id: module.id,
         label: module.label,
         description: module.description,
-        defaultLeft: module.defaultLeft,
-        defaultRight: module.defaultRight,
+        defaultLeft: DEFAULT_STATE.leftModules.includes(module.id),
+        defaultRight: DEFAULT_STATE.rightModules.includes(module.id),
       }));
     case 'fonts':
       return NERD_FONTS.map((font) => ({

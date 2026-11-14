@@ -1,9 +1,19 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 import { getShellBinary, posixShellQuote } from '../config/shells.ts';
 import type { PackageManager, ShellId } from '../types.ts';
-import { cachedFont, cacheFont, sha256Digest } from './cache.ts';
+import {
+  cachedFont,
+  cacheFont,
+  forgetScriptInstall,
+  isRecordedScriptInstall,
+  recordedFontFiles,
+  recordFontFiles,
+  recordScriptInstall,
+  sha256Digest,
+} from './cache.ts';
 import { errorMessage } from './errors.ts';
 import {
   CommandCancelledError,
@@ -14,7 +24,9 @@ import {
   runCommand,
 } from './exec.ts';
 import { type ExtractedFontFile, extractFontFiles, fontFileNames } from './fontExtractor.ts';
-import { homeDir, xdgBaseDir } from './paths.ts';
+import { homeDir, scriptInstallBinDir, withPathDir, xdgBaseDir } from './paths.ts';
+
+export { scriptInstallBinDir } from './paths.ts';
 
 // Package names per shell per package manager. Missing combos are intentional
 // (powershell is AUR-only on Arch, nushell is absent from Debian/Ubuntu
@@ -33,8 +45,10 @@ function needsSudo(): boolean {
 }
 
 /** The scripted path is a separate code branch; omitting it here makes a stray lookup a type error. */
-const INSTALL_CMDS: Record<Exclude<PackageManager, 'script'>, (pkg: string) => string[]> = {
-  pacman: (pkg) => [...sudo(), 'pacman', '-Syu', '--noconfirm', '--needed', pkg],
+type InstallingManager = Exclude<PackageManager, 'script'>;
+
+const INSTALL_CMDS: Record<InstallingManager, (pkg: string) => string[]> = {
+  pacman: (pkg) => [...sudo(), 'pacman', '-S', '--noconfirm', '--needed', pkg],
   apt: (pkg) => [...sudo(), 'apt-get', 'install', '-y', pkg],
   dnf: (pkg) => [...sudo(), 'dnf', 'install', '-y', pkg],
   brew: (pkg) => ['brew', 'install', pkg],
@@ -43,6 +57,23 @@ const INSTALL_CMDS: Record<Exclude<PackageManager, 'script'>, (pkg: string) => s
 
 function sudo(): string[] {
   return needsSudo() ? ['sudo'] : [];
+}
+
+async function installPackage(
+  pm: InstallingManager,
+  pkg: string,
+  signal?: AbortSignal
+): Promise<void> {
+  try {
+    await runCommand(INSTALL_CMDS[pm](pkg), { signal });
+  } catch (err) {
+    if (pm !== 'pacman' || signal?.aborted) throw err;
+    throw new Error(
+      `${errorMessage(err)}. If pacman could not download it, its package lists are out of date: ` +
+        'run `sudo pacman -Syu` to upgrade the system, then run this again.',
+      { cause: err }
+    );
+  }
 }
 
 /** A fresh image has no package index, so the first apt install would 404. */
@@ -104,10 +135,6 @@ const FONT_CHECKSUM_TIMEOUT_MS = 30_000;
 const MAX_FONT_ARCHIVE_BYTES = 200 * 1024 * 1024;
 
 /** Where the official install script puts the binary when run without sudo. */
-export function scriptInstallBinDir(): string {
-  return path.join(homeDir(), '.local', 'bin');
-}
-
 const STARSHIP_INSTALL_URL = 'https://starship.rs/install.sh';
 
 export const MANUAL_STARSHIP_INSTALL = `curl -sS ${STARSHIP_INSTALL_URL} | sh`;
@@ -158,6 +185,9 @@ async function installStarshipViaScript(signal?: AbortSignal): Promise<void> {
       ['env', 'POSIXLY_CORRECT=1', 'sh', scriptPath, '--yes', '--bin-dir', scriptInstallBinDir()],
       { signal }
     );
+    try {
+      recordScriptInstall(path.join(scriptInstallBinDir(), 'starship'));
+    } catch {}
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -170,7 +200,7 @@ export async function installStarship(pm: PackageManager, signal?: AbortSignal):
     return;
   }
 
-  await runCommand(INSTALL_CMDS[pm]('starship'), { signal });
+  await installPackage(pm, 'starship', signal);
 }
 
 /**
@@ -186,13 +216,6 @@ export function getMissingStarshipPathDir(): string | null {
   return fs.existsSync(path.join(scriptInstallBinDir(), 'starship')) ? scriptInstallBinDir() : null;
 }
 
-/** PATH with `dir` in front, for running a script install that PATH lacks. */
-function withPathDir(dir: string | null): NodeJS.ProcessEnv['PATH'] {
-  const current = process.env.PATH;
-  if (!dir) return current;
-  return current ? `${dir}${path.delimiter}${current}` : dir;
-}
-
 /** `starship -V`, with `pathDir` on PATH for a script install PATH lacks; null when it fails. */
 export async function readStarshipVersion(pathDir: string | null): Promise<string | null> {
   try {
@@ -206,7 +229,8 @@ export async function readStarshipVersion(pathDir: string | null): Promise<strin
 
 /**
  * Rejects when starship cannot load the config at `configPath`. `print-config`
- * exits 0 even on a broken config, so its warnings on stderr are the failure.
+ * exits 0 even on a broken config, so its config errors on stderr are the
+ * failure; other output there (an unrelated warning) is not.
  */
 export async function verifyStarshipConfig(
   configPath: string,
@@ -214,7 +238,10 @@ export async function verifyStarshipConfig(
 ): Promise<void> {
   const env = { ...process.env, STARSHIP_CONFIG: configPath, PATH: withPathDir(pathDir) };
   const { stderr } = await runCaptureBoth('starship', ['print-config'], { env });
-  if (stderr) throw new Error(stderr);
+  const configError = stripVTControlCharacters(stderr)
+    .split('\n')
+    .some((line) => /\bERROR\b|\(starship::config\)/.test(line));
+  if (configError) throw new Error(stderr);
 }
 
 /**
@@ -265,7 +292,7 @@ export async function installShell(
   }
 
   await refreshPackageIndex(pm, signal);
-  await runCommand(INSTALL_CMDS[pm](pkg), { signal });
+  await installPackage(pm, pkg, signal);
 }
 
 export function getNerdFontsDir(): string {
@@ -377,7 +404,7 @@ function verifyChecksum(zipName: string, buffer: Buffer, expectedDigest: string)
   }
 }
 
-async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> {
+async function installFontFiles(fontId: string, zipName: string, buffer: Buffer): Promise<void> {
   let fontFiles: ExtractedFontFile[];
   try {
     fontFiles = await extractFontFiles(buffer);
@@ -394,9 +421,15 @@ async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> 
   fs.mkdirSync(fontsDir, { recursive: true });
 
   for (const file of fontFiles) {
-    // The worker flattens entry paths to basenames; do not join onto the raw path.
+    // extractFontFiles flattens entry paths to basenames; do not join onto the raw path.
     fs.writeFileSync(path.join(fontsDir, file.name), file.bytes);
   }
+  try {
+    recordFontFiles(
+      fontId,
+      fontFiles.map((file) => file.name)
+    );
+  } catch {}
 
   await refreshFontCache(fontsDir);
 }
@@ -437,17 +470,17 @@ export async function installNerdFont(
   } catch (err) {
     if (signal?.aborted) throw new CommandCancelledError(`look up ${font.zipName} checksum`);
     if (!cached) throw err;
-    await installFontFiles(font.zipName, cached.buffer);
+    await installFontFiles(fontId, font.zipName, cached.buffer);
     return `installed ${font.label} from cache`;
   }
   if (cached && cached.digest === asset.digest) {
-    await installFontFiles(font.zipName, cached.buffer);
+    await installFontFiles(fontId, font.zipName, cached.buffer);
     return `installed ${font.label} from cache`;
   }
 
   const buffer = await downloadFont(font.zipName, asset.url, signal);
   verifyChecksum(font.zipName, buffer, asset.digest);
-  await installFontFiles(font.zipName, buffer);
+  await installFontFiles(fontId, font.zipName, buffer);
 
   // Pin the verified archive so a later run reuses it without re-downloading.
   // A cache that cannot be written (no space, read-only ~/.cache) must not undo
@@ -498,30 +531,37 @@ export type StarshipRemoval =
  */
 export async function plannedStarshipRemoval(pm: PackageManager): Promise<StarshipRemoval> {
   const scriptBinary = path.join(scriptInstallBinDir(), 'starship');
-  if (fs.existsSync(scriptBinary)) return { kind: 'script', path: scriptBinary };
+  const scriptExists = fs.existsSync(scriptBinary);
+  if (scriptExists && isRecordedScriptInstall(scriptBinary)) {
+    return { kind: 'script', path: scriptBinary };
+  }
   const onPath = commandPath('starship');
-  if (!onPath) return { kind: 'absent' };
   const remove = REMOVE_CMDS[pm];
-  if (!remove || !(await packageOwnsStarship(pm, onPath))) return { kind: 'manual', path: onPath };
-  return { kind: 'package', pm, command: pm === 'brew' ? remove : [...sudo(), ...remove] };
+  if (onPath && onPath !== scriptBinary && remove && (await packageOwnsStarship(pm, onPath))) {
+    return { kind: 'package', pm, command: pm === 'brew' ? remove : [...sudo(), ...remove] };
+  }
+  if (scriptExists) return { kind: 'manual', path: scriptBinary };
+  return onPath ? { kind: 'manual', path: onPath } : { kind: 'absent' };
 }
 
 export async function removeStarship(plan: StarshipRemoval, signal?: AbortSignal): Promise<void> {
-  if (plan.kind === 'script') fs.rmSync(plan.path, { force: true });
-  else if (plan.kind === 'package') await runCommand(plan.command, { signal });
+  if (plan.kind === 'script') {
+    fs.rmSync(plan.path, { force: true });
+    forgetScriptInstall();
+  } else if (plan.kind === 'package') await runCommand(plan.command, { signal });
 }
 
 /**
- * The files of an installed Nerd Font, listed from its cached archive. Null when
- * no verified archive is cached, so the files cannot be told apart from others.
+ * The files of an installed Nerd Font, listed from its cached archive, else from
+ * the names its install recorded. Null when neither is there, so the files
+ * cannot be told apart from others.
  */
 export async function installedFontFiles(fontId: string): Promise<string[] | null> {
   const cached = cachedFont(fontId);
-  if (!cached) return null;
+  const names = cached ? fontFileNames(cached.buffer) : recordedFontFiles(fontId);
+  if (!names) return null;
   const fontsDir = getNerdFontsDir();
-  return fontFileNames(cached.buffer)
-    .map((name) => path.join(fontsDir, name))
-    .filter((f) => fs.existsSync(f));
+  return names.map((name) => path.join(fontsDir, name)).filter((f) => fs.existsSync(f));
 }
 
 export async function removeFontFiles(files: string[]): Promise<void> {

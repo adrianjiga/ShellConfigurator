@@ -172,22 +172,36 @@ describe('doctor health check via the real deps', () => {
     expect(report.ok).toBe(true);
   });
 
-  it('fails the config check when print-config exits 0 but warns on stderr', async () => {
+  function printConfigWrites(stderr: string) {
     mockExecFile.mockImplementation(
       (cmd: string, args: string[], options: unknown, cb: (...rest: unknown[]) => void) => {
         if (cmd === 'starship' && args[0] === 'print-config') {
-          cb(null, '{\n}\n', '[WARN] unknown field `starship`\n');
+          cb(null, '{\n}\n', stderr);
           return;
         }
         execFileFailsOrSucceeds(cmd, args, options, cb);
       }
+    );
+  }
+
+  it('fails the config check when print-config exits 0 but reports a config error', async () => {
+    printConfigWrites(
+      '[\u001b[31mERROR\u001b[0m] - (starship::config): Unable to parse the config file: TOML parse error\n'
     );
 
     const report = await runDoctor(null, DEFAULT_DOCTOR_DEPS);
     const config = report.findings.find((f) => f.id === 'config');
 
     expect(config?.status).toBe('fail');
-    expect(config?.detail).toContain('unknown field');
+    expect(config?.detail).toContain('Unable to parse the config file');
+  });
+
+  it('passes the config check over a warning on stderr that is not about the config', async () => {
+    printConfigWrites('[WARN] - (starship::utils): Executing command "git" timed out.\n');
+
+    const report = await runDoctor(null, DEFAULT_DOCTOR_DEPS);
+
+    expect(report.findings.find((f) => f.id === 'config')?.status).toBe('pass');
   });
 
   it('flags a mismatch between the recorded and installed starship version', async () => {

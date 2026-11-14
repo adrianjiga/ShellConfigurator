@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
+import { fileURLToPath } from 'node:url';
 import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
@@ -26,8 +27,14 @@ import { CliRunError, CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
 import { lastRunShells, recordRunSafely } from './services/history.ts';
 import { formatListing, listEntries } from './services/listings.ts';
-import { redactHome } from './services/redact.ts';
-import { formatRepairReport, runRepair } from './services/repair.ts';
+import { redactPersonal } from './services/redact.ts';
+import {
+  DEFAULT_REPAIR_DEPS,
+  formatRepairReport,
+  type RepairDeps,
+  type RepairReport,
+  runRepair,
+} from './services/repair.ts';
 import {
   defaultRollbackRun,
   formatRollbackReport,
@@ -36,7 +43,13 @@ import {
   rollbackRunsWithManifests,
   runRollback,
 } from './services/rollback.ts';
-import { captureRun, trackedFiles } from './services/runCapture.ts';
+import {
+  CapturedRunError,
+  captureRun,
+  interruptedRunCount,
+  recoverInterruptedRuns,
+  trackedFiles,
+} from './services/runCapture.ts';
 import { renderShare } from './services/share.ts';
 import {
   type ActiveConfig,
@@ -91,7 +104,7 @@ export function reportFatal(prefix: string, err: unknown): void {
     process.exitCode = err instanceof CliUsageError ? 2 : 1;
     return;
   }
-  const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  const message = redactPersonal(err instanceof Error ? (err.stack ?? err.message) : String(err));
   process.stderr.write(`\n${prefix}: ${message}\n`);
   process.exitCode = 1;
 }
@@ -125,8 +138,9 @@ Options:
   -d, --dry-run       Install nothing; print what would happen (generate still
                      writes -o/--export files)
   --no-install        Alias for --dry-run
-  --restore, --undo   Copy the newest .bak-* snapshot back over the shared and
-                     per-shell configs created by earlier wizard runs
+  --restore           Copy the newest .bak-* snapshot back over the shared and
+                     per-shell configs created by earlier wizard runs; rc files
+                     stay as they are (shell-configurator rollback undoes a run)
 
   Flags may appear before or after the subcommand (e.g. "--dry-run generate"
   works like "generate --dry-run"); when a flag is repeated the last one wins.
@@ -153,21 +167,26 @@ apply options (a headless install from a state card):
                        regenerating it (per-shell files are never written)
   --import-url <url>   Fetch a starship.toml over the web and adopt it (implies --adopt)
   --json               With --dry-run, print the plan, config and diffs as JSON
-  Without --state, apply also takes the generate options above; --shells is
-  then required.
+  Without --state, apply also takes the generate options above except -o and
+  --export; --shells is then required.
 
 doctor options (checks the setup; exits non-zero when a check fails):
   --state <file>       Check the setup described by a saved state card
   --json               Print the report as JSON instead of the text summary
   --fix                Apply the repairs for failing checks, then re-check (like 'repair')
   --include-warnings   With --fix, also apply the repairs warnings suggest
+  -y, --yes            With --fix, go ahead without asking (required off a terminal)
+  --dry-run            With --fix, print the fixes it would apply; change nothing
+  Without --state it checks the shells that were set up, not every installed one.
 
-repair options (fixes the failing checks; exits non-zero when one still fails):
+repair options (fixes the failing checks; asks first; exits non-zero when one still fails):
   --state <file>       Repair the setup described by a saved state card
+  -y, --yes            Go ahead without asking (required off a terminal)
   --dry-run            Print the fixes it would apply; change nothing
   --include-warnings   Also apply the fixes warnings suggest (e.g. the terminal font);
                        a warning may describe a choice you made on purpose
   --json               Print the report as JSON instead of the text summary
+  rollback puts back the files it changed (not a reinstalled Starship or font).
 
 uninstall options (removes the Starship setup; asks before changing anything):
   --shells <id,...>    Only these shells (default: every shell it set up)
@@ -197,11 +216,11 @@ timings options (changes no config; times the modules in the current folder):
   ~/.config/starship.toml, else Starship's built-in default prompt.
   --config <file>      Time this starship.toml instead
   --json               Print the timings and suggestions as JSON
-  The generate flags (--preset, --palette, --state, ...) time a config built
+  The look flags (--preset, --palette, --font, --state, ...) time a config built
   from them. Modules run in parallel, so the prompt is about as slow as its
   slowest one.
 
-share options (takes the generate flags, e.g. shell-configurator share --preset tokyo-night):
+share options (takes the look flags, e.g. shell-configurator share --preset tokyo-night):
   -o, --output <file>  Write the Markdown to this file instead of stdout
   The card it prints has no shells or font install of this machine; whoever uses
   it adds --shells (and --font) to apply.
@@ -226,6 +245,9 @@ export function runRestore(): void {
       const saved = r.previousSavedTo ? `; previous saved to ${r.previousSavedTo}` : '';
       process.stdout.write(`  ${r.what}: ${r.restoredTo} (from ${r.restoredFrom}${saved})\n`);
     }
+    process.stdout.write(
+      'Shell rc files are unchanged, so each shell still reads its own config. To undo a whole run, use shell-configurator rollback.\n'
+    );
   }
   if (failed.length > 0) {
     process.stderr.write('Could not restore some configs:\n');
@@ -333,6 +355,23 @@ function acceptedFlags(subcommand: Subcommand): Set<string> {
   return new Set(SUBCOMMAND_INFO[subcommand].flags.map((info) => info.name));
 }
 
+const NOT_STATE_FLAGS = new Set(['--import-url', '--output', '--export']);
+
+function refuseUnusedFlags(flags: CliFlags, subcommand: Subcommand): void {
+  const accepted = acceptedFlags(subcommand);
+  const layered =
+    subcommand === 'doctor' || subcommand === 'repair'
+      ? presentConfigFlags(flags).filter((flag) => !NOT_STATE_FLAGS.has(flag))
+      : [];
+  const unused = presentFlags(flags).filter(
+    (flag) => !accepted.has(flag) && !layered.includes(flag)
+  );
+  if (subcommand === 'doctor' && flags.dryRun && !flags.fix) unused.push('--dry-run without --fix');
+  if (unused.length > 0) {
+    throw new CliUsageError(`${unused.join(', ')} cannot be used with ${subcommand}.`);
+  }
+}
+
 function warnIgnoredFlags(flags: CliFlags, subcommand: string): void {
   if (flags.stateFile) return;
   for (const flag of presentConfigFlags(flags)) {
@@ -348,9 +387,13 @@ function warnIgnoredFlags(flags: CliFlags, subcommand: string): void {
  * output. `--json` swaps the human summary for the report object, and `--fix`
  * upgrades the run into a repair.
  */
-export async function runDoctorCommand(flags: CliFlags): Promise<void> {
+export async function runDoctorCommand(
+  flags: CliFlags,
+  command: string,
+  io: PromptIo = DEFAULT_PROMPT_IO
+): Promise<void> {
   if (flags.fix) {
-    await runRepairCommand(flags);
+    await runRepairCommand(flags, command, io);
     return;
   }
   warnIgnoredFlags(flags, 'doctor');
@@ -364,20 +407,53 @@ export async function runDoctorCommand(flags: CliFlags): Promise<void> {
   if (!report.ok) process.exitCode = 1;
 }
 
-/** Runs the doctor's fixes, then re-checks; a still-failing check exits non-zero. */
-export async function runRepairCommand(flags: CliFlags): Promise<void> {
+export async function runRepairCommand(
+  flags: CliFlags,
+  command: string,
+  io: PromptIo = DEFAULT_PROMPT_IO,
+  deps: RepairDeps = DEFAULT_REPAIR_DEPS
+): Promise<void> {
   warnIgnoredFlags(flags, 'repair');
   const state = flags.stateFile ? stateFromFlags(flags) : null;
-  const report = await runRepair(state, undefined, {
-    dryRun: flags.dryRun,
-    includeWarnings: flags.includeWarnings,
-  });
+  const options = { includeWarnings: flags.includeWarnings };
+  const plan = await runRepair(state, deps, { ...options, dryRun: true });
+  const changes = !flags.dryRun && plan.actions.length > 0;
+  if (changes) {
+    const proceed = await confirmChanges(
+      flags,
+      io,
+      'repair changes files and may install software',
+      () => formatRepairReport(plan),
+      '\nApply these fixes? [y/N] '
+    );
+    if (!proceed) return;
+  }
+
+  const record = (exitCode: number, runId: string | null) =>
+    recordRunSafely({ kind: 'repair', command, exitCode, runId, ...(state ? { state } : {}) });
+  let captured: { result: RepairReport; runId: string | null };
+  try {
+    captured = changes
+      ? await captureRun(
+          trackedFiles(),
+          () => runRepair(state, deps, { ...options, before: plan.before }),
+          { record: { kind: 'repair', command, ...(state ? { state } : {}) } }
+        )
+      : { result: { ...plan, dryRun: flags.dryRun ?? false }, runId: null };
+  } catch (err) {
+    if (!(err instanceof CapturedRunError)) throw err;
+    record(1, err.runId);
+    throw err.cause;
+  }
+  const { result: report, runId } = captured;
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {
     process.stdout.write(formatRepairReport(report));
+    if (runId) process.stdout.write('\nUndo it with: shell-configurator rollback\n');
   }
   if (!report.ok) process.exitCode = 1;
+  if (changes) record(report.ok ? 0 : 1, runId);
 }
 
 async function askToProceed(question: string): Promise<boolean> {
@@ -435,11 +511,6 @@ export async function runUninstallCommand(
   command: string,
   io: UninstallIo = DEFAULT_UNINSTALL_IO
 ): Promise<void> {
-  const accepted = acceptedFlags('uninstall');
-  const unused = presentFlags(flags).filter((flag) => !accepted.has(flag));
-  if (unused.length > 0) {
-    throw new CliUsageError(`${unused.join(', ')} cannot be used with uninstall.`);
-  }
   if (flags.font === 'none') {
     throw new CliUsageError('uninstall --font takes the Nerd Font to remove, not none.');
   }
@@ -468,7 +539,9 @@ export async function runUninstallCommand(
   }
 
   const { result: report, runId } = changes
-    ? await captureRun(trackedFiles(), () => runUninstall(steps))
+    ? await captureRun(trackedFiles(), () => runUninstall(steps), {
+        record: { kind: 'uninstall', command },
+      })
     : { result: await runUninstall(steps, { dryRun }), runId: null };
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
@@ -508,14 +581,16 @@ export async function runRollbackCommand(
   command: string,
   io: PromptIo = DEFAULT_PROMPT_IO
 ): Promise<void> {
-  const accepted = acceptedFlags('rollback');
-  const unused = presentFlags(flags).filter((flag) => !accepted.has(flag));
-  if (unused.length > 0) {
-    throw new CliUsageError(`${unused.join(', ')} cannot be used with rollback.`);
-  }
-
+  const readOnly = flags.list || flags.dryRun;
+  if (!readOnly) recoverInterruptedRuns();
+  const waiting = readOnly ? interruptedRunCount() : 0;
   const entries = rollbackRunsWithManifests();
   const runs = entries.map((entry) => entry.run);
+  if (waiting > 0 && !flags.json) {
+    process.stdout.write(
+      `${waiting} interrupted run${waiting === 1 ? ' is' : 's are'} not listed yet; a rollback without --list or --dry-run records ${waiting === 1 ? 'it' : 'them'} first.\n`
+    );
+  }
   if (flags.list) {
     process.stdout.write(
       flags.json ? `${JSON.stringify(runs, null, 2)}\n` : formatRollbackRuns(runs)
@@ -548,6 +623,11 @@ export async function runRollbackCommand(
   const steps = planRollback(manifest);
   const dryRun = flags.dryRun ?? false;
   const changes = !dryRun && steps.some((step) => step.run);
+  if (changes && target.interrupted && !flags.json) {
+    process.stdout.write(
+      'That run was interrupted, so its record was finished later: a change made to these files after the interruption is put back too.\n'
+    );
+  }
   if (changes) {
     const proceed = await confirmChanges(
       flags,
@@ -563,14 +643,22 @@ export async function runRollbackCommand(
     ? await captureRun(
         manifest.files.map((file) => file.path),
         async () => runRollback(target.runId, steps),
-        { rewritable: manifest.files.filter((file) => file.rewritable).map((file) => file.path) }
+        {
+          rewritable: manifest.files.filter((file) => file.rewritable).map((file) => file.path),
+          record: { kind: 'rollback', command, rollbackOf: target.runId },
+          recovered: true,
+        }
       )
     : { result: runRollback(target.runId, steps, { dryRun }), runId: null };
+  const alreadyBack = !changes && !dryRun && report.complete && !target.rolledBack;
   process.stdout.write(
     flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatRollbackReport(report)
   );
+  if (alreadyBack && !flags.json) {
+    process.stdout.write('\nEvery file is already back, so that run now counts as rolled back.\n');
+  }
   if (!report.ok) process.exitCode = 1;
-  if (changes) {
+  if (changes || alreadyBack) {
     recordRunSafely({
       kind: 'rollback',
       command,
@@ -586,13 +674,7 @@ export async function runTimingsCommand(
   flags: CliFlags,
   deps: ProbeDeps = DEFAULT_PROBE_DEPS
 ): Promise<void> {
-  const present = presentFlags(flags);
-  const accepted = acceptedFlags('timings');
-  const unused = present.filter((flag) => !accepted.has(flag));
-  if (unused.length > 0) {
-    throw new CliUsageError(`${unused.join(', ')} cannot be used with timings.`);
-  }
-  const building = present.filter((flag) => flag !== '--config' && flag !== '--json');
+  const building = presentFlags(flags).filter((flag) => flag !== '--config' && flag !== '--json');
   if (flags.configFile && building.length > 0) {
     throw new CliUsageError(
       `--config times an existing file, so ${building.join(', ')} cannot be used with it.`
@@ -639,11 +721,6 @@ export async function runTimingsCommand(
 }
 
 export function runShareCommand(flags: CliFlags): void {
-  const accepted = acceptedFlags('share');
-  const unused = presentFlags(flags).filter((flag) => !accepted.has(flag));
-  if (unused.length > 0) {
-    throw new CliUsageError(`${unused.join(', ')} cannot be used with share.`);
-  }
   const state = stateFromFlags(flags);
   if (state.keepExistingConfig) {
     throw new CliUsageError(
@@ -664,10 +741,6 @@ export function runShareCommand(flags: CliFlags): void {
 }
 
 export function runCompletionsCommand(flags: CliFlags): void {
-  const unused = presentFlags(flags);
-  if (unused.length > 0) {
-    throw new CliUsageError(`${unused.join(', ')} cannot be used with completions.`);
-  }
   const shell = flags.completionShell;
   if (!COMPLETION_SHELLS.includes(shell as CompletionShell)) {
     throw new CliUsageError(
@@ -684,16 +757,9 @@ export async function runDebugInfoCommand(
   flags: CliFlags,
   deps: DebugInfoDeps = DEFAULT_DEBUG_INFO_DEPS
 ): Promise<void> {
-  const unused = presentConfigFlags(flags);
-  if (flags.stateFile) unused.push('--state');
-  if (flags.fix) unused.push('--fix');
-  if (flags.dryRun) unused.push('--dry-run');
-  if (unused.length > 0) {
-    throw new CliUsageError(`${unused.join(', ')} cannot be used with debug-info.`);
-  }
   const info = await collectDebugInfo(VERSION, deps);
   process.stdout.write(
-    flags.json ? redactHome(`${JSON.stringify(info, null, 2)}\n`) : formatDebugInfo(info)
+    flags.json ? redactPersonal(`${JSON.stringify(info, null, 2)}\n`) : formatDebugInfo(info)
   );
 }
 
@@ -709,8 +775,13 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.includeWarnings && !repairs) {
     throw new CliUsageError('--include-warnings only applies to repair (or doctor --fix).');
   }
-  if (flags.yes && flags.subcommand !== 'uninstall' && flags.subcommand !== 'rollback') {
-    throw new CliUsageError('--yes only applies to uninstall and rollback.');
+  if (
+    flags.yes &&
+    !repairs &&
+    flags.subcommand !== 'uninstall' &&
+    flags.subcommand !== 'rollback'
+  ) {
+    throw new CliUsageError('--yes only applies to repair, doctor --fix, uninstall and rollback.');
   }
   if (flags.starship && flags.subcommand !== 'uninstall') {
     throw new CliUsageError('--starship only applies to uninstall.');
@@ -721,6 +792,7 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if ((flags.list || flags.runId) && flags.subcommand !== 'rollback') {
     throw new CliUsageError(`${flags.list ? '--list' : '--run'} only applies to rollback.`);
   }
+  if (flags.subcommand) refuseUnusedFlags(flags, flags.subcommand);
   if (flags.subcommand === 'rollback') {
     await runRollbackCommand(flags, command);
     return true;
@@ -754,11 +826,11 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
     return true;
   }
   if (flags.subcommand === 'doctor') {
-    await runDoctorCommand(flags);
+    await runDoctorCommand(flags, command);
     return true;
   }
   if (flags.subcommand === 'repair') {
-    await runRepairCommand(flags);
+    await runRepairCommand(flags, command);
     return true;
   }
   // No subcommand: the interactive wizard runs next — silently dropping
@@ -787,9 +859,6 @@ export function crash(prefix: string, err: unknown): void {
   process.exit(process.exitCode ?? 1);
 }
 
-process.on('uncaughtException', (err) => crash('ShellConfigurator crashed', err));
-process.on('unhandledRejection', (err) => crash('ShellConfigurator crashed', err));
-
 /** Everything before the wizard: global flags, headless subcommands. */
 export async function routeCli(argv: string[]): Promise<{ handled: boolean; flags: CliFlags }> {
   const flags: CliFlags = parseCliArgs(argv);
@@ -798,9 +867,21 @@ export async function routeCli(argv: string[]): Promise<{ handled: boolean; flag
   return { handled, flags };
 }
 
+export function assertWizardTerminal(
+  stdin: { isTTY?: boolean } = process.stdin,
+  stdout: { isTTY?: boolean } = process.stdout
+): void {
+  if (stdin.isTTY && stdout.isTTY) return;
+  throw new CliUsageError(
+    'The wizard needs a terminal: its input and output cannot be redirected. ' +
+      'To set up without one, run shell-configurator apply --shells <id,...> (see --help).'
+  );
+}
+
 async function main(): Promise<void> {
   const { handled, flags } = await routeCli(process.argv.slice(2));
   if (handled) return;
+  assertWizardTerminal();
 
   const app = render(
     <ErrorBoundary
@@ -813,7 +894,7 @@ async function main(): Promise<void> {
       <App dryRun={flags.dryRun ?? false} onInstallOutcome={recordInstallOutcome} />
     </ErrorBoundary>,
     // Ctrl+C during the install must cancel it, not leave it running unseen.
-    { exitOnCtrlC: false }
+    { exitOnCtrlC: false, interactive: true }
   );
 
   await app.waitUntilExit();
@@ -821,4 +902,17 @@ async function main(): Promise<void> {
   restoreTty();
 }
 
-main().catch((err) => reportFatal('ShellConfigurator exited abnormally', err));
+export function isEntryPoint(script: string | undefined = process.argv[1]): boolean {
+  if (!script) return false;
+  try {
+    return realpathSync(script) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) {
+  process.on('uncaughtException', (err) => crash('ShellConfigurator crashed', err));
+  process.on('unhandledRejection', (err) => crash('ShellConfigurator crashed', err));
+  main().catch((err) => reportFatal('ShellConfigurator exited abnormally', err));
+}

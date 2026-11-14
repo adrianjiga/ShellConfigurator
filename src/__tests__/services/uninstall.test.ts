@@ -18,6 +18,8 @@ function makeDeps(
   return {
     hasManagedRcBlock: vi.fn((id: ShellId) => wired.includes(id)),
     hasShellConfig: vi.fn((id: ShellId) => configs.includes(id)),
+    bashLoginBlockFiles: vi.fn(() => []),
+    removeBashLoginBlock: vi.fn(() => ({ removed: true })),
     startsStarship: vi.fn(() => false),
     removeManagedRcBlocks: vi.fn(() => ({ removed: true, backedUpTo: '/h/.zshrc.bak-1' })),
     removeShellConfigFile: vi.fn(() => ({ removed: true, backedUpTo: '/h/zsh.toml.bak-1' })),
@@ -68,8 +70,22 @@ describe('planUninstall', () => {
     const steps = await planUninstall({}, makeDeps([], ['nushell']));
     expect(ids(steps)).toEqual(['rc_nushell', 'config_nushell']);
     expect(steps[0]!.run).toBeUndefined();
-    expect(steps[0]!.detail).toContain(getShell('nushell')!.initPath!);
+    expect(steps[0]!.detail).toBe(
+      `set up by hand: delete ${getShell('nushell')!.initPath} and ${getShell('nushell')!.additionalInitPaths![0]} yourself`
+    );
     expect(steps[1]!.run).toBeDefined();
+  });
+
+  it('keeps Starship for a hand-set-up shell without telling to add it to --shells', async () => {
+    const deps = makeDeps([], ['nushell'], {
+      startsStarship: vi.fn((id: ShellId) => id === 'nushell'),
+    });
+
+    const steps = await planUninstall({ shells: ['nushell'], starship: true }, deps);
+
+    expect(steps.at(-1)!.detail).toBe(
+      'kept: Nushell would still start it; remove the setup of Nushell by hand first'
+    );
   });
 
   it('removes the font before Starship, after the shells', async () => {
@@ -262,12 +278,15 @@ describe('runUninstall', () => {
     expect(deps.forgetStarshipVersion).not.toHaveBeenCalled();
   });
 
-  it('passes on the note of a removal that changed nothing', async () => {
+  it('reports a removal that changed nothing as skipped, with its note', async () => {
     const deps = makeDeps(['zsh'], [], {
       removeManagedRcBlocks: vi.fn(() => ({ removed: false, note: 'no ShellConfigurator lines' })),
     });
     const report = await runUninstall(await planUninstall({}, deps));
-    expect(report.actions[0]!.detail).toBe('no ShellConfigurator lines');
+    expect(report.actions[0]).toMatchObject({
+      status: 'skipped',
+      detail: 'no ShellConfigurator lines',
+    });
   });
 
   it('only plans in a dry run', async () => {

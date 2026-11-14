@@ -43,6 +43,7 @@ time_format = "%H:%M"
 [character]
 success_symbol = '[❯](bold ok)'
 error_symbol   = '[❯](bold err)'
+vimcmd_symbol  = '[❯](bold ok)'
 
 [fill]
 symbol = " "

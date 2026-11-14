@@ -1,9 +1,16 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { SHELLS } from '../config/shells.ts';
-import { getSharedConfigPath, getShellConfigPath } from '../generators/shellRc.ts';
+import {
+  bashLoginFiles,
+  getSharedConfigPath,
+  getShellConfigPath,
+  writeFileAtomic,
+} from '../generators/shellRc.ts';
+import type { WizardState } from '../types.ts';
 import { sha256Digest } from './cache.ts';
 import { errorMessage, isMissingFile } from './errors.ts';
+import { type HistoryKind, recordRun } from './history.ts';
 import { stateDir } from './paths.ts';
 import { terminalFontConfigFiles } from './terminalFont.ts';
 
@@ -57,6 +64,7 @@ export function runDir(runId: string): string {
 export function trackedFiles(): string[] {
   return [
     ...SHELLS.flatMap((shell) => (shell.rcFile ? [shell.rcFile] : [])),
+    ...bashLoginFiles(),
     ...SHELLS.map((shell) => getShellConfigPath(shell.id)),
     getSharedConfigPath(),
     ...terminalFontConfigFiles(),
@@ -94,17 +102,58 @@ function createRunFolder(): string {
   }
 }
 
+export interface InterruptedRecord {
+  kind: HistoryKind;
+  command?: string;
+  rollbackOf?: string;
+  state?: WizardState;
+}
+
+interface PendingCapture {
+  version: typeof RUN_MANIFEST_VERSION;
+  pid: number;
+  startedAt?: number;
+  files: CapturedFile[];
+  record?: InterruptedRecord;
+  rewritable?: string[];
+}
+
+const PENDING = 'pending.json';
+
+const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+const activeCaptures = new Set<string>();
+
+function writeJsonAtomic(file: string, value: unknown): void {
+  writeFileAtomic(file, `${JSON.stringify(value, null, 2)}\n`, 0o600);
+}
+
 /**
  * Copies each file into a new run folder before a run changes anything. A
  * file that cannot be read (a folder, no permission) is left out, since it
  * could not be put back.
  */
-export function beginRunCapture(files: string[]): RunCapture {
+export function beginRunCapture(
+  files: string[],
+  record?: InterruptedRecord,
+  rewritable: readonly string[] = []
+): RunCapture {
   const runId = createRunFolder();
   const dir = runDir(runId);
   try {
     fs.mkdirSync(path.join(dir, 'files'), { mode: 0o700 });
-    return { runId, dir, files: copyFiles(files, dir) };
+    const capture = { runId, dir, files: copyFiles(files, dir) };
+    const pending: PendingCapture = {
+      version: RUN_MANIFEST_VERSION,
+      pid: process.pid,
+      startedAt: Date.now(),
+      files: capture.files,
+      ...(record ? { record } : {}),
+      ...(rewritable.length > 0 ? { rewritable: [...rewritable] } : {}),
+    };
+    writeJsonAtomic(path.join(dir, PENDING), pending);
+    activeCaptures.add(runId);
+    return capture;
   } catch (err) {
     fs.rmSync(dir, { recursive: true, force: true });
     throw err;
@@ -136,6 +185,8 @@ export interface CaptureOptions {
   onChanged?: (runId: string, files: RunFile[], error?: unknown) => void;
   /** Captured files that later runs rewrite (see RunFile.rewritable). */
   rewritable?: readonly string[];
+  record?: InterruptedRecord;
+  recovered?: boolean;
 }
 
 function changedFiles(capture: RunCapture, rewritable: readonly string[]): RunFile[] {
@@ -168,6 +219,7 @@ export function finishRunCapture(
   options: CaptureOptions = {},
   error?: unknown
 ): RunManifest | null {
+  activeCaptures.delete(capture.runId);
   const rewritable = options.rewritable ?? [];
   let changed = changedFiles(capture, rewritable);
   if (changed.length === 0) {
@@ -191,10 +243,101 @@ export function finishRunCapture(
     runId: capture.runId,
     files: changed,
   };
-  const file = path.join(capture.dir, 'manifest.json');
-  fs.writeFileSync(`${file}.tmp`, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
-  fs.renameSync(`${file}.tmp`, file);
+  writeJsonAtomic(path.join(capture.dir, 'manifest.json'), manifest);
+  fs.rmSync(path.join(capture.dir, PENDING), { force: true });
   return manifest;
+}
+
+type IsAlive = (pid: number, runId: string) => boolean;
+
+function processAlive(pid: number, runId: string): boolean {
+  if (pid === process.pid) return activeCaptures.has(runId);
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+interface DeadRun {
+  runId: string;
+  dir: string;
+  pendingFile: string;
+  pending: PendingCapture;
+}
+
+const CLAIM = /^pending\.json\.(\d+)$/;
+
+function pendingFiles(dir: string, runId: string, isAlive: IsAlive): string[] {
+  const claims = fs.readdirSync(dir).flatMap((name) => {
+    const pid = CLAIM.exec(name)?.[1];
+    return pid && !isAlive(Number(pid), runId) ? [path.join(dir, name)] : [];
+  });
+  return [path.join(dir, PENDING), ...claims];
+}
+
+function deadRuns(isAlive: IsAlive): DeadRun[] {
+  let runs: string[];
+  try {
+    runs = fs.readdirSync(runsDir()).sort();
+  } catch {
+    return [];
+  }
+  return runs.flatMap((runId) => {
+    const dir = runDir(runId);
+    let files: string[];
+    try {
+      files = pendingFiles(dir, runId, isAlive);
+    } catch {
+      return [];
+    }
+    for (const pendingFile of files) {
+      try {
+        const pending = JSON.parse(fs.readFileSync(pendingFile, 'utf8')) as PendingCapture;
+        if (pending.version !== RUN_MANIFEST_VERSION || !Array.isArray(pending.files)) return [];
+        const stale = Date.now() - (pending.startedAt ?? Date.now()) > PENDING_MAX_AGE_MS;
+        return !stale && isAlive(pending.pid, runId) ? [] : [{ runId, dir, pendingFile, pending }];
+      } catch {}
+    }
+    return [];
+  });
+}
+
+export function interruptedRunCount(isAlive: IsAlive = processAlive): number {
+  return deadRuns(isAlive).length;
+}
+
+export function recoverInterruptedRuns(isAlive: IsAlive = processAlive): string[] {
+  return deadRuns(isAlive).flatMap(({ runId, dir, pendingFile, pending }) => {
+    const claim = path.join(dir, `${PENDING}.${process.pid}`);
+    try {
+      fs.renameSync(pendingFile, claim);
+    } catch {
+      return [];
+    }
+    try {
+      const manifest = finishRunCapture(
+        { runId, dir, files: pending.files },
+        { rewritable: pending.rewritable ?? [] }
+      );
+      fs.rmSync(claim, { force: true });
+      if (!manifest) return [];
+      const record = pending.record ?? { kind: 'apply' as const };
+      recordRun({
+        ...record,
+        runId,
+        interrupted: true,
+        ...(record.kind === 'rollback' ? { partial: true } : {}),
+      });
+      return [runId];
+    } catch {
+      try {
+        fs.renameSync(claim, path.join(dir, PENDING));
+      } catch {}
+      return [];
+    }
+  });
 }
 
 /**
@@ -208,9 +351,10 @@ export async function captureRun<T>(
   run: () => Promise<T>,
   options: CaptureOptions = {}
 ): Promise<{ result: T; runId: string | null }> {
+  if (!options.recovered) recoverInterruptedRuns();
   let capture: RunCapture | null;
   try {
-    capture = beginRunCapture(files);
+    capture = beginRunCapture(files, options.record, options.rewritable);
   } catch {
     capture = null;
   }
@@ -239,13 +383,19 @@ function finishSafely(
   options: CaptureOptions,
   error?: unknown
 ): string | null {
+  let runId: string | null;
   try {
-    const runId = finishRunCapture(capture, options, error)?.runId ?? null;
-    pruneRuns();
-    return runId;
+    runId = finishRunCapture(capture, options, error)?.runId ?? null;
   } catch {
+    try {
+      fs.rmSync(capture.dir, { recursive: true, force: true });
+    } catch {}
     return null;
   }
+  try {
+    pruneRuns();
+  } catch {}
+  return runId;
 }
 
 /** How many captured runs rollback keeps; older ones are deleted. */

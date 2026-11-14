@@ -22,6 +22,7 @@ beforeEach(() => {
   // No real alacritty binary is probed for its version.
   process.env.PATH = tmp;
   delete process.env.WEZTERM_CONFIG_FILE;
+  delete process.env.KITTY_CONFIG_DIRECTORY;
 });
 
 afterEach(() => {
@@ -47,14 +48,16 @@ function write(rel: string, content: string): void {
 }
 
 describe('wireTerminalFont', () => {
-  it('fails a read-only config without leaving a backup behind', () => {
-    if (process.getuid?.() === 0) return;
-    write('kitty/kitty.conf', 'font_family Old\n');
-    fs.chmodSync(path.join(tmp, 'kitty', 'kitty.conf'), 0o444);
+  it.skipIf(process.getuid?.() === 0)(
+    'fails a read-only config without leaving a backup behind',
+    () => {
+      write('kitty/kitty.conf', 'font_family Old\n');
+      fs.chmodSync(path.join(tmp, 'kitty', 'kitty.conf'), 0o444);
 
-    expect(() => wireTerminalFont('kitty', 'Hack Nerd Font')).toThrow();
-    expect(fs.readdirSync(path.join(tmp, 'kitty'))).toEqual(['kitty.conf']);
-  });
+      expect(() => wireTerminalFont('kitty', 'Hack Nerd Font')).toThrow();
+      expect(fs.readdirSync(path.join(tmp, 'kitty'))).toEqual(['kitty.conf']);
+    }
+  );
 
   it('refuses a dangling symlinked config instead of creating its target', () => {
     const dir = path.join(tmp, 'kitty');

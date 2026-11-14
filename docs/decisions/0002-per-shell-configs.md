@@ -32,8 +32,9 @@ plus `starship init` line to that shell's rc file.
   and `starship init` lines, plus a `PATH` line first when a script install put
   `starship` somewhere the shell does not look. Shells that run Starship but were
   not selected get a `STARSHIP_CONFIG` unset guard from `resetSharedShellConfig`
-  instead, which also removes a per-shell block an earlier run wrote, unless the
-  user's own rc line sets `STARSHIP_CONFIG`.
+  instead, which also removes a per-shell block an earlier run wrote. A shell
+  that still has its own per-shell setup, or where the user sets
+  `STARSHIP_CONFIG` themselves, gets no guard.
 - The shared path is backed up best-effort inside the single Config task, which
   runs after the Starship, font and shell installs and before the per-shell rc
   tasks, so `--restore` can offer a way back for the config that previously stood

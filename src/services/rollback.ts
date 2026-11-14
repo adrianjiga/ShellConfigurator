@@ -4,6 +4,7 @@ import { statusLine } from '../config/status.ts';
 import { writeFileAtomic } from '../generators/shellRc.ts';
 import { errorMessage } from './errors.ts';
 import { type HistoryKind, type HistoryRecord, readHistory } from './history.ts';
+import { redactUrls } from './redact.ts';
 import {
   hashOf,
   laterRunWrites,
@@ -21,6 +22,7 @@ export interface RollbackRun {
   files: number;
   /** A later rollback undid this run, and was not undone itself. */
   rolledBack: boolean;
+  interrupted?: boolean;
 }
 
 /**
@@ -64,9 +66,10 @@ export function rollbackRunsWithManifests(
         runId: r.runId,
         timestamp: r.timestamp,
         kind: r.kind,
-        ...(r.command ? { command: r.command } : {}),
+        ...(r.command ? { command: redactUrls(r.command) } : {}),
         files: manifest.files.length,
         rolledBack: isRolledBack(r.runId),
+        ...(r.interrupted ? { interrupted: true } : {}),
       };
       return [{ run, manifest }];
     })
@@ -168,7 +171,7 @@ export function planRollback(manifest: RunManifest): RollbackStep[] {
         if (!unchanged()) return { status: 'skipped', detail: CHANGED_SINCE, left: true };
         const content = fs.readFileSync(copy);
         fs.mkdirSync(path.dirname(file.path), { recursive: true });
-        writeFileAtomic(file.path, content);
+        writeFileAtomic(file.path, content, file.mode);
         if (file.mode !== undefined) fs.chmodSync(file.path, file.mode);
         return { status: 'restored', detail: 'put back its content from before that run' };
       },
@@ -222,6 +225,7 @@ export function formatRollbackRuns(runs: RollbackRun[]): string {
   const target = defaultRollbackRun(runs);
   const lines = runs.map((run) => {
     const marks = [
+      ...(run.interrupted ? ['interrupted'] : []),
       ...(run === target ? ['next to roll back'] : []),
       ...(run.rolledBack ? ['rolled back'] : []),
     ];

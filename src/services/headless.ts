@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { MODULES } from '../config/modules.ts';
 import { PALETTES } from '../config/palettes.ts';
 import { PRESETS, powerlineDroppedReason } from '../config/presets.ts';
-import { SHELLS } from '../config/shells.ts';
+import { getShell, SHELLS, type ShellDef, setupCommand } from '../config/shells.ts';
 import { statusLine, statusMark } from '../config/status.ts';
 import { getSharedConfigPath, getShellConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
@@ -15,11 +15,14 @@ import {
   type WizardState,
 } from '../types.ts';
 import type { CliFlags } from './args.ts';
+import { cancelOnSignals, signalExitCode } from './cancel.ts';
 import {
   detectContainerAsync,
   detectInstalledShellsAsync,
   detectPackageManagerAsync,
+  detectRemoteSessionAsync,
   detectTerminalAsync,
+  findStarshipAsync,
 } from './detector.ts';
 import { CliRunError, CliUsageError, errorMessage } from './errors.ts';
 import { type FileChange, plannedFileChanges } from './fileDiff.ts';
@@ -32,7 +35,9 @@ import {
   FONT_FALLBACK_NOTE,
   plannedResetShells,
   runInstallTasks,
+  TASK_IDS,
 } from './installTasks.ts';
+import { redactUrl, redactUrlText } from './redact.ts';
 import { CapturedRunError, captureRun, trackedFiles } from './runCapture.ts';
 import { parseState, serializeState } from './state.ts';
 import { whatChangedPath, writeWhatChangedSafely } from './whatChanged.ts';
@@ -165,14 +170,6 @@ export function stateFromFlags(flags: CliFlags): WizardState {
     if (flags.hasNerdFont === undefined && !flags.stateFile) {
       state = { ...state, hasNerdFont: preset.requiresNerdFont };
     }
-    if (
-      preset.requiresNerdFont &&
-      flags.hasNerdFont === undefined &&
-      flags.font === undefined &&
-      !flags.stateFile
-    ) {
-      state = { ...state, nerdFontToInstall: { kind: 'install', id: NERD_FONTS[0].id } };
-    }
   }
 
   if (flags.palette) state = { ...state, palette: flags.palette as WizardState['palette'] };
@@ -263,13 +260,64 @@ function formatTask(t: InstallTask): string {
   return `${statusMark(t.status).icon} ${statusLine(t.status, `${t.label}${suffix}`)}`;
 }
 
+/** `text` with terminal control characters shown as `\\uXXXX`, so a fetched file cannot hide lines. */
+function showControlCharacters(text: string): string {
+  return text.replace(
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: these are what it escapes.
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g,
+    (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`
+  );
+}
+
+/**
+ * Every line of `toml` that may set a command Starship runs on every prompt: a
+ * `command`, `when` or `shell` key in any form (dotted, quoted, inline table),
+ * a `custom` table header, and the rest of a multi-line string such a key
+ * starts.
+ */
+export function customCommands(toml: string): string[] {
+  const lines = toml.split(/\r?\n/);
+  const found: string[] = [];
+  const key = /(^|[\s.{,])["']?(command|when|shell)["']?\s*=/;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (line.trimStart().startsWith('#')) continue;
+    const header = /^\s*\[\[?[^\]]*\bcustom\b/.test(line);
+    const escapedKey = /^[^=]*\\[uU]/.test(line) || /^\s*\[[^\]]*\\[uU]/.test(line);
+    if (!header && !escapedKey && !key.test(line)) continue;
+    found.push(line.trim());
+    const quote = /("""|''')/.exec(line)?.[1];
+    if (quote && line.split(quote).length === 2) {
+      while (++i < lines.length) {
+        found.push(lines[i]!.trim());
+        if (lines[i]!.includes(quote)) break;
+      }
+    }
+  }
+  return found;
+}
+
 /** The plain-text plan/applied view `apply` prints to stdout. */
 function printTasks(tasks: InstallTask[]): void {
   for (const task of tasks) process.stdout.write(`  ${formatTask(task)}\n`);
 }
 
+/** The setup command of each selected shell that is set up by hand. */
+function printManualSetup(state: WizardState): void {
+  const manual = state.selectedShells
+    .map((id) => getShell(id))
+    .filter((shell): shell is ShellDef => Boolean(shell && !shell.rcFile));
+  for (const shell of manual) {
+    process.stdout.write(
+      `\n${shell.label} is set up by hand. ${shell.manualNote ?? ''}\n  ${setupCommand(shell, state.keepExistingConfig)}\n`
+    );
+  }
+}
+
 /** Cap on how long an --import-url fetch may hang before it is aborted. */
 const IMPORT_FETCH_TIMEOUT_MS = 10_000;
+
+const IMPORT_MAX_REDIRECTS = 5;
 
 /** Cap on how large an --import-url config may be. Starship configs are KBs. */
 const IMPORT_FETCH_MAX_BYTES = 1_000_000;
@@ -294,38 +342,60 @@ export async function fetchImportedConfig(
   url: string,
   options: FetchConfigOptions = {}
 ): Promise<string> {
+  const shown = redactUrl(url);
   const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(url)?.[1]?.toLowerCase();
   if (scheme !== 'http' && scheme !== 'https') {
-    throw new CliUsageError(`--import-url expects an http(s) URL, got '${url}'`);
+    throw new CliUsageError(`--import-url expects an http(s) URL, got '${shown}'`);
   }
   if (scheme !== 'https') {
     throw new CliUsageError(
-      `--import-url requires an https URL, got '${url}' — the downloaded config runs ` +
+      `--import-url requires an https URL, got '${shown}' — the downloaded config runs ` +
         'commands on every prompt, so it must not travel over plain http.'
+    );
+  }
+  if (/^https:\/\/[^/?#]*@/i.test(url)) {
+    throw new CliUsageError(
+      `--import-url cannot send a user name or password ('${shown}'); ` +
+        'use a URL that needs none, such as a raw gist link.'
     );
   }
 
   const timeoutMs = options.timeoutMs ?? IMPORT_FETCH_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? IMPORT_FETCH_MAX_BYTES;
-  const shown = url.replace(/\/\/[^/@]*@/, '//');
 
   let response: Response;
   try {
-    response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    const signal = AbortSignal.timeout(timeoutMs);
+    let current = url;
+    for (let hop = 0; ; hop++) {
+      response = await fetch(current, { signal, redirect: 'manual' });
+      const location =
+        response.status >= 300 && response.status < 400 && response.headers.get('location');
+      if (!location) break;
+      await response.body?.cancel();
+      if (hop === IMPORT_MAX_REDIRECTS) {
+        throw new CliRunError(
+          `Could not fetch '${shown}': more than ${IMPORT_MAX_REDIRECTS} redirects`
+        );
+      }
+      const next = new URL(location, current);
+      if (next.protocol !== 'https:') {
+        throw new CliRunError(
+          `Could not fetch '${shown}': redirected to a non-https URL ${redactUrl(next.href)}`
+        );
+      }
+      current = next.href;
+    }
   } catch (err) {
+    if (err instanceof CliRunError) throw err;
     // AbortSignal.timeout rejects with a TimeoutError DOMException on timeout.
     if (err instanceof DOMException && err.name === 'TimeoutError') {
       throw new CliRunError(`Could not fetch '${shown}': request timed out after ${timeoutMs}ms`);
     }
-    throw new CliRunError(`Could not fetch '${shown}': ${errorMessage(err)}`);
+    throw new CliRunError(`Could not fetch '${shown}': ${redactUrlText(errorMessage(err))}`);
   }
   if (!response.ok) {
     throw new CliRunError(`Could not fetch '${shown}': HTTP ${response.status}`);
-  }
-  if (response.url && !response.url.toLowerCase().startsWith('https://')) {
-    throw new CliRunError(
-      `Could not fetch '${shown}': redirected to a non-https URL ${response.url}`
-    );
   }
 
   // A declared content-length is a cheap first gate; the actual byte count is
@@ -379,9 +449,24 @@ export async function fetchImportedConfig(
  * which shells are installed, and which package manager installs should use.
  */
 async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
+  const preset = PRESETS.find((p) => p.id === flags.preset);
+  if (
+    preset?.requiresNerdFont &&
+    flags.hasNerdFont === undefined &&
+    flags.font === undefined &&
+    !flags.stateFile &&
+    !flags.adopt &&
+    !flags.importUrl
+  ) {
+    throw new CliUsageError(
+      `The ${preset.id} preset draws Nerd Font icons. Pass --font <id> to install a Nerd Font ` +
+        `(${NERD_FONTS.map((font) => font.id).join(', ')}), --has-nerd-font when the terminal ` +
+        'already shows them, or --no-nerd-font for a version without icons.'
+    );
+  }
   let state = stateFromFlags(flags);
 
-  if (!flags.dryRun && state.selectedShells.length === 0) {
+  if (state.selectedShells.length === 0) {
     throw new CliUsageError(
       'apply configures at least one shell, but none are selected. ' +
         'Pass --shells <id,...> or a --state card that selects shells.'
@@ -389,19 +474,25 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
   }
 
   if (flags.importUrl) {
-    state = {
-      ...state,
-      keepExistingConfig: true,
-      sharedConfigToml: await fetchImportedConfig(flags.importUrl),
-    };
+    const toml = await fetchImportedConfig(flags.importUrl);
+    const commands = customCommands(toml);
+    if (commands.length > 0) {
+      process.stderr.write(
+        `shell-configurator: these lines of the imported config may run commands on every prompt; check them:\n${commands
+          .map((command) => `  ${showControlCharacters(command)}`)
+          .join('\n')}\n`
+      );
+    }
+    state = { ...state, keepExistingConfig: true, sharedConfigToml: toml };
   }
-  const [installedShells, packageManager, container, terminal] = await Promise.all([
+  const [installedShells, packageManager, container, terminal, remoteSession] = await Promise.all([
     detectInstalledShellsAsync(),
     detectPackageManagerAsync(),
     detectContainerAsync(),
     detectTerminalAsync(),
+    detectRemoteSessionAsync(),
   ]);
-  return { ...state, installedShells, packageManager, container, terminal };
+  return { ...state, installedShells, packageManager, container, terminal, remoteSession };
 }
 
 export type DryRunConfig =
@@ -421,14 +512,15 @@ export interface DryRunPlan {
 export function dryRunPlan(
   state: WizardState,
   tasks: InstallTask[],
-  resetShells: readonly ShellId[]
+  resetShells: readonly ShellId[],
+  starshipInstalled = false
 ): DryRunPlan {
   const shared = getSharedConfigPath();
   const pathDir = state.skipStarshipInstall ? null : plannedPathDir(state.packageManager);
   return {
     dryRun: true,
     shells: state.selectedShells,
-    installStarship: !state.skipStarshipInstall,
+    installStarship: !state.skipStarshipInstall && !starshipInstalled,
     tasks,
     config: state.keepExistingConfig
       ? state.sharedConfigToml != null
@@ -463,8 +555,11 @@ function printChanges(plan: DryRunPlan): void {
         ? [plan.config.path]
         : []
   );
+  const terminalNote = plan.tasks.some((task) => task.id === TASK_IDS.terminal)
+    ? "Its terminal font step edits the terminal's own config, which is not shown here.\n"
+    : '';
   if (plan.changes.length === 0) {
-    process.stdout.write('\nNo config or rc file on disk would change.\n');
+    process.stdout.write(`\nNo config or rc file on disk would change.\n${terminalNote}`);
     return;
   }
   process.stdout.write('\nChanges to config and rc files on disk:\n');
@@ -474,11 +569,11 @@ function printChanges(plan: DryRunPlan): void {
     } else if (change.status === 'create' && shownAbove.has(change.path)) {
       process.stdout.write(`\ncreate ${change.path}: the config shown above\n`);
     } else {
-      process.stdout.write(`\n${change.diff}`);
+      process.stdout.write(`\n${showControlCharacters(change.diff)}`);
     }
   }
   process.stdout.write(
-    '\nA real run also saves a backup of each config it replaces and writes WHAT-CHANGED.md.\n'
+    `\nA real run also saves a backup of each config it replaces and writes WHAT-CHANGED.md.\n${terminalNote}`
   );
 }
 
@@ -500,7 +595,8 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
   const tasks = buildTaskList(state, resetShells);
 
   if (flags.dryRun) {
-    const plan = dryRunPlan(state, tasks, resetShells);
+    const starshipInstalled = !state.skipStarshipInstall && (await findStarshipAsync()).installed;
+    const plan = dryRunPlan(state, tasks, resetShells, starshipInstalled);
     if (flags.json) {
       process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
       return;
@@ -508,16 +604,18 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
     process.stdout.write('shell-configurator apply (dry run) — nothing will be changed.\n\n');
     process.stdout.write(
       `Targets: ${plan.shells.join(', ') || '(none)'} · ` +
-        `will ${plan.installStarship ? 'install' : 'skip'} Starship\n`
+        `${plan.installStarship ? 'will install Starship' : starshipInstalled ? 'Starship is already installed' : 'will skip Starship'}\n`
     );
     printTasks(plan.tasks);
+    printManualSetup(state);
     const config = plan.config;
     if (config.kind === 'per-shell') {
       process.stdout.write(`\nGenerated starship.toml:\n\n${config.toml}`);
       if (config.tomlIfFontFails) process.stdout.write(`\n\n${FONT_FALLBACK_NOTE}\n`);
     } else if (config.kind === 'imported') {
       process.stdout.write('\nConfig to keep (no per-shell TOML is generated):\n\n');
-      process.stdout.write(config.toml.endsWith('\n') ? config.toml : `${config.toml}\n`);
+      const shown = showControlCharacters(config.toml);
+      process.stdout.write(shown.endsWith('\n') ? shown : `${shown}\n`);
     } else {
       process.stdout.write(
         config.exists
@@ -538,15 +636,27 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
       : [...progress, { id: id as InstallTask['id'], label: id, status: 'pending', ...patch }];
   };
   let captured: { result: InstallTask[]; runId: string | null };
+  const controller = new AbortController();
+  const { stop: stopListening } = cancelOnSignals(controller, () =>
+    process.stderr.write(
+      '\nCancelling: the step that is running finishes first (press Ctrl+C again to quit now).\n'
+    )
+  );
   try {
     captured = await captureRun(
       [...trackedFiles(), whatChangedPath()],
       async () => {
-        finished = await runInstallTasks(state, DEFAULT_INSTALL_TASK_DEPS, onUpdate);
+        finished = await runInstallTasks(
+          state,
+          DEFAULT_INSTALL_TASK_DEPS,
+          onUpdate,
+          controller.signal
+        );
         return finished;
       },
       {
         rewritable: [whatChangedPath()],
+        record: { kind: 'apply', state, ...(command ? { command } : {}) },
         onChanged: (runId, files, error) => {
           summary = writeWhatChangedSafely({
             kind: 'apply',
@@ -561,25 +671,25 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
       }
     );
   } catch (err) {
+    stopListening();
     if (!(err instanceof CapturedRunError)) throw err;
     recordRunSafely({ kind: 'apply', state, command, exitCode: 1, runId: err.runId });
     if (summary) process.stdout.write(`What changed, and how to undo it: ${summary}\n`);
     throw err.cause;
   }
+  const cancelledBy = stopListening();
   const { result: results, runId } = captured;
   const failed = results.some((t) => t.status === 'failed');
   printTasks(results);
+  printManualSetup(state);
 
-  if (failed) process.exitCode = 1;
+  const exitCode = cancelledBy ? signalExitCode(cancelledBy) : failed ? 1 : 0;
+  if (exitCode !== 0) process.exitCode = exitCode;
 
-  recordRunSafely({
-    kind: 'apply',
-    state,
-    command,
-    results,
-    exitCode: failed ? 1 : 0,
-    runId,
-  });
+  recordRunSafely({ kind: 'apply', state, command, results, exitCode, runId });
 
+  if (cancelledBy && runId) {
+    process.stdout.write('\nCancelled. Undo what it changed with: shell-configurator rollback\n');
+  }
   if (summary) process.stdout.write(`\nWhat changed, and how to undo it: ${summary}\n`);
 }

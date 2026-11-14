@@ -43,6 +43,7 @@ export interface RepairOptions {
   dryRun?: boolean;
   /** Also apply the fixes warnings carry; they may describe a deliberate choice. */
   includeWarnings?: boolean;
+  before?: DoctorReport;
 }
 
 export interface RepairDeps {
@@ -105,7 +106,11 @@ async function applyFix(
       const pm = await deps.detectPackageManager();
       await deps.installStarship(pm);
       const version = await deps.readStarshipVersion(deps.getMissingStarshipPathDir());
-      if (version) deps.recordStarshipVersion(version);
+      if (version) {
+        try {
+          deps.recordStarshipVersion(version);
+        } catch {}
+      }
       return { detail: `reinstalled Starship via ${pm}`, status: 'fixed' };
     }
     case 'write-config': {
@@ -167,7 +172,7 @@ export async function runRepair(
   deps: RepairDeps = DEFAULT_REPAIR_DEPS,
   options: RepairOptions = {}
 ): Promise<RepairReport> {
-  const before = await deps.runDoctor(state);
+  const before = options.before ?? (await deps.runDoctor(state));
   const pointAtShared = state?.keepExistingConfig ?? null;
   const actions: RepairAction[] = [];
   let starshipInstallFailed = false;

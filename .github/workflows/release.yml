@@ -41,6 +41,7 @@ jobs:
           fi
       - run: npm ci --ignore-scripts
       - run: npm run build
+      - run: npm run prepublishOnly
       # --silent keeps prepare output off stdout so only the tarball name lands
       # in GITHUB_ENV.
       - name: Package release tarball
@@ -64,7 +65,11 @@ jobs:
       # ACTIONS_ID_TOKEN_REQUEST_URL. No NODE_AUTH_TOKEN is set so the exchange
       # is used. Stage defers 2FA to a later maintainer approval.
       - name: Stage on npm (OIDC)
-        run: npm stage publish --provenance --access public --ignore-scripts
+        shell: bash
+        run: |
+          args=(--provenance --access public --ignore-scripts)
+          case "$GITHUB_REF_NAME" in *-*) args+=(--tag next) ;; esac
+          npm stage publish "${args[@]}"
       - name: Build release notes from conventional commits
         shell: bash
         run: scripts/releaseNotes.sh > "$RUNNER_TEMP/release-notes.md"

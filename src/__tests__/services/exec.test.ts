@@ -314,6 +314,19 @@ describe('runCommand', () => {
     }
   });
 
+  it('reports a step that finished as the cancel arrived as done, not cancelled', async () => {
+    const child = new EventEmitter() as EventEmitter & { kill: ReturnType<typeof vi.fn> };
+    child.kill = vi.fn();
+    mockSpawn.mockImplementation(() => child);
+    const controller = new AbortController();
+    const promise = runCommand(['brew', 'install', 'starship'], { signal: controller.signal });
+
+    controller.abort();
+    child.emit('exit', 0, null);
+
+    await expect(promise).resolves.toBeUndefined();
+  });
+
   it('settles and resumes the UI when the child exits but its stdio is left open', async () => {
     // A child that backgrounds a grandchild inheriting the shared tty (e.g. a pacman
     // post-transaction hook) keeps its stdio open, so 'close' never fires. runCommand

@@ -39,11 +39,32 @@ async function press(instance: ReturnType<typeof render>, ...keys: string[]) {
 }
 
 describe('SegmentsScreen', () => {
-  it('renders the configurable modules without character', async () => {
+  it('fits a usual terminal, showing a window of rows around the cursor', async () => {
     const { instance } = setup();
     await flush();
-    expect(instance.lastFrame()).toContain('Username');
-    expect(instance.lastFrame()).not.toContain('Prompt character');
+    const frame = instance.lastFrame() ?? '';
+    expect(frame.split('\n').length).toBeLessThan(40);
+    expect(frame).toMatch(/↓ \d+ more/);
+    expect(frame).not.toMatch(/↑ \d+ more/);
+
+    await press(instance, ...Array(20).fill(DOWN));
+    expect(instance.lastFrame()).toMatch(/↑ \d+ more/);
+  });
+
+  it('renders the configurable modules without character', async () => {
+    const { instance, onNext } = setup();
+    await flush();
+    const frame = instance.lastFrame() ?? '';
+    expect(frame).toContain('Username');
+    expect(frame).toContain('1. Directory');
+    expect(frame).toContain('2. Git Branch');
+    expect(frame).not.toMatch(/\b3\. /);
+
+    instance.stdin.write('\r');
+    await flush();
+    expect(onNext).toHaveBeenCalledWith(
+      expect.objectContaining({ leftModules: ['directory', 'git_branch', 'character'] })
+    );
   });
 
   it('shows selected modules in prompt order, then the available ones', async () => {
@@ -86,6 +107,37 @@ describe('SegmentsScreen', () => {
       leftModules: ['directory', 'git_branch', 'username', 'character'],
       rightModules: ['time'],
     });
+  });
+
+  it('puts a module back on the right when it is unticked on the left again', async () => {
+    let state: WizardState = {
+      ...DEFAULT_STATE,
+      leftModules: ['directory', 'git_branch', 'character'],
+      rightModules: ['username', 'time'],
+    };
+    const onNext = vi.fn();
+    const screen = () => (
+      <SegmentsScreen
+        side="left"
+        state={state}
+        onNext={onNext}
+        onUpdate={(update) => {
+          state = { ...state, ...update };
+          instance.rerender(screen());
+        }}
+        onBack={vi.fn()}
+      />
+    );
+    const instance = render(screen());
+    await flush();
+
+    await press(instance, DOWN, DOWN, ' ');
+    expect(state.rightModules).toEqual(['time']);
+    await press(instance, ' ', '\r');
+
+    expect(onNext).toHaveBeenCalledWith(
+      expect.objectContaining({ rightModules: ['username', 'time'] })
+    );
   });
 
   it('appends a newly enabled module to the end of the prompt order', async () => {
@@ -285,11 +337,30 @@ describe('SegmentsScreen', () => {
     });
     await flush();
     await press(instance, 'g', 'i', 't');
-    await press(instance, ' ');
+    await press(instance, '\r');
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['directory', 'git_status', 'character'],
       rightModules: [],
     });
+    expect(instance.lastFrame()).toContain('type to search');
+  });
+
+  it('takes a space into the search instead of ticking a row', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+    await press(instance, ...'exit status');
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(instance.lastFrame()).toContain('exit status');
+    expect(instance.lastFrame()).toContain('Exit Status');
+  });
+
+  it('keeps the cursor where it is on Backspace with no search', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+    await press(instance, DOWN, DOWN, BACKSPACE, ' ');
+    const { leftModules } = onUpdate.mock.calls.at(-1)![0];
+    expect(leftModules).toHaveLength(4);
+    expect(leftModules.slice(0, 2)).toEqual(['directory', 'git_branch']);
   });
 
   it('marks modules already on the left as unavailable on the right', async () => {

@@ -1,9 +1,10 @@
+import { isUtf8 } from 'node:buffer';
 import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getShell, isShellId, posixShellQuote, type ShellDef } from '../config/shells.ts';
+import { getShell, isShellId, posixShellQuote, rcQuote, type ShellDef } from '../config/shells.ts';
 import { errorMessage } from '../services/errors.ts';
-import { configHome, homeDir } from '../services/paths.ts';
+import { configHome, expandShellPath, homeDir, scriptInstallBinDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 
 export interface WriteConfigResult {
@@ -58,9 +59,30 @@ export function backupIfExists(filePath: string): string | undefined {
 function writeWithBackup(configPath: string, toml: string): WriteConfigResult {
   const configDir = path.dirname(configPath);
   if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
-  const backedUpTo = backupIfExists(configPath);
+  const current = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
+  if (current === toml) return { path: configPath };
+  let backedUpTo: string | undefined;
+  if (current !== null) {
+    assertWritable(configPath);
+    backedUpTo = sameBackup(configPath, current) ?? backupIfExists(configPath);
+  }
   writeFileAtomic(configPath, toml);
-  return { path: configPath, backedUpTo };
+  return { path: configPath, ...(backedUpTo ? { backedUpTo } : {}) };
+}
+
+/** Refuses a file that cannot be written before anything is backed up for it. */
+function assertWritable(filePath: string): void {
+  if (fs.existsSync(filePath)) fs.accessSync(filePath, fs.constants.W_OK);
+}
+
+/** The newest backup of `filePath` when it already holds `content`. */
+function sameBackup(filePath: string, content: string): string | undefined {
+  try {
+    const previous = newestBackup(path.dirname(filePath), path.basename(filePath));
+    return previous && fs.readFileSync(previous, 'utf8') === content ? previous : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** A name `backupPath` produced: an ISO stamp with `:`/`.` replaced, maybe a suffix. */
@@ -94,14 +116,24 @@ function resolveWriteTarget(filePath: string): { target: string; mode?: number }
  * its permissions. A reader never sees a truncated file. On failure the temp
  * file is removed and the original error re-thrown.
  */
-export function writeFileAtomic(filePath: string, content: string | Buffer): void {
-  const { target, mode } = resolveWriteTarget(filePath);
+export function writeFileAtomic(
+  filePath: string,
+  content: string | Buffer,
+  newFileMode?: number
+): void {
+  const resolved = resolveWriteTarget(filePath);
+  const { target } = resolved;
+  const mode = resolved.mode ?? newFileMode;
   const tmpPath = path.join(
     path.dirname(target),
     `.${path.basename(target)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
   );
   try {
-    fs.writeFileSync(tmpPath, content, { encoding: 'utf8', flush: true });
+    fs.writeFileSync(tmpPath, content, {
+      encoding: 'utf8',
+      flush: true,
+      ...(mode !== undefined ? { mode } : {}),
+    });
     if (mode !== undefined) fs.chmodSync(tmpPath, mode);
     fs.renameSync(tmpPath, target);
   } catch (err) {
@@ -269,6 +301,19 @@ export function fishInitFile(rcFile: string): string {
   return path.join(path.dirname(rcFile), 'conf.d', 'starship.fish');
 }
 
+/**
+ * A file this tool is about to rewrite, as text. A file that is not UTF-8 is refused.
+ */
+export function readTextToRewrite(file: string): string {
+  const text = fs.readFileSync(file, 'utf8');
+  if (text.includes('\uFFFD') && !isUtf8(fs.readFileSync(file))) {
+    throw new Error(
+      `${file} is not UTF-8 text, so it is left as it is: save it as UTF-8 and run this again`
+    );
+  }
+  return text;
+}
+
 export interface RcIo {
   exists: (path: string) => boolean;
   readFile: (path: string) => string;
@@ -281,52 +326,44 @@ export const FS_RC_IO: RcIo = {
 
 const MAX_SOURCE_DEPTH = 3;
 
-function expandPath(raw: string, env: NodeJS.ProcessEnv): string | null {
-  let unresolved = false;
-  const expanded = raw
-    .replace(/^(["'])(.*)\1$/, '$2')
-    .replace(/^~(?=\/|$)/, homeDir())
-    .replace(/\$\{(\w+)\}|\$(\w+)/g, (_match, braced: string, bare: string) => {
-      const value = env[braced ?? bare];
-      if (value === undefined) unresolved = true;
-      return value ?? '';
-    });
-  return !unresolved && path.isAbsolute(expanded) ? expanded : null;
-}
-
 /** The files a shell script sources (`source f`, `. f`), expanded; ones it cannot resolve are left out. */
 export function sourcedFiles(content: string, env: NodeJS.ProcessEnv = process.env): string[] {
   return content.split('\n').flatMap((line) => {
     if (line.trimStart().startsWith('#')) return [];
     return [
       ...line.matchAll(/(?:^|[;&|]|\s)\s*(?:source|\.)\s+("[^"]*"|'[^']*'|[^\s;&|]+)/g),
-    ].flatMap((match) => expandPath(match[1], env) ?? []);
+    ].flatMap((match) => expandShellPath(match[1], env) ?? []);
   });
 }
 
-/**
- * Whether `content`, or a file it sources (three levels deep), runs the shell's
- * Starship init, as Omarchy's ~/.bashrc does through $OMARCHY_PATH/default/bash/rc.
- */
-export function initReachable(
+function reachableSome(
   content: string,
-  shellId: ShellId,
-  io: RcIo = FS_RC_IO,
-  env: NodeJS.ProcessEnv = process.env,
+  test: (text: string) => boolean,
+  io: RcIo,
+  env: NodeJS.ProcessEnv,
   depth = 0,
   seen: Set<string> = new Set()
 ): boolean {
-  if (hasStarshipInit(content, shellId)) return true;
+  if (test(content)) return true;
   if (depth >= MAX_SOURCE_DEPTH) return false;
   return sourcedFiles(content, env).some((file) => {
     if (seen.has(file)) return false;
     seen.add(file);
     try {
-      return io.exists(file) && initReachable(io.readFile(file), shellId, io, env, depth + 1, seen);
+      return io.exists(file) && reachableSome(io.readFile(file), test, io, env, depth + 1, seen);
     } catch {
       return false;
     }
   });
+}
+
+export function initReachable(
+  content: string,
+  shellId: ShellId,
+  io: RcIo = FS_RC_IO,
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  return reachableSome(content, (text) => hasStarshipInit(text, shellId), io, env);
 }
 
 /**
@@ -377,6 +414,19 @@ export function manualSetupAppliedWith(
     : pins.every((filePath) => io.exists(filePath));
 }
 
+function exportsConfigPath(shell: ShellDef, line: string, configPath: string): boolean {
+  const prefix = shell.configEnv?.exportPrefix;
+  const t = line.trim();
+  if (!prefix || !t.startsWith(prefix)) return false;
+  const value = t.slice(prefix.length);
+  return [
+    rcQuote(shell.id, configPath),
+    posixShellQuote(configPath),
+    `"${configPath}"`,
+    configPath,
+  ].includes(value);
+}
+
 /**
  * Whether the shell still has its own working setup from an earlier run: its rc
  * exports STARSHIP_CONFIG to its per-shell config, and that file exists. Such a
@@ -384,13 +434,17 @@ export function manualSetupAppliedWith(
  */
 export function keepsOwnConfig(shellId: ShellId, io: RcIo = FS_RC_IO): boolean {
   const shell = getShell(shellId);
-  const exportLine = starshipConfigLine(shellId);
-  if (!shell?.rcFile || !exportLine) return false;
+  if (!shell?.rcFile || !shell.configEnv) return false;
+  const configPath = getShellConfigPath(shellId);
   try {
+    if (!io.exists(shell.rcFile)) return false;
+    const content = io.readFile(shell.rcFile);
+    const setting = lastStarshipConfigLine(shell, content, true);
     return (
-      io.exists(shell.rcFile) &&
-      hasLine(io.readFile(shell.rcFile), exportLine) &&
-      io.exists(getShellConfigPath(shellId))
+      setting !== undefined &&
+      (exportsConfigPath(shell, setting, configPath) ||
+        rcExportedConfigPath(shellId, content) === configPath) &&
+      io.exists(configPath)
     );
   } catch {
     return false;
@@ -432,11 +486,28 @@ function isBlockMarkerLine(line: string): boolean {
   return t === BLOCK_MARKER || t === ADOPT_MARKER;
 }
 
+function ownPathLines(shell: ShellDef): string[] {
+  if (!shell.pathLine) return [];
+  const dir = scriptInstallBinDir();
+  const legacy = shell.id === 'fish' ? `fish_add_path ${dir}` : `export PATH="${dir}:$PATH"`;
+  return [shell.pathLine(dir), legacy];
+}
+
+const OTHER_HOME_PATH_LINE: Partial<Record<ShellId, RegExp>> = {
+  bash: /^export PATH=(?:'\/[^']*\/\.local\/bin':"\$PATH"|"\/[^"$]*\/\.local\/bin:\$PATH")$/,
+  zsh: /^export PATH=(?:'\/[^']*\/\.local\/bin':"\$PATH"|"\/[^"$]*\/\.local\/bin:\$PATH")$/,
+  fish: /^fish_add_path (?:'\/[^']*\/\.local\/bin'|\/[^\s'"$]*\/\.local\/bin)$/,
+};
+
 function isPathLine(shell: ShellDef, line: string): boolean {
   const t = line.trim();
-  return shell.id === 'fish'
-    ? t.startsWith('fish_add_path ')
-    : t.startsWith('export PATH=') && (t.endsWith(':$PATH"') || t.endsWith(':"$PATH"'));
+  return ownPathLines(shell).includes(t) || Boolean(OTHER_HOME_PATH_LINE[shell.id]?.test(t));
+}
+
+function isConfigLine(shell: ShellDef, line: string): boolean {
+  const t = line.trim();
+  const env = shell.configEnv;
+  return Boolean(env && (t.startsWith(env.exportPrefix) || t === env.unsetLine));
 }
 
 /**
@@ -444,10 +515,18 @@ function isPathLine(shell: ShellDef, line: string): boolean {
  * line) ends the block.
  */
 function isManagedLine(shell: ShellDef, line: string): boolean {
-  const t = line.trim();
-  if (t === shell.initLine || isPathLine(shell, t)) return true;
-  const env = shell.configEnv;
-  return Boolean(env && (t.startsWith(env.exportPrefix) || t === env.unsetLine));
+  return line.trim() === shell.initLine || isPathLine(shell, line) || isConfigLine(shell, line);
+}
+
+function managedBlockEnd(lines: string[], start: number, shell: ShellDef): number {
+  let configLines = 0;
+  let j = start + 1;
+  while (j < lines.length && !isBlockMarkerLine(lines[j]) && isManagedLine(shell, lines[j])) {
+    if (isConfigLine(shell, lines[j]) && ++configLines > 1) break;
+    j++;
+    if (lines[j - 1].trim() === shell.initLine) break;
+  }
+  return j;
 }
 
 /** Matches a managed line by its trimmed text, so CRLF files and stray spaces still match. */
@@ -482,12 +561,8 @@ function removeShellConfiguratorBlocks(
     const line = lines[i];
     // Adopt-mode blocks share the marker prefix, so both are recognised here.
     if (isBlockMarkerLine(line)) {
-      const block = [line];
-      let j = i + 1;
-      while (j < lines.length && !isBlockMarkerLine(lines[j]) && isManagedLine(shell, lines[j])) {
-        block.push(lines[j]);
-        j++;
-      }
+      const j = managedBlockEnd(lines, i, shell);
+      const block = lines.slice(i, j);
       if (needles.some((n) => block.some((blockLine) => lineMatches(blockLine, n)))) {
         // Drop the stale block (and the blank line that follows it), keeping
         // note of its PATH line: without it starship may not be found at all.
@@ -533,7 +608,7 @@ export interface ApplyShellConfigOptions {
 export function starshipConfigLine(shellId: ShellId): string | null {
   const env = getShell(shellId)?.configEnv;
   if (!env) return null;
-  return `${env.exportPrefix}${posixShellQuote(getShellConfigPath(shellId))}`;
+  return `${env.exportPrefix}${rcQuote(shellId, getShellConfigPath(shellId))}`;
 }
 
 /** Creates the rc file's parent directory (important for fish) when missing. */
@@ -583,14 +658,30 @@ function buildAdditionLines(
  * own init line they form a block of their own, closed by a blank line so the
  * user's line never becomes part of it. Null when no init line is in the file.
  */
+function sourcedInitIndex(lines: string[], shell: ShellDef, io: RcIo): number {
+  return lines.findIndex(
+    (line) =>
+      !line.trimStart().startsWith('#') &&
+      sourcedFiles(line).some((file) => {
+        try {
+          return io.exists(file) && initReachable(io.readFile(file), shell.id, io);
+        } catch {
+          return false;
+        }
+      })
+  );
+}
+
 function insertBeforeInit(
   content: string,
   shell: ShellDef,
   marker: string,
-  lines: string[]
+  lines: string[],
+  io: RcIo = FS_RC_IO
 ): string | null {
   const all = content.split('\n');
-  const index = initLineIndex(all, shell.id);
+  const own = initLineIndex(all, shell.id);
+  const index = own === -1 ? sourcedInitIndex(all, shell, io) : own;
   if (index === -1) return null;
 
   let above = index - 1;
@@ -650,16 +741,64 @@ export function appliedRcContent(
   const lines = [...carried, ...added.lines];
   const { pathLine } = added;
   if (lines.length === 0) {
-    return { content: cleaned, applied: false, note: 'already configured' };
+    return cleaned === existing
+      ? { content: cleaned, applied: false, note: 'already configured' }
+      : { content: cleaned, applied: true, note: 'removed a stale ShellConfigurator block' };
   }
 
   const marker = options.pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
-  const inserted = initPresent ? insertBeforeInit(cleaned, shell, marker, lines) : null;
+  const inserted = initPresent ? insertBeforeInit(cleaned, shell, marker, lines, io) : null;
   return {
-    content: inserted ?? appendManagedBlock(cleaned, marker, lines),
+    content: keepLineEndings(existing, inserted ?? appendManagedBlock(cleaned, marker, lines)),
     applied: true,
     note: pathLine ? `${options.ensurePathDir} added to PATH` : undefined,
   };
+}
+
+const BASH_LOGIN_FILES = ['.bash_profile', '.bash_login', '.profile'];
+
+export const LOGIN_MARKER = '# Added by ShellConfigurator (login shells read this, not ~/.bashrc)';
+
+const LOGIN_LINE = '[ -n "$BASH_VERSION" ] && [ -f ~/.bashrc ] && . ~/.bashrc';
+
+export function bashLoginFile(io: RcIo = FS_RC_IO): string {
+  const files = bashLoginFiles();
+  return files.find((file) => io.exists(file)) ?? files[0];
+}
+
+export function bashLoginFiles(): string[] {
+  return BASH_LOGIN_FILES.map((name) => path.join(homeDir(), name));
+}
+
+export function bashNeedsLoginFile(platform: NodeJS.Platform = process.platform): boolean {
+  return platform === 'darwin';
+}
+
+export function loginLoadsBashrc(
+  content: string,
+  io: RcIo = FS_RC_IO,
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  const bashrc = getShell('bash')?.rcFile;
+  return Boolean(
+    bashrc && reachableSome(content, (text) => sourcedFiles(text, env).includes(bashrc), io, env)
+  );
+}
+
+export function bashLoginContent(existing: string, io: RcIo = FS_RC_IO): string {
+  return loginLoadsBashrc(existing, io)
+    ? existing
+    : keepLineEndings(existing, appendManagedBlock(existing, LOGIN_MARKER, [LOGIN_LINE]));
+}
+
+function ensureBashLogin(): string | null {
+  if (!bashNeedsLoginFile()) return null;
+  const file = bashLoginFile();
+  const existing = fs.existsSync(file) ? readTextToRewrite(file) : '';
+  const content = bashLoginContent(existing);
+  if (content === existing) return null;
+  writeFileAtomic(file, content);
+  return file;
 }
 
 export function applyShellConfig(
@@ -681,10 +820,59 @@ export function applyShellConfig(
 
   const rcPath = shell.rcFile;
   ensureRcDir(rcPath);
-  const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
+  const existing = fs.existsSync(rcPath) ? readTextToRewrite(rcPath) : '';
   const { content, ...result } = appliedRcContent(shellId, existing, options)!;
   if (content !== existing) writeFileAtomic(rcPath, content);
-  return result;
+  if (shellId !== 'bash') return result;
+  let loginNote: string;
+  try {
+    const login = ensureBashLogin();
+    if (!login) return result;
+    loginNote = `${path.basename(login)} now loads .bashrc`;
+  } catch (err) {
+    loginNote = `could not make ${path.basename(bashLoginFile())} load .bashrc (${errorMessage(err)}), so macOS terminals may not show the prompt`;
+    if (!result.applied) return { applied: false, note: loginNote };
+  }
+  return {
+    applied: true,
+    note: result.applied && result.note ? `${result.note}; ${loginNote}` : loginNote,
+  };
+}
+
+export function bashLoginBlockFiles(io: RcIo = FS_RC_IO): string[] {
+  return bashLoginFiles().filter((file) => {
+    try {
+      return io.exists(file) && hasLine(io.readFile(file), LOGIN_MARKER);
+    } catch {
+      return false;
+    }
+  });
+}
+
+export function removeBashLoginBlock(file: string): RemovalResult {
+  if (!fs.existsSync(file)) return { removed: false, note: `${file} does not exist` };
+  const lines = readTextToRewrite(file).split('\n');
+  const at = lines.findIndex((line) => line.trim() === LOGIN_MARKER);
+  if (at === -1) return { removed: false, note: `no ShellConfigurator line in ${file}` };
+  const end = lines[at + 1]?.trim() === LOGIN_LINE ? at + 2 : at + 1;
+  const start = at > 0 && lines[at - 1].trim() === '' ? at - 1 : at;
+  lines.splice(start, end - start);
+  const content = lines.join('\n');
+  if (content.trim() !== '') assertWritable(file);
+  const backedUpTo = backupIfExists(file);
+  if (content.trim() === '') fs.rmSync(file);
+  else writeFileAtomic(file, content);
+  return {
+    removed: true,
+    ...(backedUpTo ? { backedUpTo } : {}),
+    ...(content.trim() === '' ? { note: 'it held nothing else, so it is gone' } : {}),
+  };
+}
+
+/** `content` in CRLF when `existing` uses CRLF on every line. */
+function keepLineEndings(existing: string, content: string): string {
+  const crlfOnly = existing.includes('\r\n') && !existing.replace(/\r\n/g, '').includes('\n');
+  return crlfOnly ? content.replace(/\r?\n/g, '\r\n') : content;
 }
 
 /** Appends a managed block at the end, after a blank line unless the file is empty. */
@@ -701,12 +889,85 @@ function starshipUnsetLine(shellId: ShellId): string | null {
 }
 
 /** True when the line sets STARSHIP_CONFIG, in any form a user or an earlier run wrote. */
-function setsStarshipConfig(shell: ShellDef, line: string): boolean {
+function setsStarshipConfig(shell: ShellDef, line: string, exportedOnly = false): boolean {
   const t = line.trim();
   if (t.startsWith('#')) return false;
-  return shell.id === 'fish'
-    ? fishExportsStarshipConfig(t)
-    : /^(export\s+)?STARSHIP_CONFIG=/.test(t);
+  if (shell.id === 'fish') return fishExportsStarshipConfig(t);
+  const exported = /^(?:export|(?:typeset|declare)\s+-\w*x\w*)\s+STARSHIP_CONFIG=/.test(t);
+  return exported || (!exportedOnly && /^STARSHIP_CONFIG=/.test(t));
+}
+
+function lastStarshipConfigLine(
+  shell: ShellDef,
+  content: string,
+  exportedOnly = false
+): string | undefined {
+  return content
+    .split('\n')
+    .filter((line) => setsStarshipConfig(shell, line, exportedOnly))
+    .at(-1);
+}
+
+function starshipConfigValue(shell: ShellDef, line: string): string {
+  const t = line.trim();
+  const raw =
+    shell.id === 'fish'
+      ? t.replace(/^set(\s+-\S+)*\s+STARSHIP_CONFIG\s*/, '')
+      : t.slice(t.indexOf('=') + 1);
+  const value = raw.trim();
+  const quoted = /^(["'])(.*?)\1/.exec(value);
+  return quoted ? quoted[2] : (/^[^\s;&|]*/.exec(value)?.[0] ?? '');
+}
+
+export function rcStarshipConfig(shellId: ShellId, content: string): string | null {
+  const shell = getShell(shellId);
+  const setting = shell && lastStarshipConfigLine(shell, content);
+  return setting ? starshipConfigValue(shell, setting) : null;
+}
+
+/** The config path the rc's last exported STARSHIP_CONFIG line hands Starship, expanded. */
+export function rcExportedConfigPath(shellId: ShellId, content: string): string | null {
+  const shell = getShell(shellId);
+  const setting = shell && lastStarshipConfigLine(shell, content, true);
+  const value = setting ? starshipConfigValue(shell, setting) : '';
+  return value ? (expandShellPath(value) ?? value) : null;
+}
+
+function startupFiles(shell: ShellDef): string[] {
+  const home = homeDir();
+  if (shell.id === 'zsh' && shell.rcFile) {
+    const dir = path.dirname(shell.rcFile);
+    return [
+      ...new Set([
+        path.join(home, '.zshenv'),
+        path.join(dir, '.zshenv'),
+        path.join(dir, '.zprofile'),
+      ]),
+    ];
+  }
+  if (shell.id === 'bash') return bashLoginFiles();
+  return [];
+}
+
+function setsOwnStarshipConfig(
+  shell: ShellDef,
+  rcContent: string,
+  io: RcIo,
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  const sets = (text: string) =>
+    removeShellConfiguratorBlocks(text, shell, [EVERY_BLOCK])
+      .split('\n')
+      .some((line) => setsStarshipConfig(shell, line));
+  const skipRc = () => new Set(shell.rcFile ? [shell.rcFile] : []);
+  if (reachableSome(rcContent, sets, io, env, 0, skipRc())) return true;
+  return startupFiles(shell).some((file) => {
+    try {
+      return io.exists(file) && reachableSome(io.readFile(file), sets, io, env, 1, skipRc());
+    } catch {
+      return false;
+    }
+  });
 }
 
 function fishExportsStarshipConfig(line: string): boolean {
@@ -734,7 +995,7 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
 
   const rcPath = shell.rcFile;
   ensureRcDir(rcPath);
-  const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
+  const existing = fs.existsSync(rcPath) ? readTextToRewrite(rcPath) : '';
   const { content, ...result } = resetRcContent(shellId, existing)!;
   if (content !== existing) writeFileAtomic(rcPath, content);
   return result;
@@ -756,7 +1017,7 @@ export function resetRcContent(
   const carried: string[] = [];
 
   let content = removeShellConfiguratorBlocks(existing, shell, [isConfigExport(shell)], carried);
-  const ownExport = content.split('\n').some((line) => setsStarshipConfig(shell, line));
+  const ownExport = setsOwnStarshipConfig(shell, content, io);
   // A stale unset guard after the shell's own export would cancel it.
   if (ownExport && hasLine(content, unsetLine)) {
     content = removeShellConfiguratorBlocks(content, shell, [unsetLine], carried);
@@ -772,14 +1033,18 @@ export function resetRcContent(
   const note = ownExport ? 'sets its own STARSHIP_CONFIG' : undefined;
 
   if (lines.length === 0 && !needsInit) {
-    return { content, applied: false, note: note ?? 'already configured' };
+    return content === existing
+      ? { content, applied: false, note: note ?? 'already configured' }
+      : { content, applied: true, note: note ?? 'removed a stale ShellConfigurator block' };
   }
 
-  const inserted = initPresent ? insertBeforeInit(content, shell, BLOCK_MARKER, lines) : null;
+  const inserted = initPresent ? insertBeforeInit(content, shell, BLOCK_MARKER, lines, io) : null;
   return {
-    content:
+    content: keepLineEndings(
+      existing,
       inserted ??
-      appendManagedBlock(content, BLOCK_MARKER, needsInit ? [...lines, shell.initLine] : lines),
+        appendManagedBlock(content, BLOCK_MARKER, needsInit ? [...lines, shell.initLine] : lines)
+    ),
     applied: true,
     ...(note ? { note } : {}),
   };
@@ -845,7 +1110,7 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
   const rcPath = shell.rcFile;
   if (!fs.existsSync(rcPath)) return { removed: false, note: `${rcPath} does not exist` };
 
-  const existing = fs.readFileSync(rcPath, 'utf8');
+  const existing = readTextToRewrite(rcPath);
   const carried: string[] = [];
   const stripped = removeShellConfiguratorBlocks(existing, shell, [EVERY_BLOCK], carried);
   if (stripped === existing) {
@@ -861,14 +1126,18 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
     ownInit || otherInit ? [...new Set(carried)].filter((line) => !hasLine(stripped, line)) : [];
   const lines = stripped.split('\n');
   if (kept.length > 0) {
+    const sourced = ownInit ? -1 : sourcedInitIndex(lines, shell, FS_RC_IO);
     const at = ownInit
       ? initLineIndex(lines, shellId)
-      : lines.length - (lines.at(-1) === '' ? 1 : 0);
+      : sourced !== -1
+        ? sourced
+        : lines.length - (lines.at(-1) === '' ? 1 : 0);
     lines.splice(at, 0, ...kept);
   }
 
+  assertWritable(rcPath);
   const backedUpTo = backupIfExists(rcPath);
-  writeFileAtomic(rcPath, lines.join('\n'));
+  writeFileAtomic(rcPath, keepLineEndings(existing, lines.join('\n')));
   const notes = [
     ...(ownInit ? ['your own Starship init line stays'] : []),
     ...(otherInit
@@ -887,7 +1156,7 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
   };
 }
 
-/** Moves a shell's per-shell config aside to a backup, which `--restore` can bring back. */
+/** Moves a shell's per-shell config aside to a backup. */
 export function removeShellConfigFile(shellId: ShellId): RemovalResult {
   const configPath = getShellConfigPath(shellId);
   if (!fs.existsSync(configPath)) return { removed: false, note: `${configPath} does not exist` };

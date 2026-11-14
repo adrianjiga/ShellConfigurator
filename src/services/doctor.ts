@@ -3,12 +3,19 @@ import * as path from 'node:path';
 import { getShell } from '../config/shells.ts';
 import { statusLine } from '../config/status.ts';
 import {
+  bashLoginFile,
+  bashNeedsLoginFile,
   fishInitFile,
   getSharedConfigPath,
   getShellConfigPath,
   hasManagedConfigExport,
+  hasManagedRcBlock,
   initReachable,
+  loginLoadsBashrc,
   manualSetupAppliedWith,
+  rcExportedConfigPath,
+  rcStarshipConfig,
+  startsStarship,
 } from '../generators/shellRc.ts';
 import { fontIdToInstall, type ShellId, type TerminalId, type WizardState } from '../types.ts';
 import { cachedStarshipVersion } from './cache.ts';
@@ -20,15 +27,19 @@ import {
   isStarshipInstalledAsync,
 } from './detector.ts';
 import { errorMessage } from './errors.ts';
+import { escapeRegExp } from './escapeRegExp.ts';
 import { runCapture } from './exec.ts';
+import { lastRunShells } from './history.ts';
 import {
   fontLabel,
   getFontFamily,
   getMissingStarshipPathDir,
   getNerdFontsDir,
+  NERD_FONTS,
   readStarshipVersion,
   verifyStarshipConfig,
 } from './installer.ts';
+import { starshipTooOld, tooOldNote } from './starshipVersion.ts';
 import { readTerminalFontFamily, TERMINAL_LABELS } from './terminalFont.ts';
 
 export type DoctorStatus = 'pass' | 'warn' | 'fail';
@@ -64,6 +75,7 @@ export interface DoctorDeps {
   /** The starship version the last install/apply recorded, or null. */
   readCachedStarshipVersion: () => string | null;
   detectInstalledShells: typeof detectInstalledShellsAsync;
+  lastRunShells: () => ShellId[] | null;
   detectTerminal: typeof detectTerminalAsync;
   readFontFamily: typeof readTerminalFontFamily;
   /** Terminals that render Nerd Font symbols without one installed. */
@@ -71,7 +83,7 @@ export interface DoctorDeps {
   verifyConfig: (configPath: string) => Promise<void>;
   readFile: (path: string) => string;
   exists: (path: string) => boolean;
-  hasNerdFonts: () => boolean;
+  hasNerdFonts: (fontId?: string | null) => boolean;
   isContainer: () => Promise<boolean>;
   env: NodeJS.ProcessEnv;
 }
@@ -81,15 +93,22 @@ export const DEFAULT_DOCTOR_DEPS: DoctorDeps = {
   getMissingStarshipPathDir,
   readStarshipVersion,
   detectCurrentShell: detectCurrentShellAsync,
-  readCachedStarshipVersion: () => cachedStarshipVersion(),
+  readCachedStarshipVersion: () => {
+    try {
+      return cachedStarshipVersion();
+    } catch {
+      return null;
+    }
+  },
   detectInstalledShells: detectInstalledShellsAsync,
+  lastRunShells,
   detectTerminal: detectTerminalAsync,
   readFontFamily: readTerminalFontFamily,
   hasBundledNerdFonts: hasBundledNerdFonts,
   verifyConfig: (configPath) => verifyStarshipConfig(configPath),
   readFile: (path) => fs.readFileSync(path, 'utf8'),
   exists: (path) => fs.existsSync(path),
-  hasNerdFonts: () => fontDirs().some((dir) => hasNerdFontFiles(dir)),
+  hasNerdFonts: (fontId) => fontDirs().some((dir) => hasNerdFontFiles(dir, nerdFontFile(fontId))),
   isContainer: detectContainerAsync,
   env: process.env,
 };
@@ -108,7 +127,7 @@ async function hasBundledNerdFonts(terminalId: TerminalId): Promise<boolean> {
   }
 }
 
-const NERD_FONT_FILE = /nerd ?font/i;
+const NERD_FONT_FILE = /nerd ?font.*\.(ttf|otf)$/i;
 
 function fontDirs(): string[] {
   return process.platform === 'darwin'
@@ -116,8 +135,14 @@ function fontDirs(): string[] {
     : [getNerdFontsDir(), '/usr/share/fonts', '/usr/local/share/fonts'];
 }
 
-/** Any font file under `dir` whose name says Nerd Font, at any nesting depth. */
-function hasNerdFontFiles(dir: string, depth = 3): boolean {
+function nerdFontFile(fontId?: string | null): RegExp {
+  const family = NERD_FONTS.find((font) => font.id === fontId)?.family;
+  if (!family) return NERD_FONT_FILE;
+  const name = escapeRegExp(family.replace(/\s*Nerd Font$/, '').replace(/\s+/g, ''));
+  return new RegExp(`^${name}.*NerdFont.*\\.(ttf|otf)$`, 'i');
+}
+
+function hasNerdFontFiles(dir: string, pattern: RegExp, depth = 3): boolean {
   let entries: Array<fs.Dirent | string>;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -127,9 +152,9 @@ function hasNerdFontFiles(dir: string, depth = 3): boolean {
   return entries.some((entry) => {
     const name = typeof entry === 'string' ? entry : entry.name;
     if (typeof entry !== 'string' && entry.isDirectory()) {
-      return depth > 0 && hasNerdFontFiles(path.join(dir, name), depth - 1);
+      return depth > 0 && hasNerdFontFiles(path.join(dir, name), pattern, depth - 1);
     }
-    return NERD_FONT_FILE.test(name);
+    return pattern.test(name.replace(/\s+/g, ''));
   });
 }
 
@@ -152,16 +177,11 @@ export function shellPointsAtShared(
  * install time — so running the doctor under a different env is not a failure.
  */
 function exportedConfigPath(content: string, shellId: ShellId): string | null {
-  const match =
-    shellId === 'fish'
-      ? /set\s+-gx\s+STARSHIP_CONFIG\s+(?:"([^"]+)"|'([^']+)'|(\S+))/.exec(content)
-      : /export\s+STARSHIP_CONFIG=(?:"([^"]+)"|'([^']+)'|(\S+))/.exec(content);
-  if (!match) return null;
-  return match.slice(1).find((value) => value !== undefined) ?? null;
+  return rcExportedConfigPath(shellId, content);
 }
 
-function setsOwnConfig(content: string): boolean {
-  return content.includes('STARSHIP_CONFIG=') || content.includes('set -gx STARSHIP_CONFIG ');
+function setsOwnConfig(content: string, shellId: ShellId): boolean {
+  return rcStarshipConfig(shellId, content) !== null;
 }
 
 interface StarshipProbe {
@@ -181,6 +201,14 @@ async function probeStarship(deps: DoctorDeps): Promise<StarshipProbe> {
 }
 
 function checkStarship(probe: StarshipProbe, state: WizardState | null): DoctorFinding {
+  if (probe.installed && starshipTooOld(probe.version)) {
+    return {
+      id: 'starship',
+      title: 'Starship',
+      status: 'warn',
+      detail: tooOldNote(probe.version!),
+    };
+  }
   if (probe.installed) {
     return {
       id: 'starship',
@@ -239,7 +267,8 @@ function checkVersionDrift(probe: StarshipProbe, deps: DoctorDeps): DoctorFindin
  * login shell, else the shell that launched the tool) actually load the modified
  * rc? Configuring bash while using zsh is a healthy install that shows nothing.
  */
-async function checkRunningShell(shellIds: ShellId[], deps: DoctorDeps): Promise<DoctorFinding> {
+async function checkRunningShell(wiring: ShellWiring[], deps: DoctorDeps): Promise<DoctorFinding> {
+  const shellIds = wiring.map((w) => w.id);
   const current = await deps.detectCurrentShell();
   const shell = current ? getShell(current) : undefined;
   if (!current || !shell) {
@@ -262,7 +291,8 @@ async function checkRunningShell(shellIds: ShellId[], deps: DoctorDeps): Promise
   }
   const rcFile = shell.rcFile;
   if (!rcFile) {
-    return manualSetupAppliedWith(shell, deps)
+    const pointAtShared = wiring.find((w) => w.id === current)?.pointAtShared ?? false;
+    return manualSetupAppliedWith(shell, deps, pointAtShared)
       ? {
           id: 'current-shell',
           title: 'Current shell',
@@ -382,6 +412,18 @@ function checkShellWiring(
       fix,
     };
   }
+  if (shellId === 'bash' && bashNeedsLoginFile()) {
+    const loginFile = bashLoginFile(deps);
+    if (!loginLoadsBashrc(readRc(loginFile, deps), deps, deps.env)) {
+      return {
+        id: `shell:${shellId}`,
+        title: shell.label,
+        status: 'fail',
+        detail: `${loginFile} does not load ${shell.rcFile}, so the login shells macOS terminals start never run it`,
+        fix,
+      };
+    }
+  }
   if (!hasConfig) {
     return {
       id: `shell:${shellId}`,
@@ -391,7 +433,7 @@ function checkShellWiring(
       fix,
     };
   }
-  if (fromState && pointAtShared && setsOwnConfig(content)) {
+  if (fromState && pointAtShared && setsOwnConfig(content, shellId)) {
     const managed = hasManagedConfigExport(shellId, content);
     return {
       id: `shell:${shellId}`,
@@ -406,7 +448,7 @@ function checkShellWiring(
   if (!deps.exists(configPath)) {
     if (pointAtShared) {
       return !fromState
-        ? setsOwnConfig(content)
+        ? setsOwnConfig(content, shellId)
           ? {
               id: `shell:${shellId}`,
               title: shell.label,
@@ -534,7 +576,7 @@ async function checkFontInstalled(
       detail: 'no Nerd Font requested',
     };
   }
-  if (deps.hasNerdFonts()) {
+  if (deps.hasNerdFonts(fontId)) {
     return {
       id: 'font-installed',
       title: 'Nerd Font',
@@ -652,14 +694,55 @@ async function checkFontSelected(
 }
 
 /**
- * Runs every health check against the machine. Without a state card the
- * wiring mode of each present shell is read from its rc.
+ * The installed shells that were set up: the last recorded run chose them, or
+ * they start Starship or carry a ShellConfigurator block.
+ */
+async function shellsSetUp(deps: DoctorDeps): Promise<ShellId[]> {
+  const lastRun = deps.lastRunShells() ?? [];
+  return (await deps.detectInstalledShells()).filter(
+    (id) => lastRun.includes(id) || startsStarship(id, false, deps) || hasManagedRcBlock(id, deps)
+  );
+}
+
+const NO_SHELL_SET_UP: DoctorFinding = {
+  id: 'shells',
+  title: 'Shells',
+  status: 'warn',
+  detail: 'no installed shell starts Starship — run shell-configurator to set one up',
+};
+
+function withCachedReads(deps: DoctorDeps): DoctorDeps {
+  const reads = new Map<string, string>();
+  const exists = new Map<string, boolean>();
+  return {
+    ...deps,
+    readFile: (file) => {
+      const cached = reads.get(file);
+      if (cached !== undefined) return cached;
+      const content = deps.readFile(file);
+      reads.set(file, content);
+      return content;
+    },
+    exists: (file) => {
+      const cached = exists.get(file);
+      if (cached !== undefined) return cached;
+      const found = deps.exists(file);
+      exists.set(file, found);
+      return found;
+    },
+  };
+}
+
+/**
+ * Runs every health check against the machine. Without a state card it checks
+ * the shells that were set up, reading each one's wiring mode from its rc.
  */
 export async function runDoctor(
   state: WizardState | null,
-  deps: DoctorDeps = DEFAULT_DOCTOR_DEPS
+  uncached: DoctorDeps = DEFAULT_DOCTOR_DEPS
 ): Promise<DoctorReport> {
-  const shellIds = state ? state.selectedShells : await deps.detectInstalledShells();
+  const deps = withCachedReads(uncached);
+  const shellIds = state ? state.selectedShells : await shellsSetUp(deps);
   const wiring: ShellWiring[] = shellIds.map((id) => ({
     id,
     pointAtShared: state ? state.keepExistingConfig : shellPointsAtShared(id, deps),
@@ -670,12 +753,13 @@ export async function runDoctor(
   const findings: DoctorFinding[] = [
     checkStarship(probe, state),
     checkLocale(deps),
+    ...(shellIds.length === 0 ? [NO_SHELL_SET_UP] : []),
     ...wiring.map((w) => checkShellWiring(w.id, w.pointAtShared, state !== null, deps)),
     await checkConfigs(wiring, probe, deps, state === null),
     await checkFontInstalled(state, deps),
     await checkFontSelected(state, deps),
     checkVersionDrift(probe, deps),
-    await checkRunningShell(shellIds, deps),
+    await checkRunningShell(wiring, deps),
   ];
 
   return { ok: findings.every((f) => f.status !== 'fail'), findings };

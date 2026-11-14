@@ -1,6 +1,9 @@
 import { getShell } from '../config/shells.ts';
 import {
   appliedRcContent,
+  bashLoginContent,
+  bashLoginFile,
+  bashNeedsLoginFile,
   FS_RC_IO,
   getSharedConfigPath,
   getShellConfigPath,
@@ -187,6 +190,9 @@ export function plannedFileChanges(
       changes.push(
         change(rcFile, (existing) => appliedRcContent(shellId, existing, options, io)!.content, io)
       );
+    }
+    if (state.selectedShells.includes('bash') && bashNeedsLoginFile()) {
+      changes.push(change(bashLoginFile(io), (existing) => bashLoginContent(existing, io), io));
     }
     for (const shellId of resetShells) {
       const rcFile = getShell(shellId)?.rcFile;

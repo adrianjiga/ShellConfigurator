@@ -23,13 +23,17 @@ const block = (text: string, lang: string) =>
 
 describe('shareableState', () => {
   it('keeps the look and drops what belongs to this machine', () => {
-    expect(shareableState(tokyo)).toMatchObject({
+    expect(
+      shareableState({ ...tokyo, skipStarshipInstall: true, keepExistingConfig: true })
+    ).toMatchObject({
       preset: 'tokyo-night',
       characterSymbol: 'lambda',
       hasNerdFont: true,
       selectedShells: [],
       nerdFontToInstall: { kind: 'none' },
       setDefaultShell: null,
+      skipStarshipInstall: false,
+      keepExistingConfig: false,
     });
   });
 });

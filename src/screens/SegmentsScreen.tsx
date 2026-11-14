@@ -74,6 +74,8 @@ function buildRows(
   return [...selectedRows, ...availableRows];
 }
 
+const SEGMENT_ROWS = 12;
+
 export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: SegmentsScreenProps) {
   const currentModules = side === 'left' ? state.leftModules : state.rightModules;
 
@@ -89,8 +91,13 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
   }));
   const viewRef = useRef(view);
   const { selected, filter, cursor } = view;
+  const rightOnOpen = useRef(state.rightModules);
 
   const rows = buildRows(selected, filter, takenByLeft);
+  const first = Math.min(
+    Math.max(0, cursor - Math.floor(SEGMENT_ROWS / 2)),
+    Math.max(0, rows.length - SEGMENT_ROWS)
+  );
 
   function update(next: Partial<SegmentsView>) {
     viewRef.current = { ...viewRef.current, ...next };
@@ -106,7 +113,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
       side === 'left'
         ? {
             leftModules: modules,
-            rightModules: state.rightModules.filter((id) => !modules.includes(id)),
+            rightModules: rightOnOpen.current.filter((id) => !modules.includes(id)),
           }
         : { rightModules: modules };
     commit(changes);
@@ -198,8 +205,15 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
       return;
     }
 
-    if (char === ' ') {
+    const searching = viewRef.current.filter !== '';
+    if (char === ' ' && !searching) {
       toggleRow();
+      return;
+    }
+
+    if (key.return && searching) {
+      toggleRow();
+      setFilter('');
       return;
     }
 
@@ -210,7 +224,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
 
     // Everything typed narrows the list; Backspace widens it again.
     const next = editedText(viewRef.current.filter, char, key);
-    if (next !== null) setFilter(next);
+    if (next !== null && next !== viewRef.current.filter) setFilter(next);
   });
 
   return (
@@ -236,9 +250,15 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
 
         <Box flexDirection="column">
           {rows.length === 0 && <Text color={uiColor('yellow')}>No modules match “{filter}”.</Text>}
-          {rows.map((row, i) => {
+          {first > 0 && (
+            <Text color={uiColor('gray')} italic>
+              ↑ {first} more
+            </Text>
+          )}
+          {rows.slice(first, first + SEGMENT_ROWS).map((row, k) => {
+            const i = first + k;
             const mod = MODULE_BY_ID.get(row.id)!;
-            const showHeading = i === 0 || rows[i - 1]!.selected !== row.selected;
+            const showHeading = k === 0 || rows[i - 1]!.selected !== row.selected;
             const position = selected.indexOf(row.id) + 1;
             const marker = row.taken ? TAKEN : row.selected ? CHECKED : UNCHECKED;
 
@@ -267,17 +287,30 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
               </Box>
             );
           })}
+          {rows.length - first - SEGMENT_ROWS > 0 && (
+            <Text color={uiColor('gray')} italic>
+              ↓ {rows.length - first - SEGMENT_ROWS} more
+            </Text>
+          )}
         </Box>
       </Box>
 
       <NavHints
-        hints={[
-          { key: '↑↓', label: 'navigate' },
-          { key: 'Space', label: 'toggle' },
-          { key: 'Shift+↑↓', label: 'reorder' },
-          { key: 'Enter/Tab/→', label: 'next' },
-          { key: 'Esc/←', label: 'back' },
-        ]}
+        hints={
+          filter
+            ? [
+                { key: '↑↓', label: 'navigate' },
+                { key: 'Enter', label: 'toggle and clear the search' },
+                { key: 'Esc', label: 'clear the search' },
+              ]
+            : [
+                { key: '↑↓', label: 'navigate' },
+                { key: 'Space', label: 'toggle' },
+                { key: 'Shift+↑↓', label: 'reorder' },
+                { key: 'Enter/Tab/→', label: 'next' },
+                { key: 'Esc/←', label: 'back' },
+              ]
+        }
       />
     </WizardLayout>
   );

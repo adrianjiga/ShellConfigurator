@@ -1,5 +1,6 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { configHome, homeDir, xdgBaseDir } from '../services/paths.ts';
+import { configHome, expandShellPath, homeDir, xdgBaseDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 
 export interface ShellDef {
@@ -46,7 +47,7 @@ export const SHELLS: ShellDef[] = [
     binary: 'zsh',
     label: 'Zsh',
     get rcFile() {
-      const zdotdir = process.env.ZDOTDIR?.trim();
+      const zdotdir = process.env.ZDOTDIR?.trim() || zshenvZdotdir();
       return path.join(zdotdir && path.isAbsolute(zdotdir) ? zdotdir : homeDir(), '.zshrc');
     },
     initLine: 'eval "$(starship init zsh)"',
@@ -72,7 +73,7 @@ export const SHELLS: ShellDef[] = [
       return path.join(configHome(), 'fish', 'config.fish');
     },
     initLine: 'starship init fish | source',
-    pathLine: (dir) => `fish_add_path ${posixShellQuote(dir)}`,
+    pathLine: (dir) => `fish_add_path ${fishQuote(dir)}`,
     configEnv: { exportPrefix: 'set -gx STARSHIP_CONFIG ', unsetLine: 'set -e STARSHIP_CONFIG' },
   },
   {
@@ -91,7 +92,7 @@ export const SHELLS: ShellDef[] = [
     get adoptInitLine() {
       return nushellAutoloadCommand('rm -f ($d | path join starship-config.nu)');
     },
-    manualNote: 'Run the command above from Bash (it invokes Nushell to write its autoload files).',
+    manualNote: 'Run its setup command from Bash (it invokes Nushell to write its autoload files).',
     get initPath() {
       return path.join(nushellDataDir(), 'vendor', 'autoload', 'starship.nu');
     },
@@ -110,12 +111,46 @@ export const SHELLS: ShellDef[] = [
       return `$env:STARSHIP_CONFIG = '${configPath}'; Invoke-Expression (&starship init powershell)`;
     },
     adoptInitLine: 'Invoke-Expression (&starship init powershell)',
-    manualNote: 'Add the above line to your $PROFILE file in PowerShell.',
+    manualNote: 'Add its setup line to your $PROFILE file in PowerShell.',
     get initPath() {
       return path.join(configHome(), 'powershell', 'Microsoft.PowerShell_profile.ps1');
     },
   },
 ];
+
+let zshenvCache: { key: string; setting: string | null } | null = null;
+
+/**
+ * The ZDOTDIR ~/.zshenv sets, which zsh uses even when it is not exported, so
+ * a tool started from zsh does not see it.
+ */
+export function zshenvZdotdir(): string | null {
+  const file = path.join(homeDir(), '.zshenv');
+  let key: string;
+  try {
+    const stat = fs.statSync(file);
+    key = `${file}:${stat.ino}:${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}`;
+  } catch {
+    return null;
+  }
+  if (zshenvCache?.key !== key) zshenvCache = { key, setting: zshenvSetting(file) };
+  return zshenvCache.setting ? expandShellPath(zshenvCache.setting) : null;
+}
+
+function zshenvSetting(file: string): string | null {
+  try {
+    return (
+      fs
+        .readFileSync(file, 'utf8')
+        .split('\n')
+        .map((line) => /^\s*(?:export\s+)?ZDOTDIR=(\S+)\s*(?:#.*)?$/.exec(line)?.[1])
+        .filter((value): value is string => value !== undefined)
+        .at(-1) ?? null
+    );
+  } catch {
+    return null;
+  }
+}
 
 /** The per-shell config the wizard writes; mirrors getShellConfigPath in shellRc.ts. */
 function perShellConfigPath(id: ShellId): string {
@@ -137,10 +172,21 @@ function nushellAutoloadCommand(configStep: string): string {
 
 /** Nushell's `$nu.data-dir`. */
 function nushellDataDir(): string {
-  if (process.platform === 'darwin') {
-    return path.join(homeDir(), 'Library', 'Application Support', 'nushell');
-  }
-  return path.join(xdgBaseDir('XDG_DATA_HOME', path.join(homeDir(), '.local', 'share')), 'nushell');
+  const fallback =
+    process.platform === 'darwin'
+      ? path.join(homeDir(), 'Library', 'Application Support')
+      : path.join(homeDir(), '.local', 'share');
+  return path.join(xdgBaseDir('XDG_DATA_HOME', fallback), 'nushell');
+}
+
+/** A fish single-quoted string holding `value` exactly: fish reads `\\` and `\'` inside one. */
+export function fishQuote(value: string): string {
+  return `'${value.replace(/[\\']/g, '\\$&')}'`;
+}
+
+/** The single-quoted form of `value` in the rc file of `shellId`. */
+export function rcQuote(shellId: ShellId, value: string): string {
+  return shellId === 'fish' ? fishQuote(value) : posixShellQuote(value);
 }
 
 export function posixShellQuote(value: string): string {

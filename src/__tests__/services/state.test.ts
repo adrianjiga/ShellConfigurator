@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CliUsageError } from '../../services/errors.ts';
 import { parseState, STATE_VERSION, type StateCard, serializeState } from '../../services/state.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
@@ -55,6 +56,24 @@ describe('parseState', () => {
     expect(restored).toEqual(sampleState);
   });
 
+  it('names the misspelled keys of a card instead of quietly dropping them', () => {
+    const card = JSON.parse(serializeState(sampleState)) as Record<string, Record<string, unknown>>;
+    card.wizard.powerLine = true;
+    card.wizard.pallete = 'gruvbox';
+
+    expect(() => parseState(JSON.stringify(card))).toThrow(
+      new CliUsageError("Invalid state card: unknown keys 'powerLine', 'pallete' in wizard")
+    );
+  });
+
+  it('names an unknown top-level key', () => {
+    const card = { ...JSON.parse(serializeState(sampleState)), wizzard: {} };
+
+    expect(() => parseState(JSON.stringify(card))).toThrow(
+      new CliUsageError("Invalid state card: unknown key 'wizzard' in the card")
+    );
+  });
+
   it('rejects malformed JSON', () => {
     expect(() => parseState('{nope')).toThrow(/Invalid state card/);
   });
@@ -101,13 +120,33 @@ describe('parseState', () => {
   });
 
   it('starts runtime fields at their defaults', () => {
-    const restored = parseState(serializeState(sampleState));
-    expect(restored.step).toBe('welcome');
-    expect(restored.hasNerdFont).toBe(false);
-    expect(restored.packageManager).toBe('script');
-    expect(restored.installedShells).toEqual([]);
-    expect(restored.dryRun).toBe(false);
-    expect(restored.installResults).toEqual([]);
+    const restored = parseState(
+      serializeState({
+        ...sampleState,
+        step: 'review',
+        packageManager: 'brew',
+        installedShells: ['zsh', 'fish'],
+        terminal: 'kitty',
+        container: true,
+        remoteSession: 'ssh',
+        dryRun: true,
+        installResults: [{ id: 'config', label: 'Write config files', status: 'done' }],
+        runId: 'run-1',
+        summaryPath: '/h/WHAT-CHANGED.md',
+      })
+    );
+    expect(restored).toMatchObject({
+      step: 'welcome',
+      packageManager: 'script',
+      installedShells: [],
+      terminal: null,
+      container: false,
+      remoteSession: null,
+      dryRun: false,
+      installResults: [],
+      runId: null,
+      summaryPath: null,
+    });
   });
 
   it.each([

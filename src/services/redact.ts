@@ -1,14 +1,39 @@
+import * as os from 'node:os';
 import { quoteArgv, splitQuotedArgv } from './args.ts';
+import { escapeRegExp } from './escapeRegExp.ts';
 import { homeDir } from './paths.ts';
 
 /** Shows the home directory as `~`, so a pasted report does not name the user. */
 export function redactHome(text: string, home: string = homeDir()): string {
-  if (home.length <= 1) return text;
-  const escaped = home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return text.replace(new RegExp(`${escaped}(?![^/\\s\`'":,)\\]])`, 'g'), '~');
+  const trimmed = home.replace(/\/+$/, '');
+  if (trimmed.length <= 1) return text;
+  return text.replace(
+    new RegExp(`(?<![\\w.~-])(?<![^/]/)${escapeRegExp(trimmed)}(?![\\w.~-])`, 'g'),
+    '~'
+  );
 }
 
-function redactUrl(value: string): string {
+function currentUser(): string {
+  try {
+    return os.userInfo().username;
+  } catch {
+    return '';
+  }
+}
+
+export function redactUser(text: string, user: string = currentUser()): string {
+  if (user.length < 2) return text;
+  return text.replace(
+    new RegExp(`(?<=/(?:[Uu]sers|home)/)${escapeRegExp(user)}(?![\\w.~-])`, 'g'),
+    '<user>'
+  );
+}
+
+export function redactPersonal(text: string, home?: string, user?: string): string {
+  return redactUser(redactHome(text, home), user);
+}
+
+export function redactUrl(value: string): string {
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value;
   try {
     const url = new URL(value);
@@ -38,6 +63,6 @@ export function redactUrls(command: string): string {
   );
 }
 
-function redactUrlText(text: string): string {
+export function redactUrlText(text: string): string {
   return text.replace(/(\b[a-z][a-z0-9+.-]*:\/\/)([^/\s'"]*@)?([^\s'"?#]*)[^\s'"]*/gi, '$1$3');
 }

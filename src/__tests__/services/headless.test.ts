@@ -10,9 +10,15 @@ const {
   mockDetectPackageManager,
   mockDetectContainer,
   mockDetectTerminal,
+  mockFindStarship,
   mockRunInstallTasks,
   mockRecordRun,
 } = vi.hoisted(() => ({
+  mockFindStarship: vi.fn(
+    async (): Promise<{ installed: boolean; pathDir?: string }> => ({
+      installed: false,
+    })
+  ),
   mockDetectInstalledShells: vi.fn(),
   mockDetectPackageManager: vi.fn(),
   mockDetectContainer: vi.fn(),
@@ -31,6 +37,7 @@ vi.mock('../../services/detector.ts', async () => {
     detectPackageManagerAsync: mockDetectPackageManager,
     detectContainerAsync: mockDetectContainer,
     detectTerminalAsync: mockDetectTerminal,
+    findStarshipAsync: mockFindStarship,
   };
 });
 
@@ -57,9 +64,11 @@ vi.mock('../../services/history.ts', async () => {
 });
 
 import type { ModuleId } from '../../config/modules.ts';
+import { getShell } from '../../config/shells.ts';
 import type { CliFlags } from '../../services/args.ts';
 import { CliRunError, CliUsageError } from '../../services/errors.ts';
 import {
+  customCommands,
   dryRunPlan,
   fetchImportedConfig,
   runApply,
@@ -70,6 +79,7 @@ import { NERD_FONTS } from '../../services/installer.ts';
 import { DEFAULT_INSTALL_TASK_DEPS } from '../../services/installTasks.ts';
 import { STATE_VERSION, serializeState } from '../../services/state.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
+import { stubPlatform } from '../helpers/platform.ts';
 
 const flags = (partial: Partial<CliFlags>): CliFlags => ({
   subcommand: 'generate',
@@ -83,6 +93,17 @@ function writeFixtureCard(dir: string, state: Partial<WizardState> = {}): string
   const file = path.join(dir, 'card.json');
   fs.writeFileSync(file, serializeState({ ...DEFAULT_STATE, ...state }));
   return file;
+}
+
+function expectUsageError(run: () => unknown, message: RegExp): void {
+  let caught: unknown;
+  try {
+    run();
+  } catch (err) {
+    caught = err;
+  }
+  expect(caught).toBeInstanceOf(CliUsageError);
+  expect((caught as Error).message).toMatch(message);
 }
 
 describe('stateFromFlags', () => {
@@ -108,12 +129,14 @@ describe('stateFromFlags', () => {
     expect(stateFromFlags(flags({ preset: 'pure-prompt' })).hasNerdFont).toBe(false);
   });
 
-  it('plans the font install a Nerd Font preset needs', () => {
-    const state = stateFromFlags(flags({ preset: 'pastel-powerline' }));
-    expect(state.nerdFontToInstall).toEqual({ kind: 'install', id: NERD_FONTS[0].id });
-    expect(stateFromFlags(flags({ preset: 'pure-prompt' })).nerdFontToInstall).toEqual({
+  it('never plans a font install the flags did not ask for', () => {
+    expect(stateFromFlags(flags({ preset: 'pastel-powerline' })).nerdFontToInstall).toEqual({
       kind: 'none',
     });
+    expect(
+      stateFromFlags(flags({ preset: 'pastel-powerline', font: NERD_FONTS[0].id }))
+        .nerdFontToInstall
+    ).toEqual({ kind: 'install', id: NERD_FONTS[0].id });
   });
 
   it('does not plan a font install when the user says glyphs already render', () => {
@@ -198,27 +221,27 @@ describe('stateFromFlags', () => {
   });
 
   it('throws CliUsageError for an unknown shell id', () => {
-    expect(() => stateFromFlags(flags({ shells: ['zsh', 'csh'] }))).toThrow(/csh/);
+    expectUsageError(() => stateFromFlags(flags({ shells: ['zsh', 'csh'] })), /csh/);
   });
 
   it('throws CliUsageError for an unknown preset', () => {
-    expect(() => stateFromFlags(flags({ preset: 'nonexistent' }))).toThrow(/preset/);
+    expectUsageError(() => stateFromFlags(flags({ preset: 'nonexistent' })), /preset/);
   });
 
   it('throws CliUsageError for an unknown palette', () => {
-    expect(() => stateFromFlags(flags({ palette: 'rainbow-brite' }))).toThrow(/palette/);
+    expectUsageError(() => stateFromFlags(flags({ palette: 'rainbow-brite' })), /palette/);
   });
 
   it('throws CliUsageError for an unknown character symbol', () => {
-    expect(() => stateFromFlags(flags({ characterSymbol: 'spiral' }))).toThrow(/character/);
+    expectUsageError(() => stateFromFlags(flags({ characterSymbol: 'spiral' })), /character/);
   });
 
   it('throws CliUsageError for an unknown shell id in --set-default', () => {
-    expect(() => stateFromFlags(flags({ setDefaultShell: 'elvish' }))).toThrow(/set-default/);
+    expectUsageError(() => stateFromFlags(flags({ setDefaultShell: 'elvish' })), /set-default/);
   });
 
   it('throws CliUsageError for an unknown Nerd Font', () => {
-    expect(() => stateFromFlags(flags({ font: 'ComicMono' }))).toThrow(/Nerd Font/);
+    expectUsageError(() => stateFromFlags(flags({ font: 'ComicMono' })), /Nerd Font/);
   });
 
   it('maps --font to an install and infers hasNerdFont', () => {
@@ -350,7 +373,7 @@ describe('stateFromFlags', () => {
       const card = writeFixtureCard(dir, {
         leftModules: ['directory', 'sentinel'] as ModuleId[],
       });
-      expect(() => stateFromFlags(flags({ stateFile: card }))).toThrow(/sentinel/);
+      expectUsageError(() => stateFromFlags(flags({ stateFile: card })), /sentinel/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -362,7 +385,7 @@ describe('stateFromFlags', () => {
       const card = writeFixtureCard(dir, {
         rightModules: ['time', 'bogus_module'] as ModuleId[],
       });
-      expect(() => stateFromFlags(flags({ stateFile: card }))).toThrow(/bogus_module/);
+      expectUsageError(() => stateFromFlags(flags({ stateFile: card })), /bogus_module/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -381,7 +404,8 @@ describe('stateFromFlags', () => {
   it('reports a missing state card file as a usage error', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
     try {
-      expect(() => stateFromFlags(flags({ stateFile: path.join(dir, 'missing.json') }))).toThrow(
+      expectUsageError(
+        () => stateFromFlags(flags({ stateFile: path.join(dir, 'missing.json') })),
         /Could not read state card/
       );
     } finally {
@@ -560,7 +584,15 @@ describe('runApply', () => {
     { id: 'config', label: 'Write config files', status: 'done' },
   ];
 
+  let restorePlatform: () => void;
+  let scratchHome: string;
   beforeEach(() => {
+    restorePlatform = stubPlatform('linux');
+    scratchHome = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-home-'));
+    vi.stubEnv('HOME', scratchHome);
+    vi.stubEnv('XDG_CONFIG_HOME', undefined);
+    vi.stubEnv('XDG_STATE_HOME', undefined);
+    vi.stubEnv('ZDOTDIR', undefined);
     vi.clearAllMocks();
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
     stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
@@ -573,7 +605,10 @@ describe('runApply', () => {
   });
 
   afterEach(() => {
+    restorePlatform();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    fs.rmSync(scratchHome, { recursive: true, force: true });
   });
 
   it('prints a plan and runs nothing for --dry-run', async () => {
@@ -789,6 +824,27 @@ describe('runApply', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('shows terminal control characters of a fetched config in a dry run instead of sending them', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('[character]\n\u001b[1A\u001b[2Kformat = "$all"\n', { status: 200 })
+    );
+
+    await runApply(
+      flags({
+        subcommand: 'apply',
+        shells: ['zsh'],
+        dryRun: true,
+        importUrl: 'https://example.com/raw',
+      })
+    );
+
+    const output = stdoutWrite.mock.calls
+      .map((call: [string, ...unknown[]]) => String(call[0]))
+      .join('');
+    expect(output).toContain('\\u001b[1A\\u001b[2Kformat');
+    expect(output).not.toContain('\u001b[2K');
+  });
+
   it('runs the install pipeline and records a successful run in history', async () => {
     mockRunInstallTasks.mockResolvedValue(doneTasks as never);
     const files = [{ path: '/h/.zshrc', before: '0', after: 'x' }];
@@ -929,13 +985,57 @@ describe('runApply', () => {
     }
   });
 
-  it('still dry-runs an empty plan as a preview', async () => {
-    await runApply(flags({ subcommand: 'apply', dryRun: true }));
+  it('prints the setup command of a shell set up by hand', async () => {
+    mockRunInstallTasks.mockResolvedValue([
+      {
+        id: 'rc_nushell',
+        label: 'Configure nushell',
+        status: 'skipped',
+        note: getShell('nushell')!.manualNote,
+      },
+    ] as never);
+
+    await runApply(flags({ subcommand: 'apply', shells: ['nushell'] }));
 
     const output = stdoutWrite.mock.calls
       .map((call: [string, ...unknown[]]) => String(call[0]))
       .join('');
-    expect(output).toContain('(none)');
+    expect(output).toContain('Nushell is set up by hand.');
+    expect(output).toContain(`  ${getShell('nushell')!.initLine}\n`);
+  });
+
+  it('refuses a dry run with no shells, as the real run does', async () => {
+    await expect(runApply(flags({ subcommand: 'apply', dryRun: true }))).rejects.toThrow(
+      new CliUsageError(
+        'apply configures at least one shell, but none are selected. Pass --shells <id,...> or a --state card that selects shells.'
+      )
+    );
+  });
+
+  it.each([
+    [{ installed: true }, 'Starship is already installed'],
+    [{ installed: true, pathDir: '/home/u/.local/bin' }, 'Starship is already installed'],
+    [{ installed: false }, 'will install Starship'],
+  ])('says what detection found about Starship (%o)', async (found, text) => {
+    mockFindStarship.mockResolvedValueOnce(found);
+
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'], dryRun: true }));
+
+    const output = stdoutWrite.mock.calls
+      .map((call: [string, ...unknown[]]) => String(call[0]))
+      .join('');
+    expect(output).toContain(text);
+  });
+
+  it("says the terminal font step's own config edit is not in the diff", async () => {
+    mockDetectTerminal.mockResolvedValue('ghostty');
+
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'], dryRun: true, font: 'FiraCode' }));
+
+    const output = stdoutWrite.mock.calls
+      .map((call: [string, ...unknown[]]) => String(call[0]))
+      .join('');
+    expect(output).toContain("terminal font step edits the terminal's own config");
   });
 
   it('survives a history write failure', async () => {
@@ -989,7 +1089,8 @@ describe('runApply', () => {
         sharedConfigToml: '[character]\nsuccess_symbol = "…"\n',
       }),
       DEFAULT_INSTALL_TASK_DEPS,
-      expect.any(Function)
+      expect.any(Function),
+      expect.any(AbortSignal)
     );
   });
 
@@ -1003,7 +1104,8 @@ describe('runApply', () => {
     expect(mockRunInstallTasks).toHaveBeenCalledWith(
       expect.objectContaining({ container: true }),
       DEFAULT_INSTALL_TASK_DEPS,
-      expect.any(Function)
+      expect.any(Function),
+      expect.any(AbortSignal)
     );
   });
 
@@ -1018,7 +1120,8 @@ describe('runApply', () => {
     expect(mockRunInstallTasks).toHaveBeenCalledWith(
       expect.objectContaining({ terminal: 'kitty' }),
       DEFAULT_INSTALL_TASK_DEPS,
-      expect.any(Function)
+      expect.any(Function),
+      expect.any(AbortSignal)
     );
   });
 
@@ -1031,8 +1134,57 @@ describe('runApply', () => {
     expect(mockRunInstallTasks).toHaveBeenCalledWith(
       expect.objectContaining({ terminal: null }),
       DEFAULT_INSTALL_TASK_DEPS,
-      expect.any(Function)
+      expect.any(Function),
+      expect.any(AbortSignal)
     );
+  });
+
+  it('stops a Nerd Font preset without font flags instead of installing a font', async () => {
+    await expect(
+      runApply(flags({ subcommand: 'apply', preset: 'tokyo-night', shells: ['zsh'] }))
+    ).rejects.toThrow(
+      new CliUsageError(
+        `The tokyo-night preset draws Nerd Font icons. Pass --font <id> to install a Nerd Font (${NERD_FONTS.map((font) => font.id).join(', ')}), --has-nerd-font when the terminal already shows them, or --no-nerd-font for a version without icons.`
+      )
+    );
+    expect(mockRunInstallTasks).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ hasNerdFont: true }, { kind: 'none' }],
+    [{ font: 'FiraCode' }, { kind: 'install', id: 'FiraCode' }],
+  ])('runs a Nerd Font preset once %o says how to show its icons', async (extra, font) => {
+    mockRunInstallTasks.mockResolvedValue([] as never);
+
+    await runApply(
+      flags({ subcommand: 'apply', preset: 'tokyo-night', shells: ['zsh'], ...extra })
+    );
+
+    expect(mockRunInstallTasks).toHaveBeenCalledWith(
+      expect.objectContaining({ nerdFontToInstall: font }),
+      DEFAULT_INSTALL_TASK_DEPS,
+      expect.any(Function),
+      expect.any(AbortSignal)
+    );
+  });
+
+  it('cancels the steps on Ctrl+C, then records the run and exits like a signal', async () => {
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+    const listeners = process.listenerCount('SIGINT');
+    mockRunInstallTasks.mockImplementationOnce(async (_state, _deps, _onUpdate, signal) => {
+      process.emit('SIGINT');
+      expect(signal?.aborted).toBe(true);
+      return [{ id: 'config', label: 'Write config files', status: 'failed' }] as never;
+    });
+
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }), 'apply --shells zsh');
+
+    expect(process.exitCode).toBe(130);
+    expect(mockRecordRun).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 130 }));
+    expect(process.listenerCount('SIGINT')).toBe(listeners);
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Cancelling'));
+    stderrWrite.mockRestore();
+    process.exitCode = undefined;
   });
 
   it('adopts the existing shared config when --adopt is passed without --import-url', async () => {
@@ -1071,26 +1223,85 @@ describe('runApply', () => {
     await expect(fetchImportedConfig('HTTPS://example.com/starship.toml')).resolves.toBe('[a]');
   });
 
-  it('rejects a redirect that lands on plain http', async () => {
-    const response = new Response('[a]', { status: 200 });
-    Object.defineProperty(response, 'url', { value: 'http://mirror.example.com/config.toml' });
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+  it('refuses a URL with a user name or password before fetching, without printing them', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
-    await expect(fetchImportedConfig('https://example.com/starship.toml')).rejects.toThrow(
-      /redirected to a non-https URL/
+    const error = await fetchImportedConfig(
+      'https://user:s3cret@example.com/config.toml?token=abc123'
+    ).catch((err: Error) => err);
+
+    expect(error).toBeInstanceOf(CliUsageError);
+    expect((error as Error).message).toContain('cannot send a user name or password');
+    expect((error as Error).message).not.toMatch(/s3cret|abc123/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('warns about the commands an imported config runs on every prompt', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('[custom.ip]\ncommand = "curl -s https://ip.example"\nwhen = true\n', {
+        status: 200,
+      })
+    );
+
+    await runApply(
+      flags({
+        subcommand: 'apply',
+        shells: ['zsh'],
+        dryRun: true,
+        importUrl: 'https://example.com/c',
+      })
+    );
+
+    expect(stderrWrite).toHaveBeenCalledWith(
+      expect.stringContaining('command = "curl -s https://ip.example"')
     );
   });
 
-  it('keeps credentials out of fetch error messages', async () => {
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('boom'));
+  it('refuses a redirect through plain http on the way, not only at the end', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(null, { status: 302, headers: { location: 'http://example.com/cfg.toml' } })
+    );
 
-    const error = await fetchImportedConfig('https://user:s3cret@example.com/config.toml').catch(
+    await expect(fetchImportedConfig('https://example.com/start')).rejects.toThrow(
+      "Could not fetch 'https://example.com/start': redirected to a non-https URL http://example.com/cfg.toml"
+    );
+  });
+
+  it('follows https redirects to the config', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(null, { status: 301, headers: { location: '/moved/cfg.toml' } })
+      )
+      .mockResolvedValueOnce(new Response('[character]\n'));
+
+    await expect(fetchImportedConfig('https://example.com/start')).resolves.toBe('[character]\n');
+    expect(fetchSpy.mock.calls[1]![0]).toBe('https://example.com/moved/cfg.toml');
+  });
+
+  it('releases the body of every redirect it follows', async () => {
+    const redirect = new Response('moved', { status: 302, headers: { location: '/cfg.toml' } });
+    const cancel = vi.spyOn(redirect.body!, 'cancel');
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(redirect)
+      .mockResolvedValueOnce(new Response('[character]\n'));
+
+    await fetchImportedConfig('https://example.com/start');
+
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it('keeps the query out of fetch error messages, also the one fetch gives', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      new Error('failed: https://example.com/config.toml?token=abc123')
+    );
+
+    const error = await fetchImportedConfig('https://example.com/config.toml?token=abc123').catch(
       (err: Error) => err
     );
-    expect(error instanceof Error ? error.message : String(error)).not.toContain('s3cret');
-    expect(error instanceof Error ? error.message : String(error)).toContain(
-      "'https://example.com/config.toml'"
-    );
+
+    expect((error as Error).message).not.toContain('abc123');
+    expect((error as Error).message).toContain("'https://example.com/config.toml'");
   });
 
   it('rejects an HTTP error when fetching an imported config as a run failure', async () => {
@@ -1244,5 +1455,54 @@ describe('dryRunPlan', () => {
       []
     );
     expect(plan.config).toMatchObject({ kind: 'imported', toml: '' });
+  });
+});
+
+describe('customCommands', () => {
+  it('lists every line that may set a command, in any TOML form', () => {
+    const toml = [
+      '[directory]',
+      'truncation_length = 3',
+      '[custom.git_email]',
+      'command = "git config user.email"',
+      'when = "git rev-parse"',
+      '[ custom . spaced ]',
+      '"command" = "quoted key"',
+      'custom.dotted.command = "dotted key"',
+      '[custom]',
+      'inline = { command = "inline table", when = true }',
+      'multi = { shell = ["bash"] }',
+      '[custom.long]',
+      'command = """',
+      'curl -s https://example.com',
+      '"""',
+      '# command = "a comment"',
+    ].join('\n');
+
+    expect(customCommands(toml)).toEqual([
+      '[custom.git_email]',
+      'command = "git config user.email"',
+      'when = "git rev-parse"',
+      '[ custom . spaced ]',
+      '"command" = "quoted key"',
+      'custom.dotted.command = "dotted key"',
+      '[custom]',
+      'inline = { command = "inline table", when = true }',
+      'multi = { shell = ["bash"] }',
+      '[custom.long]',
+      'command = """',
+      'curl -s https://example.com',
+      '"""',
+    ]);
+  });
+
+  it('lists a key or table spelled with escapes, which could hide a command', () => {
+    expect(
+      customCommands('["\\u0063ustom".x]\n"\\u0063ommand" = "id"\nformat = "\\u2192 $all"\n')
+    ).toEqual(['["\\u0063ustom".x]', '"\\u0063ommand" = "id"']);
+  });
+
+  it('finds nothing in a config without commands', () => {
+    expect(customCommands('[directory]\ntruncation_length = 3\n')).toEqual([]);
   });
 });

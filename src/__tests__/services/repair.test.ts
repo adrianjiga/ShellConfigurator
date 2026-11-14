@@ -40,6 +40,17 @@ const state = (overrides: Partial<WizardState> = {}): WizardState => ({
 });
 
 describe('runRepair', () => {
+  it('applies the fixes of a report it is given, checking only once afterwards', async () => {
+    const before = report([finding({ kind: 'configure-shell', shellId: 'bash' })]);
+    const deps = makeDeps(report([]));
+
+    const result = await runRepair(null, deps, { before });
+
+    expect(deps.applyShellConfig).toHaveBeenCalledOnce();
+    expect(deps.runDoctor).toHaveBeenCalledOnce();
+    expect(result.before).toBe(before);
+  });
+
   it('does nothing when there are no actionable findings', async () => {
     const deps = makeDeps(report([{ id: 'a', title: 'A', status: 'pass', detail: 'fine' }]));
     const result = await runRepair(null, deps);
@@ -84,11 +95,24 @@ describe('runRepair', () => {
   });
 
   it('plans fixes without applying them in dry-run', async () => {
-    const before = report([finding({ kind: 'configure-shell', shellId: 'zsh' })]);
+    const before = report([
+      finding({ kind: 'reinstall-starship' }),
+      finding({ kind: 'configure-shell', shellId: 'zsh' }),
+      finding({ kind: 'write-config', shellId: 'fish' }),
+      finding({ kind: 'reinstall-font', fontId: 'JetBrainsMono' }),
+      finding({ kind: 'wire-font', terminalId: 'kitty', family: 'Hack Nerd Font' }),
+    ]);
     const deps = makeDeps(before);
     const result = await runRepair(null, deps, { dryRun: true });
-    expect(result.actions[0]).toMatchObject({ status: 'planned', detail: expect.any(String) });
+    expect(result.actions.map((action) => [action.status, action.detail])).toEqual([
+      ['planned', 'reinstall Starship via the detected package manager'],
+      ['planned', 'add the missing Starship lines to the zsh rc'],
+      ['planned', 'write the Starship config for fish'],
+      ['planned', 'reinstall JetBrains Mono'],
+      ['planned', 'set the kitty font to "Hack Nerd Font"'],
+    ]);
     expect(deps.applyShellConfig).not.toHaveBeenCalled();
+    expect(deps.installStarship).not.toHaveBeenCalled();
     expect(result.after).toBe(before);
     expect(result.dryRun).toBe(true);
     expect(deps.runDoctor).toHaveBeenCalledOnce();

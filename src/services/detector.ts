@@ -1,10 +1,9 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { SHELLS } from '../config/shells.ts';
-import type { PackageManager, ShellId, TerminalId } from '../types.ts';
+import type { PackageManager, RemoteSession, ShellId, TerminalId } from '../types.ts';
 import { commandExistsAsync, commandPathAsync, runCapture } from './exec.ts';
-import { getMissingStarshipPathDir } from './installer.ts';
+import { scriptInstallBinDir, withPathDir } from './paths.ts';
 
 const readFileP = promisify(fs.readFile);
 
@@ -111,11 +110,11 @@ export async function findStarshipAsync(): Promise<{
 }> {
   const onPath = await isStarshipInstalledAsync();
   if (onPath.installed) return onPath;
-  const pathDir = getMissingStarshipPathDir();
-  if (!pathDir) return onPath;
+  const pathDir = scriptInstallBinDir();
+  if (!fs.existsSync(`${pathDir}/starship`)) return onPath;
   try {
     const version = await runCapture('starship', ['-V'], {
-      env: { ...process.env, PATH: `${pathDir}${path.delimiter}${process.env.PATH ?? ''}` },
+      env: { ...process.env, PATH: withPathDir(pathDir) },
     });
     return { installed: true, version, pathDir };
   } catch {
@@ -184,6 +183,23 @@ export async function detectContainerAsync(): Promise<boolean> {
     }
   }
   return false;
+}
+
+/**
+ * An SSH session or WSL, where the terminal runs on another computer or on
+ * Windows, so fonts installed here never reach it.
+ */
+export async function detectRemoteSessionAsync(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<RemoteSession> {
+  if (env.SSH_CONNECTION || env.SSH_TTY || env.SSH_CLIENT) return 'ssh';
+  if (env.WSL_DISTRO_NAME || env.WSL_INTEROP) return 'wsl';
+  try {
+    const release = await readFileP('/proc/sys/kernel/osrelease', 'utf8');
+    return /microsoft/i.test(release) ? 'wsl' : null;
+  } catch {
+    return null;
+  }
 }
 
 const byName = (name: string) => SHELLS.find((s) => s.binary === name || s.id === name);
