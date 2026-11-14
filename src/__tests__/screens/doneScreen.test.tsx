@@ -530,6 +530,15 @@ describe('DoneScreen share', () => {
     );
   });
 
+  it('saves once when s arrives twice before the screen re-renders', async () => {
+    const instance = done();
+    await flush();
+    instance.stdin.write('s');
+    instance.stdin.write('s');
+    await flush();
+    expect(mocks.writeShareFile).toHaveBeenCalledOnce();
+  });
+
   it('offers nothing to share in adopt mode, where the prompt is not generated', async () => {
     const instance = done({ keepExistingConfig: true });
     await flush();

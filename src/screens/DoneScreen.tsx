@@ -1,5 +1,5 @@
 import { Box, Text, useApp, useInput } from 'ink';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ConfigPlan, TaskPlan } from '../components/PlanSections.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
@@ -62,6 +62,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
   const [outcome, setOutcome] = useState<RestoreOutcome | null>(null);
   const [shared, setShared] = useState<{ file: string } | { error: string } | null>(null);
   const canShare = !state.keepExistingConfig;
+  const saved = useRef(false);
 
   const failures = state.installResults.filter((t) => t.status === 'failed');
   const hasFailures = failures.length > 0;
@@ -73,9 +74,11 @@ export function DoneScreen({ state }: DoneScreenProps) {
       exit();
       return;
     }
-    if (char.toLowerCase() === 's' && canShare && !(shared && 'file' in shared)) {
+    if (char.toLowerCase() === 's' && canShare && !saved.current) {
       try {
-        setShared({ file: writeShareFile(state) });
+        const file = writeShareFile(state);
+        saved.current = true;
+        setShared({ file });
       } catch (err) {
         setShared({ error: errorMessage(err) });
       }
