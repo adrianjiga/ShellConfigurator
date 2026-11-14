@@ -95,6 +95,9 @@ describe('parseCliArgs', () => {
       ['-y', 'yes', true],
       ['--starship', 'starship', true],
       ['--list', 'list', true],
+      ['--list-presets', 'listPresets', true],
+      ['--list-modules', 'listModules', true],
+      ['--list-fonts', 'listFonts', true],
     ];
 
     it.each(cases)('%s sets %s to %s', (arg, key, expected) => {

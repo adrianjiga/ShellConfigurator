@@ -36,6 +36,9 @@ export const FLAGS = {
   dryRun: flag('--dry-run', 'Change nothing; print what would happen', undefined, '-d'),
   noInstall: flag('--no-install', 'Alias for --dry-run'),
   restore: flag('--restore', 'Copy the newest backups back over the configs'),
+  listPresets: flag('--list-presets', 'List the presets (--json for data)'),
+  listModules: flag('--list-modules', 'List the prompt modules (--json for data)'),
+  listFonts: flag('--list-fonts', 'List the Nerd Fonts (--json for data)'),
   undo: flag('--undo', 'Alias for --restore'),
   preset: flag(
     '--preset',
@@ -81,6 +84,9 @@ export const WIZARD_FLAGS: readonly FlagInfo[] = [
   FLAGS.noInstall,
   FLAGS.restore,
   FLAGS.undo,
+  FLAGS.listPresets,
+  FLAGS.listModules,
+  FLAGS.listFonts,
 ];
 
 const CONFIG_FLAGS = [

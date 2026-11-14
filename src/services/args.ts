@@ -75,6 +75,10 @@ export interface CliFlags {
   runId?: string;
   /** The shell `completions` writes a script for: its one positional argument. */
   completionShell?: string;
+  /** List what a flag accepts (--list-presets, --list-modules, --list-fonts). */
+  listPresets?: boolean;
+  listModules?: boolean;
+  listFonts?: boolean;
   help: boolean;
   version: boolean;
   restore: boolean;
@@ -143,6 +147,15 @@ const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> 
   },
   '--list': (r, v) => {
     r.list = v;
+  },
+  '--list-presets': (r, v) => {
+    r.listPresets = v;
+  },
+  '--list-modules': (r, v) => {
+    r.listModules = v;
+  },
+  '--list-fonts': (r, v) => {
+    r.listFonts = v;
   },
 };
 
