@@ -35,8 +35,10 @@ function needsSudo(): boolean {
 }
 
 /** The scripted path is a separate code branch; omitting it here makes a stray lookup a type error. */
-const INSTALL_CMDS: Record<Exclude<PackageManager, 'script'>, (pkg: string) => string[]> = {
-  pacman: (pkg) => [...sudo(), 'pacman', '-Syu', '--noconfirm', '--needed', pkg],
+type InstallingManager = Exclude<PackageManager, 'script'>;
+
+const INSTALL_CMDS: Record<InstallingManager, (pkg: string) => string[]> = {
+  pacman: (pkg) => [...sudo(), 'pacman', '-S', '--noconfirm', '--needed', pkg],
   apt: (pkg) => [...sudo(), 'apt-get', 'install', '-y', pkg],
   dnf: (pkg) => [...sudo(), 'dnf', 'install', '-y', pkg],
   brew: (pkg) => ['brew', 'install', pkg],
@@ -45,6 +47,28 @@ const INSTALL_CMDS: Record<Exclude<PackageManager, 'script'>, (pkg: string) => s
 
 function sudo(): string[] {
   return needsSudo() ? ['sudo'] : [];
+}
+
+/**
+ * Installs one package. pacman installs from the package lists it has, without
+ * upgrading the system; when those are too old to download from, the error
+ * says to upgrade the system first.
+ */
+async function installPackage(
+  pm: InstallingManager,
+  pkg: string,
+  signal?: AbortSignal
+): Promise<void> {
+  try {
+    await runCommand(INSTALL_CMDS[pm](pkg), { signal });
+  } catch (err) {
+    if (pm !== 'pacman' || signal?.aborted) throw err;
+    throw new Error(
+      `${errorMessage(err)}. If pacman could not download it, its package lists are out of date: ` +
+        'run `sudo pacman -Syu` to upgrade the system, then run this again.',
+      { cause: err }
+    );
+  }
 }
 
 /** A fresh image has no package index, so the first apt install would 404. */
@@ -168,7 +192,7 @@ export async function installStarship(pm: PackageManager, signal?: AbortSignal):
     return;
   }
 
-  await runCommand(INSTALL_CMDS[pm]('starship'), { signal });
+  await installPackage(pm, 'starship', signal);
 }
 
 /**
@@ -263,7 +287,7 @@ export async function installShell(
   }
 
   await refreshPackageIndex(pm, signal);
-  await runCommand(INSTALL_CMDS[pm](pkg), { signal });
+  await installPackage(pm, pkg, signal);
 }
 
 export function getNerdFontsDir(): string {

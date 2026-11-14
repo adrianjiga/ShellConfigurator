@@ -264,7 +264,7 @@ describe('installStarship', () => {
     await installStarship('pacman');
     expect(mockSpawn).toHaveBeenCalledWith(
       'sudo',
-      ['pacman', '-Syu', '--noconfirm', '--needed', 'starship'],
+      ['pacman', '-S', '--noconfirm', '--needed', 'starship'],
       { stdio: 'inherit' }
     );
   });
@@ -375,6 +375,20 @@ describe('installStarship', () => {
 
     await expect(installStarship('pacman')).rejects.toThrow('killed by signal SIGKILL');
   });
+
+  it('tells the user to upgrade the system when pacman fails, instead of upgrading it', async () => {
+    spawnOutcome({ status: 1 });
+
+    await expect(installShell('fish', 'pacman')).rejects.toThrow(
+      'run `sudo pacman -Syu` to upgrade the system, then run this again'
+    );
+  });
+
+  it('adds no pacman hint for another package manager', async () => {
+    spawnOutcome({ status: 1 });
+
+    await expect(installStarship('apk')).rejects.toThrow(/^(?!.*pacman).*exit code 1/);
+  });
 });
 
 describe('installShell', () => {
@@ -428,9 +442,9 @@ describe('installShell', () => {
   });
 
   it.each([
-    ['zsh', 'pacman', ['pacman', '-Syu', '--noconfirm', '--needed', 'zsh']],
+    ['zsh', 'pacman', ['pacman', '-S', '--noconfirm', '--needed', 'zsh']],
     ['fish', 'dnf', ['dnf', 'install', '-y', 'fish']],
-    ['nushell', 'pacman', ['pacman', '-Syu', '--noconfirm', '--needed', 'nushell']],
+    ['nushell', 'pacman', ['pacman', '-S', '--noconfirm', '--needed', 'nushell']],
     ['nushell', 'dnf', ['dnf', 'install', '-y', 'nushell']],
     ['nushell', 'apk', ['apk', 'add', '--no-cache', 'nushell']],
   ] as const)('installs %s via %s with sudo', async (shell, pm, command) => {
