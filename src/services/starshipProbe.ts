@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as nodePath from 'node:path';
-import { getSharedConfigPath, getShellConfigPath } from '../generators/shellRc.ts';
-import type { ShellId, WizardState } from '../types.ts';
+import { stripVTControlCharacters } from 'node:util';
+import { getSharedConfigPath } from '../generators/shellRc.ts';
+import type { WizardState } from '../types.ts';
 import { findStarshipAsync } from './detector.ts';
 import { CAPTURE_TIMEOUT_MS, runCaptureBoth } from './exec.ts';
 import {
@@ -12,15 +13,8 @@ import {
   withPreviewProject,
 } from './preview.ts';
 
-const ESC = String.fromCharCode(27);
-const BEL = String.fromCharCode(7);
-const ESCAPES = new RegExp(
-  `${ESC}\\][^${BEL}${ESC}]*(?:${BEL}|${ESC}\\\\)|${ESC}\\[[0-?]*[ -/]*[@-~]|${ESC}[@-Z\\\\-_]`,
-  'g'
-);
-
 export function stripAnsi(text: string): string {
-  return text.replace(ESCAPES, '');
+  return stripVTControlCharacters(text);
 }
 
 export interface ModuleTiming {
@@ -143,6 +137,7 @@ function topLevelNumber(toml: string, key: string): number | null {
 }
 
 const ALWAYS_ON = new Set(['character', 'line_break', 'fill']);
+const SPECIFIC_ADVICE = new Set(['git_status', 'git_metrics', 'directory']);
 
 function moduleSuggestion(timing: ModuleTiming): Suggestion {
   const took = `${timing.module} took ${Math.round(timing.ms)}ms`;
@@ -200,7 +195,7 @@ export function suggestFixes(
     });
   }
   const hitTimeout = (timing: ModuleTiming) =>
-    timedOut.length > 0 && timing.ms >= commandTimeout * 0.9;
+    timedOut.length > 0 && timing.ms >= commandTimeout * 0.9 && !SPECIFIC_ADVICE.has(timing.module);
   for (const timing of timings) {
     if (timing.ms >= SLOW_MODULE_MS && !ALWAYS_ON.has(timing.module) && !hitTimeout(timing)) {
       suggestions.push(moduleSuggestion(timing));
@@ -251,52 +246,60 @@ export class StarshipMissingError extends Error {
   }
 }
 
+export type ActiveConfig = { kind: 'file'; path: string } | { kind: 'defaults'; reason: string };
+
 /**
- * The config a shell started here loads: $STARSHIP_CONFIG, else the shell's
- * per-shell config, else the shared one. Null when none of them exists.
+ * The config Starship loads in this environment, by its own rule:
+ * $STARSHIP_CONFIG when set, else the shared starship.toml; its built-in
+ * defaults when that file does not exist.
  */
-export function activeConfigPath(
-  shell: ShellId | null,
+export function activeStarshipConfig(
+  env: NodeJS.ProcessEnv = process.env,
   exists: (file: string) => boolean = fs.existsSync
-): string | null {
-  const candidates = [
-    process.env.STARSHIP_CONFIG,
-    shell ? getShellConfigPath(shell) : undefined,
-    getSharedConfigPath(),
-  ];
-  return candidates.find((file): file is string => Boolean(file) && exists(file as string)) ?? null;
+): ActiveConfig {
+  const configured = env.STARSHIP_CONFIG?.trim();
+  const path = configured || getSharedConfigPath();
+  if (exists(path)) return { kind: 'file', path };
+  return {
+    kind: 'defaults',
+    reason: configured
+      ? `$STARSHIP_CONFIG (${configured}) does not exist`
+      : `${path} does not exist`,
+  };
 }
 
 export async function timePrompt(
-  toml: string,
-  path: string,
+  config: { toml: string; path?: string },
+  folder: string,
   deps: ProbeDeps = DEFAULT_PROBE_DEPS,
   scratchDeps: Pick<ScratchDeps, 'createScratch' | 'writeConfig' | 'cleanup'> = DEFAULT_PREVIEW_DEPS
 ): Promise<TimingsReport> {
   if (!(await deps.isStarshipInstalled())) throw new StarshipMissingError();
-  const scratch = await scratchDeps.createScratch();
+  const scratch = config.path ? null : await scratchDeps.createScratch();
   try {
-    const configPath = nodePath.join(scratch, STARSHIP_CONFIG_FILE);
-    await scratchDeps.writeConfig(scratch, toml);
+    let configPath = config.path;
+    if (scratch) {
+      configPath = nodePath.join(scratch, STARSHIP_CONFIG_FILE);
+      await scratchDeps.writeConfig(scratch, config.toml);
+    }
     let output: { stdout: string; stderr: string };
     try {
-      output = await deps.run('timings', path, configPath);
+      output = await deps.run('timings', folder, configPath!);
     } catch (err) {
-      if ((err as { killed?: boolean }).killed) throw new StarshipTimedOutError(path);
+      if ((err as { killed?: boolean }).killed) throw new StarshipTimedOutError(folder);
       throw err;
     }
-    const { stdout, stderr } = output;
-    const modules = parseTimings(stdout);
+    const modules = parseTimings(output.stdout);
     const slowestMs = modules[0]?.ms ?? 0;
     return {
-      path,
+      path: folder,
       slowestMs,
       slow: slowestMs >= SLOW_PROMPT_MS,
       modules,
-      suggestions: suggestFixes(modules, stderr, toml),
+      suggestions: suggestFixes(modules, output.stderr, config.toml),
     };
   } finally {
-    await scratchDeps.cleanup(scratch);
+    if (scratch) await scratchDeps.cleanup(scratch);
   }
 }
 

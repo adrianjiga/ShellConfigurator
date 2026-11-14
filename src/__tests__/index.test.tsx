@@ -1329,31 +1329,31 @@ describe('index timings command', () => {
     expect(output()).toContain('git_status took 320ms');
   });
 
-  it('times the config the current shell loads when no flags are given', async () => {
+  it('times the config Starship loads here when no flags are given', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-active-'));
     const config = path.join(dir, 'zsh.toml');
     fs.writeFileSync(config, 'format = "$character"\n');
     vi.stubEnv('STARSHIP_CONFIG', config);
     try {
-      await runTimingsCommand(parseCliArgs(['timings']), deps(), async () => 'zsh');
+      const probe = deps();
+      await runTimingsCommand(parseCliArgs(['timings']), probe);
       expect(output()).toContain(`(config: ${config})`);
+      expect(probe.run).toHaveBeenCalledWith('timings', process.cwd(), config);
     } finally {
       vi.unstubAllEnvs();
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('falls back to the default prompt, and says so, when no config is found', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-active-'));
-    vi.stubEnv('STARSHIP_CONFIG', undefined);
-    vi.stubEnv('HOME', dir);
-    vi.stubEnv('XDG_CONFIG_HOME', undefined);
+  it("times Starship's built-in default prompt when the config it would load is missing", async () => {
+    vi.stubEnv('STARSHIP_CONFIG', '/no/such/starship.toml');
     try {
-      await runTimingsCommand(parseCliArgs(['timings']), deps(), async () => null);
-      expect(output()).toContain('(config: the default prompt; no config of yours was found)');
+      await runTimingsCommand(parseCliArgs(['timings']), deps());
+      expect(output()).toContain(
+        "(config: Starship's built-in default prompt, since $STARSHIP_CONFIG (/no/such/starship.toml) does not exist)"
+      );
     } finally {
       vi.unstubAllEnvs();
-      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 

@@ -6,7 +6,7 @@ vi.unmock('../../services/starshipProbe.ts');
 import { getSharedConfigPath, getShellConfigPath } from '../../generators/shellRc.ts';
 import { generateToml } from '../../generators/starship.ts';
 import {
-  activeConfigPath,
+  activeStarshipConfig,
   explainPromptAsync,
   type ProbeDeps,
   parseExplain,
@@ -141,6 +141,12 @@ describe('suggestFixes', () => {
     ]);
   });
 
+  it('keeps git_status advice when some other tool timed out', () => {
+    const warnings = 'Executing command "/usr/bin/node" timed out.';
+    const suggestions = suggestFixes([timing('git_status', 600)], warnings, '');
+    expect(suggestions.map((s) => s.module)).toEqual([undefined, 'git_status']);
+  });
+
   it('never suggests turning off the modules every prompt needs', () => {
     expect(suggestFixes([timing('character', 90), timing('line_break', 70)], '', '')).toEqual([]);
   });
@@ -191,7 +197,7 @@ describe('timePrompt', () => {
   it('times the config in the folder and reports the slowest module and the fixes', async () => {
     const deps = fakeDeps(TIMINGS);
     const scratch = fakeScratch();
-    const report = await timePrompt('format = "$all"\n', '/work/repo', deps, scratch);
+    const report = await timePrompt({ toml: 'format = "$all"\n' }, '/work/repo', deps, scratch);
 
     expect(scratch.writeConfig).toHaveBeenCalledWith('/scratch', 'format = "$all"\n');
     expect(deps.calls).toEqual([['timings', '/work/repo', path.join('/scratch', 'starship.toml')]]);
@@ -199,6 +205,19 @@ describe('timePrompt', () => {
     expect(report).toMatchObject({ path: '/work/repo', slowestMs: 1200, slow: true });
     expect(report.modules).toHaveLength(4);
     expect(report.suggestions.map((s) => s.module)).toEqual(['git_status', 'directory']);
+  });
+
+  it('times an existing config where it is, without a scratch folder', async () => {
+    const deps = fakeDeps(TIMINGS);
+    const scratch = fakeScratch();
+    await timePrompt(
+      { toml: 'x = 1\n', path: '/home/u/.config/starship.toml' },
+      '/w',
+      deps,
+      scratch
+    );
+    expect(deps.calls).toEqual([['timings', '/w', '/home/u/.config/starship.toml']]);
+    expect(scratch.createScratch).not.toHaveBeenCalled();
   });
 
   it('explains a Starship that was killed for taking too long', async () => {
@@ -209,7 +228,7 @@ describe('timePrompt', () => {
       },
     };
     const scratch = fakeScratch();
-    const failure = timePrompt('format = "$all"\n', '/big/repo', deps, scratch);
+    const failure = timePrompt({ toml: 'format = "$all"\n' }, '/big/repo', deps, scratch);
     await expect(failure).rejects.toBeInstanceOf(StarshipTimedOutError);
     await expect(failure).rejects.toThrow(/in \/big\/repo within 30s.*git_status/);
     expect(scratch.cleanup).toHaveBeenCalledWith('/scratch');
@@ -217,7 +236,7 @@ describe('timePrompt', () => {
 
   it('refuses to run without Starship', async () => {
     await expect(
-      timePrompt('format = "$all"\n', '/', fakeDeps('', '', false), fakeScratch())
+      timePrompt({ toml: 'format = "$all"\n' }, '/', fakeDeps('', '', false), fakeScratch())
     ).rejects.toBeInstanceOf(StarshipMissingError);
   });
 });
@@ -278,25 +297,33 @@ describe('explainPromptAsync', () => {
   });
 });
 
-describe('activeConfigPath', () => {
+describe('activeStarshipConfig', () => {
   const existing =
     (...files: string[]) =>
     (file: string) =>
       files.includes(file);
+  const shared = () => getSharedConfigPath();
 
-  it('prefers STARSHIP_CONFIG, then the shell config, then the shared config', () => {
-    vi.stubEnv('STARSHIP_CONFIG', '/env/starship.toml');
-    try {
-      const shell = getShellConfigPath('zsh');
-      const shared = getSharedConfigPath();
-      expect(activeConfigPath('zsh', existing('/env/starship.toml', shell, shared))).toBe(
-        '/env/starship.toml'
-      );
-      expect(activeConfigPath('zsh', existing(shell, shared))).toBe(shell);
-      expect(activeConfigPath('zsh', existing(shared))).toBe(shared);
-      expect(activeConfigPath(null, existing())).toBeNull();
-    } finally {
-      vi.unstubAllEnvs();
-    }
+  it('follows Starship: STARSHIP_CONFIG when set, else the shared config', () => {
+    expect(
+      activeStarshipConfig({ STARSHIP_CONFIG: '/env/s.toml' }, existing('/env/s.toml'))
+    ).toEqual({
+      kind: 'file',
+      path: '/env/s.toml',
+    });
+    expect(activeStarshipConfig({}, existing(shared()))).toEqual({ kind: 'file', path: shared() });
+  });
+
+  it("is Starship's defaults when that file is missing, without trying another one", () => {
+    expect(
+      activeStarshipConfig(
+        { STARSHIP_CONFIG: '/gone.toml' },
+        existing(shared(), getShellConfigPath('zsh'))
+      )
+    ).toEqual({ kind: 'defaults', reason: '$STARSHIP_CONFIG (/gone.toml) does not exist' });
+    expect(activeStarshipConfig({}, existing())).toEqual({
+      kind: 'defaults',
+      reason: `${shared()} does not exist`,
+    });
   });
 });

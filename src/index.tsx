@@ -21,7 +21,6 @@ import {
   type DebugInfoDeps,
   formatDebugInfo,
 } from './services/debugInfo.ts';
-import { detectCurrentShellAsync } from './services/detector.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
 import { CliRunError, CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
@@ -40,7 +39,8 @@ import {
 import { captureRun, trackedFiles } from './services/runCapture.ts';
 import { renderShare } from './services/share.ts';
 import {
-  activeConfigPath,
+  type ActiveConfig,
+  activeStarshipConfig,
   DEFAULT_PROBE_DEPS,
   formatTimings,
   type ProbeDeps,
@@ -193,8 +193,8 @@ debug-info options (reads only; e.g. shell-configurator debug-info > issue.md):
   Your home directory is shown as ~ so the report does not name you.
 
 timings options (changes no config; times the modules in the current folder):
-  Without flags it times the config your shell loads: $STARSHIP_CONFIG, else
-  the shell's per-shell config, else ~/.config/starship.toml.
+  Without flags it times the config Starship loads here: $STARSHIP_CONFIG, else
+  ~/.config/starship.toml, else Starship's built-in default prompt.
   --config <file>      Time this starship.toml instead
   --json               Print the timings and suggestions as JSON
   The generate flags (--preset, --palette, --state, ...) time a config built
@@ -582,8 +582,7 @@ export async function runRollbackCommand(
 
 export async function runTimingsCommand(
   flags: CliFlags,
-  deps: ProbeDeps = DEFAULT_PROBE_DEPS,
-  currentShell: () => Promise<ShellId | null> = detectCurrentShellAsync
+  deps: ProbeDeps = DEFAULT_PROBE_DEPS
 ): Promise<void> {
   const present = presentFlags(flags);
   const accepted = acceptedFlags('timings');
@@ -597,33 +596,36 @@ export async function runTimingsCommand(
       `--config times an existing file, so ${building.join(', ')} cannot be used with it.`
     );
   }
-  let toml: string;
+  let source: { toml: string; path?: string };
   let config: string;
-  const file =
-    flags.configFile ?? (building.length === 0 ? activeConfigPath(await currentShell()) : null);
-  if (file) {
-    try {
-      toml = readFileSync(file, 'utf8');
-    } catch (err) {
-      throw new CliUsageError(`Could not read '${file}': ${errorMessage(err)}`);
-    }
-    config = file;
-  } else {
+  if (building.length > 0) {
     const state = stateFromFlags(flags);
     if (state.keepExistingConfig) {
       throw new CliUsageError(
         `An adopt-mode card keeps your own config, so there is nothing to build; time it with --config ${getSharedConfigPath()}.`
       );
     }
-    toml = generateToml(state);
-    config =
-      building.length > 0
-        ? 'built from the flags'
-        : 'the default prompt; no config of yours was found';
+    source = { toml: generateToml(state) };
+    config = 'built from the flags';
+  } else {
+    const active: ActiveConfig = flags.configFile
+      ? { kind: 'file', path: flags.configFile }
+      : activeStarshipConfig();
+    if (active.kind === 'file') {
+      try {
+        source = { toml: readFileSync(active.path, 'utf8'), path: active.path };
+      } catch (err) {
+        throw new CliUsageError(`Could not read '${active.path}': ${errorMessage(err)}`);
+      }
+      config = active.path;
+    } else {
+      source = { toml: '' };
+      config = `Starship's built-in default prompt, since ${active.reason}`;
+    }
   }
   let report: TimingsReport;
   try {
-    report = await timePrompt(toml, process.cwd(), deps);
+    report = await timePrompt(source, process.cwd(), deps);
   } catch (err) {
     throw new CliRunError(errorMessage(err));
   }
