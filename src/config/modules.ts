@@ -120,6 +120,18 @@ export const CORE_MODULES: readonly ModuleId[] = [
 export const isConfigurableModule = (id: ModuleId): id is ConfigurableModuleId =>
   id !== 'character';
 
+/** A module drawn as its symbol before a sample value, enabled explicitly. */
+function symbolModule(
+  symbol: (hasNerdFont: boolean) => string,
+  sample: string
+): Pick<ModuleDef, 'previewSegment' | 'settings'> {
+  return {
+    previewSegment: (hasNerdFont) => `${symbol(hasNerdFont)}${sample}`,
+    settings: ({ hasNerdFont }) =>
+      `symbol   = "${tomlBasic(symbol(hasNerdFont))}"\ndisabled = false`,
+  };
+}
+
 const MODULE_DEFS = {
   username: {
     label: 'Username',
@@ -230,13 +242,8 @@ deleted   = "-\${count}"
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.nodejs : 'node '}v22.0.0`,
+    ...symbolModule((nf) => (nf ? NERD_FONT_SYMBOLS.nodejs : 'node '), 'v22.0.0'),
     content: '$symbol$version',
-    settings: ({ hasNerdFont }) =>
-      `
-symbol   = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.nodejs : 'node ')}"
-disabled = false
-`.trim(),
   },
   python: {
     label: 'Python',
@@ -244,13 +251,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.python : 'py '}3.12.0`,
+    ...symbolModule((nf) => (nf ? NERD_FONT_SYMBOLS.python : 'py '), '3.12.0'),
     content: '$symbol$version( \\($virtualenv\\))',
-    settings: ({ hasNerdFont }) =>
-      `
-symbol   = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.python : 'py ')}"
-disabled = false
-`.trim(),
   },
   rust: {
     label: 'Rust',
@@ -258,13 +260,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.rust : 'rs '}1.80.0`,
+    ...symbolModule((nf) => (nf ? NERD_FONT_SYMBOLS.rust : 'rs '), '1.80.0'),
     content: '$symbol$version',
-    settings: ({ hasNerdFont }) =>
-      `
-symbol   = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.rust : 'rs ')}"
-disabled = false
-`.trim(),
   },
   docker_context: {
     label: 'Docker',
@@ -272,13 +269,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '🐳 dev',
+    ...symbolModule(() => '🐳 ', 'dev'),
     content: '$symbol$context',
-    settings: () =>
-      `
-symbol   = "🐳 "
-disabled = false
-`.trim(),
   },
   kubernetes: {
     label: 'Kubernetes',
@@ -286,13 +278,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '☸ prod',
+    ...symbolModule(() => '☸ ', 'prod'),
     content: '$symbol$context( \\($namespace\\))',
-    settings: () =>
-      `
-symbol   = "☸ "
-disabled = false
-`.trim(),
   },
   aws: {
     label: 'AWS',
@@ -438,13 +425,8 @@ threshold = 2
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '🐹 v1.22',
+    ...symbolModule(() => '🐹 ', 'v1.22'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "🐹 "
-disabled = false
-`.trim(),
   },
   java: {
     label: 'Java',
@@ -452,13 +434,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '☕ v21',
+    ...symbolModule(() => '☕ ', 'v21'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "☕ "
-disabled = false
-`.trim(),
   },
   dotnet: {
     label: '.NET',
@@ -466,13 +443,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '.NET 8.0',
+    ...symbolModule(() => '.NET ', '8.0'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = ".NET "
-disabled = false
-`.trim(),
   },
   ruby: {
     label: 'Ruby',
@@ -480,13 +452,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '💎 3.3',
+    ...symbolModule(() => '💎 ', '3.3'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "💎 "
-disabled = false
-`.trim(),
   },
   php: {
     label: 'PHP',
@@ -494,13 +461,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '🐘 8.3',
+    ...symbolModule(() => '🐘 ', '8.3'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "🐘 "
-disabled = false
-`.trim(),
   },
   c: {
     label: 'C',
@@ -508,13 +470,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => 'C 13.2',
+    ...symbolModule(() => 'C ', '13.2'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "C "
-disabled = false
-`.trim(),
   },
   cpp: {
     label: 'C++',
@@ -522,13 +479,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => 'C++ 13.2',
+    ...symbolModule(() => 'C++ ', '13.2'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "C++ "
-disabled = false
-`.trim(),
   },
   zig: {
     label: 'Zig',
@@ -536,13 +488,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '↯ 0.13',
+    ...symbolModule(() => '↯ ', '0.13'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "↯ "
-disabled = false
-`.trim(),
   },
   lua: {
     label: 'Lua',
@@ -550,13 +497,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '🌙 5.4',
+    ...symbolModule(() => '🌙 ', '5.4'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "🌙 "
-disabled = false
-`.trim(),
   },
   swift: {
     label: 'Swift',
@@ -564,13 +506,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '🐦 5.10',
+    ...symbolModule(() => '🐦 ', '5.10'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "🐦 "
-disabled = false
-`.trim(),
   },
   elixir: {
     label: 'Elixir',
@@ -578,13 +515,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '💧 1.16',
+    ...symbolModule(() => '💧 ', '1.16'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "💧 "
-disabled = false
-`.trim(),
   },
   // `satisfies` (not a type annotation) so each callback still gets contextual
   // typing, while the Record makes the table exhaustive over ConfigurableModuleId.
