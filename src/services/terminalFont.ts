@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { backupIfExists } from '../generators/shellRc.ts';
+import { backupIfExists, writeFileAtomic } from '../generators/shellRc.ts';
 import { assertNever, type TerminalId } from '../types.ts';
 import { configHome, homeDir } from './paths.ts';
 
@@ -335,7 +335,7 @@ export function wireTerminalFont(
   // checking first keeps it from collecting a backup on every run.
   if (fs.existsSync(filePath)) fs.accessSync(filePath, fs.constants.W_OK);
   const backedUpTo = backupIfExists(filePath);
-  fs.writeFileSync(filePath, updated, 'utf8');
+  writeFileAtomic(filePath, updated);
   return { applied: true, path: filePath, backedUpTo };
 }
 

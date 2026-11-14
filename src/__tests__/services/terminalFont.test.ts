@@ -52,6 +52,28 @@ describe('wireTerminalFont', () => {
     expect(fs.readdirSync(path.join(tmp, 'kitty'))).toEqual(['kitty.conf']);
   });
 
+  it('refuses a dangling symlinked config instead of creating its target', () => {
+    const dir = path.join(tmp, 'kitty');
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(tmp, 'dotfiles', 'kitty.conf');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.symlinkSync(target, path.join(dir, 'kitty.conf'));
+
+    expect(() => wireTerminalFont('kitty', 'Hack Nerd Font')).toThrow();
+    expect(fs.existsSync(target)).toBe(false);
+  });
+
+  it('writes through a symlinked config so the link survives', () => {
+    write('dotfiles/kitty.conf', 'font_family Old\n');
+    fs.mkdirSync(path.join(tmp, 'kitty'), { recursive: true });
+    fs.symlinkSync(path.join(tmp, 'dotfiles', 'kitty.conf'), path.join(tmp, 'kitty', 'kitty.conf'));
+
+    wireTerminalFont('kitty', 'Hack Nerd Font');
+
+    expect(fs.lstatSync(path.join(tmp, 'kitty', 'kitty.conf')).isSymbolicLink()).toBe(true);
+    expect(read('dotfiles/kitty.conf')).toBe('font_family Hack Nerd Font\n');
+  });
+
   it('creates a kitty config with the font family', () => {
     const result = wireTerminalFont('kitty', 'JetBrainsMono Nerd Font');
 
