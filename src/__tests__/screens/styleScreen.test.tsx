@@ -397,6 +397,36 @@ describe('StyleScreen', () => {
     expect(instance.lastFrame()).not.toContain('Enter saves');
   });
 
+  it('lets Backspace correct the substitutions draft before saving', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+
+    await press(instance.stdin, '\t', 5);
+    await press(instance.stdin, '\u001B[B');
+    await press(instance.stdin, '\r');
+    for (const char of 'projects=codex') await press(instance.stdin, char);
+    await press(instance.stdin, '\u007F');
+    await press(instance.stdin, '\r');
+
+    expect(onUpdate).toHaveBeenLastCalledWith(
+      selection({ directorySubstitutions: [{ from: 'projects', to: 'code' }] })
+    );
+  });
+
+  it('closes the editor on the first Escape and leaves on the second', async () => {
+    const { instance, onBack } = setup();
+    await flush();
+
+    await press(instance.stdin, '\t', 5);
+    await press(instance.stdin, '\u001B[B');
+    await press(instance.stdin, '\r');
+    await pressEsc(instance.stdin);
+    expect(onBack).not.toHaveBeenCalled();
+
+    await pressEsc(instance.stdin);
+    expect(onBack).toHaveBeenCalled();
+  });
+
   it('confirms the directory settings with Enter', async () => {
     const { instance, onNext } = setup({
       directoryTruncationLength: 1,
