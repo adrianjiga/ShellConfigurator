@@ -216,12 +216,14 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 - **Effort.** S-M. **D:** P0.3, P0.4, P1.1.
 - **Shipped:** `shell-configurator uninstall [--shells …] [--starship] [--font <id>] [--yes] [--dry-run] [--json]`
   (`services/uninstall.ts`). It strips every ShellConfigurator rc block (rc backed up first; a carried PATH
-  line stays when the user's own init line does) and moves per-shell configs to `.bak-*`, so `--restore`
-  brings them back. Starship and the font are opt-in rather than default, since either may predate the
-  wizard: the script binary or the pacman/apk/Homebrew package is removed, and font files are listed from
-  the cached archive. It asks on a terminal and needs `--yes` elsewhere, and records an `uninstall` run in
-  history. The headless apply smoke now runs a real uninstall, a no-op second uninstall and a restore
-  on every distro cell. Not reverted: the terminal font setting and `chsh`.
+  line stays when the user's own or fish's `conf.d` init does) and moves per-shell configs to `.bak-*`,
+  then prints the `cp` commands that copy each backup back. Starship and the font are opt-in rather than
+  default, since either may predate the wizard: Starship goes only when no shell would still start it, as
+  the script binary or a pacman/apk/Homebrew package that package manager owns; font files are listed from
+  the cached archive's headers, and terminals still set to the font are named. A shell's config stays when
+  its rc could not be cleaned. It asks on a terminal, needs `--yes` elsewhere, and records an `uninstall`
+  run in history. The headless apply smoke now runs a real uninstall, a no-op second uninstall and the
+  printed undo commands on every distro cell. Not reverted: the terminal font setting and `chsh`.
 
 **P4.2 — Rollback snapshots (#14)** — **TODO (partial foundation)**
 
