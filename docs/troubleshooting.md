@@ -142,6 +142,20 @@ add `unset STARSHIP_CONFIG` (or `set -e STARSHIP_CONFIG` for fish) manually.
 
 ---
 
+## A shell lost its own prompt and looks like another shell
+
+A shell you set up in an earlier run but did **not** select in a later run is
+pointed back at the shared `~/.config/starship.toml` (its rc gets
+`unset STARSHIP_CONFIG`, or `set -e STARSHIP_CONFIG` for fish). It then shows
+the same prompt as every shell without its own config, which can look as if it
+never started; `echo $FISH_VERSION` prints a version only inside fish, and
+`exit` takes you back to the shell you started it from. Its own config, `~/.config/starship/<shell>.toml`, stays on disk. The Review
+and Done screens say which shells this affects. To get its prompt back, run the
+wizard again with that shell selected, or `shell-configurator rollback` to undo
+the later run.
+
+---
+
 ## Nushell / PowerShell setup is "manual"
 
 Nushell and PowerShell don't have traditional RC files that `eval` can
