@@ -226,6 +226,9 @@ describe('writeSharedConfig', () => {
 
     expect(result.backedUpTo).toContain(sharedPath);
     expect(fs.copyFileSync).toHaveBeenCalledWith(sharedPath, expect.stringContaining(sharedPath));
+    const copyOrder = vi.mocked(fs.copyFileSync).mock.invocationCallOrder[0]!;
+    const writeOrder = vi.mocked(fs.writeFileSync).mock.invocationCallOrder[0]!;
+    expect(copyOrder).toBeLessThan(writeOrder);
   });
 
   it('does not back up when there is no existing shared config', () => {
