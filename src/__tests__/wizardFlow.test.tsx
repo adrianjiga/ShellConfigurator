@@ -95,6 +95,13 @@ beforeEach(() => {
   setAdvanceDelayForTests(0);
 });
 
+async function pressKeys(instance: ReturnType<typeof render>, keys: string[]): Promise<void> {
+  for (const key of keys) {
+    instance.stdin.write(key);
+    await flush();
+  }
+}
+
 /** Walks the wizard to the end and returns the TOML that was written. */
 async function runWizard(
   keys: string[],
@@ -105,10 +112,7 @@ async function runWizard(
   await flush();
   if (instanceOut) instanceOut.instance = instance;
 
-  for (const key of keys) {
-    instance.stdin.write(key);
-    await flush();
-  }
+  await pressKeys(instance, keys);
 
   // The install chain is async; let its microtasks drain.
   for (let i = 0; i < 20 && mockWriteConfig.mock.calls.length === 0; i++) {
@@ -329,24 +333,7 @@ describe('dry-run wizard walkthrough', () => {
     await flush();
 
     // Walk straight to the shells step and pick zsh; installing must be skipped.
-    instance.stdin.write(ENTER); // welcome
-    await flush();
-    instance.stdin.write(ENTER); // fontcheck
-    await flush();
-    instance.stdin.write(ENTER); // preset
-    await flush();
-    instance.stdin.write(ENTER); // segments_left
-    await flush();
-    instance.stdin.write(ENTER); // segments_right
-    await flush();
-    instance.stdin.write(ENTER); // style
-    await flush();
-    instance.stdin.write(SPACE); // select zsh
-    await flush();
-    instance.stdin.write(ENTER); // -> review
-    await flush();
-    instance.stdin.write(ENTER); // -> done (skips installing)
-    await flush();
+    await pressKeys(instance, [ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER]);
 
     return instance;
   }
