@@ -117,6 +117,16 @@ describe('ReviewScreen', () => {
     expect(instance.lastFrame()).toContain('Nerd Font (JetBrains Mono)');
   });
 
+  it('does not promise a font download inside a container', async () => {
+    const { instance } = setup({
+      container: true,
+      nerdFontToInstall: { kind: 'install', id: 'JetBrainsMono' },
+    });
+    await flush();
+
+    expect(instance.lastFrame()).not.toContain('JetBrains Mono');
+  });
+
   it('confirms with Enter', async () => {
     const { instance, onNext } = setup();
     await flush();

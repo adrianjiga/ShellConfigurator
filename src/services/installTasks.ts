@@ -118,7 +118,7 @@ export function shellTaskId(shellId: ShellId): `shell_${ShellId}` {
 }
 
 /** The font this run installs: a chosen one, never inside a container. */
-function plannedFont(state: WizardState): string | null {
+export function plannedFont(state: WizardState): string | null {
   const fontId = fontIdToInstall(state.nerdFontToInstall);
   return fontId && !state.container ? fontId : null;
 }

@@ -8,8 +8,8 @@ import { uiColor } from '../config/colors.ts';
 import { getShell, setupCommand } from '../config/shells.ts';
 import { getSharedConfigPath, plannedRcBlock } from '../generators/shellRc.ts';
 import { fontLabel, plannedPathDir } from '../services/installer.ts';
-import { buildTaskList, plannedResetShells } from '../services/installTasks.ts';
-import { fontIdToInstall, type ShellId, type WizardState } from '../types.ts';
+import { buildTaskList, plannedFont, plannedResetShells } from '../services/installTasks.ts';
+import type { ShellId, WizardState } from '../types.ts';
 
 interface ReviewScreenProps {
   state: WizardState;
@@ -39,7 +39,7 @@ function rcSnippet(
 }
 
 export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
-  const fontId = fontIdToInstall(state.nerdFontToInstall);
+  const fontId = plannedFont(state);
   const fontName = fontId ? fontLabel(fontId) : null;
   const [tasks] = useState(() => buildTaskList(state, plannedResetShells(state)));
   const [sharedConfigShadowed] = useState(
