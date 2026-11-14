@@ -169,11 +169,16 @@ export async function collectDebugInfo(
           kind: last.kind,
           timestamp: last.timestamp,
           ...(last.exitCode !== undefined ? { exitCode: last.exitCode } : {}),
-          ...(last.command ? { command: last.command } : {}),
+          ...(last.command ? { command: redactUrls(last.command) } : {}),
         }
       : null,
     doctor,
   };
+}
+
+/** Hides the credentials, query and fragment of every URL, where tokens travel. */
+export function redactUrls(text: string): string {
+  return text.replace(/(\b[a-z][a-z0-9+.-]*:\/\/)([^/\s'"]*@)?([^\s'"?#]*)[^\s'"]*/gi, '$1$3');
 }
 
 /** Shows the home directory as `~`, so a pasted report does not name the user. */

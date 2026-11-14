@@ -5,6 +5,7 @@ import {
   type DebugInfoDeps,
   formatDebugInfo,
   redactHome,
+  redactUrls,
 } from '../../services/debugInfo.ts';
 import { homeDir } from '../../services/paths.ts';
 import type { ShellId } from '../../types.ts';
@@ -33,7 +34,7 @@ function makeDeps(overrides: Partial<DebugInfoDeps> = {}): DebugInfoDeps {
         timestamp: '2026-11-14T10:00:00.000Z',
         kind: 'apply',
         exitCode: 1,
-        command: `apply --state ${home}/card.json`,
+        command: `apply --state ${home}/card.json --import-url https://u:tok@example.com/s.toml?key=1`,
       },
     ],
     shellFacts: (id: ShellId) => ({
@@ -111,8 +112,9 @@ describe('formatDebugInfo', () => {
     expect(text).toContain('| Zsh | yes | `~/.zshrc` | yes | yes | yes |');
     expect(text).toContain('- `/opt/homebrew/bin` — has `starship`');
     expect(text).toContain(
-      'apply at 2026-11-14T10:00:00.000Z, exit 1 (`apply --state ~/card.json`)'
+      'apply at 2026-11-14T10:00:00.000Z, exit 1 (`apply --state ~/card.json --import-url https://example.com/s.toml`)'
     );
+    expect(text).not.toContain('tok');
     expect(text).toContain('```text\nStarship health check');
     expect(text).not.toContain(home);
   });
@@ -132,6 +134,20 @@ describe('formatDebugInfo', () => {
       )
     );
     expect(text).toContain('- Installed: yes (in `~/.local/bin`, not on PATH)');
+  });
+});
+
+describe('redactUrls', () => {
+  it('drops the credentials, query and fragment of a URL', () => {
+    expect(
+      redactUrls(
+        "apply --import-url 'https://ana:ghp_secret@gist.githubusercontent.com/ana/raw/s.toml?token=abc#x' --shells zsh"
+      )
+    ).toBe("apply --import-url 'https://gist.githubusercontent.com/ana/raw/s.toml' --shells zsh");
+  });
+
+  it('leaves a command without URLs alone', () => {
+    expect(redactUrls('apply --state card.json')).toBe('apply --state card.json');
   });
 });
 
