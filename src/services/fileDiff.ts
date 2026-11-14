@@ -1,0 +1,182 @@
+import * as fs from 'node:fs';
+import { getShell } from '../config/shells.ts';
+import {
+  appliedRcContent,
+  getSharedConfigPath,
+  getShellConfigPath,
+  type RcIo,
+  resetRcContent,
+} from '../generators/shellRc.ts';
+import { generateToml } from '../generators/starship.ts';
+import type { ShellId, WizardState } from '../types.ts';
+import { errorMessage } from './errors.ts';
+
+type Op = { kind: ' ' | '-' | '+'; line: string };
+
+const CONTEXT = 3;
+const MAX_LCS_CELLS = 4_000_000;
+
+function splitLines(text: string): string[] {
+  if (text === '') return [];
+  const lines = text.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+}
+
+function lineOps(before: string[], after: string[]): Op[] {
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  let endB = before.length;
+  let endA = after.length;
+  while (endB > start && endA > start && before[endB - 1] === after[endA - 1]) {
+    endB--;
+    endA--;
+  }
+  const a = before.slice(start, endB);
+  const b = after.slice(start, endA);
+  const middle: Op[] = [];
+  if ((a.length + 1) * (b.length + 1) > MAX_LCS_CELLS) {
+    middle.push(...a.map((line) => ({ kind: '-' as const, line })));
+    middle.push(...b.map((line) => ({ kind: '+' as const, line })));
+  } else {
+    const width = b.length + 1;
+    const lcs = new Uint32Array((a.length + 1) * width);
+    for (let i = a.length - 1; i >= 0; i--) {
+      for (let j = b.length - 1; j >= 0; j--) {
+        lcs[i * width + j] =
+          a[i] === b[j]
+            ? lcs[(i + 1) * width + j + 1] + 1
+            : Math.max(lcs[(i + 1) * width + j], lcs[i * width + j + 1]);
+      }
+    }
+    let i = 0;
+    let j = 0;
+    while (i < a.length || j < b.length) {
+      if (i < a.length && j < b.length && a[i] === b[j]) {
+        middle.push({ kind: ' ', line: a[i++] });
+        j++;
+      } else if (
+        i < a.length &&
+        (j === b.length || lcs[(i + 1) * width + j] >= lcs[i * width + j + 1])
+      ) {
+        middle.push({ kind: '-', line: a[i++] });
+      } else {
+        middle.push({ kind: '+', line: b[j++] });
+      }
+    }
+  }
+  return [
+    ...before.slice(0, start).map((line) => ({ kind: ' ' as const, line })),
+    ...middle,
+    ...before.slice(endB).map((line) => ({ kind: ' ' as const, line })),
+  ];
+}
+
+function hunkRange(start: number, length: number): string {
+  return `${length === 0 ? start : start + 1},${length}`;
+}
+
+/**
+ * A `git diff`-style unified diff from `before` (null when the file does not
+ * exist) to `after`, labelled with `file`. Empty when nothing changes.
+ */
+export function unifiedDiff(before: string | null, after: string, file: string): string {
+  const ops = lineOps(splitLines(before ?? ''), splitLines(after));
+  const changed = ops.flatMap((op, index) => (op.kind === ' ' ? [] : [index]));
+  if (changed.length === 0) return '';
+
+  const out = [before === null ? '--- /dev/null' : `--- ${file}`, `+++ ${file}`];
+  let next = 0;
+  while (next < changed.length) {
+    const first = Math.max(0, changed[next] - CONTEXT);
+    let last = changed[next];
+    while (next + 1 < changed.length && changed[next + 1] - last <= CONTEXT * 2 + 1) {
+      last = changed[++next];
+    }
+    next++;
+    const end = Math.min(ops.length, last + CONTEXT + 1);
+    const hunk = ops.slice(first, end);
+    const oldStart = ops.slice(0, first).filter((op) => op.kind !== '+').length;
+    const newStart = ops.slice(0, first).filter((op) => op.kind !== '-').length;
+    const oldLength = hunk.filter((op) => op.kind !== '+').length;
+    const newLength = hunk.filter((op) => op.kind !== '-').length;
+    out.push(`@@ -${hunkRange(oldStart, oldLength)} +${hunkRange(newStart, newLength)} @@`);
+    out.push(...hunk.map((op) => `${op.kind}${op.line}`));
+  }
+  return `${out.join('\n')}\n`;
+}
+
+export type FileChange =
+  | { path: string; status: 'create' | 'modify'; added: number; removed: number; diff: string }
+  | { path: string; status: 'unreadable'; error: string };
+
+const FS_IO: RcIo = {
+  exists: (filePath) => fs.existsSync(filePath),
+  readFile: (filePath) => fs.readFileSync(filePath, 'utf8'),
+};
+
+function change(filePath: string, next: (existing: string) => string, io: RcIo): FileChange | null {
+  let before: string | null;
+  try {
+    before = io.exists(filePath) ? io.readFile(filePath) : null;
+  } catch (err) {
+    return { path: filePath, status: 'unreadable', error: errorMessage(err) };
+  }
+  const after = next(before ?? '');
+  if (before !== null && after === before) return null;
+  const diff = unifiedDiff(before, after, filePath);
+  const lines = diff.split('\n').slice(2);
+  return {
+    path: filePath,
+    status: before === null ? 'create' : 'modify',
+    added: lines.filter((line) => line.startsWith('+')).length,
+    removed: lines.filter((line) => line.startsWith('-')).length,
+    diff,
+  };
+}
+
+/**
+ * Every config and rc file a run with `state` would write, diffed against what
+ * is on disk now, using the same planners as the real writers. `pathDir` is the
+ * directory the rc lines would add to PATH. Files that would stay as they are
+ * are left out; fonts, the Starship binary and terminal configs are not files
+ * this covers.
+ */
+export function plannedFileChanges(
+  state: WizardState,
+  resetShells: readonly ShellId[],
+  pathDir: string | null,
+  io: RcIo = FS_IO
+): FileChange[] {
+  const changes: (FileChange | null)[] = [];
+
+  if (state.keepExistingConfig) {
+    const imported = state.sharedConfigToml;
+    if (imported != null) changes.push(change(getSharedConfigPath(), () => imported, io));
+  } else if (state.selectedShells.length > 0) {
+    const toml = generateToml(state);
+    for (const shellId of state.selectedShells) {
+      changes.push(change(getShellConfigPath(shellId), () => toml, io));
+    }
+  }
+
+  if (!state.skipStarshipInstall) {
+    const options = { ensurePathDir: pathDir, pointAtSharedConfig: state.keepExistingConfig };
+    for (const shellId of state.selectedShells) {
+      const rcFile = getShell(shellId)?.rcFile;
+      if (!rcFile) continue;
+      changes.push(
+        change(rcFile, (existing) => appliedRcContent(shellId, existing, options, io)!.content, io)
+      );
+    }
+    for (const shellId of resetShells) {
+      const rcFile = getShell(shellId)?.rcFile;
+      if (!rcFile) continue;
+      changes.push(
+        change(rcFile, (existing) => resetRcContent(shellId, existing, io)!.content, io)
+      );
+    }
+  }
+
+  return changes.filter((entry): entry is FileChange => entry !== null);
+}
