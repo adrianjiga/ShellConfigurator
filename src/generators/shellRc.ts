@@ -690,3 +690,73 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
   );
   return note ? { applied: true, note } : { applied: true };
 }
+
+const EVERY_BLOCK: LineNeedle = () => true;
+
+/** Whether the shell's rc file has a ShellConfigurator block. */
+export function hasManagedRcBlock(shellId: ShellId, io: RcIo = FS_RC_IO): boolean {
+  const shell = getShell(shellId);
+  if (!shell?.rcFile) return false;
+  try {
+    if (!io.exists(shell.rcFile)) return false;
+    const content = io.readFile(shell.rcFile);
+    return removeShellConfiguratorBlocks(content, shell, [EVERY_BLOCK]) !== content;
+  } catch {
+    return false;
+  }
+}
+
+export interface RemovalResult {
+  removed: boolean;
+  backedUpTo?: string;
+  note?: string;
+}
+
+/**
+ * Removes every ShellConfigurator block from the shell's rc file, after backing
+ * it up. A PATH line a block carried stays when the user's own init line still
+ * needs it to find Starship.
+ */
+export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
+  const shell = getShell(shellId);
+  if (!shell?.rcFile) return { removed: false, note: 'no rc file' };
+  const rcPath = shell.rcFile;
+  if (!fs.existsSync(rcPath)) return { removed: false, note: `${rcPath} does not exist` };
+
+  const existing = fs.readFileSync(rcPath, 'utf8');
+  const carried: string[] = [];
+  const stripped = removeShellConfiguratorBlocks(existing, shell, [EVERY_BLOCK], carried);
+  if (stripped === existing) {
+    return { removed: false, note: `no ShellConfigurator lines in ${rcPath}` };
+  }
+
+  const ownInit = hasStarshipInit(stripped, shellId);
+  const kept = ownInit ? [...new Set(carried)].filter((line) => !hasLine(stripped, line)) : [];
+  const lines = stripped.split('\n');
+  if (kept.length > 0) {
+    const command = INIT_COMMAND[shellId];
+    const index = lines.findIndex((l) => !l.trimStart().startsWith('#') && l.includes(command));
+    lines.splice(index, 0, ...kept);
+  }
+
+  const backedUpTo = backupIfExists(rcPath);
+  writeFileAtomic(rcPath, lines.join('\n'));
+  const notes = [
+    ...(ownInit ? ['your own Starship init line stays'] : []),
+    ...(kept.length > 0 ? ['kept the PATH line it needs'] : []),
+  ];
+  return {
+    removed: true,
+    ...(backedUpTo ? { backedUpTo } : {}),
+    ...(notes.length > 0 ? { note: notes.join('; ') } : {}),
+  };
+}
+
+/** Moves a shell's per-shell config aside to a backup, which `--restore` can bring back. */
+export function removeShellConfigFile(shellId: ShellId): RemovalResult {
+  const configPath = getShellConfigPath(shellId);
+  if (!fs.existsSync(configPath)) return { removed: false, note: `${configPath} does not exist` };
+  const backedUpTo = backupPath(configPath);
+  fs.renameSync(configPath, backedUpTo);
+  return { removed: true, backedUpTo };
+}
