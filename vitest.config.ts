@@ -18,6 +18,13 @@ export default defineConfig({
         branches: 81,
         functions: 91,
         lines: 93,
+        'src/**/*.{ts,tsx}': {
+          perFile: true,
+          statements: 75,
+          branches: 55,
+          functions: 65,
+          lines: 75,
+        },
       },
     },
   },
