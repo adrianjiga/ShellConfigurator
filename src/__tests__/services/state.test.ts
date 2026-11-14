@@ -15,6 +15,9 @@ const sampleState: WizardState = {
   setDefaultShell: 'zsh',
   skipStarshipInstall: true,
   hasNerdFont: false,
+  continuationPrompt: 'arrow',
+  addNewline: false,
+  vimMode: true,
 };
 
 describe('serializeState', () => {
@@ -59,6 +62,14 @@ describe('parseState', () => {
   it('reads a card that starts with a UTF-8 BOM', () => {
     const restored = parseState(`\uFEFF${serializeState(sampleState)}`);
     expect(restored.selectedShells).toEqual(['zsh', 'fish']);
+  });
+
+  it('rejects a card with no version', () => {
+    const card = JSON.parse(serializeState(sampleState)) as Record<string, unknown>;
+    delete card.version;
+    expect(() => parseState(JSON.stringify(card))).toThrow(
+      /Unsupported state card version: undefined/
+    );
   });
 
   it('rejects an unknown version', () => {
@@ -122,6 +133,8 @@ describe('parseState', () => {
       'palette',
       'characterSymbol',
       'continuationPrompt',
+      'addNewline',
+      'vimMode',
       'setDefaultShell',
       'directoryTruncationLength',
     ]) {
@@ -132,6 +145,8 @@ describe('parseState', () => {
     expect(restored.palette).toBe('default');
     expect(restored.characterSymbol).toBe('arrow');
     expect(restored.continuationPrompt).toBe('dot');
+    expect(restored.addNewline).toBe(true);
+    expect(restored.vimMode).toBe(false);
     expect(restored.setDefaultShell).toBeNull();
     expect(restored.directoryTruncationLength).toBe(3);
   });
