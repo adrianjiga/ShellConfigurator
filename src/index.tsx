@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
+import { createInterface } from 'node:readline/promises';
 import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
@@ -8,11 +9,18 @@ import type { CliFlags } from './services/args.ts';
 import { parseCliArgs, quoteArgv } from './services/args.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
 import { CliRunError, CliUsageError } from './services/errors.ts';
-import { runApply, runGenerate, stateFromFlags } from './services/headless.ts';
+import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
 import { lastRunShells, recordRunSafely } from './services/history.ts';
 import { formatRepairReport, runRepair } from './services/repair.ts';
 import { restoreTty } from './services/tty.ts';
-import type { InstallTask, WizardState } from './types.ts';
+import {
+  DEFAULT_UNINSTALL_DEPS,
+  formatUninstallReport,
+  planUninstall,
+  runUninstall,
+  type UninstallDeps,
+} from './services/uninstall.ts';
+import type { InstallTask, ShellId, WizardState } from './types.ts';
 
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   .version as string;
@@ -57,6 +65,7 @@ Usage:
   shell-configurator apply        run a full install headlessly
   shell-configurator doctor       check an existing setup and report problems
   shell-configurator repair       fix the problems doctor finds
+  shell-configurator uninstall    remove what the wizard set up
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
@@ -109,6 +118,15 @@ repair options (fixes the failing checks; exits non-zero when one still fails):
   --include-warnings   Also apply the fixes warnings suggest (e.g. the terminal font);
                        a warning may describe a choice you made on purpose
   --json               Print the report as JSON instead of the text summary
+
+uninstall options (removes the Starship setup; asks before changing anything):
+  --shells <id,...>    Only these shells (default: every shell it set up)
+  --starship           Also remove Starship itself
+  --font <font>        Also remove this Nerd Font
+  -y, --yes            Go ahead without asking (required off a terminal)
+  --dry-run            Print what it would remove; change nothing
+  --json               Print the report as JSON instead of the text summary
+  rc files and configs are backed up first; --restore brings the configs back.
 `);
 }
 
@@ -230,8 +248,84 @@ export async function runRepairCommand(flags: CliFlags): Promise<void> {
   if (!report.ok) process.exitCode = 1;
 }
 
+async function askToProceed(question: string): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    return /^y(es)?$/i.test((await rl.question(question)).trim());
+  } finally {
+    rl.close();
+  }
+}
+
+export interface UninstallIo {
+  confirm: (question: string) => Promise<boolean>;
+  isTerminal: () => boolean;
+  deps: UninstallDeps;
+}
+
+const DEFAULT_UNINSTALL_IO: UninstallIo = {
+  confirm: askToProceed,
+  isTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
+  deps: DEFAULT_UNINSTALL_DEPS,
+};
+
 /**
- * Runs a headless subcommand (`generate`, `apply`, `doctor` or `repair`) to completion,
+ * Removes what the wizard set up. On a terminal it shows the plan and asks
+ * first; elsewhere it needs --yes. A failed step exits non-zero.
+ */
+export async function runUninstallCommand(
+  flags: CliFlags,
+  command: string,
+  io: UninstallIo = DEFAULT_UNINSTALL_IO
+): Promise<void> {
+  const unused = presentConfigFlags(flags).filter((f) => f !== '--shells' && f !== '--font');
+  if (flags.stateFile) unused.push('--state');
+  if (unused.length > 0) {
+    throw new CliUsageError(`${unused.join(', ')} cannot be used with uninstall.`);
+  }
+  if (flags.font === 'none') {
+    throw new CliUsageError('uninstall --font takes the Nerd Font to remove, not none.');
+  }
+  validateFlagValues(flags);
+
+  const steps = await planUninstall(
+    {
+      ...(flags.shells ? { shells: [...new Set(flags.shells)] as ShellId[] } : {}),
+      starship: flags.starship ?? false,
+      ...(flags.font ? { fontId: flags.font } : {}),
+    },
+    io.deps
+  );
+  const dryRun = flags.dryRun ?? false;
+  const changes = !dryRun && steps.some((step) => step.run);
+  if (changes && !flags.yes) {
+    if (flags.json || !io.isTerminal()) {
+      throw new CliUsageError(
+        'uninstall removes files; pass --yes to go ahead, or --dry-run to see the plan.'
+      );
+    }
+    process.stdout.write(formatUninstallReport(await runUninstall(steps, { dryRun: true })));
+    if (!(await io.confirm('\nRemove these? [y/N] '))) {
+      process.stdout.write('Nothing was changed.\n');
+      return;
+    }
+  }
+
+  const report = await runUninstall(steps, { dryRun });
+  if (flags.json) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  } else {
+    process.stdout.write(formatUninstallReport(report));
+    if (report.actions.some((a) => a.id.startsWith('config_') && a.status === 'removed')) {
+      process.stdout.write('\nRun shell-configurator --restore to bring the configs back.\n');
+    }
+  }
+  if (!report.ok) process.exitCode = 1;
+  if (changes) recordRunSafely({ kind: 'uninstall', command, exitCode: report.ok ? 0 : 1 });
+}
+
+/**
+ * Runs a headless subcommand (`generate`, `apply`, `doctor`, `repair` or `uninstall`) to completion,
  * returning true when the flags targeted one so the Ink wizard is skipped
  * entirely. Errors propagate for the caller's fatal handler — headless runs
  * never render. `command` is the original invocation line, recorded for
@@ -241,6 +335,13 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   const repairs = flags.subcommand === 'repair' || (flags.subcommand === 'doctor' && flags.fix);
   if (flags.includeWarnings && !repairs) {
     throw new CliUsageError('--include-warnings only applies to repair (or doctor --fix).');
+  }
+  if ((flags.yes || flags.starship) && flags.subcommand !== 'uninstall') {
+    throw new CliUsageError(`${flags.yes ? '--yes' : '--starship'} only applies to uninstall.`);
+  }
+  if (flags.subcommand === 'uninstall') {
+    await runUninstallCommand(flags, command);
+    return true;
   }
   if (flags.subcommand === 'generate') {
     runGenerate(flags);
@@ -272,7 +373,7 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.fix) dropped.push('--fix');
   if (dropped.length > 0) {
     throw new CliUsageError(
-      `${dropped.join(', ')} require a subcommand (generate, apply, doctor or repair).`
+      `${dropped.join(', ')} require a subcommand (generate, apply, doctor, repair or uninstall).`
     );
   }
   return false;

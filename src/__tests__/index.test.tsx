@@ -94,11 +94,14 @@ import {
   routeCli,
   runGlobalFlags,
   runHeadlessCommand,
+  runUninstallCommand,
+  type UninstallIo,
 } from '../index.tsx';
 import { parseCliArgs } from '../services/args.ts';
 import { CliRunError, CliUsageError } from '../services/errors.ts';
 import { serializeState } from '../services/state.ts';
-import { DEFAULT_STATE, type InstallTask } from '../types.ts';
+import type { UninstallDeps } from '../services/uninstall.ts';
+import { DEFAULT_STATE, type InstallTask, type ShellId } from '../types.ts';
 
 describe('index CLI handling', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
@@ -678,5 +681,178 @@ describe('index reportFatal', () => {
       expect.stringContaining('prefix:') as unknown as string
     );
     expect(process.exitCode).toBe(1);
+  });
+});
+
+describe('index uninstall command', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+  const savedExitCode = process.exitCode;
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+    mockRecordRun.mockClear();
+  });
+
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+    process.exitCode = savedExitCode;
+  });
+
+  function fakeIo(
+    overrides: Partial<UninstallIo> = {},
+    deps: Partial<UninstallDeps> = {}
+  ): UninstallIo & { deps: UninstallDeps } {
+    return {
+      confirm: vi.fn().mockResolvedValue(true),
+      isTerminal: () => true,
+      deps: {
+        hasManagedRcBlock: (id: ShellId) => id === 'zsh',
+        hasShellConfig: (id: ShellId) => id === 'zsh',
+        removeManagedRcBlocks: vi.fn(() => ({ removed: true })),
+        removeShellConfigFile: vi.fn(() => ({ removed: true })),
+        detectPackageManager: vi.fn().mockResolvedValue('brew'),
+        plannedStarshipRemoval: vi.fn(() => ({ kind: 'absent' as const })),
+        removeStarship: vi.fn(),
+        forgetStarshipVersion: vi.fn(),
+        installedFontFiles: vi.fn().mockResolvedValue([]),
+        removeFontFiles: vi.fn(),
+        ...deps,
+      },
+      ...overrides,
+    };
+  }
+
+  const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
+
+  it('shows the plan and removes nothing when the user says no', async () => {
+    const io = fakeIo({ confirm: vi.fn().mockResolvedValue(false) });
+
+    await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);
+
+    expect(io.confirm).toHaveBeenCalled();
+    expect(output()).toContain('PLANNED Zsh rc');
+    expect(output()).toContain('Nothing was changed.');
+    expect(io.deps.removeManagedRcBlocks).not.toHaveBeenCalled();
+    expect(mockRecordRun).not.toHaveBeenCalled();
+  });
+
+  it('removes everything once confirmed, records the run and points at --restore', async () => {
+    const io = fakeIo();
+
+    await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);
+
+    expect(io.deps.removeManagedRcBlocks).toHaveBeenCalledWith('zsh');
+    expect(io.deps.removeShellConfigFile).toHaveBeenCalledWith('zsh');
+    expect(output()).toContain('REMOVED Zsh config');
+    expect(output()).toContain('shell-configurator --restore');
+    expect(mockRecordRun).toHaveBeenCalledWith({
+      kind: 'uninstall',
+      command: 'uninstall',
+      exitCode: 0,
+    });
+  });
+
+  it('goes ahead without asking under --yes', async () => {
+    const io = fakeIo({ isTerminal: () => false });
+    await runUninstallCommand(parseCliArgs(['uninstall', '-y']), 'uninstall -y', io);
+    expect(io.confirm).not.toHaveBeenCalled();
+    expect(io.deps.removeManagedRcBlocks).toHaveBeenCalled();
+  });
+
+  it('refuses to change files off a terminal without --yes', async () => {
+    const io = fakeIo({ isTerminal: () => false });
+    await expect(runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io)).rejects.toThrow(
+      CliUsageError
+    );
+    expect(io.deps.removeManagedRcBlocks).not.toHaveBeenCalled();
+  });
+
+  it('refuses --json without --yes rather than mixing a prompt into the JSON', async () => {
+    await expect(
+      runUninstallCommand(parseCliArgs(['uninstall', '--json']), 'uninstall --json', fakeIo())
+    ).rejects.toThrow(/pass --yes/);
+  });
+
+  it('only prints the plan in a dry run, without asking', async () => {
+    const io = fakeIo();
+    await runUninstallCommand(parseCliArgs(['uninstall', '--dry-run']), 'uninstall --dry-run', io);
+    expect(io.confirm).not.toHaveBeenCalled();
+    expect(io.deps.removeManagedRcBlocks).not.toHaveBeenCalled();
+    expect(output()).toContain('dry run');
+    expect(mockRecordRun).not.toHaveBeenCalled();
+  });
+
+  it('does not ask when there is nothing to remove', async () => {
+    const io = fakeIo({}, { hasManagedRcBlock: () => false, hasShellConfig: () => false });
+    await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);
+    expect(io.confirm).not.toHaveBeenCalled();
+    expect(output()).toContain('Nothing to uninstall.');
+  });
+
+  it('prints the report as JSON and exits non-zero when a step fails', async () => {
+    const io = fakeIo(
+      {},
+      {
+        removeManagedRcBlocks: vi.fn(() => {
+          throw new Error('read-only');
+        }),
+      }
+    );
+
+    await runUninstallCommand(parseCliArgs(['uninstall', '--json', '--yes']), 'uninstall', io);
+
+    expect(JSON.parse(output()).actions[0]).toMatchObject({
+      status: 'failed',
+      detail: 'read-only',
+    });
+    expect(process.exitCode).toBe(1);
+    expect(mockRecordRun).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 1 }));
+  });
+
+  it('passes --shells, --font and --starship through to the plan', async () => {
+    const io = fakeIo();
+    await runUninstallCommand(
+      parseCliArgs([
+        'uninstall',
+        '--dry-run',
+        '--shells',
+        'zsh,zsh',
+        '--font',
+        'Hack',
+        '--starship',
+      ]),
+      'uninstall',
+      io
+    );
+    expect(io.deps.installedFontFiles).toHaveBeenCalledWith('Hack');
+    expect(io.deps.plannedStarshipRemoval).toHaveBeenCalledWith('brew');
+    expect(output().match(/Zsh rc/g)).toHaveLength(1);
+  });
+
+  it.each([
+    [['--preset', 'pure-prompt'], /--preset cannot be used with uninstall/],
+    [['--state', 'card.json'], /--state cannot be used with uninstall/],
+    [['--font', 'none'], /not none/],
+    [['--font', 'Comic'], /Unknown Nerd Font/],
+    [['--shells', 'tcsh'], /Unknown shell id/],
+  ])('rejects %o', async (args, message) => {
+    await expect(
+      runUninstallCommand(parseCliArgs(['uninstall', ...args]), 'uninstall', fakeIo())
+    ).rejects.toThrow(message);
+  });
+
+  it('rejects --yes and --starship outside uninstall', async () => {
+    await expect(runHeadlessCommand(parseCliArgs(['repair', '--yes']), '')).rejects.toThrow(
+      '--yes only applies to uninstall.'
+    );
+    await expect(runHeadlessCommand(parseCliArgs(['doctor', '--starship']), '')).rejects.toThrow(
+      '--starship only applies to uninstall.'
+    );
+  });
+
+  it('documents uninstall in the help text', () => {
+    runGlobalFlags(parseCliArgs(['--help']));
+    expect(output()).toContain('shell-configurator uninstall');
+    expect(output()).toContain('-y, --yes');
   });
 });
