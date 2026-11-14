@@ -20,10 +20,9 @@ export interface ExtractedFontFile {
  * The worker source, evaluated via `eval: true` so no extra file ships in dist/.
  * It runs as CommonJS, so `require` is available even though the host module is
  * ESM; fflate's absolute path and the zip travel through workerData, and results
- * come back on `parentPort`. Decompressing in a worker isolates parsing from the
- * main thread, so a hostile archive can only crash the throwaway worker, not the
- * wizard. Entries are flattened to basenames here (load-bearing, the equivalent
- * of path.basename in the old in-process extraction).
+ * come back on `parentPort`. Decompressing in a worker keeps parsing off the
+ * main thread, and the size caps bound how far a hostile archive can expand.
+ * Entries are flattened to basenames here, so none can name a path.
  */
 const WORKER_SOURCE = `
 const { parentPort, workerData } = require('node:worker_threads');

@@ -100,7 +100,7 @@ const FONT_DOWNLOAD_TIMEOUT_MS = 5 * 60_000;
  */
 const FONT_CHECKSUM_TIMEOUT_MS = 30_000;
 
-/** Nerd Font archives run to tens of MB; anything far past that is not a font archive. */
+/** The largest Nerd Font archives are over 100 MB; anything far past that is not a font archive. */
 const MAX_FONT_ARCHIVE_BYTES = 200 * 1024 * 1024;
 
 /** Where the official install script puts the binary when run without sudo. */

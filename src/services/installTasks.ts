@@ -461,7 +461,7 @@ export async function runInstallTasks(
     };
   });
 
-  // --- Apply shell RC files (skipped until Starship is installed) ---
+  // --- Apply shell RC files (skipped when the Starship install is skipped or failed) ---
   // Checked once, after the install, so the rc lines can fix up PATH if the
   // script install put the binary somewhere the shell will not look.
   const ensurePathDir = state.skipStarshipInstall ? null : deps.getMissingStarshipPathDir();

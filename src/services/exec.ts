@@ -90,6 +90,12 @@ export class CommandCancelledError extends Error {
 }
 
 /**
+ * How long a cancelled command is given to stop on SIGTERM before the
+ * cancellation is escalated to SIGKILL, which no process can ignore.
+ */
+export const KILL_ESCALATION_DELAY_MS = 5000;
+
+/**
  * Runs a command with stdio: 'inherit' so sudo password prompts appear in the
  * terminal.
  *
@@ -97,12 +103,6 @@ export class CommandCancelledError extends Error {
  * and gives no way to cancel. Because the child writes to the same TTY Ink draws
  * on, the UI is suspended for the child's lifetime so the two cannot interleave.
  */
-/**
- * How long a cancelled command is given to stop on SIGTERM before the
- * cancellation is escalated to SIGKILL, which no process can ignore.
- */
-export const KILL_ESCALATION_DELAY_MS = 5000;
-
 export function runCommand(args: string[], options: { signal?: AbortSignal } = {}): Promise<void> {
   const [cmd, ...rest] = args;
   if (!cmd) return Promise.reject(new Error('Empty command'));
@@ -150,8 +150,6 @@ export function runCommand(args: string[], options: { signal?: AbortSignal } = {
 
     child.on('error', (err) => settle(() => reject(err)));
 
-    // 'exit' not 'close': a child that backgrounds a grandchild keeps its stdio
-    // open, so 'close' never fires even though the process has ended.
     child.on('exit', (status, signal) => {
       if (cancelled) {
         settle(() => reject(new CommandCancelledError(printable)));
