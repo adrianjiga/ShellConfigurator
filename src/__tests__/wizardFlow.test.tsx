@@ -73,7 +73,7 @@ vi.mock('../services/installer.ts', () => ({
 
 import { App } from '../app.tsx';
 import { setAdvanceDelayForTests } from '../screens/InstallingScreen.tsx';
-import type { InstallTask } from '../types.ts';
+import type { InstallTask, WizardState } from '../types.ts';
 
 const ENTER = '\r';
 const SPACE = ' ';
@@ -220,6 +220,10 @@ describe('full wizard walkthrough', () => {
     const results = recordOutcome.mock.calls.at(-1)?.[0] as InstallTask[] | undefined;
     expect(results?.some((t) => t.status === 'failed')).toBe(false);
     expect(process.exitCode ?? 0).toBe(0);
+
+    const finalState = recordOutcome.mock.calls.at(-1)?.[1] as WizardState;
+    expect(finalState.selectedShells).toEqual(['zsh']);
+    expect(finalState.installResults).toBe(results);
   });
 
   it('reports a failed install for a non-zero exit', async () => {
@@ -345,6 +349,16 @@ describe('dry-run wizard walkthrough', () => {
     expect(frame).toContain('Dry run');
     expect(frame).toContain('Tasks that would run');
     expect(frame).toContain('Configuration to write');
+  });
+
+  it('reports no install outcome for a dry run', async () => {
+    const recordOutcome = vi.fn();
+    const instance = render(<App dryRun onInstallOutcome={recordOutcome} />);
+    await flush();
+    await pressKeys(instance, [ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER]);
+
+    expect(instance.lastFrame()).toContain('Dry run');
+    expect(recordOutcome).not.toHaveBeenCalled();
   });
 
   it('never writes any config or rc files in dry-run mode', async () => {
