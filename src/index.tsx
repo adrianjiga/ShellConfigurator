@@ -534,7 +534,8 @@ export async function runRollbackCommand(
   const { result: report, runId } = changes
     ? await captureRun(
         manifest.files.map((file) => file.path),
-        async () => runRollback(target.runId, steps)
+        async () => runRollback(target.runId, steps),
+        { rewritable: manifest.files.filter((file) => file.rewritable).map((file) => file.path) }
       )
     : { result: runRollback(target.runId, steps, { dryRun }), runId: null };
   process.stdout.write(

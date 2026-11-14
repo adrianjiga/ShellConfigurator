@@ -6,6 +6,7 @@ import { errorMessage } from './errors.ts';
 import { type HistoryKind, type HistoryRecord, readHistory } from './history.ts';
 import {
   hashOf,
+  laterRunWrites,
   type RunManifest,
   readRunManifest,
   runDir,
@@ -122,9 +123,6 @@ export function planRollback(manifest: RunManifest): RollbackStep[] {
       };
     }
     const unchanged = () => hashOf(file.path) === file.after;
-    const changedSince = file.summary
-      ? { detail: 'a later run rewrote it, so it is left as it is' }
-      : { detail: CHANGED_SINCE, left: true };
     let current: string | null;
     try {
       current = hashOf(file.path);
@@ -146,14 +144,17 @@ export function planRollback(manifest: RunManifest): RollbackStep[] {
       if (current === before) {
         return { path: file.path, detail: 'already as it was before that run' };
       }
-      return { path: file.path, ...changedSince };
+      if (file.rewritable && laterRunWrites(manifest.runId, file.path).has(current)) {
+        return { path: file.path, detail: 'a later run rewrote it, so it is left as it is' };
+      }
+      return { path: file.path, detail: CHANGED_SINCE, left: true };
     }
     if (file.before === null) {
       return {
         path: file.path,
         detail: 'delete it: that run created it',
         run: () => {
-          if (!unchanged()) return { status: 'skipped', ...changedSince };
+          if (!unchanged()) return { status: 'skipped', detail: CHANGED_SINCE, left: true };
           fs.rmSync(file.path, { force: true });
           return { status: 'removed', detail: 'deleted it: that run created it' };
         },
@@ -164,7 +165,7 @@ export function planRollback(manifest: RunManifest): RollbackStep[] {
       path: file.path,
       detail: 'put back its content from before that run',
       run: () => {
-        if (!unchanged()) return { status: 'skipped', ...changedSince };
+        if (!unchanged()) return { status: 'skipped', detail: CHANGED_SINCE, left: true };
         const content = fs.readFileSync(copy);
         fs.mkdirSync(path.dirname(file.path), { recursive: true });
         writeFileAtomic(file.path, content);

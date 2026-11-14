@@ -45,15 +45,12 @@ function run(overrides: Partial<WhatChangedRun> = {}): WhatChangedRun {
       { id: 'rc_zsh', label: 'Configure zsh', status: 'failed', error: 'read-only' },
       { id: 'font', label: 'Install Hack', status: 'done' },
     ],
-    manifest: {
-      version: 1,
-      runId: 'run-1',
-      files: [
-        { path: '/etc/zshrc-ish', before: '0', after: 'abc' },
-        { path: getShellConfigPath('zsh'), before: null, after: 'def' },
-        { path: '/gone', before: '2', after: null },
-      ],
-    },
+    runId: 'run-1',
+    files: [
+      { path: '/etc/zshrc-ish', before: '0', after: 'abc' },
+      { path: getShellConfigPath('zsh'), before: null, after: 'def' },
+      { path: '/gone', before: '2', after: null },
+    ],
     ...overrides,
   };
 }
@@ -131,11 +128,7 @@ describe('renderWhatChanged', () => {
   it('shows the home directory as ~', () => {
     const text = renderWhatChanged(
       run({
-        manifest: {
-          version: 1,
-          runId: 'r',
-          files: [{ path: path.join(os.homedir(), '.zshrc'), before: '0', after: 'x' }],
-        },
+        files: [{ path: path.join(os.homedir(), '.zshrc'), before: '0', after: 'x' }],
       })
     );
     expect(text).toContain('- modified `~/.zshrc`');
@@ -143,72 +136,84 @@ describe('renderWhatChanged', () => {
   });
 });
 
-/** A captured run that changed `file` to `content`; returns its runId. */
-function capturedRun(file: string, content: string): string {
-  const capture = beginRunCapture([file]);
-  fs.writeFileSync(file, content);
-  return finishRunCapture(capture)!.runId;
-}
-
-describe('writeWhatChangedSafely', () => {
-  const { manifest: _, ...details } = run();
+describe('the summary written inside its run', () => {
   const rc = () => path.join(tmpDir, 'rc');
+  const { runId: _runId, files: _files, ...details } = run();
 
-  it('writes the summary of a run that changed files, as part of that run', () => {
-    const runId = capturedRun(rc(), 'one');
-    const file = writeWhatChangedSafely(runId, details);
+  /** A captured run that sets the rc to `content` and writes its summary; returns its runId. */
+  function runWithSummary(content: string, timestamp = 'now'): string {
+    const capture = beginRunCapture([rc(), whatChangedPath()]);
+    fs.writeFileSync(rc(), content);
+    return finishRunCapture(capture, {
+      rewritable: [whatChangedPath()],
+      onChanged: (runId, files) => {
+        writeWhatChangedSafely({ ...details, timestamp, runId, files });
+      },
+    })!.runId;
+  }
 
+  const manifestOf = (runId: string) => readRunManifest(runId)!;
+
+  it('writes the summary into the starship config folder, as part of the run', () => {
+    const runId = runWithSummary('one');
+
+    const file = whatChangedPath();
     expect(file).toBe(path.join(process.env.XDG_CONFIG_HOME!, 'starship', 'WHAT-CHANGED.md'));
-    expect(file).toBe(whatChangedPath());
-    const manifest = readRunManifest(runId)!;
-    expect(fs.readFileSync(file!, 'utf8')).toBe(
-      renderWhatChanged({
-        ...details,
-        manifest: { ...manifest, files: manifest.files.slice(0, 1) },
-      })
-    );
-    expect(manifest.files.at(-1)).toMatchObject({ path: file, before: null, summary: true });
-  });
-
-  it('leaves the last summary alone when the run changed nothing', () => {
-    fs.mkdirSync(path.dirname(whatChangedPath()), { recursive: true });
-    fs.writeFileSync(whatChangedPath(), 'earlier');
-    expect(writeWhatChangedSafely(null, details)).toBeNull();
-    expect(fs.readFileSync(whatChangedPath(), 'utf8')).toBe('earlier');
+    const text = fs.readFileSync(file, 'utf8');
+    expect(text).toContain(`run id \`${runId}\``);
+    expect(text).toContain(`- created \`${rc()}\``);
+    expect(manifestOf(runId).files.at(-1)).toMatchObject({
+      path: file,
+      before: null,
+      rewritable: true,
+    });
   });
 
   it('is put back to the earlier summary when its run is rolled back', () => {
-    writeWhatChangedSafely(capturedRun(rc(), 'one'), details);
+    runWithSummary('one', 'first');
     const first = fs.readFileSync(whatChangedPath(), 'utf8');
-    const second = capturedRun(rc(), 'two');
-    writeWhatChangedSafely(second, { ...details, timestamp: 'later' });
-    expect(fs.readFileSync(whatChangedPath(), 'utf8')).not.toBe(first);
+    const second = runWithSummary('two', 'second');
 
-    const report = runRollback(second, planRollback(readRunManifest(second)!));
+    const report = runRollback(second, planRollback(manifestOf(second)));
 
     expect(report.complete).toBe(true);
     expect(fs.readFileSync(whatChangedPath(), 'utf8')).toBe(first);
   });
 
-  it('does not make rolling back an older run partial once a later run rewrote it', () => {
-    const other = path.join(tmpDir, 'other');
-    const first = capturedRun(rc(), 'one');
-    writeWhatChangedSafely(first, details);
-    writeWhatChangedSafely(capturedRun(other, 'x'), { ...details, timestamp: 'later' });
+  it('is left in place, without making the rollback partial, once a later run rewrote it', () => {
+    const first = runWithSummary('one', 'first');
+    const capture = beginRunCapture([path.join(tmpDir, 'other'), whatChangedPath()]);
+    fs.writeFileSync(path.join(tmpDir, 'other'), 'x');
+    finishRunCapture(capture, {
+      rewritable: [whatChangedPath()],
+      onChanged: (runId, files) => {
+        writeWhatChangedSafely({ ...details, timestamp: 'later', runId, files });
+      },
+    });
     const latest = fs.readFileSync(whatChangedPath(), 'utf8');
 
-    const report = runRollback(first, planRollback(readRunManifest(first)!));
+    const report = runRollback(first, planRollback(manifestOf(first)));
 
     expect(report.complete).toBe(true);
     expect(fs.existsSync(rc())).toBe(false);
     expect(fs.readFileSync(whatChangedPath(), 'utf8')).toBe(latest);
   });
 
+  it('counts a summary the user edited as changed since, which leaves the rollback partial', () => {
+    const runId = runWithSummary('one');
+    fs.appendFileSync(whatChangedPath(), 'my notes\n');
+
+    const report = runRollback(runId, planRollback(manifestOf(runId)));
+
+    expect(report.complete).toBe(false);
+    expect(report.actions.find((a) => a.path === whatChangedPath())?.detail).toBe(
+      'changed since that run, so it is left as it is'
+    );
+  });
+
   it('returns null instead of throwing when it cannot write', () => {
-    const runId = capturedRun(rc(), 'one');
     fs.mkdirSync(process.env.XDG_CONFIG_HOME!, { recursive: true });
     fs.writeFileSync(path.join(process.env.XDG_CONFIG_HOME!, 'starship'), 'a file, not a folder');
-    expect(writeWhatChangedSafely(runId, details)).toBeNull();
-    expect(readRunManifest(runId)!.files.map((f) => f.path)).toEqual([rc()]);
+    expect(writeWhatChangedSafely(run())).toBeNull();
   });
 });

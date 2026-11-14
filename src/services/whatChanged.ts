@@ -7,7 +7,7 @@ import { fontIdToInstall, type InstallTask, type WizardState } from '../types.ts
 import { TASK_IDS } from './installTasks.ts';
 import { configHome } from './paths.ts';
 import { redactHome, redactUrls } from './redact.ts';
-import { type RunManifest, readRunManifest, writeInRun } from './runCapture.ts';
+import type { RunFile } from './runCapture.ts';
 
 export function whatChangedPath(): string {
   return path.join(configHome(), 'starship', 'WHAT-CHANGED.md');
@@ -18,7 +18,8 @@ export interface WhatChangedRun {
   timestamp: string;
   state: WizardState;
   results: InstallTask[];
-  manifest: RunManifest;
+  runId: string;
+  files: RunFile[];
   command?: string;
 }
 
@@ -28,7 +29,7 @@ function codeSpan(text: string): string {
   return longest === 0 ? `${fence}${text}${fence}` : `${fence} ${text} ${fence}`;
 }
 
-function fileChange(file: RunManifest['files'][number]): string {
+function fileChange(file: RunFile): string {
   if (file.before === null) return 'created';
   if (file.after === null) return 'removed';
   return 'modified';
@@ -57,7 +58,7 @@ export function renderWhatChanged(run: WhatChangedRun): string {
   const lines = [
     '# What ShellConfigurator changed',
     '',
-    `${run.kind === 'install' ? 'Wizard install' : 'Headless apply'} on ${run.timestamp}${run.command ? ` (${codeSpan(`shell-configurator ${redactUrls(run.command)}`)})` : ''}, run id \`${run.manifest.runId}\`.`,
+    `${run.kind === 'install' ? 'Wizard install' : 'Headless apply'} on ${run.timestamp}${run.command ? ` (${codeSpan(`shell-configurator ${redactUrls(run.command)}`)})` : ''}, run id \`${run.runId}\`.`,
     '',
     'A later `uninstall` or `rollback` may have undone it since; `shell-configurator rollback --list` shows the runs that still stand.',
     '',
@@ -70,7 +71,7 @@ export function renderWhatChanged(run: WhatChangedRun): string {
     '',
     '## Files',
     '',
-    ...run.manifest.files.map((file) => `- ${fileChange(file)} \`${file.path}\``),
+    ...run.files.map((file) => `- ${fileChange(file)} \`${file.path}\``),
     '',
     '## Shells',
     '',
@@ -89,26 +90,16 @@ export function renderWhatChanged(run: WhatChangedRun): string {
  * Writes the summary as part of the run itself, so rolling the run back puts
  * the previous summary back. Null when the run's record cannot take it.
  */
-export function writeWhatChanged(run: WhatChangedRun): string | null {
+export function writeWhatChanged(run: WhatChangedRun): string {
   const file = whatChangedPath();
-  const written = writeInRun(run.manifest.runId, file, () => {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    writeFileAtomic(file, renderWhatChanged(run));
-  });
-  return written ? file : null;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  writeFileAtomic(file, renderWhatChanged(run));
+  return file;
 }
 
-/**
- * The summary of the captured run `runId`, written when that run changed files
- * and never throwing. A run that changed nothing leaves the last summary alone.
- */
-export function writeWhatChangedSafely(
-  runId: string | null,
-  run: Omit<WhatChangedRun, 'manifest'>
-): string | null {
+export function writeWhatChangedSafely(run: WhatChangedRun): string | null {
   try {
-    const manifest = runId ? readRunManifest(runId) : null;
-    return manifest ? writeWhatChanged({ ...run, manifest }) : null;
+    return writeWhatChanged(run);
   } catch {
     return null;
   }

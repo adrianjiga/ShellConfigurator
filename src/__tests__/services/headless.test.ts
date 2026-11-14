@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CapturedRunError, captureRun, trackedFiles } from '../../services/runCapture.ts';
-import { writeWhatChangedSafely } from '../../services/whatChanged.ts';
+import { whatChangedPath, writeWhatChangedSafely } from '../../services/whatChanged.ts';
 
 const {
   mockDetectInstalledShells,
@@ -790,9 +790,13 @@ describe('runApply', () => {
 
   it('runs the install pipeline and records a successful run in history', async () => {
     mockRunInstallTasks.mockResolvedValue(doneTasks as never);
-    vi.mocked(captureRun).mockImplementationOnce(async (files, run) => {
-      expect(files).toEqual(trackedFiles());
-      return { result: await run(), runId: 'run-3' };
+    const files = [{ path: '/h/.zshrc', before: '0', after: 'x' }];
+    vi.mocked(captureRun).mockImplementationOnce(async (captured, run, options) => {
+      expect(captured).toEqual([...trackedFiles(), whatChangedPath()]);
+      expect(options?.rewritable).toEqual([whatChangedPath()]);
+      const result = await run();
+      options?.onChanged?.('run-3', files, undefined);
+      return { result, runId: 'run-3' };
     });
     await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }), 'apply --shells zsh');
 
@@ -813,13 +817,61 @@ describe('runApply', () => {
       .join('');
     expect(output).toContain('Install Starship');
     expect(writeWhatChangedSafely).toHaveBeenCalledWith(
-      'run-3',
-      expect.objectContaining({ kind: 'apply', command: 'apply --shells zsh', results: doneTasks })
+      expect.objectContaining({
+        kind: 'apply',
+        command: 'apply --shells zsh',
+        results: doneTasks,
+        runId: 'run-3',
+        files,
+      })
+    );
+  });
+
+  it('writes no summary for a run that changed nothing', async () => {
+    mockRunInstallTasks.mockResolvedValue(doneTasks as never);
+    vi.mocked(writeWhatChangedSafely).mockClear();
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }));
+    expect(writeWhatChangedSafely).not.toHaveBeenCalled();
+  });
+
+  it('still writes the summary of a run that broke partway, with its unfinished tasks failed', async () => {
+    const failure = new Error('chain broke');
+    mockRunInstallTasks.mockImplementationOnce(
+      async (_state: unknown, _deps: unknown, onUpdate: (id: string, patch: object) => void) => {
+        onUpdate('starship', { status: 'done' });
+        throw failure;
+      }
+    );
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run, options) => {
+      try {
+        return { result: await run(), runId: 'run-4' };
+      } catch (err) {
+        options?.onChanged?.('run-4', [], err);
+        throw new CapturedRunError('run-4', err);
+      }
+    });
+    vi.mocked(writeWhatChangedSafely).mockReturnValueOnce('/h/.config/starship/WHAT-CHANGED.md');
+
+    await expect(runApply(flags({ subcommand: 'apply', shells: ['zsh'] }))).rejects.toBe(failure);
+
+    const results = vi.mocked(writeWhatChangedSafely).mock.lastCall![0].results;
+    expect(results.find((task) => task.id === 'starship')?.status).toBe('done');
+    expect(results.find((task) => task.id === 'rc_zsh')).toMatchObject({
+      status: 'failed',
+      error: 'chain broke',
+    });
+    expect(stdoutWrite).toHaveBeenCalledWith(
+      'What changed, and how to undo it: /h/.config/starship/WHAT-CHANGED.md\n'
     );
   });
 
   it('prints where the summary of what changed was written', async () => {
     mockRunInstallTasks.mockResolvedValue(doneTasks as never);
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run, options) => {
+      const result = await run();
+      options?.onChanged?.('run-5', [], undefined);
+      return { result, runId: 'run-5' };
+    });
     vi.mocked(writeWhatChangedSafely).mockReturnValueOnce('/h/.config/starship/WHAT-CHANGED.md');
 
     await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }));

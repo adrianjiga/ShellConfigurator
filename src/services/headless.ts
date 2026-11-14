@@ -35,7 +35,7 @@ import {
 } from './installTasks.ts';
 import { CapturedRunError, captureRun, trackedFiles } from './runCapture.ts';
 import { parseState, serializeState } from './state.ts';
-import { writeWhatChangedSafely } from './whatChanged.ts';
+import { whatChangedPath, writeWhatChangedSafely } from './whatChanged.ts';
 
 const SHELL_IDS = new Set<string>(SHELLS.map((s) => s.id));
 const MODULE_IDS = new Set<string>([...MODULES.map((m) => m.id), 'character']);
@@ -447,6 +447,14 @@ function perShellConfig(state: WizardState): DryRunConfig {
     : { kind: 'per-shell', toml };
 }
 
+function interruptedTasks(tasks: InstallTask[], error: unknown): InstallTask[] {
+  return tasks.map((task) =>
+    task.status === 'pending' || task.status === 'running'
+      ? { ...task, status: 'failed', error: errorMessage(error) }
+      : task
+  );
+}
+
 function printChanges(plan: DryRunPlan): void {
   const shownAbove = new Set(
     plan.config.kind === 'per-shell'
@@ -521,14 +529,41 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
     return;
   }
 
+  let progress = tasks;
+  let finished: InstallTask[] | undefined;
+  let summary: string | null = null;
+  const onUpdate = (id: string, patch: Partial<InstallTask>) => {
+    progress = progress.some((task) => task.id === id)
+      ? progress.map((task) => (task.id === id ? { ...task, ...patch } : task))
+      : [...progress, { id: id as InstallTask['id'], label: id, status: 'pending', ...patch }];
+  };
   let captured: { result: InstallTask[]; runId: string | null };
   try {
-    captured = await captureRun(trackedFiles(), () =>
-      runInstallTasks(state, DEFAULT_INSTALL_TASK_DEPS, () => {})
+    captured = await captureRun(
+      [...trackedFiles(), whatChangedPath()],
+      async () => {
+        finished = await runInstallTasks(state, DEFAULT_INSTALL_TASK_DEPS, onUpdate);
+        return finished;
+      },
+      {
+        rewritable: [whatChangedPath()],
+        onChanged: (runId, files, error) => {
+          summary = writeWhatChangedSafely({
+            kind: 'apply',
+            timestamp: new Date().toISOString(),
+            state,
+            results: finished ?? interruptedTasks(progress, error),
+            runId,
+            files,
+            ...(command ? { command } : {}),
+          });
+        },
+      }
     );
   } catch (err) {
     if (!(err instanceof CapturedRunError)) throw err;
     recordRunSafely({ kind: 'apply', state, command, exitCode: 1, runId: err.runId });
+    if (summary) process.stdout.write(`What changed, and how to undo it: ${summary}\n`);
     throw err.cause;
   }
   const { result: results, runId } = captured;
@@ -546,12 +581,5 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
     runId,
   });
 
-  const summary = writeWhatChangedSafely(runId, {
-    kind: 'apply',
-    timestamp: new Date().toISOString(),
-    state,
-    results,
-    ...(command ? { command } : {}),
-  });
   if (summary) process.stdout.write(`\nWhat changed, and how to undo it: ${summary}\n`);
 }
