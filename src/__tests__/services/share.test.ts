@@ -86,4 +86,15 @@ describe('writeShareFile', () => {
       renderShare(tokyo)
     );
   });
+
+  it('leaves no temporary file behind, and gives up after 100 names', () => {
+    for (let n = 1; n <= 100; n++) {
+      fs.writeFileSync(
+        path.join(dir, n === 1 ? 'starship-prompt.md' : `starship-prompt-${n}.md`),
+        ''
+      );
+    }
+    expect(() => writeShareFile(tokyo, dir)).toThrow(/through starship-prompt-100\.md all exist/);
+    expect(fs.readdirSync(dir).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+  });
 });

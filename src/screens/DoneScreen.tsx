@@ -376,7 +376,8 @@ export function DoneScreen({ state }: DoneScreenProps) {
             {shared === null ? (
               <>
                 Press <Text color={uiColor('cyan')}>s</Text> to save this prompt as Markdown to
-                share, with the card that rebuilds it (starship-prompt.md in this folder).
+                share, with the card that rebuilds it. This writes starship-prompt.md in this folder
+                {state.dryRun ? ', even in a dry run' : ''}.
               </>
             ) : 'file' in shared ? (
               <>

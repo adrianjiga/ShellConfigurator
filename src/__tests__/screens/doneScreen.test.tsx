@@ -497,6 +497,9 @@ describe('DoneScreen share', () => {
     const instance = done();
     await flush();
     expect(instance.lastFrame()).toContain('to save this prompt as Markdown');
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
+      'This writes starship-prompt.md in this folder, even in a dry run.'
+    );
 
     instance.stdin.write('s');
     await flush();
