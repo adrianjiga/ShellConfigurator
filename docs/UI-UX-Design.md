@@ -343,8 +343,8 @@ same code path as the CLI's `--restore`) and prints what was restored. It does n
 undo rc-file edits or terminal font configs, runs at most once, and is disabled in
 dry-run mode (no backups were made). `s` saves the prompt as Markdown to share
 (`writeShareFile`: `starship-prompt.md` in the current folder, or a numbered name
-next to an existing one) and shows where; it works in dry-run mode too, runs once,
-and is not offered in adopt mode.
+next to an existing one) and shows where; it works in dry-run mode too, saves
+once (after a failure `s` tries again), and is not offered in adopt mode.
 
 ---
 

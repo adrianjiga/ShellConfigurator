@@ -623,7 +623,11 @@ function timePrompt(toml: string, path: string, deps?: ProbeDeps): Promise<Timin
 // (git_status/git_metrics: core.fsmonitor or disabling it; a language module
 // that runs a version command: disabling it; directory: a slow drive). Modules
 // run in parallel, so `slow` compares the slowest module with SLOW_PROMPT_MS
-// (200). Rejects with StarshipMissingError without Starship.
+// (200). `character`, `line_break` and `fill` never get a fix. The config's own
+// command_timeout/scan_timeout are read from its top level (past multi-line
+// strings, with `_` digit separators). Rejects with StarshipMissingError without
+// Starship, and with StarshipTimedOutError when Starship is killed after 30s.
+// stripAnsi removes every escape sequence (colours, cursor moves, OSC 8 links).
 
 function explainPromptAsync(state: WizardState, deps?: ProbeDeps): Promise<ExplainResult>;
 // `starship explain` for the generated config in the preview's sample project:
@@ -635,7 +639,12 @@ function renderShare(state: WizardState): string;
 // Markdown for an issue, a gist or the Starship presets gallery: the generated
 // starship.toml and a state card (serializeState of shareableState, which drops
 // this machine's shells, font install and default shell) that rebuilds exactly
-// that TOML with `apply --state prompt.json --shells <your shells>`.
+// that TOML with `apply --state prompt.json --shells <your shells>`. The home
+// folder is shown as `~` (redactHome), and the Markdown says so when it was.
+
+function withPreviewProject<T>(state, deps: ScratchDeps, run): Promise<T>;
+// preview.ts: a scratch folder with the generated config and the sample project
+// for `run`, removed afterwards; renderPromptAsync and explainPromptAsync use it.
 
 function writeShareFile(state: WizardState, dir?: string): string;
 // Writes renderShare to starship-prompt.md in `dir` (default: the current
@@ -991,8 +1000,11 @@ and suggestions with the TOML to add (`timePrompt` in
 the config is built from the generate flags (`--preset`, `--palette`,
 `--state`, ...), and the two cannot be combined. `--json` prints `{ config,
 path, slowestMs, slow, modules: [{ module, ms, output }], suggestions: [{ module?,
-text, toml? }] }`. It reads only. Without Starship it is a run error; `--shells`,
-`--yes` and other flags are usage errors.
+text, toml? }] }`. It reads only. Without Starship, or when Starship takes longer
+than 30s (a very slow module, usually git_status), it is a run error. An
+adopt-mode card is a usage error that points at `--config` with the shared
+config; `--shells`, `--yes` and other flags are usage errors too. The flags each
+command accepts come from `SUBCOMMAND_INFO`.
 
 ### share
 
@@ -1003,8 +1015,9 @@ shell-configurator share [generate flags] [-o <file>]
 Prints the prompt the generate flags (or `--state`) build as Markdown: its
 `starship.toml` and the state card that rebuilds it (`renderShare` in
 `src/services/share.ts`). `-o` writes it to a file instead. The card leaves out
-this machine's shells, font install and default shell. `--shells`, `--json` and
-other flags are usage errors.
+this machine's shells, font install and default shell, and the home folder is
+shown as `~`. An adopt-mode card is a usage error (there is no generated prompt
+to share); `--shells`, `--json` and other flags are usage errors.
 
 ### Exit Codes
 

@@ -42,7 +42,9 @@ higher `command_timeout` when a tool timed out (its module then shows nothing),
 a higher `scan_timeout` when scanning the folder timed out, and for a slow module
 the line that turns it off. A slow `git_status` in a large repo usually gets
 faster with `git config core.fsmonitor true`. Starship runs modules in parallel,
-so the prompt is about as slow as its slowest module.
+so the prompt is about as slow as its slowest module. If Starship takes longer
+than 30 seconds, `timings` stops and says so; in a large repo that is almost
+always `git_status`.
 
 ## Nerd Font characters show as boxes or question marks
 
