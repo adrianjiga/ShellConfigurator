@@ -292,6 +292,8 @@ src/
     ├── debugInfo.ts           Read-only Markdown/JSON report of the setup for bug reports
     ├── cliSurface.ts          Description of every subcommand and flag, for completions
     ├── completions.ts         Generates the bash/zsh/fish completion scripts
+    ├── whatChanged.ts         Writes the WHAT-CHANGED.md summary after an install or apply
+    ├── listings.ts            The preset/module/font lists behind --list-presets etc.
     ├── state.ts               State card serialization (serializeState / parseState)
     ├── history.ts             history.jsonl ledger + snapshot writes
     ├── cache.ts               Font archive cache (pin + sha256) + recorded starship version

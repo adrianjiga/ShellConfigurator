@@ -557,6 +557,23 @@ function runRollback(
 // while a change of the run stays in place (left: true on that action).
 ```
 
+### whatChanged.ts / listings.ts
+
+```typescript
+function writeWhatChangedSafely(run: WhatChangedRun): string | null;
+// After a wizard install or apply: writes ~/.config/starship/WHAT-CHANGED.md
+// (renderWhatChanged) listing the tasks and their outcome, the files the run
+// changed (created/modified/removed, from its manifest), each selected shell's
+// Starship lines and config, and the rollback/uninstall/doctor commands. Home is
+// shown as ~. Returns the path, or null when it could not write (never throws).
+// Tests get a stub from setup.ts.
+
+function listEntries(kind: 'presets' | 'modules' | 'fonts'): ListEntry[];
+// The ids --list-presets/--list-modules/--list-fonts print, with label,
+// description and, for --json, the data a script needs (a preset's palette,
+// powerline and modules; a module's default side; a font's family).
+```
+
 ### cliSurface.ts / completions.ts
 
 ```typescript
@@ -699,7 +716,7 @@ function runInstallTasks(
 
 ## Headless CLI & Run Data
 
-The public flag surface in `src/index.tsx`/`src/services/args.ts`, in nine groups.
+The public flag surface in `src/index.tsx`/`src/services/args.ts`, in ten groups.
 
 ### Interactive
 
@@ -738,7 +755,7 @@ shell-configurator generate --preset <id> [flags]
 ### apply (an install from a state card)
 
 ```
-shell-configurator apply [--state <file>] [generate flags] [--dry-run] [--adopt] [--import-url <url>]
+shell-configurator apply [--state <file>] [generate flags] [--dry-run [--json]] [--adopt] [--import-url <url>]
   --state       the state card to install (also: --import); without it, apply
                 takes the generate flags above and --shells is required
   --adopt       keep the shared ~/.config/starship.toml (never writes per-shell files)
@@ -746,7 +763,25 @@ shell-configurator apply [--state <file>] [generate flags] [--dry-run] [--adopt]
                 bounded — a 10s timeout and a 1 MB cap reject a hung or oversized
                 response. A non-http(s) URL is a usage error; an HTTP error, an
                 empty or HTML body is a run error)
+  --json        with --dry-run, print { dryRun, shells, installStarship, tasks,
+                config } instead of text; config is { kind: 'per-shell', toml },
+                { kind: 'imported', path, toml } or { kind: 'kept', path, exists }.
+                A real apply with --json is a usage error
 ```
+
+A real apply writes `~/.config/starship/WHAT-CHANGED.md` and ends with
+`What changed, and how to undo it: <path>`; the wizard's Done screen shows the
+same line.
+
+### List flags
+
+```
+shell-configurator --list-presets | --list-modules | --list-fonts [--json]
+```
+
+Print the ids `--preset`, the module lists and `--font` accept, as aligned
+`id  label — description` lines, or as JSON. They run without a subcommand, one
+at a time.
 
 ### doctor / repair (day-2 health)
 

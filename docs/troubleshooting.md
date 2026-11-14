@@ -215,6 +215,9 @@ to remove Starship too, and `--font <id>` to remove a Nerd Font it installed.
 
 ## Undoing a run with rollback
 
+`~/.config/starship/WHAT-CHANGED.md` describes the last install or `apply`:
+what ran, which files it changed, and the commands that undo it.
+
 Every wizard install, `apply` and `uninstall` keeps a copy of the rc files,
 per-shell configs, shared config and terminal configs it changes.
 `shell-configurator rollback --list` shows those runs, newest first, and
