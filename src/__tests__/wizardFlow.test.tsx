@@ -124,8 +124,6 @@ async function runWizard(
   return mockWriteConfig.mock.calls[0]![0];
 }
 
-/** The InstallingScreen advances to Done ~1.2s after the chain ends; wait for it. */
-
 describe('full wizard walkthrough', () => {
   it('writes parseable TOML reflecting the default choices', async () => {
     const toml = await runWizard([

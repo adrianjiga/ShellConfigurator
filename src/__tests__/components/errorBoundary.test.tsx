@@ -22,7 +22,6 @@ describe('ErrorBoundary', () => {
   });
 
   it('renders a readable message instead of a stack trace', () => {
-    // React logs the caught error to stderr; silence it for the test output.
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const onError = vi.fn();
 

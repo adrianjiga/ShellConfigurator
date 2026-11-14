@@ -65,8 +65,8 @@ describe('SegmentsScreen', () => {
     const descriptionLine = lines.find((l) => l.includes('Current directory path'));
     expect(toggleLine).toBeTruthy();
     expect(descriptionLine).toBeTruthy();
-    // The description is indented one column past the checkbox marker, in the
-    // same margin-based convention ShellScreen uses (margin 4).
+    // The description starts two columns past the checkbox marker, PickerRow's
+    // hint margin.
     expect(descriptionLine!.indexOf('Current directory')).toBe(toggleLine!.indexOf('[✓]') + 2);
     // And it sits on its own line, never on the toggle/label line.
     expect(descriptionLine).not.toContain('[✓]');

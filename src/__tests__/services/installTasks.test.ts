@@ -107,14 +107,14 @@ describe('runInstallTasks', () => {
     expect(deps.recordStarshipVersion).not.toHaveBeenCalled();
   });
 
-  it('installs a concrete nerd font but ignores the sentinel', async () => {
+  it('installs a concrete nerd font and none when no font was chosen', async () => {
     const deps = fakeDeps();
     const withFont = await runInstallTasks(
       state({ nerdFontToInstall: { kind: 'install' as const, id: 'JetBrainsMono' } }),
       deps,
       vi.fn()
     );
-    const withSentinel = await runInstallTasks(
+    const withoutFont = await runInstallTasks(
       state({ nerdFontToInstall: NO_NERD_FONT }),
       deps,
       vi.fn()
@@ -123,7 +123,7 @@ describe('runInstallTasks', () => {
     expect(deps.installNerdFont).toHaveBeenCalledTimes(1);
     expect(deps.installNerdFont).toHaveBeenCalledWith('JetBrainsMono', undefined);
     expect(withFont.find((t) => t.id === 'font')?.status).toBe('done');
-    expect(withSentinel.some((t) => t.id === 'font')).toBe(false);
+    expect(withoutFont.some((t) => t.id === 'font')).toBe(false);
   });
 
   it('skips the font install inside a container', async () => {
