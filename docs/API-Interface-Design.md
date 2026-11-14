@@ -624,12 +624,13 @@ function timePrompt(toml: string, path: string, deps?: ProbeDeps): Promise<Timin
 // that runs a version command: disabling it; directory: a slow drive). Modules
 // run in parallel, so `slow` compares the slowest module with SLOW_PROMPT_MS
 // (200). `character`, `line_break` and `fill` never get a fix, and a module
-// whose tool timed out gets only the command_timeout advice. The config is
-// written with the injectable scratch helpers (ScratchDeps) the preview uses. The config's own
+// that ran into the timeout gets only the command_timeout advice (git_status,
+// git_metrics and directory keep theirs). An existing config is timed where it
+// is; one built from flags goes to a scratch folder (ScratchDeps). Escapes are
+// stripped with node:util's stripVTControlCharacters. The config's own
 // command_timeout/scan_timeout are read from its top level (past multi-line
 // strings, with `_` digit separators). Rejects with StarshipMissingError without
 // Starship, and with StarshipTimedOutError when Starship is killed after 30s.
-// stripAnsi removes every escape sequence (colours, cursor moves, OSC 8 links).
 
 function explainPromptAsync(state: WizardState, deps?: ProbeDeps): Promise<ExplainResult>;
 // `starship explain` for the generated config in the preview's sample project:
@@ -1000,9 +1001,9 @@ Times each module of a config in the current folder with `starship timings`
 and prints them slowest first, how long the prompt waits for its slowest module,
 and suggestions with the TOML to add (`timePrompt` in
 `src/services/starshipProbe.ts`). Without flags it times the config the current
-shell loads (`activeConfigPath`: `$STARSHIP_CONFIG`, else the shell's per-shell
-config, else the shared `starship.toml`; the default prompt, labelled as such,
-when none exists). `--config` times an existing file, and the generate flags
+Starship loads here, by Starship's own rule (`activeStarshipConfig`:
+`$STARSHIP_CONFIG` when set, else the shared `starship.toml`; Starship's
+built-in default prompt, labelled with the reason, when that file is missing). `--config` times an existing file, and the generate flags
 (`--preset`, `--palette`, `--state`, ...) time a config built from them; the two
 cannot be combined. `--json` prints `{ config,
 path, slowestMs, slow, modules: [{ module, ms, output }], suggestions: [{ module?,

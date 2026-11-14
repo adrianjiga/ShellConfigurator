@@ -36,9 +36,8 @@ fixes can reach all of them. `--json` prints the full report.
 ## The prompt is slow
 
 Run `shell-configurator timings` in a folder where the prompt feels slow. It
-times the config your shell loads (`$STARSHIP_CONFIG`, else your shell's
-per-shell config, else `~/.config/starship.toml`); `--config <file>` times
-another one.
+times the config Starship loads in that shell (`$STARSHIP_CONFIG` when it is
+set, else `~/.config/starship.toml`); `--config <file>` times another one.
 It lists each module's time, slowest first, and suggests what to change: a
 higher `command_timeout` when a tool timed out (its module then shows nothing),
 a higher `scan_timeout` when scanning the folder timed out, and for a slow module

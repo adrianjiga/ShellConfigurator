@@ -28,7 +28,7 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/),
 - **What changed**: after an install or `apply`, `~/.config/starship/WHAT-CHANGED.md` lists what ran, every file it changed, where each shell's Starship lines are, and how to undo it
 - **Scripting**: `--list-presets`, `--list-modules` and `--list-fonts` (with `--json`) list the ids the flags accept, and `apply --dry-run --json` prints the plan, config and file diffs as JSON
 - **Shell completions**: `completions <bash|zsh|fish>` prints a completion script for every subcommand, flag and value (presets, palettes, shells, fonts)
-- **Prompt timings**: `timings` times each module of the config your shell loads in the current folder and suggests fixes for slow ones (`--config` times another `starship.toml`)
+- **Prompt timings**: `timings` times each module of the config Starship loads in the current folder and suggests fixes for slow ones (`--config` times another `starship.toml`)
 - **Explain**: on the Review step, `e` shows why each part of the prompt appears, from `starship explain`
 - **Share**: `share` prints the prompt as Markdown, with its `starship.toml` and the state card that rebuilds it; `s` on the Done screen saves it as `starship-prompt.md`
 
