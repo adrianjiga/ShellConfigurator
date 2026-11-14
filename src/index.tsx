@@ -263,7 +263,7 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.adopt || flags.importUrl) {
     throw new CliUsageError(
       '--adopt and --import-url require the apply subcommand. ' +
-        'Usage: shell-configurator apply --adopt [--shells <id,...>]'
+        'Usage: shell-configurator apply --adopt --shells <id,...>'
     );
   }
   const dropped = presentConfigFlags(flags);
