@@ -899,6 +899,8 @@ describe('index uninstall command', () => {
     [['--preset', 'pure-prompt'], /--preset cannot be used with uninstall/],
     [['--state', 'card.json'], /--state cannot be used with uninstall/],
     [['--fix'], /--fix cannot be used with uninstall/],
+    [['--include-warnings'], /--include-warnings cannot be used with uninstall/],
+    [['--restore'], /--restore cannot be used with uninstall/],
     [['--font', 'none'], /not none/],
     [['--font', 'Comic'], /Unknown Nerd Font/],
     [['--shells', 'tcsh'], /Unknown shell id/],
@@ -1092,6 +1094,9 @@ describe('index rollback command', () => {
   it.each([
     [['--preset', 'pure-prompt'], /--preset cannot be used with rollback/],
     [['--state', 'card.json'], /--state cannot be used with rollback/],
+    [['--fix'], /--fix cannot be used with rollback/],
+    [['--include-warnings'], /--include-warnings cannot be used with rollback/],
+    [['--restore'], /--restore cannot be used with rollback/],
   ])('rejects %o', async (args, message) => {
     await expect(
       runRollbackCommand(parseCliArgs(['rollback', ...args]), 'rollback', io())

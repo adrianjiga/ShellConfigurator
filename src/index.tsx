@@ -297,6 +297,16 @@ function presentFlags(flags: CliFlags): string[] {
   return present;
 }
 
+const UNINSTALL_FLAGS = new Set([
+  '--shells',
+  '--font',
+  '--starship',
+  '--yes',
+  '--dry-run',
+  '--json',
+]);
+const ROLLBACK_FLAGS = new Set(['--list', '--run', '--yes', '--dry-run', '--json']);
+
 function warnIgnoredFlags(flags: CliFlags, subcommand: string): void {
   if (flags.stateFile) return;
   for (const flag of presentConfigFlags(flags)) {
@@ -399,9 +409,7 @@ export async function runUninstallCommand(
   command: string,
   io: UninstallIo = DEFAULT_UNINSTALL_IO
 ): Promise<void> {
-  const unused = presentConfigFlags(flags).filter((f) => f !== '--shells' && f !== '--font');
-  if (flags.stateFile) unused.push('--state');
-  if (flags.fix) unused.push('--fix');
+  const unused = presentFlags(flags).filter((flag) => !UNINSTALL_FLAGS.has(flag));
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with uninstall.`);
   }
@@ -473,9 +481,7 @@ export async function runRollbackCommand(
   command: string,
   io: PromptIo = DEFAULT_PROMPT_IO
 ): Promise<void> {
-  const unused = presentConfigFlags(flags);
-  if (flags.stateFile) unused.push('--state');
-  if (flags.fix) unused.push('--fix');
+  const unused = presentFlags(flags).filter((flag) => !ROLLBACK_FLAGS.has(flag));
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with rollback.`);
   }
