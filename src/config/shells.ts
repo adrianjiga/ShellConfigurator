@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { configHome, homeDir, xdgBaseDir } from '../services/paths.ts';
+import { configHome, expandShellPath, homeDir, xdgBaseDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 
 export interface ShellDef {
@@ -118,42 +118,35 @@ export const SHELLS: ShellDef[] = [
   },
 ];
 
-/** `$NAME`, `${NAME}` and `${NAME:-default}` in `value`, or null when one cannot be resolved. */
-function expandShellWord(value: string): string | null {
-  const vars: Record<string, string | undefined> = {
-    ...process.env,
-    HOME: homeDir(),
-    XDG_CONFIG_HOME: configHome(),
-  };
-  let unresolved = false;
-  const expanded = value
-    .replace(/^(["'])(.*)\1$/, '$2')
-    .replace(/^~(?=\/|$)/, homeDir())
-    .replace(
-      /\$\{(\w+):-([^}]*)\}|\$\{(\w+)\}|\$(\w+)/g,
-      (_m, withDefault, fallback, braced, bare) => {
-        const name = withDefault ?? braced ?? bare;
-        const found = vars[name] || (withDefault ? expandShellWord(fallback) : undefined);
-        if (!found) unresolved = true;
-        return found ?? '';
-      }
-    );
-  return unresolved ? null : expanded;
-}
+let zshenvCache: { key: string; setting: string | null } | null = null;
 
 /**
  * The ZDOTDIR ~/.zshenv sets, which zsh uses even when it is not exported, so
  * a tool started from zsh does not see it.
  */
 export function zshenvZdotdir(): string | null {
+  const file = path.join(homeDir(), '.zshenv');
+  let key: string;
   try {
-    const setting = fs
-      .readFileSync(path.join(homeDir(), '.zshenv'), 'utf8')
-      .split('\n')
-      .map((line) => /^\s*(?:export\s+)?ZDOTDIR=(\S+)\s*(?:#.*)?$/.exec(line)?.[1])
-      .filter((value): value is string => value !== undefined)
-      .at(-1);
-    return setting ? expandShellWord(setting) : null;
+    const stat = fs.statSync(file);
+    key = `${file}:${stat.ino}:${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}`;
+  } catch {
+    return null;
+  }
+  if (zshenvCache?.key !== key) zshenvCache = { key, setting: zshenvSetting(file) };
+  return zshenvCache.setting ? expandShellPath(zshenvCache.setting) : null;
+}
+
+function zshenvSetting(file: string): string | null {
+  try {
+    return (
+      fs
+        .readFileSync(file, 'utf8')
+        .split('\n')
+        .map((line) => /^\s*(?:export\s+)?ZDOTDIR=(\S+)\s*(?:#.*)?$/.exec(line)?.[1])
+        .filter((value): value is string => value !== undefined)
+        .at(-1) ?? null
+    );
   } catch {
     return null;
   }

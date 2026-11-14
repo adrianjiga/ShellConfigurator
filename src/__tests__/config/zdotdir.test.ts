@@ -40,6 +40,23 @@ describe('the zsh rc file', () => {
     expect(zshrc()).toBe(path.join(home, 'zdot', '.zshrc'));
   });
 
+  it('reads ~/.zshenv again once it changes', () => {
+    const zshenv = path.join(home, '.zshenv');
+    fs.writeFileSync(zshenv, 'ZDOTDIR=$HOME/one\n');
+    expect(zshrc()).toBe(path.join(home, 'one', '.zshrc'));
+    fs.writeFileSync(zshenv, 'ZDOTDIR=$HOME/second\n');
+    expect(zshrc()).toBe(path.join(home, 'second', '.zshrc'));
+    fs.rmSync(zshenv);
+    expect(zshrc()).toBe(path.join(home, '.zshrc'));
+  });
+
+  it('expands the cached setting against the environment of each call', () => {
+    fs.writeFileSync(path.join(home, '.zshenv'), 'ZDOTDIR=$XDG_CONFIG_HOME/zsh\n');
+    expect(zshrc()).toBe(path.join(home, '.config', 'zsh', '.zshrc'));
+    vi.stubEnv('XDG_CONFIG_HOME', path.join(home, 'xdg'));
+    expect(zshrc()).toBe(path.join(home, 'xdg', 'zsh', '.zshrc'));
+  });
+
   it('falls back to ~/.zshrc when the setting names a variable it cannot know', () => {
     fs.writeFileSync(path.join(home, '.zshenv'), 'ZDOTDIR=$DOTFILES/zsh\n');
     expect(zshrc()).toBe(path.join(home, '.zshrc'));

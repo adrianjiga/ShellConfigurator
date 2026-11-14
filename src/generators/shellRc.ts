@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getShell, isShellId, posixShellQuote, rcQuote, type ShellDef } from '../config/shells.ts';
 import { errorMessage } from '../services/errors.ts';
-import { configHome, homeDir, scriptInstallBinDir } from '../services/paths.ts';
+import { configHome, expandShellPath, homeDir, scriptInstallBinDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 
 export interface WriteConfigResult {
@@ -326,26 +326,13 @@ export const FS_RC_IO: RcIo = {
 
 const MAX_SOURCE_DEPTH = 3;
 
-function expandPath(raw: string, env: NodeJS.ProcessEnv): string | null {
-  let unresolved = false;
-  const expanded = raw
-    .replace(/^(["'])(.*)\1$/, '$2')
-    .replace(/^~(?=\/|$)/, homeDir())
-    .replace(/\$\{(\w+)\}|\$(\w+)/g, (_match, braced: string, bare: string) => {
-      const value = env[braced ?? bare];
-      if (value === undefined) unresolved = true;
-      return value ?? '';
-    });
-  return !unresolved && path.isAbsolute(expanded) ? expanded : null;
-}
-
 /** The files a shell script sources (`source f`, `. f`), expanded; ones it cannot resolve are left out. */
 export function sourcedFiles(content: string, env: NodeJS.ProcessEnv = process.env): string[] {
   return content.split('\n').flatMap((line) => {
     if (line.trimStart().startsWith('#')) return [];
     return [
       ...line.matchAll(/(?:^|[;&|]|\s)\s*(?:source|\.)\s+("[^"]*"|'[^']*'|[^\s;&|]+)/g),
-    ].flatMap((match) => expandPath(match[1], env) ?? []);
+    ].flatMap((match) => expandShellPath(match[1], env) ?? []);
   });
 }
 
