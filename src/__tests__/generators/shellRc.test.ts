@@ -28,7 +28,7 @@ function lastWrittenContent(): string {
 }
 
 import * as fs from 'node:fs';
-import { getShell } from '../../config/shells.ts';
+import { getShell, posixShellQuote } from '../../config/shells.ts';
 import {
   appliedRcContent,
   applyShellConfig,
@@ -55,6 +55,7 @@ import { restoreEnv } from '../helpers/env.ts';
 
 const expectedConfigPath = path.join(os.homedir(), '.config', 'starship', 'zsh.toml');
 const expectedConfigDir = path.join(os.homedir(), '.config', 'starship');
+const ownBin = posixShellQuote(path.join(os.homedir(), '.local', 'bin'));
 
 describe('getShellConfigPath', () => {
   const savedEnv = { ...process.env };
@@ -416,13 +417,13 @@ describe('applyShellConfig', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(
       () =>
-        `# Added by ShellConfigurator\nexport PATH='/home/u/.local/bin':"$PATH"\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`
+        `# Added by ShellConfigurator\nexport PATH=${ownBin}:"$PATH"\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`
     );
 
     applyShellConfig('zsh', { pointAtSharedConfig: true });
 
     expect(lastWrittenContent()).toBe(
-      `# Added by ShellConfigurator (shared config)\nexport PATH='/home/u/.local/bin':"$PATH"\neval "$(starship init zsh)"\n`
+      `# Added by ShellConfigurator (shared config)\nexport PATH=${ownBin}:"$PATH"\neval "$(starship init zsh)"\n`
     );
   });
 
@@ -1052,14 +1053,14 @@ describe('resetSharedShellConfig', () => {
   });
 
   it('points a shell an earlier run wired per-shell back at the shared config', () => {
-    const original = `# Existing content\n# Added by ShellConfigurator\nexport PATH='/home/u/.local/bin':"$PATH"\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`;
+    const original = `# Existing content\n# Added by ShellConfigurator\nexport PATH=${ownBin}:"$PATH"\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`;
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() => original);
 
     expect(resetSharedShellConfig('zsh')).toEqual({ applied: true });
     const written = lastWrittenContent();
     expect(written).not.toContain('export STARSHIP_CONFIG');
-    expect(written).toContain(`export PATH='/home/u/.local/bin':"$PATH"`);
+    expect(written).toContain(`export PATH=${ownBin}:"$PATH"`);
     expect(written.match(/starship init zsh/g)).toHaveLength(1);
     expect(written.indexOf('unset STARSHIP_CONFIG')).toBeLessThan(written.indexOf('starship init'));
 
@@ -1436,13 +1437,13 @@ describe('removing ShellConfigurator lines', () => {
 
   it("keeps the user's own init line and the PATH line it needs", () => {
     rcHolds(
-      '# Added by ShellConfigurator\nexport PATH=\'/h/.local/bin\':"$PATH"\nexport STARSHIP_CONFIG=\'/h/s.toml\'\n\neval "$(starship init bash)"\n'
+      `# Added by ShellConfigurator\nexport PATH=${ownBin}:"$PATH"\nexport STARSHIP_CONFIG='/h/s.toml'\n\neval "$(starship init bash)"\n`
     );
 
     const result = removeManagedRcBlocks('bash');
 
     expect(lastWrittenContent()).toBe(
-      'export PATH=\'/h/.local/bin\':"$PATH"\neval "$(starship init bash)"\n'
+      `export PATH=${ownBin}:"$PATH"\neval "$(starship init bash)"\n`
     );
     expect(result.note).toBe('your own Starship init line stays; kept the PATH line it needs');
   });
@@ -1453,13 +1454,49 @@ describe('removing ShellConfigurator lines', () => {
     vi.mocked(fs.existsSync).mockImplementation((p) => p === fishRc || p === confD);
     vi.mocked(fs.readFileSync).mockImplementation(
       () =>
-        "set -g fish_greeting\n\n# Added by ShellConfigurator\nfish_add_path '/h/.local/bin'\nset -gx STARSHIP_CONFIG '/h/fish.toml'\n"
+        `set -g fish_greeting\n\n# Added by ShellConfigurator\nfish_add_path ${ownBin}\nset -gx STARSHIP_CONFIG '/h/fish.toml'\n`
     );
 
     const result = removeManagedRcBlocks('fish');
 
-    expect(lastWrittenContent()).toBe("set -g fish_greeting\nfish_add_path '/h/.local/bin'\n");
+    expect(lastWrittenContent()).toBe(`set -g fish_greeting\nfish_add_path ${ownBin}\n`);
     expect(result.note).toBe('your conf.d/starship.fish init stays; kept the PATH line it needs');
+  });
+
+  it('keeps lines of the user written right under the block', () => {
+    rcHolds(
+      `export EDITOR=vim\n\n# Added by ShellConfigurator\nexport STARSHIP_CONFIG='/h/bash.toml'\neval "$(starship init bash)"\nexport PATH="$HOME/go/bin:$PATH"\nexport PATH="$HOME/.local/bin:$PATH"\nalias gs="git status"\n`
+    );
+
+    removeManagedRcBlocks('bash');
+
+    expect(lastWrittenContent()).toBe(
+      `export EDITOR=vim\n\nexport PATH="$HOME/go/bin:$PATH"\nexport PATH="$HOME/.local/bin:$PATH"\nalias gs="git status"\n`
+    );
+  });
+
+  it("keeps the user's own export and init line right under a block", () => {
+    rcHolds(
+      `# Added by ShellConfigurator\nunset STARSHIP_CONFIG\nexport STARSHIP_CONFIG=~/dots/starship.toml\neval "$(starship init bash)"\n`
+    );
+
+    const result = removeManagedRcBlocks('bash');
+
+    expect(lastWrittenContent()).toBe(
+      `export STARSHIP_CONFIG=~/dots/starship.toml\neval "$(starship init bash)"\n`
+    );
+    expect(result.note).toBe('your own Starship init line stays');
+  });
+
+  it('still removes a PATH line written by a version before 1.3.0', () => {
+    const bin = path.join(os.homedir(), '.local', 'bin');
+    rcHolds(
+      `# Added by ShellConfigurator\nexport PATH="${bin}:$PATH"\nexport STARSHIP_CONFIG="/h/bash.toml"\neval "$(starship init bash)"\n`
+    );
+
+    removeManagedRcBlocks('bash');
+
+    expect(lastWrittenContent()).toBe('');
   });
 
   it('writes nothing when the rc has no managed block', () => {

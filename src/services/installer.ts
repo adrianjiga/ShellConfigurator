@@ -14,7 +14,9 @@ import {
   runCommand,
 } from './exec.ts';
 import { type ExtractedFontFile, extractFontFiles, fontFileNames } from './fontExtractor.ts';
-import { homeDir, xdgBaseDir } from './paths.ts';
+import { homeDir, scriptInstallBinDir, xdgBaseDir } from './paths.ts';
+
+export { scriptInstallBinDir } from './paths.ts';
 
 // Package names per shell per package manager. Missing combos are intentional
 // (powershell is AUR-only on Arch, nushell is absent from Debian/Ubuntu
@@ -104,10 +106,6 @@ const FONT_CHECKSUM_TIMEOUT_MS = 30_000;
 const MAX_FONT_ARCHIVE_BYTES = 200 * 1024 * 1024;
 
 /** Where the official install script puts the binary when run without sudo. */
-export function scriptInstallBinDir(): string {
-  return path.join(homeDir(), '.local', 'bin');
-}
-
 const STARSHIP_INSTALL_URL = 'https://starship.rs/install.sh';
 
 export const MANUAL_STARSHIP_INSTALL = `curl -sS ${STARSHIP_INSTALL_URL} | sh`;

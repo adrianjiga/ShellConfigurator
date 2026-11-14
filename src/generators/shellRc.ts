@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getShell, isShellId, posixShellQuote, type ShellDef } from '../config/shells.ts';
 import { errorMessage } from '../services/errors.ts';
-import { configHome, homeDir } from '../services/paths.ts';
+import { configHome, homeDir, scriptInstallBinDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 
 export interface WriteConfigResult {
@@ -432,11 +432,22 @@ function isBlockMarkerLine(line: string): boolean {
   return t === BLOCK_MARKER || t === ADOPT_MARKER;
 }
 
+/** The PATH lines this tool writes, today's form and the one before 1.3.0. */
+function ownPathLines(shell: ShellDef): string[] {
+  if (!shell.pathLine) return [];
+  const dir = scriptInstallBinDir();
+  const legacy = shell.id === 'fish' ? `fish_add_path ${dir}` : `export PATH="${dir}:$PATH"`;
+  return [shell.pathLine(dir), legacy];
+}
+
 function isPathLine(shell: ShellDef, line: string): boolean {
+  return ownPathLines(shell).includes(line.trim());
+}
+
+function isConfigLine(shell: ShellDef, line: string): boolean {
   const t = line.trim();
-  return shell.id === 'fish'
-    ? t.startsWith('fish_add_path ')
-    : t.startsWith('export PATH=') && (t.endsWith(':$PATH"') || t.endsWith(':"$PATH"'));
+  const env = shell.configEnv;
+  return Boolean(env && (t.startsWith(env.exportPrefix) || t === env.unsetLine));
 }
 
 /**
@@ -444,10 +455,23 @@ function isPathLine(shell: ShellDef, line: string): boolean {
  * line) ends the block.
  */
 function isManagedLine(shell: ShellDef, line: string): boolean {
-  const t = line.trim();
-  if (t === shell.initLine || isPathLine(shell, t)) return true;
-  const env = shell.configEnv;
-  return Boolean(env && (t.startsWith(env.exportPrefix) || t === env.unsetLine));
+  return line.trim() === shell.initLine || isPathLine(shell, line) || isConfigLine(shell, line);
+}
+
+/**
+ * Index just past the block whose marker is at `start`. A block holds at most
+ * one STARSHIP_CONFIG line and ends after its init line, so a user's own
+ * export or init line written right under it is not taken for part of it.
+ */
+function managedBlockEnd(lines: string[], start: number, shell: ShellDef): number {
+  let configLines = 0;
+  let j = start + 1;
+  while (j < lines.length && !isBlockMarkerLine(lines[j]) && isManagedLine(shell, lines[j])) {
+    if (isConfigLine(shell, lines[j]) && ++configLines > 1) break;
+    j++;
+    if (lines[j - 1].trim() === shell.initLine) break;
+  }
+  return j;
 }
 
 /** Matches a managed line by its trimmed text, so CRLF files and stray spaces still match. */
@@ -482,12 +506,8 @@ function removeShellConfiguratorBlocks(
     const line = lines[i];
     // Adopt-mode blocks share the marker prefix, so both are recognised here.
     if (isBlockMarkerLine(line)) {
-      const block = [line];
-      let j = i + 1;
-      while (j < lines.length && !isBlockMarkerLine(lines[j]) && isManagedLine(shell, lines[j])) {
-        block.push(lines[j]);
-        j++;
-      }
+      const j = managedBlockEnd(lines, i, shell);
+      const block = lines.slice(i, j);
       if (needles.some((n) => block.some((blockLine) => lineMatches(blockLine, n)))) {
         // Drop the stale block (and the blank line that follows it), keeping
         // note of its PATH line: without it starship may not be found at all.

@@ -9,6 +9,11 @@ export function homeDir(): string {
   return os.homedir() || os.userInfo().homedir;
 }
 
+/** `~/.local/bin`, where the Starship install script puts the binary. */
+export function scriptInstallBinDir(): string {
+  return path.join(homeDir(), '.local', 'bin');
+}
+
 /**
  * Resolves an XDG base directory, favouring the live environment over the
  * spec fallback. Resolved per call so env changes are seen immediately, which
