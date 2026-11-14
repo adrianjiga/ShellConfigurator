@@ -113,6 +113,9 @@ interface PendingCapture {
 
 const PENDING = 'pending.json';
 
+/** The captures this process has started and not finished. */
+const activeCaptures = new Set<string>();
+
 function writeJsonAtomic(file: string, value: unknown): void {
   fs.writeFileSync(`${file}.tmp`, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   fs.renameSync(`${file}.tmp`, file);
@@ -136,6 +139,7 @@ export function beginRunCapture(files: string[], record?: InterruptedRecord): Ru
       ...(record ? { record } : {}),
     };
     writeJsonAtomic(path.join(dir, PENDING), pending);
+    activeCaptures.add(runId);
     return capture;
   } catch (err) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -170,6 +174,8 @@ export interface CaptureOptions {
   rewritable?: readonly string[];
   /** How to record the run in history if it dies before it can. */
   record?: InterruptedRecord;
+  /** The caller already recovered interrupted runs, so captureRun need not. */
+  recovered?: boolean;
 }
 
 function changedFiles(capture: RunCapture, rewritable: readonly string[]): RunFile[] {
@@ -202,6 +208,7 @@ export function finishRunCapture(
   options: CaptureOptions = {},
   error?: unknown
 ): RunManifest | null {
+  activeCaptures.delete(capture.runId);
   const rewritable = options.rewritable ?? [];
   let changed = changedFiles(capture, rewritable);
   if (changed.length === 0) {
@@ -230,8 +237,13 @@ export function finishRunCapture(
   return manifest;
 }
 
-function processAlive(pid: number): boolean {
-  if (pid === process.pid) return true;
+/**
+ * Whether the run's process still runs. A pending run of this very pid is
+ * alive only while this process is capturing it: in a container every run can
+ * get the same pid, so the pid alone would keep a dead run pending forever.
+ */
+function processAlive(pid: number, runId: string): boolean {
+  if (pid === process.pid) return activeCaptures.has(runId);
   try {
     process.kill(pid, 0);
     return true;
@@ -246,7 +258,9 @@ function processAlive(pid: number): boolean {
  * interrupted, so rollback can put its files back. A run whose process is
  * still alive is left alone. Never throws.
  */
-export function recoverInterruptedRuns(isAlive: (pid: number) => boolean = processAlive): string[] {
+export function recoverInterruptedRuns(
+  isAlive: (pid: number, runId: string) => boolean = processAlive
+): string[] {
   let runs: string[];
   try {
     runs = fs.readdirSync(runsDir()).sort();
@@ -260,7 +274,7 @@ export function recoverInterruptedRuns(isAlive: (pid: number) => boolean = proce
         fs.readFileSync(path.join(dir, PENDING), 'utf8')
       ) as PendingCapture;
       if (pending.version !== RUN_MANIFEST_VERSION || !Array.isArray(pending.files)) return [];
-      if (isAlive(pending.pid)) return [];
+      if (isAlive(pending.pid, runId)) return [];
       const manifest = finishRunCapture({ runId, dir, files: pending.files });
       if (!manifest) return [];
       const record = pending.record ?? { kind: 'apply' as const };
@@ -288,7 +302,7 @@ export async function captureRun<T>(
   run: () => Promise<T>,
   options: CaptureOptions = {}
 ): Promise<{ result: T; runId: string | null }> {
-  recoverInterruptedRuns();
+  if (!options.recovered) recoverInterruptedRuns();
   let capture: RunCapture | null;
   try {
     capture = beginRunCapture(files, options.record);

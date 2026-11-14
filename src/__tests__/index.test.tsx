@@ -987,8 +987,15 @@ describe('index uninstall command', () => {
     [['--preset', 'pure-prompt'], /--preset cannot be used with uninstall/],
     [['--state', 'card.json'], /--state cannot be used with uninstall/],
     [['--fix'], /--fix cannot be used with uninstall/],
-    [['--include-warnings'], /--include-warnings cannot be used with uninstall/],
+    [['--include-warnings'], /--include-warnings only applies to repair/],
     [['--restore'], /--restore cannot be used with uninstall/],
+  ])('refuses %o before running', async (args, message) => {
+    await expect(
+      runHeadlessCommand(parseCliArgs(['uninstall', ...args]), 'uninstall')
+    ).rejects.toThrow(message);
+  });
+
+  it.each([
     [['--font', 'none'], /not none/],
     [['--font', 'Comic'], /Unknown Nerd Font/],
     [['--shells', 'tcsh'], /Unknown shell id/],
@@ -1099,6 +1106,46 @@ describe('index rollback command', () => {
       runId: null,
       rollbackOf: second,
       partial: false,
+    });
+  });
+
+  describe('of an interrupted run', () => {
+    function interruptedRun(): string {
+      fs.writeFileSync(rc(), 'zero');
+      const capture = beginRunCapture([rc()]);
+      fs.writeFileSync(rc(), 'one');
+      const runId = finishRunCapture(capture)!.runId;
+      appendHistory({
+        version: 1,
+        timestamp: new Date().toISOString(),
+        kind: 'apply',
+        runId,
+        interrupted: true,
+      });
+      return runId;
+    }
+
+    it('warns that later edits come back too, and asks on a terminal even with --yes', async () => {
+      interruptedRun();
+      const prompt = io({ confirm: vi.fn().mockResolvedValue(false) });
+
+      await runRollbackCommand(parseCliArgs(['rollback', '--yes']), 'rollback', prompt);
+
+      expect(output()).toContain('That run was interrupted');
+      expect(prompt.confirm).toHaveBeenCalled();
+      expect(fs.readFileSync(rc(), 'utf8')).toBe('one');
+    });
+
+    it('goes ahead with --yes off a terminal', async () => {
+      interruptedRun();
+
+      await runRollbackCommand(
+        parseCliArgs(['rollback', '--yes']),
+        'rollback',
+        io({ isTerminal: () => false })
+      );
+
+      expect(fs.readFileSync(rc(), 'utf8')).toBe('zero');
     });
   });
 
@@ -1227,11 +1274,11 @@ describe('index rollback command', () => {
     [['--preset', 'pure-prompt'], /--preset cannot be used with rollback/],
     [['--state', 'card.json'], /--state cannot be used with rollback/],
     [['--fix'], /--fix cannot be used with rollback/],
-    [['--include-warnings'], /--include-warnings cannot be used with rollback/],
+    [['--include-warnings'], /--include-warnings only applies to repair/],
     [['--restore'], /--restore cannot be used with rollback/],
   ])('rejects %o', async (args, message) => {
     await expect(
-      runRollbackCommand(parseCliArgs(['rollback', ...args]), 'rollback', io())
+      runHeadlessCommand(parseCliArgs(['rollback', ...args]), 'rollback')
     ).rejects.toThrow(message);
   });
 
@@ -1309,7 +1356,7 @@ describe('index debug-info command', () => {
     [['--state', 'card.json'], /--state cannot be used with debug-info/],
     [['--dry-run'], /--dry-run cannot be used with debug-info/],
   ])('rejects %o', async (args, message) => {
-    await expect(runDebugInfoCommand(parseCliArgs(['debug-info', ...args]), deps)).rejects.toThrow(
+    await expect(runHeadlessCommand(parseCliArgs(['debug-info', ...args]), '')).rejects.toThrow(
       message
     );
   });
@@ -1359,10 +1406,10 @@ describe('index completions command', () => {
         '--starship',
         '--list',
       ],
-      /--include-warnings, --yes, --starship, --list, --run cannot be used with completions/,
+      /--include-warnings only applies to repair/,
     ],
-  ])('rejects %o', (args, message) => {
-    expect(() => runCompletionsCommand(parseCliArgs(args))).toThrow(message);
+  ])('rejects %o', async (args, message) => {
+    await expect(runHeadlessCommand(parseCliArgs(args), '')).rejects.toThrow(message);
   });
 
   it('documents completions and where to install them in the help text', () => {
@@ -1504,10 +1551,17 @@ describe('index timings command', () => {
   it.each([
     [['--config', 'x', '--preset', 'pure-prompt'], /--config times an existing file, so --preset/],
     [['--config', '/no/such/file'], /Could not read '\/no\/such\/file'/],
-    [['--shells', 'zsh'], /--shells cannot be used with timings/],
-    [['--yes'], /--yes cannot be used with timings/],
   ])('rejects %o', async (args, message) => {
     await expect(runTimingsCommand(parseCliArgs(['timings', ...args]), deps())).rejects.toThrow(
+      message
+    );
+  });
+
+  it.each([
+    [['--shells', 'zsh'], /--shells cannot be used with timings/],
+    [['--yes'], /--yes only applies to repair/],
+  ])('refuses %o before timing anything', async (args, message) => {
+    await expect(runHeadlessCommand(parseCliArgs(['timings', ...args]), '')).rejects.toThrow(
       message
     );
   });
@@ -1576,8 +1630,8 @@ describe('index share command', () => {
   it.each([
     [['--shells', 'zsh'], /--shells cannot be used with share/],
     [['--json'], /--json cannot be used with share/],
-  ])('rejects %o', (args, message) => {
-    expect(() => runShareCommand(parseCliArgs(['share', ...args]))).toThrow(message);
+  ])('rejects %o', async (args, message) => {
+    await expect(runHeadlessCommand(parseCliArgs(['share', ...args]), '')).rejects.toThrow(message);
   });
 
   it('documents share in the help text', () => {

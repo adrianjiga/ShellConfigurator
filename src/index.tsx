@@ -507,11 +507,6 @@ export async function runUninstallCommand(
   command: string,
   io: UninstallIo = DEFAULT_UNINSTALL_IO
 ): Promise<void> {
-  const accepted = acceptedFlags('uninstall');
-  const unused = presentFlags(flags).filter((flag) => !accepted.has(flag));
-  if (unused.length > 0) {
-    throw new CliUsageError(`${unused.join(', ')} cannot be used with uninstall.`);
-  }
   if (flags.font === 'none') {
     throw new CliUsageError('uninstall --font takes the Nerd Font to remove, not none.');
   }
@@ -582,12 +577,6 @@ export async function runRollbackCommand(
   command: string,
   io: PromptIo = DEFAULT_PROMPT_IO
 ): Promise<void> {
-  const accepted = acceptedFlags('rollback');
-  const unused = presentFlags(flags).filter((flag) => !accepted.has(flag));
-  if (unused.length > 0) {
-    throw new CliUsageError(`${unused.join(', ')} cannot be used with rollback.`);
-  }
-
   recoverInterruptedRuns();
   const entries = rollbackRunsWithManifests();
   const runs = entries.map((entry) => entry.run);
@@ -623,9 +612,14 @@ export async function runRollbackCommand(
   const steps = planRollback(manifest);
   const dryRun = flags.dryRun ?? false;
   const changes = !dryRun && steps.some((step) => step.run);
+  if (changes && target.interrupted && !flags.json) {
+    process.stdout.write(
+      'That run was interrupted, so its record was finished later: a change made to these files after the interruption is put back too.\n'
+    );
+  }
   if (changes) {
     const proceed = await confirmChanges(
-      flags,
+      target.interrupted && io.isTerminal() ? { ...flags, yes: false } : flags,
       io,
       'rollback rewrites files',
       () => formatRollbackReport(runRollback(target.runId, steps, { dryRun: true })),
@@ -641,6 +635,7 @@ export async function runRollbackCommand(
         {
           rewritable: manifest.files.filter((file) => file.rewritable).map((file) => file.path),
           record: { kind: 'rollback', command, rollbackOf: target.runId },
+          recovered: true,
         }
       )
     : { result: runRollback(target.runId, steps, { dryRun }), runId: null };
@@ -668,13 +663,7 @@ export async function runTimingsCommand(
   flags: CliFlags,
   deps: ProbeDeps = DEFAULT_PROBE_DEPS
 ): Promise<void> {
-  const present = presentFlags(flags);
-  const accepted = acceptedFlags('timings');
-  const unused = present.filter((flag) => !accepted.has(flag));
-  if (unused.length > 0) {
-    throw new CliUsageError(`${unused.join(', ')} cannot be used with timings.`);
-  }
-  const building = present.filter((flag) => flag !== '--config' && flag !== '--json');
+  const building = presentFlags(flags).filter((flag) => flag !== '--config' && flag !== '--json');
   if (flags.configFile && building.length > 0) {
     throw new CliUsageError(
       `--config times an existing file, so ${building.join(', ')} cannot be used with it.`
@@ -721,11 +710,6 @@ export async function runTimingsCommand(
 }
 
 export function runShareCommand(flags: CliFlags): void {
-  const accepted = acceptedFlags('share');
-  const unused = presentFlags(flags).filter((flag) => !accepted.has(flag));
-  if (unused.length > 0) {
-    throw new CliUsageError(`${unused.join(', ')} cannot be used with share.`);
-  }
   const state = stateFromFlags(flags);
   if (state.keepExistingConfig) {
     throw new CliUsageError(
@@ -746,10 +730,6 @@ export function runShareCommand(flags: CliFlags): void {
 }
 
 export function runCompletionsCommand(flags: CliFlags): void {
-  const unused = presentFlags(flags);
-  if (unused.length > 0) {
-    throw new CliUsageError(`${unused.join(', ')} cannot be used with completions.`);
-  }
   const shell = flags.completionShell;
   if (!COMPLETION_SHELLS.includes(shell as CompletionShell)) {
     throw new CliUsageError(
@@ -766,13 +746,6 @@ export async function runDebugInfoCommand(
   flags: CliFlags,
   deps: DebugInfoDeps = DEFAULT_DEBUG_INFO_DEPS
 ): Promise<void> {
-  const unused = presentConfigFlags(flags);
-  if (flags.stateFile) unused.push('--state');
-  if (flags.fix) unused.push('--fix');
-  if (flags.dryRun) unused.push('--dry-run');
-  if (unused.length > 0) {
-    throw new CliUsageError(`${unused.join(', ')} cannot be used with debug-info.`);
-  }
   const info = await collectDebugInfo(VERSION, deps);
   process.stdout.write(
     flags.json ? redactPersonal(`${JSON.stringify(info, null, 2)}\n`) : formatDebugInfo(info)

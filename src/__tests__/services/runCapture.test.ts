@@ -364,6 +364,19 @@ describe('recoverInterruptedRuns', () => {
     expect(readRunManifest(capture.runId)).toBeNull();
   });
 
+  it('recovers a dead run that had the same pid as this process, as in a container', () => {
+    const rc = file('zshrc');
+    fs.writeFileSync(rc, 'before\n');
+    const live = beginRunCapture([rc], { kind: 'apply' });
+    const dead = '2000-01-01T00-00-00.000Z';
+    fs.cpSync(live.dir, runDir(dead), { recursive: true });
+    fs.writeFileSync(rc, 'after\n');
+
+    expect(recoverInterruptedRuns()).toEqual([dead]);
+    expect(readRunManifest(live.runId)).toBeNull();
+    expect(finishRunCapture(live)?.runId).toBe(live.runId);
+  });
+
   it('removes the folder of a run that died before changing anything', () => {
     const rc = file('zshrc');
     fs.writeFileSync(rc, 'same\n');
