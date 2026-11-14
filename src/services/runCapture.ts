@@ -383,13 +383,19 @@ function finishSafely(
   options: CaptureOptions,
   error?: unknown
 ): string | null {
+  let runId: string | null;
   try {
-    const runId = finishRunCapture(capture, options, error)?.runId ?? null;
-    pruneRuns();
-    return runId;
+    runId = finishRunCapture(capture, options, error)?.runId ?? null;
   } catch {
+    try {
+      fs.rmSync(capture.dir, { recursive: true, force: true });
+    } catch {}
     return null;
   }
+  try {
+    pruneRuns();
+  } catch {}
+  return runId;
 }
 
 /** How many captured runs rollback keeps; older ones are deleted. */

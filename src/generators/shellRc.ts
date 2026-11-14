@@ -60,8 +60,9 @@ function writeWithBackup(configPath: string, toml: string): WriteConfigResult {
   const configDir = path.dirname(configPath);
   if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
   const current = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
+  if (current === toml) return { path: configPath };
   let backedUpTo: string | undefined;
-  if (current !== null && current !== toml) {
+  if (current !== null) {
     assertWritable(configPath);
     backedUpTo = sameBackup(configPath, current) ?? backupIfExists(configPath);
   }

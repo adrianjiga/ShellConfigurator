@@ -197,6 +197,19 @@ describe('captureRun', () => {
     expect(readRunManifest((err as CapturedRunError).runId!)?.files).toHaveLength(1);
   });
 
+  it('leaves nothing to recover when the manifest cannot be written', async () => {
+    const { runId } = await captureRun([file('rc')], async () => {
+      fs.writeFileSync(file('rc'), 'wired');
+      failWrites.after = 0;
+    });
+    failWrites.after = Number.POSITIVE_INFINITY;
+
+    expect(runId).toBeNull();
+    expect(fs.readdirSync(runsDir())).toEqual([]);
+    expect(recoverInterruptedRuns(() => false)).toEqual([]);
+    expect(readHistory()).toEqual([]);
+  });
+
   it('runs anyway when the capture cannot be written', async () => {
     fs.mkdirSync(path.dirname(runsDir()), { recursive: true });
     fs.writeFileSync(runsDir(), 'not a folder');

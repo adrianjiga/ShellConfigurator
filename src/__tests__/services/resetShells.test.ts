@@ -250,6 +250,15 @@ describe('writing configs and rc files', () => {
     expect(backups(path.dirname(config), 'zsh.toml')).toHaveLength(0);
   });
 
+  it('leaves a read-only config that already holds the content alone', () => {
+    const config = getShellConfigPath('zsh');
+    writeShellConfig('a\n', 'zsh');
+    fs.chmodSync(config, 0o444);
+
+    expect(writeShellConfig('a\n', 'zsh')).toEqual({ path: config });
+    expect(fs.readFileSync(config, 'utf8')).toBe('a\n');
+  });
+
   it('creates a file with the mode asked for, never wider first', () => {
     const file = path.join(home, 'private');
     writeFileAtomic(file, 'x', 0o600);
