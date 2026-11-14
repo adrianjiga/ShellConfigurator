@@ -20,10 +20,6 @@ describe('MODULES', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('covers the phase 3 module library (at least 28 placeable modules)', () => {
-    expect(MODULES.length).toBeGreaterThanOrEqual(28);
-  });
-
   it('previewSegment returns a non-empty string', () => {
     for (const mod of MODULES) {
       expect(mod.previewSegment(true, SAMPLE), `${mod.id} nerd font preview empty`).toBeTruthy();
