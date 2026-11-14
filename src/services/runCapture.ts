@@ -109,6 +109,7 @@ interface PendingCapture {
   pid: number;
   files: CapturedFile[];
   record?: InterruptedRecord;
+  rewritable?: string[];
 }
 
 const PENDING = 'pending.json';
@@ -126,7 +127,11 @@ function writeJsonAtomic(file: string, value: unknown): void {
  * file that cannot be read (a folder, no permission) is left out, since it
  * could not be put back.
  */
-export function beginRunCapture(files: string[], record?: InterruptedRecord): RunCapture {
+export function beginRunCapture(
+  files: string[],
+  record?: InterruptedRecord,
+  rewritable: readonly string[] = []
+): RunCapture {
   const runId = createRunFolder();
   const dir = runDir(runId);
   try {
@@ -137,6 +142,7 @@ export function beginRunCapture(files: string[], record?: InterruptedRecord): Ru
       pid: process.pid,
       files: capture.files,
       ...(record ? { record } : {}),
+      ...(rewritable.length > 0 ? { rewritable: [...rewritable] } : {}),
     };
     writeJsonAtomic(path.join(dir, PENDING), pending);
     activeCaptures.add(runId);
@@ -252,15 +258,14 @@ function processAlive(pid: number, runId: string): boolean {
   }
 }
 
-/**
- * Finishes the capture of every run whose process died before writing its
- * manifest (Ctrl+C, a closed terminal, a kill), and records it in history as
- * interrupted, so rollback can put its files back. A run whose process is
- * still alive is left alone. Never throws.
- */
-export function recoverInterruptedRuns(
-  isAlive: (pid: number, runId: string) => boolean = processAlive
-): string[] {
+interface DeadRun {
+  runId: string;
+  dir: string;
+  pending: PendingCapture;
+}
+
+/** The captures whose process died before writing their manifest. Reads only. */
+function deadRuns(isAlive: (pid: number, runId: string) => boolean): DeadRun[] {
   let runs: string[];
   try {
     runs = fs.readdirSync(runsDir()).sort();
@@ -274,8 +279,35 @@ export function recoverInterruptedRuns(
         fs.readFileSync(path.join(dir, PENDING), 'utf8')
       ) as PendingCapture;
       if (pending.version !== RUN_MANIFEST_VERSION || !Array.isArray(pending.files)) return [];
-      if (isAlive(pending.pid, runId)) return [];
-      const manifest = finishRunCapture({ runId, dir, files: pending.files });
+      return isAlive(pending.pid, runId) ? [] : [{ runId, dir, pending }];
+    } catch {
+      return [];
+    }
+  });
+}
+
+/** How many interrupted runs the next capture or rollback would record. Changes nothing. */
+export function interruptedRunCount(
+  isAlive: (pid: number, runId: string) => boolean = processAlive
+): number {
+  return deadRuns(isAlive).length;
+}
+
+/**
+ * Finishes the capture of every run whose process died before writing its
+ * manifest (Ctrl+C, a closed terminal, a kill), and records it in history as
+ * interrupted, so rollback can put its files back. A run whose process is
+ * still alive is left alone. Never throws.
+ */
+export function recoverInterruptedRuns(
+  isAlive: (pid: number, runId: string) => boolean = processAlive
+): string[] {
+  return deadRuns(isAlive).flatMap(({ runId, dir, pending }) => {
+    try {
+      const manifest = finishRunCapture(
+        { runId, dir, files: pending.files },
+        { rewritable: pending.rewritable ?? [] }
+      );
       if (!manifest) return [];
       const record = pending.record ?? { kind: 'apply' as const };
       recordRun({
@@ -305,7 +337,7 @@ export async function captureRun<T>(
   if (!options.recovered) recoverInterruptedRuns();
   let capture: RunCapture | null;
   try {
-    capture = beginRunCapture(files, options.record);
+    capture = beginRunCapture(files, options.record, options.rewritable);
   } catch {
     capture = null;
   }

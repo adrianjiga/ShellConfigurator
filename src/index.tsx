@@ -41,7 +41,12 @@ import {
   rollbackRunsWithManifests,
   runRollback,
 } from './services/rollback.ts';
-import { captureRun, recoverInterruptedRuns, trackedFiles } from './services/runCapture.ts';
+import {
+  captureRun,
+  interruptedRunCount,
+  recoverInterruptedRuns,
+  trackedFiles,
+} from './services/runCapture.ts';
 import { renderShare } from './services/share.ts';
 import {
   type ActiveConfig,
@@ -577,9 +582,16 @@ export async function runRollbackCommand(
   command: string,
   io: PromptIo = DEFAULT_PROMPT_IO
 ): Promise<void> {
-  recoverInterruptedRuns();
+  const readOnly = flags.list || flags.dryRun;
+  if (!readOnly) recoverInterruptedRuns();
+  const waiting = readOnly ? interruptedRunCount() : 0;
   const entries = rollbackRunsWithManifests();
   const runs = entries.map((entry) => entry.run);
+  if (waiting > 0 && !flags.json) {
+    process.stdout.write(
+      `${waiting} interrupted run${waiting === 1 ? ' is' : 's are'} not listed yet; a rollback without --list or --dry-run records ${waiting === 1 ? 'it' : 'them'} first.\n`
+    );
+  }
   if (flags.list) {
     process.stdout.write(
       flags.json ? `${JSON.stringify(runs, null, 2)}\n` : formatRollbackRuns(runs)
@@ -619,7 +631,7 @@ export async function runRollbackCommand(
   }
   if (changes) {
     const proceed = await confirmChanges(
-      target.interrupted && io.isTerminal() ? { ...flags, yes: false } : flags,
+      target.interrupted && io.isTerminal() && !flags.json ? { ...flags, yes: false } : flags,
       io,
       'rollback rewrites files',
       () => formatRollbackReport(runRollback(target.runId, steps, { dryRun: true })),

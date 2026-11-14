@@ -377,6 +377,23 @@ describe('recoverInterruptedRuns', () => {
     expect(finishRunCapture(live)?.runId).toBe(live.runId);
   });
 
+  it('keeps the rewritable files of a recovered run marked so', () => {
+    const rc = file('zshrc');
+    const summary = file('WHAT-CHANGED.md');
+    fs.writeFileSync(rc, 'before\n');
+    fs.writeFileSync(summary, 'old\n');
+    const capture = beginRunCapture([rc, summary], { kind: 'apply' }, [summary]);
+    fs.writeFileSync(rc, 'after\n');
+    fs.writeFileSync(summary, 'new\n');
+
+    recoverInterruptedRuns(dead);
+
+    expect(readRunManifest(capture.runId)?.files).toEqual([
+      expect.not.objectContaining({ rewritable: true }),
+      expect.objectContaining({ path: summary, rewritable: true }),
+    ]);
+  });
+
   it('removes the folder of a run that died before changing anything', () => {
     const rc = file('zshrc');
     fs.writeFileSync(rc, 'same\n');

@@ -1136,6 +1136,34 @@ describe('index rollback command', () => {
       expect(fs.readFileSync(rc(), 'utf8')).toBe('one');
     });
 
+    it('goes ahead with --yes --json on a terminal, where nothing can be asked', async () => {
+      interruptedRun();
+      const prompt = io();
+
+      await runRollbackCommand(parseCliArgs(['rollback', '--yes', '--json']), 'rollback', prompt);
+
+      expect(prompt.confirm).not.toHaveBeenCalled();
+      expect(fs.readFileSync(rc(), 'utf8')).toBe('zero');
+    });
+
+    it.each([['--list'], ['--dry-run']])(
+      'leaves a dead run unrecorded with %s, and says it is waiting',
+      async (flag) => {
+        fs.writeFileSync(rc(), 'zero');
+        const live = beginRunCapture([rc()]);
+        const dead = path.join(runDir(live.runId), '..', '2000-01-01T00-00-00.000Z');
+        fs.cpSync(runDir(live.runId), dead, { recursive: true });
+        finishRunCapture(live);
+        fs.writeFileSync(rc(), 'one');
+
+        await runRollbackCommand(parseCliArgs(['rollback', flag]), 'rollback', io());
+
+        expect(output()).toContain('1 interrupted run is not listed yet');
+        expect(fs.existsSync(path.join(dead, 'pending.json'))).toBe(true);
+        expect(mockRecordRun).not.toHaveBeenCalled();
+      }
+    );
+
     it('goes ahead with --yes off a terminal', async () => {
       interruptedRun();
 
