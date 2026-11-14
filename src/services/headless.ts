@@ -416,10 +416,6 @@ export interface DryRunPlan {
   changes: FileChange[];
 }
 
-/**
- * What `apply --dry-run` reports, as text or with --json: the plan, the config
- * a real run would write, and how each file it writes would differ from disk.
- */
 export function dryRunPlan(
   state: WizardState,
   tasks: InstallTask[],

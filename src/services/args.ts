@@ -73,9 +73,7 @@ export interface CliFlags {
   list?: boolean;
   /** The run rollback undoes, instead of the newest (--run). */
   runId?: string;
-  /** The shell `completions` writes a script for: its one positional argument. */
   completionShell?: string;
-  /** List what a flag accepts (--list-presets, --list-modules, --list-fonts). */
   listPresets?: boolean;
   listModules?: boolean;
   listFonts?: boolean;
@@ -202,7 +200,6 @@ const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
   },
 };
 
-/** Every flag the parser accepts: long boolean and value flags, and the short aliases. */
 export const KNOWN_FLAGS = {
   boolean: Object.keys(BOOLEAN_FLAGS),
   value: Object.keys(VALUE_FLAGS),

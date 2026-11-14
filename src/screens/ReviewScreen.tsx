@@ -19,7 +19,6 @@ interface ReviewScreenProps {
   onBack: () => void;
 }
 
-/** The setup command a shell without an rc file (nushell, powershell) needs, then its note. */
 function manualSetup(shellId: ShellId, pointAtSharedConfig: boolean): string[] {
   const shell = getShell(shellId);
   if (!shell) return [];

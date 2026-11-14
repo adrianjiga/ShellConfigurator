@@ -14,7 +14,6 @@ const ZSH_FN = '_shell-configurator';
 
 const SUBCOMMANDS = Object.keys(SUBCOMMAND_INFO) as Subcommand[];
 
-/** Every flag spelling a word could be: the long name and any short alias. */
 function spellings(flag: FlagInfo): string[] {
   return flag.short ? [flag.name, flag.short] : [flag.name];
 }
@@ -175,7 +174,6 @@ function fish(): string {
   return `${lines.join('\n')}\n`;
 }
 
-/** The completion script for a shell, generated from the CLI's own description. */
 export function completionScript(shell: CompletionShell): string {
   switch (shell) {
     case 'bash':

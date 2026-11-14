@@ -127,7 +127,6 @@ export function unifiedDiff(before: string | null, after: string, file: string):
   return diff(before, after, file).text;
 }
 
-/** The hunks of a `unifiedDiff`, without its two file header lines. */
 export function diffHunkLines(unified: string): string[] {
   return unified.trimEnd().split('\n').slice(2);
 }

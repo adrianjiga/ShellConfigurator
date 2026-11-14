@@ -558,7 +558,6 @@ export async function runRollbackCommand(
   }
 }
 
-/** Prints the completion script for the shell named after `completions`. */
 export function runCompletionsCommand(flags: CliFlags): void {
   const unused = presentFlags(flags);
   if (unused.length > 0) {

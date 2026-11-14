@@ -9,7 +9,6 @@ import { TASK_IDS } from './installTasks.ts';
 import { configHome, redactHome } from './paths.ts';
 import type { RunManifest } from './runCapture.ts';
 
-/** ~/.config/starship/WHAT-CHANGED.md, rewritten by every install and apply. */
 export function whatChangedPath(): string {
   return path.join(configHome(), 'starship', 'WHAT-CHANGED.md');
 }
@@ -47,7 +46,6 @@ function shellLine(run: WhatChangedRun, shellId: WizardState['selectedShells'][n
   return `- ${shell.label}: set up by hand with \`${setupCommand(shell, run.state.keepExistingConfig)}\` (in \`${shell.initPath}\`); ${config}`;
 }
 
-/** The Markdown summary of a run: what ran, which files changed, and how to undo it. */
 export function renderWhatChanged(run: WhatChangedRun): string {
   const fontInstalled = run.results.some(
     (task) => task.id === TASK_IDS.font && task.status === 'done'
@@ -88,7 +86,6 @@ export function renderWhatChanged(run: WhatChangedRun): string {
   return redactHome(`${lines.join('\n')}\n`);
 }
 
-/** Writes the summary; throws when it cannot. Returns where it went. */
 export function writeWhatChanged(run: WhatChangedRun): string {
   const file = whatChangedPath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -96,17 +93,12 @@ export function writeWhatChanged(run: WhatChangedRun): string {
   return file;
 }
 
-/**
- * Deletes the summary once uninstall or rollback has changed files, since it
- * would describe a run that no longer stands. Never throws.
- */
 export function removeWhatChangedSafely(): void {
   try {
     fs.rmSync(whatChangedPath(), { force: true });
   } catch {}
 }
 
-/** `writeWhatChanged` that never throws: the summary must not fail a finished run. */
 export function writeWhatChangedSafely(run: WhatChangedRun): string | null {
   try {
     return writeWhatChanged(run);

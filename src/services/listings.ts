@@ -11,7 +11,6 @@ export interface ListEntry {
   [extra: string]: unknown;
 }
 
-/** The ids a flag accepts, with what a script needs to choose between them. */
 export function listEntries(kind: ListKind): ListEntry[] {
   switch (kind) {
     case 'presets':
@@ -42,7 +41,6 @@ export function listEntries(kind: ListKind): ListEntry[] {
   }
 }
 
-/** One aligned `id  label — description` line per entry. */
 export function formatListing(entries: ListEntry[]): string {
   const width = Math.max(0, ...entries.map((entry) => entry.id.length));
   const lines = entries.map((entry) => {

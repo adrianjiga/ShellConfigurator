@@ -4,14 +4,12 @@ import { SHELLS } from '../config/shells.ts';
 import type { Subcommand } from './args.ts';
 import { NERD_FONTS } from './installer.ts';
 
-/** What a flag's value can be: a fixed list, a file path, or free text. */
 export type FlagValues = readonly string[] | 'file' | 'text';
 
 export interface FlagInfo {
   name: string;
   short?: string;
   description: string;
-  /** Absent for a boolean flag. */
   values?: FlagValues;
 }
 
@@ -76,10 +74,8 @@ export const FLAGS = {
   run: flag('--run', 'Roll back this run (an id from --list)', 'text'),
 } satisfies Record<string, FlagInfo>;
 
-/** Flags that apply with or without a subcommand. */
 export const GLOBAL_FLAGS: readonly FlagInfo[] = [FLAGS.help, FLAGS.version];
 
-/** Flags of the bare command, which starts the wizard. */
 export const WIZARD_FLAGS: readonly FlagInfo[] = [
   FLAGS.dryRun,
   FLAGS.noInstall,
@@ -110,7 +106,6 @@ const CONFIG_FLAGS = [
 export interface SubcommandInfo {
   description: string;
   flags: readonly FlagInfo[];
-  /** The positional argument's values, for `completions`. */
   argument?: readonly string[];
 }
 
