@@ -176,9 +176,7 @@ describe('ShellScreen', () => {
     await flush();
 
     expect(instance.lastFrame()).toContain('Manual setup required');
-    // "Run the above command" only makes sense on the summary screen, where the
-    // command is actually shown above the note — never here, before installation.
-    expect(instance.lastFrame()).not.toContain('Run the above command');
+    expect(instance.lastFrame()).not.toContain(getShell('nushell')!.manualNote!);
   });
 
   it('pre-selects the detected current shell', async () => {
