@@ -10,6 +10,8 @@ type SuspendListener = (suspended: boolean) => void;
 
 const listeners = new Set<SuspendListener>();
 let depth = 0;
+/** Raw mode is only re-armed for a UI that had it: headless runs never do. */
+let rawBeforeSuspend = false;
 
 export function isUiSuspended(): boolean {
   return depth > 0;
@@ -45,6 +47,7 @@ function setRawModeStandard(enabled: boolean): void {
 export function suspendUi(): void {
   depth += 1;
   if (depth === 1) {
+    rawBeforeSuspend = process.stdin.isTTY === true && process.stdin.isRaw === true;
     setRawModeStandard(false);
     notify();
   }
@@ -54,7 +57,7 @@ export function resumeUi(): void {
   if (depth === 0) return;
   depth -= 1;
   if (depth === 0) {
-    setRawModeStandard(true);
+    if (rawBeforeSuspend) setRawModeStandard(true);
     notify();
   }
 }
@@ -65,7 +68,7 @@ export const SHOW_CURSOR = '\u001B[?25h';
 export function restoreTty(): void {
   setRawModeStandard(false);
   try {
-    process.stdout.write(SHOW_CURSOR);
+    if (process.stdout.isTTY) process.stdout.write(SHOW_CURSOR);
   } catch {
     // Stream already gone; nothing to restore.
   }
@@ -76,4 +79,5 @@ export function resetUiSuspension(): void {
   if (process.env.VITEST !== 'true') return;
   listeners.clear();
   depth = 0;
+  rawBeforeSuspend = false;
 }

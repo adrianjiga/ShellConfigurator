@@ -1,6 +1,6 @@
 name: Dependabot auto-merge
 
-on: pull_request_target
+on: pull_request_target # zizmor: ignore[dangerous-triggers]
 
 permissions:
   contents: write
@@ -16,11 +16,13 @@ jobs:
         id: metadata
         with:
           skip-commit-verification: true # "Update branch" rebases rewrite Dependabot's commits, losing the verified signature
-      # Only patch bumps of development deps (biome, vitest, typescript, ...) are
-      # auto-merged. `build(deps-dev):` pins the PR to the dev-dependency group, so
-      # a production-dep regressions can never slip in without review.
+      # Only patch bumps of development deps (biome, vitest, ...) are auto-merged.
+      # typescript compiles the shipped dist/, so its bumps always get a review.
       - name: Enable auto-merge for patch-level dev-dependency bumps
-        if: ${{ steps.metadata.outputs.update-type == 'version-update:semver-patch' && startsWith(github.event.pull_request.title, 'build(deps-dev):') }}
+        if: >
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' &&
+          steps.metadata.outputs.dependency-type == 'direct:development' &&
+          !contains(steps.metadata.outputs.dependency-names, 'typescript')
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

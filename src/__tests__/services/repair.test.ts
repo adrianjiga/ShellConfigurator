@@ -19,11 +19,17 @@ function makeDeps(
 ): RepairDeps {
   return {
     runDoctor: vi.fn().mockResolvedValueOnce(before).mockResolvedValue(after),
+    shellPointsAtShared: vi.fn().mockReturnValue(false),
     applyShellConfig: vi.fn().mockReturnValue({ applied: true }),
     installStarship: vi.fn().mockResolvedValue(undefined),
     installNerdFont: vi.fn().mockResolvedValue(undefined),
     wireTerminalFont: vi.fn().mockReturnValue({ applied: true } as TerminalFontResult),
     detectPackageManager: vi.fn().mockResolvedValue('apt'),
+    generateToml: vi.fn().mockReturnValue('add_newline = true\n'),
+    writeShellConfig: vi.fn().mockReturnValue({ path: '/home/u/.config/starship/zsh.toml' }),
+    recordStarshipVersion: vi.fn(),
+    getMissingStarshipPathDir: vi.fn().mockReturnValue(null),
+    readStarshipVersion: vi.fn().mockResolvedValue('starship 1.20.0'),
     ...overrides,
   };
 }
@@ -42,6 +48,52 @@ describe('runRepair', () => {
     expect(deps.applyShellConfig).not.toHaveBeenCalled();
   });
 
+  it('leaves warnings alone even when they carry a fix', async () => {
+    const deps = makeDeps(
+      report([
+        {
+          id: 'a',
+          title: 'A',
+          status: 'warn',
+          detail: 'maybe',
+          fix: { kind: 'reinstall-starship' },
+        },
+      ])
+    );
+    const result = await runRepair(null, deps);
+    expect(result.actions).toEqual([]);
+    expect(deps.applyShellConfig).not.toHaveBeenCalled();
+    expect(deps.installStarship).not.toHaveBeenCalled();
+  });
+
+  it('applies the fixes warnings carry when asked to include warnings', async () => {
+    const deps = makeDeps(
+      report([
+        {
+          id: 'font-selected',
+          title: 'Terminal font',
+          status: 'warn',
+          detail: 'kitty uses "Menlo"',
+          fix: { kind: 'wire-font', terminalId: 'kitty', family: 'Hack Nerd Font' },
+        },
+      ])
+    );
+    const result = await runRepair(null, deps, { includeWarnings: true });
+    expect(deps.wireTerminalFont).toHaveBeenCalledWith('kitty', 'Hack Nerd Font');
+    expect(result.actions[0]).toMatchObject({ status: 'fixed' });
+  });
+
+  it('plans fixes without applying them in dry-run', async () => {
+    const before = report([finding({ kind: 'configure-shell', shellId: 'zsh' })]);
+    const deps = makeDeps(before);
+    const result = await runRepair(null, deps, { dryRun: true });
+    expect(result.actions[0]).toMatchObject({ status: 'planned', detail: expect.any(String) });
+    expect(deps.applyShellConfig).not.toHaveBeenCalled();
+    expect(result.after).toBe(before);
+    expect(result.dryRun).toBe(true);
+    expect(deps.runDoctor).toHaveBeenCalledOnce();
+  });
+
   it('re-adds the init line for a shell', async () => {
     const deps = makeDeps(report([finding({ kind: 'configure-shell', shellId: 'zsh' })]));
     const result = await runRepair(null, deps);
@@ -49,10 +101,37 @@ describe('runRepair', () => {
     expect(result.actions[0]).toMatchObject({ status: 'fixed' });
   });
 
+  it('adds the PATH line for a script install that PATH cannot reach', async () => {
+    const deps = makeDeps(
+      report([finding({ kind: 'configure-shell', shellId: 'zsh' })]),
+      undefined,
+      {
+        getMissingStarshipPathDir: vi.fn().mockReturnValue('/home/u/.local/bin'),
+      }
+    );
+    await runRepair(null, deps);
+    expect(deps.applyShellConfig).toHaveBeenCalledWith('zsh', {
+      pointAtSharedConfig: false,
+      ensurePathDir: '/home/u/.local/bin',
+    });
+  });
+
   it('passes adopt mode through to the rc writer', async () => {
     const deps = makeDeps(report([finding({ kind: 'configure-shell', shellId: 'fish' })]));
     await runRepair(state({ keepExistingConfig: true }), deps);
     expect(deps.applyShellConfig).toHaveBeenCalledWith('fish', { pointAtSharedConfig: true });
+  });
+
+  it('reads the wiring mode from the rc when there is no state card', async () => {
+    const deps = makeDeps(
+      report([finding({ kind: 'configure-shell', shellId: 'zsh' })]),
+      undefined,
+      {
+        shellPointsAtShared: vi.fn().mockReturnValue(true),
+      }
+    );
+    await runRepair(null, deps);
+    expect(deps.applyShellConfig).toHaveBeenCalledWith('zsh', { pointAtSharedConfig: true });
   });
 
   it('marks an already-configured shell as skipped', async () => {
@@ -67,6 +146,32 @@ describe('runRepair', () => {
     expect(result.actions[0]).toMatchObject({ status: 'skipped', detail: 'already configured' });
   });
 
+  it('names the skip itself when the rc writer gives no note', async () => {
+    const deps = makeDeps(
+      report([finding({ kind: 'configure-shell', shellId: 'zsh' })]),
+      undefined,
+      {
+        applyShellConfig: vi.fn().mockReturnValue({ applied: false }),
+      }
+    );
+    const result = await runRepair(null, deps);
+    expect(result.actions[0]).toMatchObject({ status: 'skipped', detail: 'already configured' });
+  });
+
+  it('is not ok when a fix failed, even if the checks pass afterwards', async () => {
+    const deps = makeDeps(
+      report([finding({ kind: 'reinstall-font', fontId: 'Hack' })]),
+      report([]),
+      {
+        installNerdFont: vi.fn().mockRejectedValue(new Error('download failed')),
+      }
+    );
+    const result = await runRepair(null, deps);
+    expect(result.after.ok).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.actions[0]).toMatchObject({ status: 'failed', detail: 'download failed' });
+  });
+
   it('reinstalls starship via the detected package manager', async () => {
     const deps = makeDeps(report([finding({ kind: 'reinstall-starship' })]), undefined, {
       detectPackageManager: vi.fn().mockResolvedValue('brew'),
@@ -76,14 +181,28 @@ describe('runRepair', () => {
     expect(result.actions[0]).toMatchObject({ status: 'fixed' });
   });
 
-  it('fails cleanly when no package manager is detected', async () => {
+  it('records the fresh version and looks in the script install dir', async () => {
     const deps = makeDeps(report([finding({ kind: 'reinstall-starship' })]), undefined, {
-      detectPackageManager: vi.fn().mockResolvedValue(null),
+      getMissingStarshipPathDir: vi.fn().mockReturnValue('/home/u/.local/bin'),
     });
+    await runRepair(null, deps);
+    expect(deps.readStarshipVersion).toHaveBeenCalledWith('/home/u/.local/bin');
+    expect(deps.recordStarshipVersion).toHaveBeenCalledWith('starship 1.20.0');
+  });
+
+  it('regenerates a missing config from the state card', async () => {
+    const deps = makeDeps(report([finding({ kind: 'write-config', shellId: 'zsh' })]));
+    const result = await runRepair(state({ selectedShells: ['zsh'] }), deps);
+    expect(deps.generateToml).toHaveBeenCalledWith(state({ selectedShells: ['zsh'] }));
+    expect(deps.writeShellConfig).toHaveBeenCalledWith('add_newline = true\n', 'zsh');
+    expect(result.actions[0]).toMatchObject({ status: 'fixed' });
+  });
+
+  it('skips a regenerate fix without a state card', async () => {
+    const deps = makeDeps(report([finding({ kind: 'write-config', shellId: 'zsh' })]));
     const result = await runRepair(null, deps);
-    expect(deps.installStarship).not.toHaveBeenCalled();
-    expect(result.actions[0]).toMatchObject({ status: 'failed' });
-    expect(result.actions[0].detail).toMatch(/no supported package manager/);
+    expect(deps.writeShellConfig).not.toHaveBeenCalled();
+    expect(result.actions[0]).toMatchObject({ status: 'skipped' });
   });
 
   it('reinstalls a missing font', async () => {
@@ -95,7 +214,7 @@ describe('runRepair', () => {
 
   it('wires the terminal font and reports when it cannot be edited', async () => {
     const wired = makeDeps(
-      report([finding({ kind: 'wire-font', terminalId: 'wezterm', family: 'Hack Nerd Font' })])
+      report([finding({ kind: 'wire-font', terminalId: 'kitty', family: 'Hack Nerd Font' })])
     );
     expect((await runRepair(null, wired)).actions[0]).toMatchObject({ status: 'fixed' });
 
@@ -134,6 +253,43 @@ describe('runRepair', () => {
     expect(result.actions.map((a) => a.status)).toEqual(['failed', 'fixed']);
     expect(result.actions[0].detail).toMatch(/sudo denied/);
     expect(deps.installNerdFont).toHaveBeenCalledOnce();
+    expect(result.ok).toBe(false);
+  });
+
+  it('does not wire a shell when the starship install failed', async () => {
+    const deps = makeDeps(
+      report([
+        {
+          id: 'starship',
+          title: 'Starship',
+          status: 'fail',
+          detail: 'x',
+          fix: { kind: 'reinstall-starship' },
+        },
+        finding({ kind: 'configure-shell', shellId: 'zsh' }),
+      ]),
+      undefined,
+      { installStarship: vi.fn().mockRejectedValue(new Error('sudo denied')) }
+    );
+    const result = await runRepair(null, deps);
+    expect(deps.applyShellConfig).not.toHaveBeenCalled();
+    expect(result.actions[1]).toMatchObject({ status: 'skipped' });
+    expect(result.actions[1].detail).toMatch(/would break new shells/);
+  });
+
+  it('does not point the terminal at a font that failed to install', async () => {
+    const deps = makeDeps(
+      report([
+        finding({ kind: 'reinstall-font', fontId: 'Hack' }),
+        finding({ kind: 'wire-font', terminalId: 'kitty', family: 'Hack Nerd Font' }),
+      ]),
+      undefined,
+      { installNerdFont: vi.fn().mockRejectedValue(new Error('no space')) }
+    );
+    const result = await runRepair(null, deps);
+    expect(deps.wireTerminalFont).not.toHaveBeenCalled();
+    expect(result.actions[1]).toMatchObject({ status: 'skipped' });
+    expect(result.actions[1].detail).toMatch(/left unchanged/);
   });
 
   it('reports failure when the checks still fail afterwards', async () => {
@@ -152,10 +308,11 @@ describe('formatRepairReport', () => {
       after: report([{ id: 'a', title: 'Starship', status: 'pass', detail: 'starship 1.20' }]),
       actions: [{ findingId: 'x', title: 'Zsh', status: 'fixed', detail: 'rewired' }],
       ok: true,
+      dryRun: false,
     });
     expect(text).toContain('FIXED   Zsh — rewired');
     expect(text).toContain('After repair:');
-    expect(text).toContain('PASS  Starship — starship 1.20');
+    expect(text).toContain('PASS    Starship — starship 1.20');
   });
 
   it('says there is nothing to repair when no action ran', () => {
@@ -164,7 +321,36 @@ describe('formatRepairReport', () => {
       after: report([]),
       actions: [],
       ok: true,
+      dryRun: false,
     });
     expect(text).toContain('Nothing to repair.');
+  });
+
+  it('lines up failed and skipped actions in the status column', () => {
+    const text = formatRepairReport({
+      before: report([]),
+      after: report([]),
+      actions: [
+        { findingId: 'a', title: 'Nerd Font', status: 'failed', detail: 'download failed' },
+        { findingId: 'b', title: 'Zsh', status: 'skipped', detail: 'already configured' },
+      ],
+      ok: false,
+      dryRun: false,
+    });
+    expect(text).toContain('FAILED  Nerd Font — download failed');
+    expect(text).toContain('SKIPPED Zsh — already configured');
+  });
+
+  it('labels a dry run and skips the post-repair report', () => {
+    const text = formatRepairReport({
+      before: report([]),
+      after: report([]),
+      actions: [{ findingId: 'x', title: 'Zsh', status: 'planned', detail: 'rewire zsh' }],
+      ok: false,
+      dryRun: true,
+    });
+    expect(text).toContain('dry run — nothing was applied');
+    expect(text).toContain('PLANNED Zsh — rewire zsh');
+    expect(text).not.toContain('After repair:');
   });
 });

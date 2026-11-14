@@ -10,15 +10,23 @@ vi.mock('../services/detector.ts', () => ({
   isStarshipInstalledAsync: vi
     .fn()
     .mockResolvedValue({ installed: true, version: 'starship 1.20' }),
+  findStarshipAsync: vi.fn().mockResolvedValue({ installed: true, version: 'starship 1.20' }),
   detectInstalledShellsAsync: vi.fn().mockResolvedValue(['zsh', 'bash']),
+  detectCurrentShellAsync: vi.fn().mockResolvedValue('zsh'),
   detectTerminalAsync: vi.fn().mockResolvedValue(null),
   detectContainerAsync: vi.fn().mockResolvedValue(false),
+}));
+
+const mocks = vi.hoisted(() => ({ exit: vi.fn() }));
+vi.mock('ink', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('ink')>()),
+  useApp: () => ({ exit: mocks.exit }),
 }));
 
 import { App } from '../app.tsx';
 
 const ENTER = '\r';
-const DOWN = '[B';
+const DOWN = '\u001B[B';
 
 afterEach(cleanup);
 beforeEach(() => vi.clearAllMocks());
@@ -96,7 +104,21 @@ describe('App wizard routing', () => {
     await press(instance, ENTER); // preset -> segments_left
 
     expect(instance.lastFrame()).toContain('Left prompt segments');
-    // The preview pane renders alongside the picker.
-    expect(instance.lastFrame()).toContain('Preview');
+    const before = instance.lastFrame()?.match(/(\d+) left segments?/)?.[1];
+
+    await press(instance, ' '); // drop the first segment
+
+    const after = instance.lastFrame()?.match(/(\d+) left segments?/)?.[1];
+    expect(Number(after)).toBe(Number(before) - 1);
+  });
+});
+
+describe('App Ctrl+C', () => {
+  it('exits on Ctrl+C outside the install step', async () => {
+    const instance = render(<App />);
+    await flush();
+    instance.stdin.write('\u0003');
+    await flush();
+    expect(mocks.exit).toHaveBeenCalled();
   });
 });

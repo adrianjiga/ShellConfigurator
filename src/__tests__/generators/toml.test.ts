@@ -48,3 +48,15 @@ describe('tomlLiteral', () => {
     expect(parse(out)).toEqual({ s: "it's" });
   });
 });
+
+describe('control characters', () => {
+  it('escapes control characters that TOML forbids in basic strings', () => {
+    const value = `a\u001bb\u0000c\u007f`;
+    expect(parse(`k = "${tomlBasic(value)}"`).k).toBe(value);
+  });
+
+  it('falls back to a basic string for a literal value with a newline', () => {
+    const value = 'line1\nline2';
+    expect(parse(`k = ${tomlLiteral(value)}`).k).toBe(value);
+  });
+});

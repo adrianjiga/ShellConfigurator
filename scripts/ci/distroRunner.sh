@@ -17,7 +17,6 @@ exec bash -euxo pipefail -c '
   cd /tmp/src
   export HOME=/tmp/smoke-home
   npm ci
-  npm run build
   node scripts/dockerSmoke.mjs
   if [ -n "${WIZARD_CHECK:-}" ] && [ "$WIZARD_CHECK" != "true" ]; then eval "$WIZARD_CHECK"; fi
 '

@@ -4,11 +4,14 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   cachedFont,
+  cachedStarshipVersion,
   cacheFont,
   fontCachePath,
   pinnedDigest,
+  recordStarshipVersion,
   sha256Digest,
 } from '../../services/cache.ts';
+import { cacheDir } from '../../services/paths.ts';
 
 let tmpDir: string;
 const savedEnv = { ...process.env };
@@ -76,7 +79,9 @@ describe('cacheFont / pinnedDigest / cachedFont', () => {
       path: fontCachePath('Hack'),
       digest,
       bytes: buffer.byteLength,
+      buffer,
     });
+    expect(cached?.buffer.equals(buffer)).toBe(true);
   });
 
   it('treats a tampered archive as absent instead of returning corrupted bytes', () => {
@@ -94,5 +99,43 @@ describe('cacheFont / pinnedDigest / cachedFont', () => {
     expect(second).not.toBe(first);
     expect(pinnedDigest('CascadiaCode')).toBe(second);
     expect(cachedFont('CascadiaCode')?.digest).toBe(second);
+  });
+});
+
+describe('cached font without a usable pin', () => {
+  it('treats an archive with no pin file as absent', () => {
+    fs.mkdirSync(path.dirname(fontCachePath('Hack')), { recursive: true });
+    fs.writeFileSync(fontCachePath('Hack'), 'bytes');
+    expect(cachedFont('Hack')).toBeNull();
+  });
+
+  it('treats an empty pin file as no pin', () => {
+    cacheFont('Hack', Buffer.from('bytes'));
+    fs.writeFileSync(fontCachePath('Hack').replace(/\.zip$/, '.sha256'), '\n');
+    expect(pinnedDigest('Hack')).toBeNull();
+    expect(cachedFont('Hack')).toBeNull();
+  });
+});
+
+describe('starship version record', () => {
+  it('is null before any version was recorded', () => {
+    expect(cachedStarshipVersion()).toBeNull();
+  });
+
+  it('creates the cache folder and reads back what it recorded', () => {
+    recordStarshipVersion('starship 1.27.0');
+    expect(fs.existsSync(cacheDir())).toBe(true);
+    expect(cachedStarshipVersion()).toBe('starship 1.27.0');
+  });
+
+  it('treats an empty record as none', () => {
+    fs.mkdirSync(cacheDir(), { recursive: true });
+    fs.writeFileSync(path.join(cacheDir(), 'starship.version'), '  \n');
+    expect(cachedStarshipVersion()).toBeNull();
+  });
+
+  it('rethrows a read error that is not a missing file', () => {
+    fs.mkdirSync(path.join(cacheDir(), 'starship.version'), { recursive: true });
+    expect(() => cachedStarshipVersion()).toThrow(/EISDIR/);
   });
 });

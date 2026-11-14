@@ -1,12 +1,14 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   appendHistory,
   type HistoryRecord,
   historyFilePath,
-  readHistory,
+  lastRunShells,
+  recordRun,
+  recordRunSafely,
   snapshotDir,
   snapshotPath,
   writeSnapshot,
@@ -32,13 +34,21 @@ function record(
   return { version: 1, timestamp: '2026-01-02T03:04:05.000Z', kind, ...overrides };
 }
 
+function readLedger(): HistoryRecord[] {
+  return fs
+    .readFileSync(historyFilePath(), 'utf8')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => JSON.parse(line) as HistoryRecord);
+}
+
 describe('historyFilePath', () => {
   it('places history.jsonl inside the app state dir', () => {
     expect(historyFilePath()).toBe(path.join(tmpDir, 'shell-configurator', 'history.jsonl'));
   });
 });
 
-describe('appendHistory / readHistory', () => {
+describe('appendHistory', () => {
   it('creates the state dir and appends a single JSON line', () => {
     appendHistory(record('install'));
 
@@ -51,12 +61,18 @@ describe('appendHistory / readHistory', () => {
     expect(JSON.parse(lines[0])).toMatchObject({ version: 1, kind: 'install' });
   });
 
+  it('creates history.jsonl readable only by its owner', () => {
+    appendHistory(record('apply', { command: 'apply --import-url https://u:tok@example.com/x' }));
+
+    const mode = fs.statSync(historyFilePath()).mode & 0o777;
+    expect(mode).toBe(0o600);
+  });
+
   it('is append-only: later runs follow earlier ones in file order', () => {
     appendHistory(record('apply', { command: 'apply --state one.json', exitCode: 0 }));
     appendHistory(record('apply', { command: 'apply --state two.json', exitCode: 1 }));
 
-    const runs = readHistory();
-    expect(runs.map((r) => r.command)).toEqual([
+    expect(readLedger().map((r) => r.command)).toEqual([
       'apply --state one.json',
       'apply --state two.json',
     ]);
@@ -75,7 +91,7 @@ describe('appendHistory / readHistory', () => {
       })
     );
 
-    expect(readHistory()).toEqual([
+    expect(readLedger()).toEqual([
       record('install', {
         command: 'shell-configurator',
         snapshotId: 'snap-abc123',
@@ -88,17 +104,45 @@ describe('appendHistory / readHistory', () => {
     ]);
   });
 
-  it('returns an empty list when no history exists yet', () => {
-    expect(readHistory()).toEqual([]);
-  });
-
-  it('skips blank and torn lines instead of failing the read', () => {
+  it('starts a new line after a record torn by a crash', () => {
     const file = historyFilePath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    const good = JSON.stringify(record('apply', { exitCode: 0 }));
-    fs.writeFileSync(file, `${good}\n\n{"version":1,"kind":"install","timestamp":"torn\n`, 'utf8');
+    fs.writeFileSync(file, '{"version":1,"kind":"apply"', 'utf8');
 
-    expect(readHistory()).toEqual([record('apply', { exitCode: 0 })]);
+    appendHistory(record('install', { exitCode: 0 }));
+
+    const lines = fs
+      .readFileSync(file, 'utf8')
+      .split('\n')
+      .filter((l) => l.trim() !== '');
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[1])).toMatchObject({ kind: 'install', exitCode: 0 });
+  });
+});
+
+describe('recordRun', () => {
+  const state: WizardState = { ...DEFAULT_STATE, selectedShells: ['zsh'] };
+
+  it('snapshots the state and links the snapshot from the ledger record', () => {
+    recordRun({
+      kind: 'apply',
+      state,
+      command: 'apply --shells zsh',
+      results: [{ id: 'starship', label: 'Install Starship', status: 'done' }],
+      exitCode: 0,
+    });
+
+    const [run] = readLedger();
+    expect(run.snapshotId).toBeDefined();
+    expect(fs.existsSync(snapshotPath(run.snapshotId ?? ''))).toBe(true);
+    expect(run).toMatchObject({ kind: 'apply', command: 'apply --shells zsh', exitCode: 0 });
+  });
+
+  it('records no snapshot when the run has no state', () => {
+    recordRun({ kind: 'uninstall' });
+
+    expect(readLedger()[0]?.snapshotId).toBeUndefined();
+    expect(fs.existsSync(snapshotDir())).toBe(false);
   });
 });
 
@@ -128,13 +172,63 @@ describe('snapshotDir / snapshotPath / writeSnapshot', () => {
     expect(card.wizard.selectedShells).toEqual(['zsh']);
   });
 
-  it('is unique per timestamp and re-writable for an id', () => {
+  it('is unique per timestamp and suffixes a same-millisecond run', () => {
     const first = writeSnapshot(DEFAULT_STATE, '2026-01-02T03:04:05.000Z');
     const second = writeSnapshot(DEFAULT_STATE, '2026-01-02T03:04:06.000Z');
+    const sameMillisecond = writeSnapshot(DEFAULT_STATE, '2026-01-02T03:04:05.000Z');
 
     expect(first).not.toBe(second);
-    // Same id overwrites the same card — idempotent snapshots.
-    expect(writeSnapshot(DEFAULT_STATE, '2026-01-02T03:04:05.000Z')).toBe(first);
-    expect(fs.readdirSync(snapshotDir())).toHaveLength(2);
+    expect(sameMillisecond).toBe(`${first}-2`);
+    expect(fs.readdirSync(snapshotDir())).toHaveLength(3);
+  });
+});
+
+describe('lastRunShells', () => {
+  it('returns null when no run has been recorded', () => {
+    expect(lastRunShells()).toBeNull();
+  });
+
+  it('reads the shells of the newest run that left a snapshot', () => {
+    recordRun({ kind: 'install', state: { ...DEFAULT_STATE, selectedShells: ['zsh'] } });
+    recordRun({ kind: 'apply', state: { ...DEFAULT_STATE, selectedShells: ['bash', 'fish'] } });
+    appendHistory(record('apply'));
+
+    expect(lastRunShells()).toEqual(['bash', 'fish']);
+  });
+
+  it('falls back past torn, non-object and snapshot-less lines to an earlier run', () => {
+    recordRun({ kind: 'install', state: { ...DEFAULT_STATE, selectedShells: ['zsh'] } });
+    appendHistory(record('apply', { snapshotId: 'deleted-snapshot' }));
+    fs.appendFileSync(historyFilePath(), 'null\n42\n{"version":1,"snapsh');
+
+    expect(lastRunShells()).toEqual(['zsh']);
+  });
+});
+
+describe('appendHistory failures', () => {
+  it.skipIf(process.getuid?.() === 0)('rethrows a read error that is not a missing file', () => {
+    appendHistory(record('install'));
+    const dir = path.dirname(historyFilePath());
+    fs.chmodSync(dir, 0o000);
+    try {
+      expect(() => appendHistory(record('apply'))).toThrow(/EACCES/);
+    } finally {
+      fs.chmodSync(dir, 0o700);
+    }
+  });
+});
+
+describe('recordRunSafely', () => {
+  it('turns a failed write into a warning instead of ending the run', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const failing = vi.fn(() => {
+      throw new Error('disk full');
+    });
+
+    expect(() => recordRunSafely({ kind: 'apply' }, failing)).not.toThrow();
+    expect(stderr).toHaveBeenCalledWith(
+      'Warning: could not record this run in history: disk full\n'
+    );
+    stderr.mockRestore();
   });
 });

@@ -21,7 +21,7 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/),
 - **Adopt-existing-config**: keep your current `~/.config/starship.toml` (or import one from a URL) and only install fonts, Starship, missing shells, and the shell wiring
 - **Terminal font wiring**: detect your terminal (Alacritty, kitty, WezTerm, Ghostty, foot) and select the installed Nerd Font in its config automatically
 - **Post-install verification**: after everything is applied, the written configs are loaded through the real `starship print-config` to catch a broken prompt before you restart
-- **Doctor / repair**: a read-only day-2 health check (Starship, locale, shell wiring, config validity, font installed + selected, version drift) and a mode that applies fixes and re-checks
+- **Doctor / repair**: a read-only day-2 health check (Starship, locale, shell wiring, config validity, font installed + selected, version drift, the shell you are running) and a mode that applies fixes and re-checks
 
 ## Requirements
 
@@ -47,17 +47,22 @@ shell-configurator
 
 ```text
 shell-configurator                            start the wizard
-shell-configurator generate                   render a starship.toml from flags
-shell-configurator apply                      run a full install headlessly from a state card
-shell-configurator apply --adopt              keep the existing shared config and wire shells to it
-shell-configurator apply --import-url <url>   fetch a shared config (gist/URL) and adopt it (implies --adopt; bounded: 10s timeout, 1 MB max)
+shell-configurator generate                   render a starship.toml from flags or a --state card (-o/--output <file>, --export <card>)
+shell-configurator apply                      run a full install headlessly from flags (--shells required) or a --state card
+shell-configurator apply --adopt --shells …   keep the existing shared config and wire shells to it
+shell-configurator apply --import-url <url>   fetch a shared config (https gist/URL) and adopt it (implies --adopt; bounded: 10s timeout, 1 MB max)
 shell-configurator doctor [--state <file>]    run the read-only day-2 health check (--json for machine-readable)
-shell-configurator doctor --fix / repair      apply the fixes for failing checks, then re-run the checks
+shell-configurator doctor --fix / repair      apply the fixes for failing checks, then re-run the checks (--dry-run to only list them)
+shell-configurator repair --include-warnings  also apply the fixes warnings suggest (e.g. the terminal font)
 shell-configurator --help                     show usage and exit
 shell-configurator --version                  print the version and exit
 shell-configurator --dry-run                  preview the config without installing (also -d, --no-install)
-shell-configurator --restore                  restore the shared and per-shell configs from their newest backup
+shell-configurator --restore                  restore the shared and per-shell configs from their newest backup (also --undo)
 ```
+
+`--state` also accepts the alias `--import`. Without `--state`, `doctor` and
+`repair` check every installed shell and read each one's wiring (per-shell or
+adopt mode) from its rc file.
 
 Flags may appear before or after the subcommand (e.g. `--dry-run apply --state card.json`);
 when a flag is repeated, the last one wins.
@@ -68,27 +73,31 @@ Brownfield users already have a `~/.config/starship.toml` they want to keep.
 Instead of generating per-shell configs that shadow it, run:
 
 ```bash
-shell-configurator apply --adopt [--shells zsh,bash,fish]
+shell-configurator apply --adopt --shells zsh,bash,fish
 ```
 
 The wizard's normal work is skipped in adopt mode: your `starship.toml` stays in
 place and untouched, and every selected shell is wired straight to it (the rc
 blocks get the `starship init` line with no `STARSHIP_CONFIG` export). Fonts,
-Starship, and missing shells are still installed.
+Starship, and missing shells are still installed. `--shells` (or a `--state`
+card that selects shells) is required.
 
 To adopt a config shared elsewhere, such as a gist:
 
 ```bash
-shell-configurator apply --import-url https://gist.github.com/user/abc123/raw/starship.toml
+shell-configurator apply --import-url https://gist.github.com/user/abc123/raw/starship.toml --shells zsh
 ```
 
 The fetched TOML is written to `~/.config/starship.toml` (backing up anything
 already there) and the shells are wired to it. `--import-url` implies `--adopt`.
-Fetches are bounded: a hung connection is aborted after 10 seconds, and a config
-over 1 MB is rejected rather than downloaded.
+The URL must be https (a redirect to plain http is refused too), and an HTML page
+is rejected, so point it at the raw file. Fetches are bounded: a hung connection
+is aborted after 10 seconds, and a config over 1 MB is rejected rather than
+downloaded.
 
-Both flags only make sense with the `apply` subcommand, so they are rejected
-elsewhere with a usage error.
+Both flags only make sense with the `apply` subcommand: `generate` and the
+interactive wizard reject them with a usage error, and `doctor`/`repair` warn
+that they are ignored without `--state`.
 
 ### Via curl (requires Node.js 24+)
 
@@ -108,27 +117,35 @@ npm run dev
 
 The wizard exits non-zero if any install step fails, so it can be used in a script.
 
-Exit codes: `0` on success, `1` when an install step failed or a fatal error
-occurred, `2` for a usage error (an invalid flag value, `--adopt`/`--import-url`
-outside `apply`, or an unreadable state card). An unknown or malformed flag (a
-bogus `--name` or a value on a boolean flag) is dropped with a `warning:` on
-stderr and does not abort the run.
+Exit codes: `0` on success; `1` when an install step failed, `doctor` found a
+failing check, `repair` left one failing, `-o`/`--export` could not be written,
+an `--import-url` fetch failed, or a fatal error occurred; `2` for a usage error
+(an unknown command or flag, a missing or invalid flag value, `--adopt`/`--import-url`
+outside `apply`, `apply` with no shells selected, or a state card that cannot be
+read, is not valid JSON, or has an unsupported version or invalid field). A typo
+never starts the installer: anything the parser does not recognise aborts the
+run.
 
 ### Headless mode, state cards and run data
 
 `generate` and `apply` run the same pure logic as the wizard. `generate` prints
-the TOML to stdout (`-o <file>` to capture it); add `--export <file>` to also
-write the versioned state card. A card captures only your choices, so
-`apply --state /path/to/card.json` reproduces the same prompt on any machine:
+the TOML to stdout (`-o <file>` writes it to a file instead); `--export <file>`
+writes the versioned state card, and without `-o` nothing is printed. A card
+captures only your choices, so `apply --state /path/to/card.json` reproduces
+the same prompt on any machine. Include `--shells` when generating, or `apply`
+has no shells to configure:
 
 ```bash
-shell-configurator generate --preset tokyo-night --palette gruvbox -o starship.toml --export my-card.json
+shell-configurator generate --preset tokyo-night --palette gruvbox --shells zsh,fish -o starship.toml --export my-card.json
 shell-configurator apply --state my-card.json
 ```
 
-Every run appends one record to `history.jsonl` (under the XDG state dir) and
-snapshots the card it applied, so `--restore` and rollback have something to
-work from. Nerd Font archives are cached under the XDG cache dir, verified
+Every wizard install and real (non-dry-run) `apply` appends one record to
+`history.jsonl` (under the XDG state dir) and snapshots the card it applied;
+`generate`, `doctor`, `repair` and dry runs record nothing. `--restore` copies
+the newest `.bak-*` backups back over the shared config and the per-shell
+configs, limited to the shells the last recorded run configured; it does not
+touch rc files. Nerd Font archives are cached under the XDG cache dir, verified
 against their pinned SHA-256 before offline reuse. The state-card schema, the
 run ledger, the font cache, `--restore`, and the full headless flag surface are
 documented in [docs/API-Interface-Design.md](docs/API-Interface-Design.md).
@@ -138,23 +155,23 @@ All releases, including changelogs and install tarballs, are published on
 
 ### Wizard steps
 
-| Step           | Description                                                                                   |
-| -------------- | --------------------------------------------------------------------------------------------- |
-| Welcome        | Detects your package manager and Starship install status                                      |
-| Font check     | Checks whether you have a Nerd Font already                                                   |
-| Font pick      | Choose a Nerd Font to install (skipped if not needed)                                         |
-| Preset         | Pick a starting preset                                                                        |
-| Left segments  | Choose modules for the left side of your prompt                                               |
-| Right segments | Choose modules for the right side                                                             |
-| Style          | Color scheme and character symbol                                                             |
-| Shell select   | Pick which shells to configure (shows install status per shell)                               |
-| Review         | Preview the config to write (or the shared config to keep in adopt mode) and the install plan |
-| Installing     | Runs all installs and writes config                                                           |
-| Done           | Summary of everything that was applied                                                        |
+| Step           | Description                                                                                                            |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Welcome        | Detects your package manager, Starship install status, terminal, and whether it is in a container                      |
+| Font check     | Checks whether you have a Nerd Font already                                                                            |
+| Font pick      | Choose a Nerd Font to install (skipped if not needed)                                                                  |
+| Preset         | Pick a starting preset                                                                                                 |
+| Left segments  | Choose modules for the left side of your prompt                                                                        |
+| Right segments | Choose modules for the right side                                                                                      |
+| Style          | Palette, segment style, character symbol, wrapped-line marker, blank line, vim mode, directory depth and substitutions |
+| Shell select   | Pick which shells to configure (shows install status per shell)                                                        |
+| Review         | Preview the config to write, each shell's rc wiring, and the install plan                                              |
+| Installing     | Runs all installs and writes config                                                                                    |
+| Done           | Summary of everything that was applied                                                                                 |
 
 ## What gets installed / configured
 
-- **Starship**: via your package manager, or `curl` if none is detected
+- **Starship**: via `brew`, `pacman` or `apk`; on `apt` and `dnf` systems (which carry no starship package) or with no package manager, via the official install script into `~/.local/bin`
 - **Nerd Font**: downloaded from the official nerd-fonts GitHub release, its SHA-256 checked against the digest published for that release, and extracted in an isolated worker before being installed to `~/Library/Fonts/` (macOS) or `~/.local/share/fonts/` (Linux)
 - **Terminal font**: when a supported terminal is detected (Alacritty, kitty, WezTerm, Ghostty, foot), its config is edited to select the installed Nerd Font (WezTerm prints the exact line instead — its config is Lua)
 - **Shells**: installed via your package manager if not already present
@@ -162,7 +179,7 @@ All releases, including changelogs and install tarballs, are published on
 - **Adopt mode**: `apply --adopt` (or `--import-url`) keeps the shared `~/.config/starship.toml` as the one prompt every shell reads; no per-shell files are written, and the rc blocks carry no `STARSHIP_CONFIG` export
 - **Shell RC files**: each selected shell gets a `STARSHIP_CONFIG` export pointing at its own config plus the `starship init` line (appended idempotently); shells left unselected get an `unset` guard so a configured parent's prompt doesn't leak in
 - **Nushell**: `nu` has no rc file, so its setup command pins `STARSHIP_CONFIG` at startup via a `vendor/autoload` `export-env` file instead
-- **Verification**: after the rc steps, every config written this run is loaded through the real `starship print-config`, so a broken prompt is caught before you restart. Font and `chsh` tasks are skipped in a container.
+- **Verification**: after the rc steps, every config written this run is loaded through the real `starship print-config`, so a broken prompt is caught before you restart. Font and `chsh` tasks are skipped in a container, and also when `CODESPACES`, `REMOTE_CONTAINERS`, `DEVCONTAINER`, `CI` or `KUBERNETES_SERVICE_HOST` is set.
 
 ## Supported Nerd Fonts
 
@@ -170,23 +187,23 @@ JetBrains Mono, Fira Code, Hack, Cascadia Code, Meslo LG, Source Code Pro
 
 ## Supported Shells
 
-| Shell      | RC file                         |
-| ---------- | ------------------------------- |
-| zsh        | `~/.zshrc`                      |
-| bash       | `~/.bashrc`                     |
-| fish       | `~/.config/fish/config.fish`    |
-| nushell    | manual (see note after install) |
-| PowerShell | manual (see note after install) |
+| Shell      | RC file                                                                    |
+| ---------- | -------------------------------------------------------------------------- |
+| zsh        | `$ZDOTDIR/.zshrc` (default `~/.zshrc`)                                     |
+| bash       | `~/.bashrc`                                                                |
+| fish       | `$XDG_CONFIG_HOME/fish/config.fish` (default `~/.config/fish/config.fish`) |
+| nushell    | manual (see note after install)                                            |
+| PowerShell | manual (see note after install)                                            |
 
 ## Project structure
 
 ```
 src/
-  config/        # Module, preset, and shell definitions
+  config/        # Module, preset, palette, colour, directory, prompt-symbol, status and shell definitions
   generators/    # TOML config builder and shell RC updater
   screens/       # One file per wizard step
-  services/      # Detection (detector.ts), installation (installer.ts, fontExtractor.ts, terminalFont.ts), orchestration (installTasks.ts), health (doctor.ts, repair.ts)
-  components/    # WizardLayout, PromptPreview, NavHints
+  services/      # CLI (args.ts, headless.ts, state.ts), detection (detector.ts), installation (installer.ts, fontExtractor.ts, terminalFont.ts), orchestration (installTasks.ts), health (doctor.ts, repair.ts), run data (history.ts, cache.ts), preview, exec/tty, paths and errors
+  components/    # WizardLayout, PromptPreview, NavHints, PickerRow, PlanSections, AppSelectInput, ErrorBoundary
   stepMachine.ts # Pure step navigation (getNextStep / getPrevStep)
   types.ts       # Shared types, STEP_ORDER, default state
   app.tsx        # State owner + step router

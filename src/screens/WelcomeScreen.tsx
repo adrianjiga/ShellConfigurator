@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
-import { useCallback, useEffect, useState } from 'react';
-import { AppSelectInput } from '../components/AppSelectInput.tsx';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppSelectInput, type SelectItem } from '../components/AppSelectInput.tsx';
 import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
@@ -8,8 +8,9 @@ import {
   detectContainerAsync,
   detectPackageManagerAsync,
   detectTerminalAsync,
-  isStarshipInstalledAsync,
+  findStarshipAsync,
 } from '../services/detector.ts';
+import { MANUAL_STARSHIP_INSTALL } from '../services/installer.ts';
 import { TERMINAL_LABELS } from '../services/terminalFont.ts';
 import type { PackageManager, TerminalId, WizardState } from '../types.ts';
 
@@ -19,7 +20,7 @@ interface WelcomeScreenProps {
 }
 
 interface Detection {
-  starship: { installed: boolean; version?: string };
+  starship: { installed: boolean; version?: string; pathDir?: string };
   pm: PackageManager;
   terminal: TerminalId | null;
   container: boolean;
@@ -27,13 +28,11 @@ interface Detection {
 
 type InstallChoice = 'auto' | 'manual';
 type ManualChoice = 'recheck' | 'continue';
-type Item<V> = { label: string; value: V };
-
 const PM_LABELS: Record<PackageManager, string> = {
   pacman: 'pacman (Arch)',
   apt: 'apt (Debian/Ubuntu)',
   dnf: 'dnf (Fedora)',
-  brew: 'Homebrew (macOS)',
+  brew: 'Homebrew',
   apk: 'apk (Alpine)',
   script: 'install script (no package manager detected)',
 };
@@ -42,15 +41,30 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
   const [detection, setDetection] = useState<Detection | null>(null);
   const [showManualHelp, setShowManualHelp] = useState(false);
 
-  const runDetection = useCallback(async (shouldDrop: () => boolean = () => false) => {
-    const [pm, starship, terminal, container] = await Promise.all([
-      detectPackageManagerAsync(),
-      isStarshipInstalledAsync(),
-      detectTerminalAsync(),
-      detectContainerAsync(),
-    ]);
-    if (!shouldDrop()) setDetection({ pm, starship, terminal, container });
-  }, []);
+  const [stillMissing, setStillMissing] = useState(false);
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    []
+  );
+
+  const runDetection = useCallback(
+    async (shouldDrop: () => boolean = () => false): Promise<Detection | null> => {
+      const [pm, starship, terminal, container] = await Promise.all([
+        detectPackageManagerAsync(),
+        findStarshipAsync(),
+        detectTerminalAsync(),
+        detectContainerAsync(),
+      ]);
+      if (shouldDrop()) return null;
+      const found = { pm, starship, terminal, container };
+      setDetection(found);
+      return found;
+    },
+    []
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -60,35 +74,35 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
     };
   }, [runDetection]);
 
+  /** What detection found, plus whether this run installs Starship. */
+  function proceed(found: Detection, skipStarshipInstall: boolean) {
+    onNext({
+      packageManager: found.pm,
+      terminal: found.terminal,
+      container: found.container,
+      skipStarshipInstall,
+    });
+  }
+
   useInput((_, key) => {
-    if (key.return && detection?.starship.installed) {
-      onNext({
-        packageManager: detection.pm,
-        terminal: detection.terminal,
-        container: detection.container,
-      });
-    }
+    if (key.return && detection?.starship.installed) proceed(detection, false);
   });
 
-  const installItems: Item<InstallChoice>[] = [
+  const installItems: SelectItem<InstallChoice>[] = [
     { label: 'Install automatically', value: 'auto' },
     { label: "I'll install it manually", value: 'manual' },
   ];
 
-  const manualItems: Item<ManualChoice>[] = [
+  const manualItems: SelectItem<ManualChoice>[] = [
     { label: 'Re-check (I installed it)', value: 'recheck' },
     { label: 'Continue without Starship', value: 'continue' },
   ];
 
-  function handleInstallChoice(item: Item<InstallChoice>) {
+  function handleInstallChoice(item: SelectItem<InstallChoice>) {
     if (!detection) return;
     switch (item.value) {
       case 'auto':
-        onNext({
-          packageManager: detection.pm,
-          terminal: detection.terminal,
-          container: detection.container,
-        });
+        proceed(detection, false);
         break;
       case 'manual':
         setShowManualHelp(true);
@@ -96,21 +110,19 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
     }
   }
 
-  async function handleManualChoice(item: Item<ManualChoice>) {
+  async function handleManualChoice(item: SelectItem<ManualChoice>) {
     if (!detection) return;
     switch (item.value) {
-      case 'recheck':
-        setShowManualHelp(false);
+      case 'recheck': {
+        setStillMissing(false);
         setDetection(null);
-        await runDetection();
+        const found = await runDetection(() => !mounted.current);
+        // Stay on the manual-install options rather than jumping back to "Install".
+        if (found && !found.starship.installed) setStillMissing(true);
         break;
+      }
       case 'continue':
-        onNext({
-          packageManager: detection.pm,
-          terminal: detection.terminal,
-          container: detection.container,
-          skipStarshipInstall: true,
-        });
+        proceed(detection, true);
         break;
     }
   }
@@ -161,17 +173,26 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
                   {detection.starship.version && (
                     <Text color={uiColor('gray')}> {detection.starship.version}</Text>
                   )}
+                  {detection.starship.pathDir && (
+                    <Text color={uiColor('gray')}>
+                      {' '}
+                      in {detection.starship.pathDir}, which the shells will add to PATH
+                    </Text>
+                  )}
                 </Box>
               ) : (
                 <Box flexDirection="column" gap={1}>
                   <Text color={uiColor('yellow')}>✗ Starship is not installed</Text>
                   {showManualHelp ? (
                     <Box flexDirection="column" gap={1}>
+                      {stillMissing && (
+                        <Text color={uiColor('yellow')}>
+                          Still not found. Install it in another terminal, then re-check.
+                        </Text>
+                      )}
                       <Text color={uiColor('gray')}>
                         Install Starship:{' '}
-                        <Text color={uiColor('cyan')}>
-                          curl -sS https://starship.rs/install.sh | sh
-                        </Text>
+                        <Text color={uiColor('cyan')}>{MANUAL_STARSHIP_INSTALL}</Text>
                       </Text>
                       <Text color={uiColor('gray')}>
                         Or see{' '}
@@ -192,6 +213,14 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
       </Box>
 
       {detection?.starship.installed && <NavHints hints={[{ key: 'Enter', label: 'continue' }]} />}
+      {detection && !detection.starship.installed && (
+        <NavHints
+          hints={[
+            { key: '↑↓', label: 'navigate' },
+            { key: 'Enter/1-9', label: 'select' },
+          ]}
+        />
+      )}
     </WizardLayout>
   );
 }

@@ -11,9 +11,14 @@ export async function flush() {
  */
 export async function waitFor(check: () => unknown, what = 'condition'): Promise<void> {
   const started = Date.now();
+  let lastError: unknown;
   while (Date.now() - started < 5000) {
-    if (check()) return;
+    try {
+      if (check()) return;
+    } catch (err) {
+      lastError = err;
+    }
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error(`timed out waiting for ${what}`);
+  throw new Error(`timed out waiting for ${what}`, { cause: lastError });
 }

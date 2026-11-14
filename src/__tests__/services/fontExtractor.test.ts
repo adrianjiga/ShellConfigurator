@@ -107,6 +107,61 @@ describe('extractFontFiles', () => {
     ).toBe('ttf');
   });
 
+  it('refuses a font entry that would expand past the size cap', async () => {
+    const zip = zipSync({ 'Huge.ttf': new Uint8Array(2048) });
+
+    await expect(
+      extractFontFiles(zipBytes(zip), { maxEntryBytes: 1024, maxTotalBytes: 4096 })
+    ).rejects.toThrow('Huge.ttf expands past');
+  });
+
+  it('refuses fonts that together expand past the total cap', async () => {
+    const zip = zipSync({ 'A.ttf': new Uint8Array(800), 'B.ttf': new Uint8Array(800) });
+
+    await expect(
+      extractFontFiles(zipBytes(zip), { maxEntryBytes: 1024, maxTotalBytes: 1200 })
+    ).rejects.toThrow('the font files expand past');
+  });
+
+  it('keeps the first of two same-named fonts and drops unsafe names', async () => {
+    const zip = zipSync({
+      'a/Font-Regular.ttf': encode('first'),
+      'b/Font-Regular.ttf': encode('second'),
+      'dir/.ttf': encode('hidden'),
+    });
+
+    const files = await extractFontFiles(zipBytes(zip));
+
+    expect(files.map((f) => f.name)).toEqual(['Font-Regular.ttf']);
+    expect(new TextDecoder().decode(files[0]!.bytes)).toBe('first');
+  });
+
+  it('matches font extensions in any case', async () => {
+    const zip = zipSync({ 'HackNerdFont-Regular.TTF': encode('ttf') });
+    const files = await extractFontFiles(zipBytes(zip));
+    expect(files.map((file) => file.name)).toEqual(['HackNerdFont-Regular.TTF']);
+  });
+
+  it('treats backslashes as part of one file name, dropping a dot-led one', async () => {
+    const zip = zipSync({
+      '..\\..\\evil.ttf': encode('ttf'),
+      'fonts\\Hack.ttf': encode('ttf'),
+    });
+    const files = await extractFontFiles(zipBytes(zip));
+    expect(files.map((file) => file.name)).toEqual(['fonts\\Hack.ttf']);
+  });
+
+  it('returns stored (uncompressed) entries intact', async () => {
+    const zip = zipSync({ 'A.ttf': encode('aaa'), 'B.otf': encode('bbb') }, { level: 0 });
+
+    const files = await extractFontFiles(zipBytes(zip));
+
+    expect(files.map((f) => [f.name, new TextDecoder().decode(f.bytes)])).toEqual([
+      ['A.ttf', 'aaa'],
+      ['B.otf', 'bbb'],
+    ]);
+  });
+
   it('returns an empty list when the archive holds no font files', async () => {
     const zip = zipSync({ 'README.md': encode('nothing') });
 
@@ -138,6 +193,17 @@ describe('extractFontFiles', () => {
     workerControls.exitCode = 3;
 
     await expect(extractFontFiles(encode('bytes'))).rejects.toThrow('exited with code 3');
+  });
+
+  it('rejects at once when the worker exits cleanly without a result', async () => {
+    vi.useFakeTimers();
+    workerControls.mode = 'silent';
+    workerControls.exitCode = 0;
+
+    const promise = extractFontFiles(encode('bytes'));
+    const resolution = expect(promise).rejects.toThrow('exited without a result');
+    await vi.advanceTimersByTimeAsync(10);
+    await resolution;
   });
 
   it('rejects with a timeout when the worker hangs', async () => {

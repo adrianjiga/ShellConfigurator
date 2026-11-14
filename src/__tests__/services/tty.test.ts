@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   isUiSuspended,
   resetUiSuspension,
+  restoreTty,
   resumeUi,
+  SHOW_CURSOR,
   subscribeToUiSuspension,
   suspendUi,
 } from '../../services/tty.ts';
@@ -33,6 +35,28 @@ describe('suspendUi / resumeUi', () => {
     }
   });
 
+  it('leaves raw mode alone when stdin is not a TTY, but still notifies', () => {
+    const setRawMode = vi.fn();
+    const realStdin = process.stdin;
+    Object.defineProperty(process, 'stdin', {
+      configurable: true,
+      value: { isTTY: false, setRawMode },
+    });
+
+    try {
+      const notified: boolean[] = [];
+      subscribeToUiSuspension((suspended) => notified.push(suspended));
+
+      suspendUi();
+      resumeUi();
+
+      expect(notified).toEqual([true, false]);
+      expect(setRawMode).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(process, 'stdin', { configurable: true, value: realStdin });
+    }
+  });
+
   it('does not re-notify while already suspended (nested suspends)', () => {
     const notified: boolean[] = [];
     subscribeToUiSuspension((suspended) => notified.push(suspended));
@@ -49,7 +73,7 @@ describe('suspendUi / resumeUi', () => {
     const realStdin = process.stdin;
     Object.defineProperty(process, 'stdin', {
       configurable: true,
-      value: { isTTY: true, setRawMode },
+      value: { isTTY: true, isRaw: true, setRawMode },
     });
 
     try {
@@ -74,6 +98,24 @@ describe('suspendUi / resumeUi', () => {
     }
   });
 
+  it('leaves a terminal that was not in raw mode out of it after resuming', () => {
+    const setRawMode = vi.fn();
+    const realStdin = process.stdin;
+    Object.defineProperty(process, 'stdin', {
+      configurable: true,
+      value: { isTTY: true, isRaw: false, setRawMode },
+    });
+
+    try {
+      suspendUi();
+      resumeUi();
+
+      expect(setRawMode).not.toHaveBeenCalledWith(true);
+    } finally {
+      Object.defineProperty(process, 'stdin', { configurable: true, value: realStdin });
+    }
+  });
+
   it('is a no-op when there is nothing suspended', () => {
     const notified: boolean[] = [];
     subscribeToUiSuspension((suspended) => notified.push(suspended));
@@ -85,6 +127,7 @@ describe('suspendUi / resumeUi', () => {
   });
 
   it('tolerates a setRawMode that throws (not a TTY race)', () => {
+    const realStdin = process.stdin;
     Object.defineProperty(process, 'stdin', {
       configurable: true,
       value: {
@@ -95,10 +138,14 @@ describe('suspendUi / resumeUi', () => {
       },
     });
 
-    expect(() => {
-      suspendUi();
-      resumeUi();
-    }).not.toThrow();
+    try {
+      expect(() => {
+        suspendUi();
+        resumeUi();
+      }).not.toThrow();
+    } finally {
+      Object.defineProperty(process, 'stdin', { configurable: true, value: realStdin });
+    }
   });
 });
 
@@ -146,5 +193,62 @@ describe('resetUiSuspension', () => {
       else process.env.VITEST = previous;
       resetUiSuspension();
     }
+  });
+});
+
+describe('restoreTty', () => {
+  const stdinTTY = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+  const stdinRaw = Object.getOwnPropertyDescriptor(process.stdin, 'setRawMode');
+  const stdoutTTY = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+  let setRawMode: ReturnType<typeof vi.fn>;
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    setRawMode = vi.fn();
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdin, 'setRawMode', { value: setRawMode, configurable: true });
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+  });
+
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+    for (const [target, key, descriptor] of [
+      [process.stdin, 'isTTY', stdinTTY],
+      [process.stdin, 'setRawMode', stdinRaw],
+      [process.stdout, 'isTTY', stdoutTTY],
+    ] as const) {
+      if (descriptor) Object.defineProperty(target, key, descriptor);
+      else delete (target as unknown as Record<string, unknown>)[key];
+    }
+  });
+
+  it('disables raw mode on a TTY stdin', () => {
+    restoreTty();
+    expect(setRawMode).toHaveBeenCalledWith(false);
+  });
+
+  it('shows the cursor again on a TTY stdout', () => {
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+    restoreTty();
+    expect(stdoutWrite).toHaveBeenCalledWith(SHOW_CURSOR);
+  });
+
+  it('writes no escape codes when stdout is a pipe', () => {
+    Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true });
+    restoreTty();
+    expect(stdoutWrite).not.toHaveBeenCalled();
+  });
+
+  it('does not throw when stdin has no setRawMode', () => {
+    Object.defineProperty(process.stdin, 'setRawMode', { value: undefined, configurable: true });
+    expect(() => restoreTty()).not.toThrow();
+  });
+
+  it('swallows write errors', () => {
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+    stdoutWrite.mockImplementation(() => {
+      throw new Error('EPIPE');
+    });
+    expect(() => restoreTty()).not.toThrow();
   });
 });

@@ -27,3 +27,8 @@ export const UNKNOWN_STATUS_MARK: StatusMark = { icon: '?', color: 'yellow' };
 export function statusMark(status: ReportedStatus): StatusMark {
   return status === 'unknown' ? UNKNOWN_STATUS_MARK : STATUS_MARKS[status];
 }
+
+/** One plain-text report line: the status word in a fixed-width column, then the text. */
+export function statusLine(status: string, text: string): string {
+  return `${status.toUpperCase().padEnd(7)} ${text}`;
+}

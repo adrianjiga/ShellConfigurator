@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/__tests__/**/*.test.{ts,tsx}'],
+    setupFiles: ['src/__tests__/helpers/setup.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
@@ -18,6 +19,13 @@ export default defineConfig({
         branches: 81,
         functions: 91,
         lines: 93,
+        'src/**/*.{ts,tsx}': {
+          perFile: true,
+          statements: 75,
+          branches: 55,
+          functions: 65,
+          lines: 75,
+        },
       },
     },
   },

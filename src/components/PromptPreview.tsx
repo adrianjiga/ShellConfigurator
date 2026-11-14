@@ -1,15 +1,21 @@
 import { Box, Text } from 'ink';
-import { useEffect, useRef, useState } from 'react';
-import { uiColor } from '../config/colors.ts';
-import { getModule, isConfigurableModule, type ModuleId } from '../config/modules.ts';
-import { getPalette, inkColor, type PaletteColorName } from '../config/palettes.ts';
+import { type ReactNode, useEffect, useState } from 'react';
+import { colorsEnabled, uiColor } from '../config/colors.ts';
 import {
-  CHARACTER_SYMBOLS,
-  NERD_FONT_SYMBOLS,
-  SEPARATOR_LEFT,
-  SEPARATOR_RIGHT,
-} from '../config/promptSymbols.ts';
-import { PREVIEW_DEBOUNCE_MS, type PreviewResult, renderPromptAsync } from '../services/preview.ts';
+  getModule,
+  isConfigurableModule,
+  type ModuleId,
+  placedModules,
+} from '../config/modules.ts';
+import { getPalette, inkColor, type PaletteColorName } from '../config/palettes.ts';
+import { bracketsSegments, drawsPowerline, rendersGlyphs } from '../config/presets.ts';
+import { CHARACTER_SYMBOLS, SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../config/promptSymbols.ts';
+import {
+  PREVIEW_DEBOUNCE_MS,
+  PREVIEW_TERMINAL_WIDTH,
+  type PreviewResult,
+  renderPromptAsync,
+} from '../services/preview.ts';
 import type { WizardState } from '../types.ts';
 
 interface PromptPreviewProps {
@@ -19,7 +25,9 @@ interface PromptPreviewProps {
    * the wizard shows true output; tests inject a stub to stay hermetically
    * on the static fallback.
    */
-  renderPreview?: (state: WizardState) => Promise<PreviewResult>;
+  renderPreview?: (state: WizardState, width: number) => Promise<PreviewResult>;
+  /** Columns the prompt is drawn in, so starship's `$fill` fits the panel. */
+  width?: number;
 }
 
 /**
@@ -28,12 +36,11 @@ interface PromptPreviewProps {
  */
 function previewSignature(state: WizardState): string {
   return JSON.stringify([
-    state.keepExistingConfig,
-    state.sharedConfigToml,
+    // The preset decides bracketed and text-only output.
+    state.preset,
     state.palette,
     state.powerline,
     state.characterSymbol,
-    state.continuationPrompt,
     state.addNewline,
     state.vimMode,
     state.directoryTruncationLength,
@@ -45,39 +52,59 @@ function previewSignature(state: WizardState): string {
 }
 
 /**
+ * The last finished render. Every screen mounts its own preview, so without this
+ * each step change would flash the static frame and run starship again.
+ */
+let lastRender: { signature: string; text: string | null } | null = null;
+
+/** Test-only: forget the last render so tests stay independent. */
+export function resetPreviewCacheForTests(): void {
+  if (process.env.VITEST === 'true') lastRender = null;
+}
+
+const renderWithStarship = (state: WizardState, width: number) =>
+  renderPromptAsync(state, undefined, width);
+
+/**
  * The live prompt panel. It asks the preview service for a real render of the
  * current config and paints that output; until one arrives (or when starship is
  * missing or the render fails) it draws the static approximation. Rendering is
  * debounced so a keyboard storm settles on exactly one starship invocation.
  */
-export function PromptPreview({ state, renderPreview = renderPromptAsync }: PromptPreviewProps) {
-  const [realPrompt, setRealPrompt] = useState<string | null>(null);
-  const lastSignatureRef = useRef<string | null>(null);
-  const signature = previewSignature(state);
+export function PromptPreview({
+  state,
+  renderPreview = renderWithStarship,
+  width = PREVIEW_TERMINAL_WIDTH,
+}: PromptPreviewProps) {
+  const [realPrompt, setRealPrompt] = useState<string | null>(() => lastRender?.text ?? null);
+  const [renderedSignature, setRenderedSignature] = useState<string | null>(
+    () => lastRender?.signature ?? null
+  );
+  const signature = `${width}:${previewSignature(state)}`;
 
   useEffect(() => {
-    if (lastSignatureRef.current === signature) return;
+    if (renderedSignature === signature) return;
     let cancelled = false;
+    const finish = (text: string | null) => {
+      if (cancelled) return;
+      lastRender = { signature, text };
+      setRenderedSignature(signature);
+      setRealPrompt(text);
+    };
     const timer = setTimeout(() => {
-      void renderPreview(state)
-        .then((result) => {
-          if (cancelled) return;
-          lastSignatureRef.current = signature;
-          setRealPrompt(result.mode === 'real' ? result.text : null);
-        })
-        .catch(() => {
-          if (cancelled) return;
-          lastSignatureRef.current = signature;
-          setRealPrompt(null);
-        });
+      void renderPreview(state, width)
+        .then((result) => finish(result.mode === 'real' ? result.text : null))
+        .catch(() => finish(null));
     }, PREVIEW_DEBOUNCE_MS);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [signature, state, renderPreview]);
+  }, [signature, state, renderPreview, renderedSignature, width]);
 
-  const leftSegmentCount = state.leftModules.filter(isConfigurableModule).length;
+  const placed = placedModules(state.leftModules, state.rightModules);
+  const leftSegmentCount = placed.left.filter(isConfigurableModule).length;
+  const rightSegmentCount = placed.right.filter(isConfigurableModule).length;
 
   return (
     <Box flexDirection="column">
@@ -85,18 +112,18 @@ export function PromptPreview({ state, renderPreview = renderPromptAsync }: Prom
         Preview
       </Text>
       {realPrompt !== null ? (
-        <RealPromptFrame text={realPrompt} />
+        <RealPromptFrame text={realPrompt} addNewline={state.addNewline} />
       ) : (
         <StaticPromptFrame state={state} />
       )}
       <Box marginTop={1} flexDirection="column">
         <Text color={uiColor('gray')} italic>
           {leftSegmentCount} left segment{leftSegmentCount !== 1 ? 's' : ''}
-          {state.rightModules.length > 0 ? `, ${state.rightModules.length} right` : ''}
+          {rightSegmentCount > 0 ? `, ${rightSegmentCount} right` : ''}
         </Text>
         {realPrompt !== null && (
           <Text color={uiColor('gray')} italic>
-            rendered live by the starship binary
+            {renderedSignature === signature ? 'rendered live by the starship binary' : 'updating…'}
           </Text>
         )}
       </Box>
@@ -104,7 +131,8 @@ export function PromptPreview({ state, renderPreview = renderPromptAsync }: Prom
   );
 }
 
-function RealPromptFrame({ text }: { text: string }) {
+/** The bordered terminal both previews draw in, below a fake previous command. */
+function PromptFrame({ addNewline, children }: { addNewline: boolean; children: ReactNode }) {
   return (
     <Box
       borderStyle="round"
@@ -113,35 +141,36 @@ function RealPromptFrame({ text }: { text: string }) {
       flexDirection="column"
       marginTop={1}
     >
-      {/* Simulated previous command output, as in the static frame */}
       <Text color={uiColor('gray')}>$ some-command</Text>
       <Text color={uiColor('gray')}>output line...</Text>
-      <Box height={1} />
-      <Text wrap="wrap">{text}</Text>
+      {addNewline && <Box height={1} />}
+      {children}
     </Box>
   );
 }
 
-/** A small local approximation of the sample path used by the static preview. */
-function previewDirectory(state: WizardState): string {
-  const substitutions = new Map(
-    state.directorySubstitutions.map(({ from, to }) => [from, to] as const)
+function RealPromptFrame({ text, addNewline }: { text: string; addNewline: boolean }) {
+  // The captured output is trimmed, so add_newline's blank line is drawn by the frame.
+  return (
+    <PromptFrame addNewline={addNewline}>
+      <Text wrap="wrap">{text}</Text>
+    </PromptFrame>
   );
-  const path = ['~', 'projects', 'myapp']
-    .map((part) => substitutions.get(part) ?? part)
-    .filter(Boolean);
-  const length = state.directoryTruncationLength;
-  const renderedPath =
-    length === 0 || path.length <= length ? path.join('/') : `…/${path.slice(-length).join('/')}`;
-  return `${state.hasNerdFont ? NERD_FONT_SYMBOLS.directory : ''}${renderedPath}`;
 }
 
-function StaticPromptFrame({ state }: { state: WizardState }) {
-  const { leftModules, rightModules, hasNerdFont, characterSymbol } = state;
+function StaticPromptFrame({ state: chosen }: { state: WizardState }) {
+  const state = { ...chosen, hasNerdFont: rendersGlyphs(chosen) };
+  const { hasNerdFont, characterSymbol } = state;
+  const { left: leftModules, right: rightModules } = placedModules(
+    state.leftModules,
+    state.rightModules
+  );
   const palette = getPalette(state.palette);
   // Mirrors the generator: separators are Nerd Font glyphs, so without one the
   // preview must show the plain prompt that will actually be written.
-  const powerline = state.powerline && hasNerdFont;
+  // Without colour there are no blocks to interlock, only bare arrows.
+  const powerline = drawsPowerline(chosen) && colorsEnabled();
+  const bracketed = bracketsSegments(state);
 
   const color = (name: PaletteColorName) => inkColor(palette.colors[name]);
 
@@ -165,11 +194,12 @@ function StaticPromptFrame({ state }: { state: WizardState }) {
       const def = getModule(id);
       if (!def) return [];
 
-      const text = def.previewSegment(hasNerdFont);
+      const text = def.previewSegment(hasNerdFont, state);
       if (!powerline) {
+        const plain = bracketed ? text : (def.plainPreview?.(hasNerdFont) ?? text);
         return [
           <Text key={id} color={uiColor(color(def.id))}>
-            {id === 'directory' ? previewDirectory(state) : text}{' '}
+            {bracketed ? `[${plain}]` : plain}{' '}
           </Text>,
         ];
       }
@@ -184,7 +214,7 @@ function StaticPromptFrame({ state }: { state: WizardState }) {
           bold
         >
           {' '}
-          {id === 'directory' ? previewDirectory(state) : text}{' '}
+          {text}{' '}
         </Text>
       );
       const separator = (
@@ -202,25 +232,14 @@ function StaticPromptFrame({ state }: { state: WizardState }) {
   }
 
   return (
-    <Box
-      borderStyle="round"
-      borderColor={uiColor('gray')}
-      padding={1}
-      flexDirection="column"
-      marginTop={1}
-    >
-      {/* Simulated previous command output */}
-      <Text color={uiColor('gray')}>$ some-command</Text>
-      <Text color={uiColor('gray')}>output line...</Text>
-      {state.addNewline && <Box height={1} />}
-
+    <PromptFrame addNewline={state.addNewline}>
       {/* Left prompt */}
       <Box flexDirection="row" flexWrap="wrap">
         {renderSide(leftModules, 'left')}
       </Box>
 
       {/* The prompt character sits on its own line, as in the generated config */}
-      <Box flexDirection="row">{leftModules.includes('character') && renderCharacter()}</Box>
+      <Box flexDirection="row">{renderCharacter()}</Box>
 
       {/* Right prompt (dimmed, shown below for simplicity) */}
       {rightModules.length > 0 && (
@@ -231,6 +250,6 @@ function StaticPromptFrame({ state }: { state: WizardState }) {
           {renderSide(rightModules, 'right')}
         </Box>
       )}
-    </Box>
+    </PromptFrame>
   );
 }

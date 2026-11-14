@@ -1,3 +1,4 @@
+import * as os from 'node:os';
 import * as nodePath from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -24,7 +25,12 @@ const { mockExecFile, mockMkdtemp, mockMkdir, mockWriteFile, mockRm } = vi.hoist
   };
 });
 
+vi.unmock('../../services/preview.ts');
 vi.mock('node:child_process', () => ({ execFile: mockExecFile }));
+const { mockMissingPathDir } = vi.hoisted(() => ({
+  mockMissingPathDir: vi.fn<() => string | null>(() => null),
+}));
+vi.mock('../../services/installer.ts', () => ({ getMissingStarshipPathDir: mockMissingPathDir }));
 vi.mock('node:fs/promises', () => ({
   mkdir: mockMkdir,
   mkdtemp: mockMkdtemp,
@@ -44,6 +50,7 @@ import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 const SCRATCH = '/tmp/scratch/preview-abc';
 const PROJECT = nodePath.join(SCRATCH, 'projects', 'myapp');
 const originalStarshipShell = process.env.STARSHIP_SHELL;
+const originalXdgCache = process.env.XDG_CACHE_HOME;
 
 function execFileSucceeds(stdout = '~/projects/myapp on  main \n❯') {
   mockExecFile.mockImplementation((...args: unknown[]) => {
@@ -82,7 +89,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete process.env.XDG_CACHE_HOME;
+  if (originalXdgCache === undefined) delete process.env.XDG_CACHE_HOME;
+  else process.env.XDG_CACHE_HOME = originalXdgCache;
   if (originalStarshipShell === undefined) delete process.env.STARSHIP_SHELL;
   else process.env.STARSHIP_SHELL = originalStarshipShell;
 });
@@ -108,7 +116,7 @@ describe('renderPromptAsync', () => {
     expect(deps.createScratch).toHaveBeenCalledOnce();
     expect(deps.scaffoldProject).toHaveBeenCalledWith(SCRATCH);
     expect(deps.writeConfig).toHaveBeenCalledWith(SCRATCH, expectedToml);
-    expect(deps.runStarshipPrompt).toHaveBeenCalledWith(SCRATCH, PROJECT);
+    expect(deps.runStarshipPrompt).toHaveBeenCalledWith(SCRATCH, PROJECT, 110);
     expect(deps.cleanup).toHaveBeenCalledWith(SCRATCH);
   });
 
@@ -153,7 +161,7 @@ describe('renderPromptAsync', () => {
     const result = await renderPromptAsync(state, DEFAULT_PREVIEW_DEPS);
 
     expect(result).toEqual({ mode: 'real', text: '~/projects/myapp on  main \n❯' });
-    expect(mockMkdtemp).toHaveBeenCalledWith('/tmp/xdg-cache/shell-configurator/preview-');
+    expect(mockMkdtemp).toHaveBeenCalledWith(nodePath.join(os.tmpdir(), 'shellconf-preview-'));
 
     const calls = execCalls();
     const prompt = calls.find((c) => c.cmd === 'starship' && c.args[0] === 'prompt');
@@ -180,6 +188,19 @@ describe('renderPromptAsync', () => {
     expect(mockRm).toHaveBeenCalledWith(SCRATCH, { recursive: true, force: true });
   });
 
+  it('puts an off-PATH script install on PATH for the render', async () => {
+    mockMissingPathDir.mockReturnValueOnce('/home/u/.local/bin');
+    mockMkdtemp.mockResolvedValue(SCRATCH);
+    mockWriteFile.mockResolvedValue(undefined);
+    mockMkdir.mockResolvedValue(undefined);
+    mockRm.mockResolvedValue(undefined);
+
+    await renderPromptAsync(state, DEFAULT_PREVIEW_DEPS);
+
+    const prompt = execCalls().find((c) => c.cmd === 'starship' && c.args[0] === 'prompt');
+    expect(prompt?.opts?.env?.PATH?.startsWith('/home/u/.local/bin')).toBe(true);
+  });
+
   it('keeps rendering even when the sample git repo cannot be created', async () => {
     process.env.XDG_CACHE_HOME = '/tmp/xdg-cache';
     mockMkdtemp.mockResolvedValue(SCRATCH);
@@ -196,6 +217,47 @@ describe('renderPromptAsync', () => {
     const result = await renderPromptAsync(state, DEFAULT_PREVIEW_DEPS);
 
     expect(result).toEqual({ mode: 'real', text: '~/projects/myapp on  main \n❯' });
+  });
+
+  it('falls back and still cleans up when the config cannot be written', async () => {
+    const deps = fakeDeps({ writeConfig: vi.fn(async () => Promise.reject(new Error('EROFS'))) });
+
+    const result = await renderPromptAsync(state, deps);
+
+    expect(result).toEqual({ mode: 'static', reason: 'render-failed' });
+    expect(deps.runStarshipPrompt).not.toHaveBeenCalled();
+    expect(deps.cleanup).toHaveBeenCalledWith(SCRATCH);
+  });
+
+  it('keeps a finished render when removing the scratch dir fails', async () => {
+    mockMkdtemp.mockResolvedValue(SCRATCH);
+    mockWriteFile.mockResolvedValue(undefined);
+    mockMkdir.mockResolvedValue(undefined);
+    mockRm.mockRejectedValue(new Error('EBUSY'));
+
+    const result = await renderPromptAsync(state, DEFAULT_PREVIEW_DEPS);
+
+    expect(result).toEqual({ mode: 'real', text: '~/projects/myapp on  main \n❯' });
+    expect(mockRm).toHaveBeenCalled();
+  });
+
+  it('still renders when git init works but the sample commit fails', async () => {
+    mockMkdtemp.mockResolvedValue(SCRATCH);
+    mockWriteFile.mockResolvedValue(undefined);
+    mockMkdir.mockResolvedValue(undefined);
+    mockRm.mockResolvedValue(undefined);
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
+      const cmd = args[0] as string;
+      const cmdArgs = args[1] as string[];
+      if (cmd === 'git' && cmdArgs.includes('commit')) cb(new Error('no identity'), '', '');
+      else cb(null, '~/projects/myapp on  main \n❯', '');
+    });
+
+    const result = await renderPromptAsync(state, DEFAULT_PREVIEW_DEPS);
+
+    expect(result).toEqual({ mode: 'real', text: '~/projects/myapp on  main \n❯' });
+    expect(execCalls().some((c) => c.cmd === 'git' && c.args.includes('init'))).toBe(true);
   });
 
   it('pins both static fallbacks as snapshots (P2 gate)', async () => {

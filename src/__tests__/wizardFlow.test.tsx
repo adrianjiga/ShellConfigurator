@@ -1,6 +1,7 @@
 import { parse } from '@iarna/toml';
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { pressEsc } from './helpers/ink.ts';
 import { flush, waitFor } from './helpers/wait.ts';
 
 // Only the side-effecting edges are stubbed. generateToml, the step machine, the
@@ -18,6 +19,7 @@ vi.mock('../services/detector.ts', () => ({
   isStarshipInstalledAsync: vi
     .fn()
     .mockResolvedValue({ installed: true, version: 'starship 1.20' }),
+  findStarshipAsync: vi.fn().mockResolvedValue({ installed: true, version: 'starship 1.20' }),
   detectInstalledShellsAsync: mockDetectInstalledShells,
   detectCurrentShellAsync: vi.fn().mockResolvedValue(null),
   detectTerminalAsync: vi.fn().mockResolvedValue(null),
@@ -43,25 +45,36 @@ vi.mock('../generators/shellRc.ts', () => ({
   applyShellConfig: mockApplyShellConfig,
   resetSharedShellConfig: mockResetSharedConfig,
   backupSharedConfig: vi.fn(() => null),
+  shellsWithStarshipInit: () => [],
   getShellConfigPath: () => '/tmp/starship.toml',
-  starshipConfigLine: () => 'export STARSHIP_CONFIG="/tmp/starship.toml"',
+  getSharedConfigPath: () => '/nonexistent/starship.toml',
+  plannedRcBlock: (shellId: string) => [
+    '# Added by ShellConfigurator',
+    'export STARSHIP_CONFIG="/tmp/starship.toml"',
+    `eval "$(starship init ${shellId})"`,
+  ],
 }));
 
 vi.mock('../services/installer.ts', () => ({
+  MANUAL_STARSHIP_INSTALL: 'curl -sS https://starship.rs/install.sh | sh',
   NERD_FONTS: [{ id: 'JetBrainsMono', label: 'JetBrains Mono', zipName: 'JetBrainsMono.zip' }],
   installStarship: vi.fn().mockResolvedValue(undefined),
   installShell: mockInstallShell,
   installNerdFont: mockInstallNerdFont,
   setDefaultShell: vi.fn().mockResolvedValue(undefined),
   getMissingStarshipPathDir: vi.fn(() => null),
+  plannedPathDir: vi.fn(() => null),
+  verifyStarshipConfig: vi.fn().mockResolvedValue(undefined),
+  readStarshipVersion: vi.fn().mockResolvedValue(null),
   getNerdFontsDir: () => '/tmp/fonts',
   fontLabel: (id: string) => id,
+  getFontFamily: (id: string) => `${id} Nerd Font`,
   shellInstallSupported: (_shellId: string, pm: string) => pm !== 'script',
 }));
 
 import { App } from '../app.tsx';
 import { setAdvanceDelayForTests } from '../screens/InstallingScreen.tsx';
-import type { InstallTask } from '../types.ts';
+import type { InstallTask, WizardState } from '../types.ts';
 
 const ENTER = '\r';
 const SPACE = ' ';
@@ -83,6 +96,13 @@ beforeEach(() => {
   setAdvanceDelayForTests(0);
 });
 
+async function pressKeys(instance: ReturnType<typeof render>, keys: string[]): Promise<void> {
+  for (const key of keys) {
+    instance.stdin.write(key);
+    await flush();
+  }
+}
+
 /** Walks the wizard to the end and returns the TOML that was written. */
 async function runWizard(
   keys: string[],
@@ -93,10 +113,7 @@ async function runWizard(
   await flush();
   if (instanceOut) instanceOut.instance = instance;
 
-  for (const key of keys) {
-    instance.stdin.write(key);
-    await flush();
-  }
+  await pressKeys(instance, keys);
 
   // The install chain is async; let its microtasks drain.
   for (let i = 0; i < 20 && mockWriteConfig.mock.calls.length === 0; i++) {
@@ -106,8 +123,6 @@ async function runWizard(
   expect(mockWriteConfig).toHaveBeenCalled();
   return mockWriteConfig.mock.calls[0]![0];
 }
-
-/** The InstallingScreen advances to Done ~1.2s after the chain ends; wait for it. */
 
 describe('full wizard walkthrough', () => {
   it('writes parseable TOML reflecting the default choices', async () => {
@@ -154,23 +169,25 @@ describe('full wizard walkthrough', () => {
     expect(mockApplyShellConfig).toHaveBeenCalledWith('zsh', expect.anything());
   });
 
-  it('never emits a module twice even when picked on both sides', async () => {
-    const toml = await runWizard([
-      ENTER, // welcome
-      ENTER, // fontcheck
-      ENTER, // preset
-      ENTER, // segments_left (directory is on by default)
-      SPACE, // segments_right: try to also enable the first module
-      ENTER, // -> style
-      ENTER, // -> shells
-      SPACE, // select zsh
-      ENTER, // -> review
-      ENTER, // -> installing
-    ]);
+  it('never emits a module twice when the left side takes one already on the right', async () => {
+    const instance = render(<App />);
+    await flush();
+    const type = (text: string) => pressKeys(instance, [...text]);
 
+    await pressKeys(instance, [ENTER, ENTER, ENTER, ENTER]); // welcome → segments_right
+    await type('node');
+    await pressKeys(instance, [SPACE]); // Node.js on the right
+    await pressEsc(instance.stdin); // clear the filter
+    await pressEsc(instance.stdin); // back to segments_left
+    await type('node');
+    await pressKeys(instance, [SPACE]); // Node.js on the left as well
+    await pressEsc(instance.stdin);
+    await pressKeys(instance, [ENTER, ENTER, ENTER, SPACE, ENTER, ENTER]);
+    for (let i = 0; i < 20 && mockWriteConfig.mock.calls.length === 0; i++) await flush();
+
+    const toml = mockWriteConfig.mock.calls[0]![0] as string;
     const formatLine = toml.split('\n').find((l) => l.startsWith('format')) ?? '';
-    const directoryRefs = formatLine.match(/\$directory/g) ?? [];
-    expect(directoryRefs.length).toBeLessThanOrEqual(1);
+    expect(formatLine.match(/\$nodejs/g)).toHaveLength(1);
   });
 
   it('pauses at a review step showing the config before installing', async () => {
@@ -203,7 +220,10 @@ describe('full wizard walkthrough', () => {
 
     const results = recordOutcome.mock.calls.at(-1)?.[0] as InstallTask[] | undefined;
     expect(results?.some((t) => t.status === 'failed')).toBe(false);
-    expect(process.exitCode ?? 0).toBe(0);
+
+    const finalState = recordOutcome.mock.calls.at(-1)?.[1] as WizardState;
+    expect(finalState.selectedShells).toEqual(['zsh']);
+    expect(finalState.installResults).toBe(results);
   });
 
   it('reports a failed install for a non-zero exit', async () => {
@@ -243,8 +263,7 @@ describe('full wizard walkthrough', () => {
 
     expect(toml).toContain('$character');
     expect(mockInstallNerdFont).toHaveBeenCalledTimes(1);
-    expect(mockInstallNerdFont).toHaveBeenCalledWith('JetBrainsMono');
-    expect(process.exitCode ?? 0).toBe(0);
+    expect(mockInstallNerdFont).toHaveBeenCalledWith('JetBrainsMono', expect.any(AbortSignal));
   });
 
   it('writes a glyph-free config when the font install fails', async () => {
@@ -272,8 +291,7 @@ describe('full wizard walkthrough', () => {
     );
     await waitFor(() => out.instance.lastFrame()?.includes('Done'), 'done screen');
 
-    // git_branch under hasNerdFont:false uses the plain-text "on " fallback.
-    expect(toml).toContain('symbol = "on "');
+    expect(toml).toContain('symbol = ""');
     expect(toml).not.toContain('symbol = " "');
     const results = recordOutcome.mock.calls.at(-1)?.[0] as InstallTask[] | undefined;
     expect(results?.some((t) => t.status === 'failed')).toBe(true);
@@ -302,8 +320,7 @@ describe('full wizard walkthrough', () => {
 
     expect(toml).toContain('$character');
     expect(mockInstallShell).toHaveBeenCalledTimes(1);
-    expect(mockInstallShell).toHaveBeenCalledWith('zsh', 'apt');
-    expect(process.exitCode ?? 0).toBe(0);
+    expect(mockInstallShell).toHaveBeenCalledWith('zsh', 'apt', expect.any(AbortSignal));
   });
 });
 
@@ -318,24 +335,7 @@ describe('dry-run wizard walkthrough', () => {
     await flush();
 
     // Walk straight to the shells step and pick zsh; installing must be skipped.
-    instance.stdin.write(ENTER); // welcome
-    await flush();
-    instance.stdin.write(ENTER); // fontcheck
-    await flush();
-    instance.stdin.write(ENTER); // preset
-    await flush();
-    instance.stdin.write(ENTER); // segments_left
-    await flush();
-    instance.stdin.write(ENTER); // segments_right
-    await flush();
-    instance.stdin.write(ENTER); // style
-    await flush();
-    instance.stdin.write(SPACE); // select zsh
-    await flush();
-    instance.stdin.write(ENTER); // -> review
-    await flush();
-    instance.stdin.write(ENTER); // -> done (skips installing)
-    await flush();
+    await pressKeys(instance, [ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER]);
 
     return instance;
   }
@@ -346,7 +346,17 @@ describe('dry-run wizard walkthrough', () => {
     const frame = instance.lastFrame();
     expect(frame).toContain('Dry run');
     expect(frame).toContain('Tasks that would run');
-    expect(frame).toContain('Generated config');
+    expect(frame).toContain('Configuration to write');
+  });
+
+  it('reports no install outcome for a dry run', async () => {
+    const recordOutcome = vi.fn();
+    const instance = render(<App dryRun onInstallOutcome={recordOutcome} />);
+    await flush();
+    await pressKeys(instance, [ENTER, ENTER, ENTER, ENTER, ENTER, ENTER, SPACE, ENTER, ENTER]);
+
+    expect(instance.lastFrame()).toContain('Dry run');
+    expect(recordOutcome).not.toHaveBeenCalled();
   });
 
   it('never writes any config or rc files in dry-run mode', async () => {

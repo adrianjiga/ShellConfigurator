@@ -1,9 +1,18 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ReviewScreen } from '../../screens/ReviewScreen.tsx';
+import { plannedPathDir } from '../../services/installer.ts';
 import { DEFAULT_STATE } from '../../types.ts';
 import { pressEsc } from '../helpers/ink.ts';
 import { flush } from '../helpers/wait.ts';
+
+vi.mock('../../services/installer.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../services/installer.ts')>()),
+  plannedPathDir: vi.fn(() => null),
+}));
 
 afterEach(() => {
   cleanup();
@@ -39,7 +48,7 @@ describe('ReviewScreen', () => {
     // The per-shell config path, the rc export, and the generated TOML. Assert on
     // space-free tokens because ink wraps long lines at the narrow test terminal.
     expect(frame).toContain('starship/zsh.toml (Zsh)');
-    expect(frame).toContain('STARSHIP_CONFIG="');
+    expect(frame).toContain("STARSHIP_CONFIG='");
     expect(frame).toContain('eval "$(starship init zsh)"');
     expect(frame).toContain('$directory$git_branch$git_status');
   });
@@ -80,13 +89,15 @@ describe('ReviewScreen', () => {
     const frame = instance.lastFrame();
     expect(frame).toContain('Config to keep');
     expect(frame).toContain('Keep existing Starship config');
-    expect(frame).toContain('starship.toml (shared)');
+    expect((frame ?? '').replace(/\s+/g, ' ')).toContain('starship.toml (shared by every shell)');
     expect(frame).toContain('success_symbol = "…"');
     expect(frame).toContain('starship init zsh');
     // Adopt mode wires the shell to the shared config: no per-shell export, and
     // never a freshly generated TOML in the review.
-    expect(frame).not.toContain('STARSHIP_CONFIG="');
+    expect(frame).not.toContain('STARSHIP_CONFIG=');
     expect(frame).not.toContain('$directory$git_branch$git_status');
+    // One shared block, however many shells read it.
+    expect(frame?.match(/shared by every/g)).toHaveLength(1);
   });
 
   it('notes that an adopted config with no import is kept as-is', async () => {
@@ -106,6 +117,16 @@ describe('ReviewScreen', () => {
     expect(instance.lastFrame()).toContain('Nerd Font (JetBrains Mono)');
   });
 
+  it('does not promise a font download inside a container', async () => {
+    const { instance } = setup({
+      container: true,
+      nerdFontToInstall: { kind: 'install', id: 'JetBrainsMono' },
+    });
+    await flush();
+
+    expect(instance.lastFrame()).not.toContain('JetBrains Mono');
+  });
+
   it('confirms with Enter', async () => {
     const { instance, onNext } = setup();
     await flush();
@@ -115,13 +136,14 @@ describe('ReviewScreen', () => {
     expect(onNext).toHaveBeenCalled();
   });
 
-  it('confirms with Space as well', async () => {
+  it('does not start the run on a stray Space or Tab', async () => {
     const { instance, onNext } = setup();
     await flush();
 
     instance.stdin.write(' ');
+    instance.stdin.write('\t');
     await flush();
-    expect(onNext).toHaveBeenCalled();
+    expect(onNext).not.toHaveBeenCalled();
   });
 
   it('goes back with Esc', async () => {
@@ -137,5 +159,76 @@ describe('ReviewScreen', () => {
     await flush();
 
     expect(instance.lastFrame()).toContain('--dry-run');
+  });
+});
+
+describe('ReviewScreen manual shells', () => {
+  it('shows the setup command before the note that refers to it', async () => {
+    const { instance } = setup({ selectedShells: ['powershell'], installedShells: ['powershell'] });
+    await flush();
+    const frame = instance.lastFrame() ?? '';
+    expect(frame.indexOf('starship init powershell')).toBeLessThan(frame.indexOf('$PROFILE'));
+  });
+});
+
+describe('ReviewScreen dry run', () => {
+  it('does not promise an install in the key hint', async () => {
+    const { instance } = setup({ dryRun: true });
+    await flush();
+    expect(instance.lastFrame()).toContain('finish the dry run');
+    expect(instance.lastFrame()).not.toMatch(/Enter\s+install/);
+  });
+});
+
+describe('ReviewScreen with several shells', () => {
+  it('prints the generated TOML once and the rc wiring for each shell', async () => {
+    const { instance } = setup({
+      selectedShells: ['zsh', 'bash'],
+      installedShells: ['zsh', 'bash'],
+    });
+    await flush();
+    const frame = instance.lastFrame() ?? '';
+    expect(frame.match(/\$directory\$git_branch\$git_status/g)).toHaveLength(1);
+    expect(frame).toContain('starship init zsh');
+    expect(frame).toContain('starship init bash');
+  });
+});
+
+describe('ReviewScreen without Starship', () => {
+  it('does not promise rc changes that the skipped install will not make', async () => {
+    const { instance } = setup({ skipStarshipInstall: true });
+    await flush();
+    const frame = (instance.lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(frame).toContain('Starship is skipped');
+    expect(frame).not.toContain('Everything below will be installed');
+    expect(frame).not.toContain('eval "$(starship init zsh)"');
+  });
+});
+
+describe('ReviewScreen PATH line', () => {
+  it('shows the PATH line a script install will add before the init line', async () => {
+    vi.mocked(plannedPathDir).mockReturnValueOnce('/home/u/.local/bin');
+    const { instance } = setup();
+    await flush();
+    const frame = instance.lastFrame() ?? '';
+    expect(frame).toContain(`export PATH='/home/u/.local/bin':"$PATH"`);
+    expect(frame.indexOf('export PATH=')).toBeLessThan(frame.indexOf('starship init zsh'));
+  });
+});
+
+describe('ReviewScreen with an existing shared config', () => {
+  it('warns that the shared config stops applying to the chosen shells', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sc-review-'));
+    vi.stubEnv('HOME', dir);
+    fs.mkdirSync(path.join(dir, '.config'));
+    fs.writeFileSync(path.join(dir, '.config', 'starship.toml'), 'format = "$all"\n');
+    try {
+      const { instance } = setup();
+      await flush();
+      expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain('apply --adopt');
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

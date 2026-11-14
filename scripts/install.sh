@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #
 # Install shell-configurator for the current user.
 #
@@ -8,16 +8,26 @@
 # needed. Safe to re-run: a previous install is replaced in place.
 #
 # Usage: curl -fsSL https://raw.githubusercontent.com/adrianjiga/ShellConfigurator/master/scripts/install.sh | sh
-set -euo pipefail
+set -eu
 
 REPO="adrianjiga/ShellConfigurator"
 API_LATEST="https://api.github.com/repos/${REPO}/releases/latest"
+
+for tool in curl tar; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "shell-configurator's installer needs $tool, which was not found." >&2
+    exit 1
+  fi
+done
 
 if command -v node >/dev/null 2>&1; then
   node_major="$(node --version | cut -d. -f1 | tr -d v)"
 else
   node_major=0
 fi
+case "$node_major" in
+  '' | *[!0-9]*) node_major=0 ;;
+esac
 
 if [ "$node_major" -lt 24 ]; then
   cat >&2 <<'EOF'
@@ -44,44 +54,83 @@ case "$(uname -s)" in
     ;;
 esac
 bin_dir="$HOME/.local/bin"
+link="$bin_dir/shell-configurator"
 
-# Resolve the tarball asset attached to the latest GitHub release. The release
-# workflow uploads shell-configurator-<version>.tgz via `npm pack`.
+if [ -e "$link" ] || [ -L "$link" ]; then
+  case "$(readlink "$link" 2>/dev/null)" in
+    "$data_dir"/*) ;;
+    *)
+      echo "$link already exists and was not made by this installer; move it away and re-run." >&2
+      exit 1
+      ;;
+  esac
+fi
+
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT
+
+# Resolve the tarball asset attached to the latest GitHub release, with the
+# SHA-256 digest GitHub publishes for it. The release workflow uploads
+# shell-configurator-<version>.tgz via `npm pack`.
 echo "Resolving latest release..."
-asset_url="$(
-  curl -fsSL "$API_LATEST" \
-    | grep -Eo '"browser_download_url": *"[^"]+\.tgz"' \
-    | head -n1 \
-    | sed -E 's/^"browser_download_url": *"([^"]+)"/\1/'
-)"
+if ! curl -fsSL ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
+  "$API_LATEST" -o "$tmp_dir/release.json"; then
+  echo "Could not read the latest release from GitHub (rate-limited? set GITHUB_TOKEN)." >&2
+  exit 1
+fi
+# shellcheck disable=SC2016
+asset="$(node -e '
+  const release = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  const asset = (release.assets || []).find((a) => a.name.endsWith(".tgz"));
+  if (asset) console.log(`${asset.browser_download_url} ${asset.digest || ""}`);
+' "$tmp_dir/release.json")"
+asset_url="${asset%% *}"
+digest="${asset#* }"
 
-if [ -z "$asset_url" ]; then
+if [ -z "$asset" ]; then
   echo "No tarball asset found in the latest release." >&2
   exit 1
 fi
+case "$digest" in
+  sha256:*) ;;
+  *)
+    echo "The release publishes no sha256 digest for its tarball; refusing to install it." >&2
+    exit 1
+    ;;
+esac
 
-mkdir -p "$data_dir" "$bin_dir"
-tmp_dir="$(mktemp -d)"
+mkdir -p "$(dirname "$data_dir")" "$bin_dir"
 
 echo "Downloading $asset_url"
 curl -fsSL "$asset_url" -o "$tmp_dir/package.tgz"
-tar -xzf "$tmp_dir/package.tgz" -C "$tmp_dir"
-
-# Clear any previous install so a stale extract never shadows a new one.
-rm -rf "${data_dir:?}"/*
-cp -rf "$tmp_dir/package/." "$data_dir/"
-rm -rf "$tmp_dir"
-
-chmod +x "$data_dir/dist/index.js"
-ln -sf "$data_dir/dist/index.js" "$bin_dir/shell-configurator"
-
-# Boot the freshly installed binary so a broken release never "installs" silently.
-if "$bin_dir/shell-configurator" --version >/dev/null 2>&1; then
-  echo "Verified the install by launching \`shell-configurator --version\`."
-else
-  echo "The installed binary failed to start. See '$data_dir' for details." >&2
+actual="$(node -e '
+  const hash = require("crypto").createHash("sha256");
+  hash.update(require("fs").readFileSync(process.argv[1]));
+  console.log(hash.digest("hex"));
+' "$tmp_dir/package.tgz")"
+if [ "sha256:$actual" != "$digest" ]; then
+  echo "Checksum mismatch: expected $digest, got sha256:$actual. Refusing to install." >&2
   exit 1
 fi
+tar -xzf "$tmp_dir/package.tgz" -C "$tmp_dir"
+
+staged="$tmp_dir/package"
+chmod +x "$staged/dist/index.js"
+
+# Boot the new release before touching the current install, so a broken one
+# never replaces a working one.
+if ! boot_error="$(node "$staged/dist/index.js" --version 2>&1 >/dev/null)"; then
+  echo "The downloaded release failed to start; your current install is unchanged:" >&2
+  printf '%s\n' "$boot_error" >&2
+  exit 1
+fi
+echo "Verified the release by launching \`shell-configurator --version\`."
+
+rm -rf "$data_dir.old"
+if [ -e "$data_dir" ]; then mv "$data_dir" "$data_dir.old"; fi
+mv "$staged" "$data_dir"
+rm -rf "$data_dir.old"
+ln -sf "$data_dir/dist/index.js" "$link"
 
 cat <<EOF
 
@@ -93,8 +142,17 @@ if ! printf '%s' "$PATH" | tr ':' '\n' | grep -qFx "$bin_dir"; then
   cat <<EOF
 NOTE: $bin_dir is not on your PATH. Add it to your shell profile:
 
-  export PATH="\$HOME/.local/bin:\$PATH"
+  export PATH="\$HOME/.local/bin:\$PATH"     (bash, zsh)
+  fish_add_path ~/.local/bin                (fish)
 EOF
+else
+  found="$(command -v shell-configurator 2>/dev/null || true)"
+  if [ -n "$found" ] && [ "$found" != "$link" ]; then
+    cat <<EOF
+NOTE: another shell-configurator comes first on your PATH: $found
+(an npm -g install?). Remove it, or put $bin_dir earlier on PATH.
+EOF
+  fi
 fi
 
 echo

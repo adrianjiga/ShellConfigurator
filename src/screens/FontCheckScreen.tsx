@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
-import { AppSelectInput } from '../components/AppSelectInput.tsx';
-import { NavHints } from '../components/NavHints.tsx';
+import { AppSelectInput, type SelectItem } from '../components/AppSelectInput.tsx';
+import { LIST_HINTS, NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { NERD_FONT_SYMBOLS } from '../config/promptSymbols.ts';
@@ -13,9 +13,7 @@ interface FontCheckScreenProps {
 }
 
 type FontChoice = 'have' | 'install' | 'none';
-type Item<V> = { label: string; value: V };
-
-const items: Item<FontChoice>[] = [
+const items: SelectItem<FontChoice>[] = [
   {
     label: 'Yes, I already have one',
     value: 'have',
@@ -31,11 +29,20 @@ const items: Item<FontChoice>[] = [
 ];
 
 export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps) {
+  // Fonts belong to the host terminal, so a container never installs one.
+  const choices = state.container ? items.filter((item) => item.value !== 'install') : items;
+  // Coming back after asking for an install, keep that answer highlighted.
+  const initialIndex = Math.max(
+    0,
+    choices.findIndex(
+      (item) => item.value === (state.nerdFontToInstall.kind === 'none' ? 'have' : 'install')
+    )
+  );
   useInput((_, key) => {
     if (key.escape) onBack();
   });
 
-  function handleSelect(item: Item<FontChoice>) {
+  function handleSelect(item: SelectItem<FontChoice>) {
     switch (item.value) {
       case 'have':
         onNext({ hasNerdFont: true, nerdFontToInstall: NO_NERD_FONT });
@@ -85,17 +92,11 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
         </Box>
 
         <Box marginTop={1}>
-          <AppSelectInput items={items} onSelect={handleSelect} />
+          <AppSelectInput items={choices} initialIndex={initialIndex} onSelect={handleSelect} />
         </Box>
       </Box>
 
-      <NavHints
-        hints={[
-          { key: '↑↓', label: 'navigate' },
-          { key: 'Enter', label: 'select' },
-          { key: 'Esc', label: 'back' },
-        ]}
-      />
+      <NavHints hints={LIST_HINTS} />
     </WizardLayout>
   );
 }

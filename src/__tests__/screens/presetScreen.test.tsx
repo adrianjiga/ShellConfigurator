@@ -12,11 +12,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function setup(hasNerdFont = false) {
+function setup(hasNerdFont = false, preset: string | null = null) {
   const onNext = vi.fn();
   const onBack = vi.fn();
   const instance = render(
-    <PresetScreen state={{ ...DEFAULT_STATE, hasNerdFont }} onNext={onNext} onBack={onBack} />
+    <PresetScreen
+      state={{ ...DEFAULT_STATE, hasNerdFont, preset }}
+      onNext={onNext}
+      onBack={onBack}
+    />
   );
   return { instance, onNext, onBack };
 }
@@ -62,8 +66,9 @@ describe('PresetScreen', () => {
     await flush();
 
     const frame = instance.lastFrame();
-    // The notice wraps mid-sentence in the 100-col frame.
-    expect(frame).toContain('hidden (no Nerd Font detected)');
+    // The notice wraps mid-sentence beside the preview, so check both halves.
+    expect(frame).toContain('Nerd Font presets hidden');
+    expect(frame).toContain('chose text symbols)');
     expect(frame).not.toContain('Nerd Font Symbols');
     expect(frame).not.toContain('★');
   });
@@ -102,7 +107,7 @@ describe('PresetScreen', () => {
 
     expect(onNext).toHaveBeenCalledWith({
       preset: 'no-nerd-font',
-      leftModules: PRESETS.find((p) => p.id === 'no-nerd-font')!.leftModules,
+      leftModules: ['directory', 'git_branch', 'git_status', 'character'],
       rightModules: ['cmd_duration'],
       palette: 'terminal',
       powerline: false,
@@ -121,7 +126,7 @@ describe('PresetScreen', () => {
 
     expect(onNext).toHaveBeenCalledWith({
       preset: 'nerd-font-symbols',
-      leftModules: PRESETS.find((p) => p.id === 'nerd-font-symbols')!.leftModules,
+      leftModules: ['username', 'hostname', 'directory', 'git_branch', 'git_status', 'character'],
       rightModules: ['nodejs', 'python', 'rust', 'cmd_duration'],
       palette: 'vivid',
       powerline: false,
@@ -136,6 +141,60 @@ describe('PresetScreen', () => {
 
     expect(onBack).toHaveBeenCalledTimes(1);
     expect(onNext).not.toHaveBeenCalled();
+  });
+
+  it('starts the cursor on the chosen preset when revisiting', async () => {
+    const { instance } = setup(true, 'nerd-font-symbols');
+    await flush();
+
+    const frame = instance.lastFrame();
+    expect(frame).toContain('Rich icons from Nerd Fonts in saturated brights');
+    expect(frame).not.toContain('Choose each option manually');
+  });
+
+  it('asks for confirmation when revisiting instead of applying at once', async () => {
+    const { instance, onNext } = setup(true, 'nerd-font-symbols');
+    await flush();
+
+    instance.stdin.write('\r');
+    await flush();
+
+    expect(onNext).not.toHaveBeenCalled();
+    const frame = instance.lastFrame();
+    expect(frame).toContain('This replaces your segment and');
+    expect(frame).toContain('style choices.');
+  });
+
+  it('applies the preset once the revisit confirmation is accepted', async () => {
+    const { instance, onNext } = setup(true, 'nerd-font-symbols');
+    await flush();
+
+    instance.stdin.write('\r');
+    await flush();
+    instance.stdin.write('\r');
+    await flush();
+
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(onNext).toHaveBeenCalledWith({
+      preset: 'nerd-font-symbols',
+      leftModules: ['username', 'hostname', 'directory', 'git_branch', 'git_status', 'character'],
+      rightModules: ['nodejs', 'python', 'rust', 'cmd_duration'],
+      palette: 'vivid',
+      powerline: false,
+    });
+  });
+
+  it('returns to the list when the revisit confirmation is cancelled', async () => {
+    const { instance, onNext, onBack } = setup(true, 'nerd-font-symbols');
+    await flush();
+
+    instance.stdin.write('\r');
+    await flush();
+    await pressEsc(instance.stdin);
+
+    expect(onNext).not.toHaveBeenCalled();
+    expect(onBack).not.toHaveBeenCalled();
+    expect(instance.lastFrame()).toContain('Rich icons from Nerd Fonts in saturated brights');
   });
 
   it('throws when no preset is compatible', async () => {
@@ -156,5 +215,18 @@ describe('PresetScreen', () => {
     } finally {
       PRESETS.push(...saved);
     }
+  });
+});
+
+describe('PresetScreen scrolling hint', () => {
+  it('says how many presets there are when some are below the fold', () => {
+    const { lastFrame } = render(
+      <PresetScreen
+        state={{ ...DEFAULT_STATE, hasNerdFont: true }}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    expect(lastFrame()).toContain(`${PRESETS.length} presets`);
   });
 });

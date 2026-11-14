@@ -1,8 +1,9 @@
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { backupStamp } from '../generators/shellRc.ts';
+import { backupIfExists, writeFileAtomic } from '../generators/shellRc.ts';
 import { assertNever, type TerminalId } from '../types.ts';
-import { configHome } from './paths.ts';
+import { configHome, homeDir } from './paths.ts';
 
 /** Human-readable terminal name, for task labels and notes. */
 export const TERMINAL_LABELS: Record<TerminalId, string> = {
@@ -12,10 +13,6 @@ export const TERMINAL_LABELS: Record<TerminalId, string> = {
   ghostty: 'Ghostty',
   foot: 'foot',
 };
-
-export function terminalLabel(id: TerminalId): string {
-  return TERMINAL_LABELS[id];
-}
 
 export interface TerminalFontResult {
   applied: boolean;
@@ -29,66 +26,150 @@ function appendBlock(content: string, block: string): string {
   return `${content.replace(/\n*$/, '')}\n\n${block}\n`;
 }
 
-function setLine(content: string, pattern: RegExp, line: string): string {
-  if (pattern.test(content)) return content.replace(pattern, line);
+function appendLine(content: string, line: string): string {
   const base = content.trim() === '' ? '' : content.replace(/\n*$/, '\n');
   return `${base}${line}\n`;
 }
 
 /**
- * Sets `family` in Alacritty's `[font.normal]` table. Alacritty accepts either a
- * nested table or an inline `normal = { … }`, and rejects an unknown `family`
- * key directly under `[font]`; each shape is updated in place, and a missing
- * table is appended.
+ * Sets ghostty's primary font: the first font-family after the last
+ * `font-family = ""` reset. The rest of the list stays as fallbacks.
+ */
+function setGhosttyFont(content: string, family: string): string {
+  let primary: RegExpMatchArray | null = null;
+  for (const match of content.matchAll(/^[ \t]*font-family[ \t]*=(.*)$/gm)) {
+    const value = unquote(match[1] ?? '');
+    if (value === '') primary = null;
+    else if (primary === null) primary = match;
+  }
+  if (!primary) return appendLine(content, `font-family = ${family}`);
+  if (unquote(primary[1] ?? '') === family) return content;
+  const start = primary.index ?? 0;
+  return `${content.slice(0, start)}font-family = ${family}${content.slice(start + primary[0].length)}`;
+}
+
+/** Replaces the last line matching `pattern` (a global, multiline regex), or appends `line`. */
+function setLastLine(content: string, pattern: RegExp, line: string): string {
+  const last = [...content.matchAll(pattern)].at(-1);
+  if (!last) return appendLine(content, line);
+  return content.slice(0, last.index) + line + content.slice(last.index + last[0].length);
+}
+
+interface TomlSection {
+  /** The table name, or null for the keys before the first header. */
+  name: string | null;
+  /** Offsets of the section's body, after its header line. */
+  start: number;
+  end: number;
+}
+
+const TOML_HEADER = /^[ \t]*\[([^[\]\n]+)\][ \t]*(?:#.*)?$/gm;
+
+/** Splits a TOML file into its top-level keys and `[table]` sections. */
+function tomlSections(content: string): TomlSection[] {
+  const sections: TomlSection[] = [];
+  let current: TomlSection = { name: null, start: 0, end: content.length };
+  for (const match of content.matchAll(TOML_HEADER)) {
+    current.end = match.index;
+    sections.push(current);
+    const lineEnd = match.index + match[0].length;
+    const breakLength = content.startsWith('\r\n', lineEnd) ? 2 : 1;
+    current = {
+      name: match[1]!.trim(),
+      start: Math.min(lineEnd + breakLength, content.length),
+      end: content.length,
+    };
+  }
+  sections.push(current);
+  return sections;
+}
+
+/** Rewrites the first `pattern` match inside one section; null when it does not match. */
+function editSection(
+  content: string,
+  section: TomlSection | undefined,
+  pattern: RegExp,
+  replacer: (...groups: string[]) => string
+): string | null {
+  if (!section) return null;
+  const body = content.slice(section.start, section.end);
+  if (!pattern.test(body)) return null;
+  const edited = body.replace(pattern, (...args: string[]) => replacer(...args));
+  return content.slice(0, section.start) + edited + content.slice(section.end);
+}
+
+/**
+ * Sets `family` in Alacritty's `[font.normal]` table. Only the font tables are
+ * edited: the inline `normal = { … }` under `[font]` (or `font.normal = { … }`
+ * at the top), dotted `normal.family`/`font.normal.family` keys, and the
+ * `[font.normal]` table itself; a missing table is appended, never duplicated.
  */
 function setTomlFont(content: string, family: string): string {
   const line = `family = "${family}"`;
+  const sections = tomlSections(content);
+  const top = sections.find((s) => s.name === null);
+  const font = sections.find((s) => s.name === 'font');
+  const fontNormal = sections.find((s) => s.name === 'font.normal');
 
-  const inlineRe = /^([ \t]*)normal\s*=\s*\{([^}]*)\}[ \t]*$/m;
-  const inlineMatch = inlineRe.exec(content);
-  if (inlineMatch) {
-    const [, indent, inner] = inlineMatch;
-    const body = /family\s*=/.test(inner)
-      ? inner.replace(/family\s*=\s*"[^"]*"/, line)
+  const inlineBody = (inner: string) =>
+    /family\s*=/.test(inner)
+      ? inner.replace(/family\s*=\s*(?:"[^"]*"|'[^']*')/, line)
       : inner.trim() === ''
         ? ` ${line} `
         : ` ${line},${inner}`;
-    return content.replace(inlineRe, () => `${indent}normal = {${body}}`);
-  }
+  const inline = (key: string) =>
+    new RegExp(`^([ \\t]*${key}\\s*=\\s*)\\{([^}]*)\\}([ \\t]*(?:#.*)?)$`, 'm');
+  const dotted = (key: string) =>
+    new RegExp(`^([ \\t]*${key})[ \\t]*=[ \\t]*(?:"[^"]*"|'[^']*')[ \\t]*(?:#.*)?$`, 'm');
 
-  const headerMatch = /^\[font\.normal\]\s*$/m.exec(content);
-  if (!headerMatch || headerMatch.index === undefined) {
-    return appendBlock(content, `[font.normal]\n${line}`);
-  }
+  const edited =
+    editSection(content, font, inline('normal'), (_m, head, inner, tail) => {
+      return `${head}{${inlineBody(inner)}}${tail}`;
+    }) ??
+    editSection(content, top, inline('font\\.normal'), (_m, head, inner, tail) => {
+      return `${head}{${inlineBody(inner)}}${tail}`;
+    }) ??
+    editSection(content, font, dotted('normal\\.family'), (_m, key) => `${key} = "${family}"`) ??
+    editSection(content, top, dotted('font\\.normal\\.family'), (_m, key) => {
+      return `${key} = "${family}"`;
+    });
+  if (edited !== null) return edited;
 
-  const headerEnd = content.indexOf('\n', headerMatch.index);
-  if (headerEnd === -1) return `${content}${line}\n`;
+  if (!fontNormal) return appendBlock(content, `[font.normal]\n${line}`);
 
-  const rest = content.slice(headerEnd + 1);
-  const nextRel = rest.search(/^\[/m);
-  const body = nextRel === -1 ? rest : rest.slice(0, nextRel);
-  const tail = nextRel === -1 ? '' : rest.slice(nextRel);
-  const newBody = /^\s*family\s*=/m.test(body)
-    ? body.replace(/^\s*family\s*=.*$/m, line)
+  const head = content.slice(0, fontNormal.start);
+  const separator = head.endsWith('\n') ? '' : '\n';
+  const body = content.slice(fontNormal.start, fontNormal.end);
+  const newBody = /^[ \t]*family[ \t]*=/m.test(body)
+    ? body.replace(/^([ \t]*)family[ \t]*=.*$/m, (_m, indent: string) => `${indent}${line}`)
     : `${line}\n${body}`;
-  return content.slice(0, headerEnd + 1) + newBody + tail;
+  return head + separator + newBody + content.slice(fontNormal.end);
 }
 
-/** Sets `font=` under `[main]`, preserving any `:size=` suffix already there. */
+/**
+ * Sets the primary `font=` under foot's `[main]` (or the keys before any
+ * header, which foot also reads as `[main]`). The first entry's `:size=`
+ * options and any comma-separated fallbacks are kept.
+ */
 function setFootFont(content: string, family: string): string {
-  const keyRe = /^(\s*)font\s*=\s*(.*)$/m;
-  const match = keyRe.exec(content);
-  if (match) {
-    const size = match[2].includes(':') ? match[2].slice(match[2].indexOf(':')) : '';
-    return content.replace(keyRe, `${match[1]}font=${family}${size}`);
-  }
+  const sections = tomlSections(content);
+  const main = sections.find((s) => s.name === 'main');
+  const top = sections.find((s) => s.name === null);
+  const keyRe = /^([ \t]*)font[ \t]*=[ \t]*(.*)$/m;
+  const replace = (_m: string, indent: string, value: string) => {
+    const [primary = '', ...fallbacks] = value.split(',');
+    const options = primary.includes(':') ? primary.slice(primary.indexOf(':')) : '';
+    return `${indent}font=${[`${family}${options}`, ...fallbacks].join(',')}`;
+  };
 
-  const headerRe = /^\[main\]\s*$/m;
-  if (!headerRe.test(content)) return appendBlock(content, `[main]\nfont=${family}`);
+  const edited =
+    editSection(content, top, keyRe, replace) ?? editSection(content, main, keyRe, replace);
+  if (edited !== null) return edited;
+  if (!main) return appendBlock(content, `[main]\nfont=${family}`);
 
-  const headerEnd = content.indexOf('\n', content.search(headerRe));
-  if (headerEnd === -1) return `${content}font=${family}\n`;
-  return `${content.slice(0, headerEnd + 1)}font=${family}\n${content.slice(headerEnd + 1)}`;
+  const head = content.slice(0, main.start);
+  const separator = head.endsWith('\n') ? '' : '\n';
+  return `${head}${separator}font=${family}\n${content.slice(main.start)}`;
 }
 
 function alacrittyTomlPath(): string {
@@ -114,11 +195,71 @@ function terminalConfigPath(id: TerminalId): string {
   }
 }
 
-function backupIfExists(filePath: string): string | undefined {
-  if (!fs.existsSync(filePath)) return undefined;
-  const backup = `${filePath}.bak-${backupStamp()}`;
-  fs.copyFileSync(filePath, backup);
-  return backup;
+// kitty, alacritty and ghostty look in more places than the XDG default; editing a new
+// file in the primary location would shadow the user's real config there.
+function configLookupPaths(id: TerminalId): string[] {
+  if (id === 'kitty') {
+    const paths: string[] = [];
+    const kittyDir = process.env.KITTY_CONFIG_DIRECTORY;
+    if (kittyDir) paths.push(path.join(kittyDir, 'kitty.conf'));
+    paths.push(path.join(configHome(), 'kitty', 'kitty.conf'));
+    if (process.platform === 'darwin') {
+      paths.push(path.join(homeDir(), 'Library', 'Preferences', 'kitty', 'kitty.conf'));
+    }
+    return paths;
+  }
+  if (id === 'alacritty') {
+    const root = configHome();
+    return [
+      alacrittyTomlPath(),
+      alacrittyYmlPath(),
+      path.join(root, 'alacritty.toml'),
+      path.join(root, 'alacritty.yml'),
+      path.join(homeDir(), '.alacritty.toml'),
+      path.join(homeDir(), '.alacritty.yml'),
+    ];
+  }
+  if (id === 'ghostty') {
+    const dirs = [path.join(configHome(), 'ghostty')];
+    if (process.platform === 'darwin') {
+      dirs.push(path.join(homeDir(), 'Library', 'Application Support', 'com.mitchellh.ghostty'));
+    }
+    return dirs.flatMap((dir) => [path.join(dir, 'config.ghostty'), path.join(dir, 'config')]);
+  }
+  return [terminalConfigPath(id)];
+}
+
+/** The Lua file WezTerm loads, defaulting to its recommended ~/.wezterm.lua. */
+function weztermConfigPath(): string {
+  const candidates = [
+    process.env.WEZTERM_CONFIG_FILE?.trim(),
+    terminalConfigPath('wezterm'),
+    path.join(homeDir(), '.wezterm.lua'),
+  ].filter((p): p is string => Boolean(p));
+  return candidates.find((p) => fs.existsSync(p)) ?? path.join(homeDir(), '.wezterm.lua');
+}
+
+function resolveTerminalConfigPath(id: TerminalId): string {
+  return configLookupPaths(id).find((p) => fs.existsSync(p)) ?? terminalConfigPath(id);
+}
+
+/** `alacritty --version` as [major, minor], or null when it cannot be run. */
+export function installedAlacrittyVersion(): [number, number] | null {
+  try {
+    const output = execFileSync('alacritty', ['--version'], {
+      encoding: 'utf8',
+      stdio: 'pipe',
+      timeout: 5000,
+    });
+    const match = /(\d+)\.(\d+)/.exec(output);
+    return match ? [Number(match[1]), Number(match[2])] : null;
+  } catch {
+    return null;
+  }
+}
+
+export interface WireTerminalFontOptions {
+  alacrittyVersion?: () => [number, number] | null;
 }
 
 /**
@@ -126,9 +267,13 @@ function backupIfExists(filePath: string): string | undefined {
  * idempotently and backing up any existing file first. WezTerm's Lua config is
  * never edited — the exact line to add is returned as a note instead.
  */
-export function wireTerminalFont(id: TerminalId, family: string): TerminalFontResult {
+export function wireTerminalFont(
+  id: TerminalId,
+  family: string,
+  options: WireTerminalFontOptions = {}
+): TerminalFontResult {
   if (id === 'wezterm') {
-    const configPath = terminalConfigPath('wezterm');
+    const configPath = weztermConfigPath();
     return {
       applied: false,
       path: configPath,
@@ -136,20 +281,31 @@ export function wireTerminalFont(id: TerminalId, family: string): TerminalFontRe
     };
   }
 
-  if (
-    id === 'alacritty' &&
-    !fs.existsSync(alacrittyTomlPath()) &&
-    fs.existsSync(alacrittyYmlPath())
-  ) {
-    const yml = alacrittyYmlPath();
+  const filePath = resolveTerminalConfigPath(id);
+  if (id === 'alacritty' && filePath.endsWith('.yml')) {
     return {
       applied: false,
-      path: yml,
-      note: `alacritty.yml is in use — add font.family: "${family}" under font: in ${yml}`,
+      path: filePath,
+      note:
+        `${filePath} is YAML, which Alacritty 0.13+ ignores: run \`alacritty migrate\` and ` +
+        `re-run, or on an older Alacritty set font.normal.family to "${family}" there`,
     };
   }
 
-  const filePath = terminalConfigPath(id);
+  // Alacritty before 0.13 reads only YAML, so a new alacritty.toml would be ignored.
+  if (id === 'alacritty' && !fs.existsSync(filePath)) {
+    const version = (options.alacrittyVersion ?? installedAlacrittyVersion)();
+    if (version && version[0] === 0 && version[1] < 13) {
+      return {
+        applied: false,
+        path: alacrittyYmlPath(),
+        note:
+          `Alacritty ${version.join('.')} reads only YAML — add font.normal.family: ` +
+          `"${family}" to ${alacrittyYmlPath()}`,
+      };
+    }
+  }
+
   const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
 
   let updated: string;
@@ -158,10 +314,10 @@ export function wireTerminalFont(id: TerminalId, family: string): TerminalFontRe
       updated = setTomlFont(existing, family);
       break;
     case 'kitty':
-      updated = setLine(existing, /^font_family\s+.*$/m, `font_family ${family}`);
+      updated = setLastLine(existing, /^[ \t]*font_family[ \t]+.*$/gm, `font_family ${family}`);
       break;
     case 'ghostty':
-      updated = setLine(existing, /^font-family\s*=.*$/m, `font-family = ${family}`);
+      updated = setGhosttyFont(existing, family);
       break;
     case 'foot':
       updated = setFootFont(existing, family);
@@ -175,8 +331,11 @@ export function wireTerminalFont(id: TerminalId, family: string): TerminalFontRe
   }
 
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  // A read-only config (e.g. a Nix-managed link) would fail the write below;
+  // checking first keeps it from collecting a backup on every run.
+  if (fs.existsSync(filePath)) fs.accessSync(filePath, fs.constants.W_OK);
   const backedUpTo = backupIfExists(filePath);
-  fs.writeFileSync(filePath, updated, 'utf8');
+  writeFileAtomic(filePath, updated);
   return { applied: true, path: filePath, backedUpTo };
 }
 
@@ -184,30 +343,94 @@ export function wireTerminalFont(id: TerminalId, family: string): TerminalFontRe
 export function readTerminalFontFamily(id: TerminalId): string | null {
   if (id === 'wezterm') return null;
 
-  let filePath = terminalConfigPath(id);
-  if (id === 'alacritty' && !fs.existsSync(filePath) && fs.existsSync(alacrittyYmlPath())) {
-    filePath = alacrittyYmlPath();
-  }
+  const filePath = resolveTerminalConfigPath(id);
   if (!fs.existsSync(filePath)) return null;
 
-  const content = fs.readFileSync(filePath, 'utf8');
-  let match: RegExpMatchArray | null;
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return null;
+  }
   switch (id) {
     case 'alacritty':
-      match =
-        content.match(/^\s*family:\s*"?([^"\n]+)"?/m) ??
-        content.match(/^\s*family\s*=\s*"([^"]+)"/m);
-      break;
+      return filePath.endsWith('.yml') ? readYamlFamily(content) : readTomlFamily(content);
     case 'kitty':
-      match = content.match(/^font_family\s+(.+)$/m);
-      break;
+      return readKittyFamily(content);
     case 'ghostty':
-      match = content.match(/^font-family\s*=\s*"?([^"\n]+)"?$/m);
-      break;
+      return readGhosttyFamily(content);
     case 'foot':
-      match = content.match(/^\s*font\s*=\s*([^:\n]+)/m);
-      break;
+      return readFootFamily(content);
   }
+}
 
-  return match?.[1]?.trim() ?? null;
+function unquote(value: string): string {
+  return value
+    .trim()
+    .replace(/^(["'])(.*)\1$/, '$2')
+    .trim();
+}
+
+function readYamlFamily(content: string): string | null {
+  const match = content.match(/^\s*family:\s*"?([^"\n]+)"?/m);
+  return match?.[1]?.trim() || null;
+}
+
+/** The family in alacritty's normal font, in any of the shapes the writer edits. */
+function readTomlFamily(content: string): string | null {
+  const sections = tomlSections(content);
+  const body = (name: string | null) => {
+    const section = sections.find((s) => s.name === name);
+    return section ? content.slice(section.start, section.end) : '';
+  };
+  const value = '("[^"]*"|\'[^\']*\')';
+  const patterns: Array<[string | null, RegExp]> = [
+    ['font.normal', new RegExp(`^[ \\t]*family[ \\t]*=[ \\t]*${value}`, 'm')],
+    ['font', new RegExp(`^[ \\t]*normal\\.family[ \\t]*=[ \\t]*${value}`, 'm')],
+    ['font', new RegExp(`^[ \\t]*normal\\s*=\\s*\\{[^}]*family\\s*=\\s*${value}`, 'm')],
+    [null, new RegExp(`^[ \\t]*font\\.normal\\.family[ \\t]*=[ \\t]*${value}`, 'm')],
+    [null, new RegExp(`^[ \\t]*font\\.normal\\s*=\\s*\\{[^}]*family\\s*=\\s*${value}`, 'm')],
+  ];
+  for (const [section, pattern] of patterns) {
+    const match = body(section).match(pattern);
+    if (match?.[1]) return unquote(match[1]) || null;
+  }
+  return null;
+}
+
+/** kitty applies the last font_family line; `family="X"` is its newer spelling. */
+function readKittyFamily(content: string): string | null {
+  const lines = [...content.matchAll(/^[ \t]*font_family[ \t]+(.+)$/gm)];
+  const value = lines.at(-1)?.[1]?.trim();
+  if (!value) return null;
+  const named = value.match(/(?:^|\s)family=("[^"]*"|'[^']*'|\S+)/);
+  return (named ? unquote(named[1]!) : value) || null;
+}
+
+/** Ghostty builds a fallback list from font-family lines; an empty value resets it. */
+function readGhosttyFamily(content: string): string | null {
+  let primary: string | null = null;
+  for (const match of content.matchAll(/^[ \t]*font-family[ \t]*=(.*)$/gm)) {
+    const value = unquote(match[1] ?? '');
+    if (value === '') primary = null;
+    else if (primary === null) primary = value;
+  }
+  return primary;
+}
+
+/** foot's [main] font, as its comma-separated families without size options. */
+function readFootFamily(content: string): string | null {
+  const sections = tomlSections(content);
+  for (const name of [null, 'main']) {
+    const section = sections.find((s) => s.name === name);
+    if (!section) continue;
+    const match = content.slice(section.start, section.end).match(/^[ \t]*font[ \t]*=(.*)$/m);
+    if (!match) continue;
+    const families = (match[1] ?? '')
+      .split(',')
+      .map((entry) => entry.split(':')[0]!.trim())
+      .filter(Boolean);
+    return families.length > 0 ? families.join(', ') : null;
+  }
+  return null;
 }

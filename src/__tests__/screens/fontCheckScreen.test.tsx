@@ -1,5 +1,6 @@
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { NERD_FONT_SYMBOLS } from '../../config/promptSymbols.ts';
 import { FontCheckScreen } from '../../screens/FontCheckScreen.tsx';
 import { DEFAULT_STATE, NO_NERD_FONT } from '../../types.ts';
 import { pressEsc } from '../helpers/ink.ts';
@@ -26,10 +27,10 @@ describe('FontCheckScreen', () => {
     expect(instance.lastFrame()).toContain('Nerd Font check');
     expect(instance.lastFrame()).toContain('folder icon');
     expect(instance.lastFrame()).toContain('git branch icon');
-    expect(instance.lastFrame()).toContain('');
-    expect(instance.lastFrame()).toContain('');
-    expect(instance.lastFrame()).toContain('');
-    expect(instance.lastFrame()).toContain('');
+    expect(instance.lastFrame()).toContain(NERD_FONT_SYMBOLS.directory);
+    expect(instance.lastFrame()).toContain(NERD_FONT_SYMBOLS.gitBranch);
+    expect(instance.lastFrame()).toContain(NERD_FONT_SYMBOLS.nodejs);
+    expect(instance.lastFrame()).toContain(NERD_FONT_SYMBOLS.python);
     expect(instance.lastFrame()).toContain('Yes, I already have one');
     expect(instance.lastFrame()).toContain('No, install one for me');
     expect(instance.lastFrame()).toContain('No, use text symbols only');
@@ -81,5 +82,32 @@ describe('FontCheckScreen', () => {
     await pressEsc(instance.stdin);
 
     expect(onBack).toHaveBeenCalled();
+  });
+});
+
+describe('FontCheckScreen in a container', () => {
+  it('does not offer to install a font, which the container would skip', () => {
+    const { lastFrame } = render(
+      <FontCheckScreen
+        state={{ ...DEFAULT_STATE, container: true }}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    expect(lastFrame()).not.toContain('install one for me');
+    expect(lastFrame()).toContain('use text symbols only');
+  });
+});
+
+describe('FontCheckScreen going back', () => {
+  it('keeps the install answer highlighted', () => {
+    const { lastFrame } = render(
+      <FontCheckScreen
+        state={{ ...DEFAULT_STATE, hasNerdFont: true, nerdFontToInstall: { kind: 'select' } }}
+        onNext={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    expect(lastFrame()).toMatch(/›\s*No, install one for me/);
   });
 });

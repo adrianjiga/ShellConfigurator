@@ -1,8 +1,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { InstallTask, WizardState } from '../types.ts';
+import { writeFileAtomic } from '../generators/shellRc.ts';
+import type { InstallTask, ShellId, WizardState } from '../types.ts';
+import { errorMessage, isMissingFile } from './errors.ts';
 import { stateDir } from './paths.ts';
-import { serializeState } from './state.ts';
+import { parseState, serializeState } from './state.ts';
 
 /**
  * What a recorded run did. `install` is the interactive wizard; `apply` is a
@@ -12,20 +14,19 @@ export type HistoryKind = 'install' | 'apply' | 'uninstall' | 'rollback';
 
 /**
  * One entry in history.jsonl: a single JSON object per line. The version field
- * drives future migrations in readHistory; fields are additive so old records
- * stay readable.
+ * drives future migrations; fields are additive so old records stay readable.
  */
 export interface HistoryRecord {
   /** Schema version of this record. */
   version: 1;
-  /** When the run started, ISO 8601. */
+  /** When the run was recorded (after it finished), ISO 8601. */
   timestamp: string;
   kind: HistoryKind;
-  /** Snapshot id of the state this run applied; the #14 rollback handle. */
+  /** Snapshot id of the state card this run applied. */
   snapshotId?: string;
-  /** Outcome of each install task, for the installer lines of `--list-runs`. */
+  /** Outcome of each install task. */
   results?: InstallTask[];
-  /** Process exit code; omitted when the run was interrupted before finishing. */
+  /** The exit code the run ended with. */
   exitCode?: number;
   /** The headless invocation (e.g. `apply --state saved.json`), for reproduction. */
   command?: string;
@@ -36,26 +37,88 @@ export function historyFilePath(): string {
   return path.join(stateDir(), 'history.jsonl');
 }
 
+export interface RecordRunOptions {
+  kind: HistoryKind;
+  /** Snapshot the applied state card alongside the record. */
+  state?: WizardState;
+  results?: InstallTask[];
+  command?: string;
+  exitCode?: number;
+}
+
+/**
+ * Snapshots the run's state and appends it to the ledger. Throws on I/O failure;
+ * callers decide whether that is fatal.
+ */
+export function recordRun(options: RecordRunOptions): void {
+  const timestamp = new Date().toISOString();
+  const snapshotId = options.state ? writeSnapshot(options.state, timestamp) : undefined;
+  appendHistory({
+    version: 1,
+    timestamp,
+    kind: options.kind,
+    ...(snapshotId ? { snapshotId } : {}),
+    ...(options.results ? { results: options.results } : {}),
+    ...(options.command ? { command: options.command } : {}),
+    ...(options.exitCode !== undefined ? { exitCode: options.exitCode } : {}),
+  });
+}
+
+/**
+ * Records a run without letting a history failure end it: a run that just
+ * installed must not die because the ledger could not be written.
+ */
+export function recordRunSafely(
+  options: RecordRunOptions,
+  record: (options: RecordRunOptions) => void = recordRun
+): void {
+  try {
+    record(options);
+  } catch (err) {
+    process.stderr.write(`Warning: could not record this run in history: ${errorMessage(err)}\n`);
+  }
+}
+
 /**
  * Records one run by appending a single JSON line. Append-only because a run is
- * immutable history; ordering — and therefore `--list-runs` — falls out of file
- * order. Throws on I/O failure; callers decide whether that is fatal.
+ * immutable history; ordering falls out of file order. Throws on I/O failure;
+ * callers decide whether that is fatal.
  */
 export function appendHistory(record: HistoryRecord): void {
   const file = historyFilePath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(file, `${JSON.stringify(record)}\n`, 'utf8');
+  ensureTrailingNewline(file);
+  fs.appendFileSync(file, `${JSON.stringify(record)}\n`, { encoding: 'utf8', mode: 0o600 });
 }
 
-/** True when the failure is simply that the file does not exist yet. */
-function isMissingFile(err: unknown): boolean {
-  return (err as { code?: string }).code === 'ENOENT';
+/**
+ * A record torn by a crash mid-append leaves no trailing newline; appending
+ * straight after it would glue the next run onto the broken line and lose both.
+ */
+function ensureTrailingNewline(file: string): void {
+  let size: number;
+  try {
+    size = fs.statSync(file).size;
+  } catch (err) {
+    if (isMissingFile(err)) return;
+    throw err;
+  }
+  if (size === 0) return;
+
+  const fd = fs.openSync(file, 'r');
+  try {
+    const last = Buffer.alloc(1);
+    fs.readSync(fd, last, 0, 1, size - 1);
+    if (last[0] !== 0x0a) fs.appendFileSync(file, '\n');
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 /**
  * The per-run snapshot store: <stateDir>/snapshots/. Each snapshot is the
- * versioned state card the run applied, resolved later by `snapshotId` during
- * `uninstall`/`--rollback` (#14).
+ * versioned state card the run applied, found again by `snapshotId` (as
+ * `lastRunShells` does for `--restore`).
  */
 export function snapshotDir(): string {
   return path.join(stateDir(), 'snapshots');
@@ -68,39 +131,39 @@ export function snapshotPath(snapshotId: string): string {
 
 /**
  * Snapshot the user choices of a run as a versioned card file and return its id.
- * The id is a slugged ISO timestamp — printable, sortable, and unique at the
- * frequency runs happen. Best-effort callers let a failure become a warning.
+ * The id is a slugged ISO timestamp — printable and sortable — with a suffix
+ * added when a second run lands in the same millisecond. Best-effort callers
+ * let a failure become a warning.
  */
 export function writeSnapshot(state: WizardState, timestamp?: string): string {
-  const id = (timestamp ?? new Date().toISOString()).replaceAll(':', '-');
+  const base = (timestamp ?? new Date().toISOString()).replaceAll(':', '-');
   fs.mkdirSync(snapshotDir(), { recursive: true });
-  fs.writeFileSync(snapshotPath(id), serializeState(state), 'utf8');
+  let id = base;
+  for (let n = 2; fs.existsSync(snapshotPath(id)); n++) id = `${base}-${n}`;
+  writeFileAtomic(snapshotPath(id), serializeState(state));
   return id;
 }
 
 /**
- * Reads every recorded run in file (chronological) order. A missing history is
- * "no runs yet", and a torn trailing line from a crash mid-append is skipped
- * rather than failing the whole read.
+ * The shells the most recent recorded run configured, from its snapshot card,
+ * or null when no readable run is recorded.
  */
-export function readHistory(): HistoryRecord[] {
-  const file = historyFilePath();
-  let content: string;
+export function lastRunShells(): ShellId[] | null {
+  let lines: string[];
   try {
-    content = fs.readFileSync(file, 'utf8');
-  } catch (err) {
-    if (isMissingFile(err)) return [];
-    throw err;
+    lines = fs.readFileSync(historyFilePath(), 'utf8').split('\n').filter(Boolean);
+  } catch {
+    return null;
   }
-
-  const records: HistoryRecord[] = [];
-  for (const line of content.split('\n')) {
-    if (line.trim() === '') continue;
+  for (const line of lines.reverse()) {
     try {
-      records.push(JSON.parse(line) as HistoryRecord);
+      const record = JSON.parse(line) as Partial<HistoryRecord>;
+      if (typeof record.snapshotId !== 'string') continue;
+      const card = fs.readFileSync(snapshotPath(record.snapshotId), 'utf8');
+      return parseState(card).selectedShells;
     } catch {
-      // Unparseable line: likely a torn append; skip it and keep the rest.
+      // A torn line or missing snapshot: try the run before it.
     }
   }
-  return records;
+  return null;
 }

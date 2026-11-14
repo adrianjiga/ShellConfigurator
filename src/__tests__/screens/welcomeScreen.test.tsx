@@ -5,14 +5,14 @@ import {
   detectContainerAsync,
   detectPackageManagerAsync,
   detectTerminalAsync,
-  isStarshipInstalledAsync,
+  findStarshipAsync,
 } from '../../services/detector.ts';
 import { DEFAULT_STATE } from '../../types.ts';
 import { flush } from '../helpers/wait.ts';
 
 vi.mock('../../services/detector.ts', () => ({
   detectPackageManagerAsync: vi.fn(),
-  isStarshipInstalledAsync: vi.fn(),
+  findStarshipAsync: vi.fn(),
   detectTerminalAsync: vi.fn(),
   detectContainerAsync: vi.fn(),
 }));
@@ -23,7 +23,7 @@ afterEach(() => {
 });
 beforeEach(() => {
   vi.mocked(detectPackageManagerAsync).mockResolvedValue('apt');
-  vi.mocked(isStarshipInstalledAsync).mockResolvedValue({ installed: false });
+  vi.mocked(findStarshipAsync).mockResolvedValue({ installed: false });
   vi.mocked(detectTerminalAsync).mockResolvedValue(null);
   vi.mocked(detectContainerAsync).mockResolvedValue(false);
 });
@@ -39,14 +39,14 @@ const DOWN = '\u001B[B';
 
 describe('WelcomeScreen', () => {
   it('shows a placeholder while detection is in flight', async () => {
-    vi.mocked(isStarshipInstalledAsync).mockReturnValue(new Promise(() => {}));
+    vi.mocked(findStarshipAsync).mockReturnValue(new Promise(() => {}));
     const { instance } = setup();
 
     expect(instance.lastFrame()).toContain('Detecting system...');
   });
 
   it('advances with Enter when Starship is already installed', async () => {
-    vi.mocked(isStarshipInstalledAsync).mockResolvedValue({
+    vi.mocked(findStarshipAsync).mockResolvedValue({
       installed: true,
       version: 'starship 1.22.1',
     });
@@ -62,7 +62,55 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: null,
       container: false,
+      skipStarshipInstall: false,
     });
+  });
+
+  it('counts a script install off PATH as installed and says where it is', async () => {
+    vi.mocked(findStarshipAsync).mockResolvedValue({
+      installed: true,
+      version: 'starship 1.27.0',
+      pathDir: '/home/u/.local/bin',
+    });
+    const { instance } = setup();
+    await flush();
+    await flush();
+
+    expect(instance.lastFrame()).toContain('Starship is installed');
+    expect(instance.lastFrame()).toContain('/home/u/.local/bin');
+    expect(instance.lastFrame()).not.toContain('Install automatically');
+  });
+
+  it('says Starship is still missing after a re-check and keeps the manual options', async () => {
+    const { instance } = setup();
+    await flush();
+    await flush();
+
+    instance.stdin.write(DOWN); // → "I'll install it manually"
+    await flush();
+    instance.stdin.write(ENTER);
+    await flush();
+    instance.stdin.write(ENTER); // → "Re-check (I installed it)"
+    await flush();
+    await flush();
+
+    expect(instance.lastFrame()).toContain('Still not found');
+    expect(instance.lastFrame()).toContain('Re-check (I installed it)');
+  });
+
+  it('drops an earlier skip once Starship is found on coming back', async () => {
+    vi.mocked(findStarshipAsync).mockResolvedValue({ installed: true, version: 'starship 1.27.0' });
+    const onNext = vi.fn();
+    const instance = render(
+      <WelcomeScreen state={{ ...DEFAULT_STATE, skipStarshipInstall: true }} onNext={onNext} />
+    );
+    await flush();
+    await flush();
+
+    instance.stdin.write(ENTER);
+    await flush();
+
+    expect(onNext).toHaveBeenCalledWith(expect.objectContaining({ skipStarshipInstall: false }));
   });
 
   it('installs automatically when Starship is missing', async () => {
@@ -78,6 +126,7 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: null,
       container: false,
+      skipStarshipInstall: false,
     });
   });
 
@@ -117,7 +166,7 @@ describe('WelcomeScreen', () => {
     instance.stdin.write(ENTER);
     await flush();
 
-    vi.mocked(isStarshipInstalledAsync).mockResolvedValueOnce({
+    vi.mocked(findStarshipAsync).mockResolvedValueOnce({
       installed: true,
       version: 'starship 1.22.1',
     });
@@ -133,6 +182,7 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: null,
       container: false,
+      skipStarshipInstall: false,
     });
   });
 
@@ -152,6 +202,7 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: 'kitty',
       container: false,
+      skipStarshipInstall: false,
     });
   });
 
@@ -170,6 +221,7 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: null,
       container: true,
+      skipStarshipInstall: false,
     });
   });
 });

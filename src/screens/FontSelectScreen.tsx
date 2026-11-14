@@ -1,9 +1,10 @@
 import { Box, Text, useInput } from 'ink';
 import { AppSelectInput } from '../components/AppSelectInput.tsx';
-import { NavHints } from '../components/NavHints.tsx';
+import { LIST_HINTS, NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { getNerdFontsDir, NERD_FONTS } from '../services/installer.ts';
+import { TERMINAL_LABELS } from '../services/terminalFont.ts';
 import type { WizardState } from '../types.ts';
 
 interface FontSelectScreenProps {
@@ -18,6 +19,14 @@ export function FontSelectScreen({ state, onNext, onBack }: FontSelectScreenProp
   });
 
   const items = NERD_FONTS.map((f) => ({ label: f.label, value: f.id }));
+  const chosen = state.nerdFontToInstall;
+  const initialIndex =
+    chosen.kind === 'install'
+      ? Math.max(
+          0,
+          items.findIndex((i) => i.value === chosen.id)
+        )
+      : 0;
 
   return (
     <WizardLayout state={state}>
@@ -28,12 +37,15 @@ export function FontSelectScreen({ state, onNext, onBack }: FontSelectScreenProp
           <Text color={uiColor('cyan')}>{getNerdFontsDir()}</Text>
         </Text>
         <Text color={uiColor('gray')} italic>
-          You'll need to set this font in your terminal emulator settings after installing.
+          {state.terminal && state.terminal !== 'wezterm'
+            ? `It will also be selected in ${TERMINAL_LABELS[state.terminal]} for you.`
+            : "You'll need to set this font in your terminal emulator settings after installing."}
         </Text>
 
         <Box marginTop={1}>
           <AppSelectInput
             items={items}
+            initialIndex={initialIndex}
             onSelect={(item) =>
               onNext({ nerdFontToInstall: { kind: 'install', id: item.value }, hasNerdFont: true })
             }
@@ -41,13 +53,7 @@ export function FontSelectScreen({ state, onNext, onBack }: FontSelectScreenProp
         </Box>
       </Box>
 
-      <NavHints
-        hints={[
-          { key: '↑↓', label: 'navigate' },
-          { key: 'Enter', label: 'select' },
-          { key: 'Esc', label: 'back' },
-        ]}
-      />
+      <NavHints hints={LIST_HINTS} />
     </WizardLayout>
   );
 }

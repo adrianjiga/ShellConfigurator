@@ -1,3 +1,6 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('ink', async () => {
@@ -18,9 +21,8 @@ const { mockRestoreConfigBackups } = vi.hoisted(() => ({
   mockRestoreConfigBackups: vi.fn(),
 }));
 
-const { mockAppendHistory, mockWriteSnapshot } = vi.hoisted(() => ({
-  mockAppendHistory: vi.fn(),
-  mockWriteSnapshot: vi.fn<(state: WizardState, timestamp: string) => string>(() => 'snap-abc123'),
+const { mockRecordRun } = vi.hoisted(() => ({
+  mockRecordRun: vi.fn(),
 }));
 
 vi.mock('../services/detector.ts', async () => {
@@ -50,8 +52,9 @@ vi.mock('../services/history.ts', async () => {
     await vi.importActual<typeof import('../services/history.ts')>('../services/history.ts');
   return {
     ...actual,
-    appendHistory: mockAppendHistory,
-    writeSnapshot: mockWriteSnapshot,
+    recordRun: mockRecordRun,
+    recordRunSafely: (options: Parameters<typeof actual.recordRun>[0]) =>
+      actual.recordRunSafely(options, mockRecordRun),
   };
 });
 
@@ -63,6 +66,14 @@ const { mockRunDoctor, mockFormatDoctorReport, mockRunRepair, mockFormatRepairRe
     mockFormatRepairReport: vi.fn(),
   })
 );
+
+const { mockRunInstallTasks } = vi.hoisted(() => ({
+  mockRunInstallTasks: vi.fn().mockResolvedValue([]),
+}));
+vi.mock('../services/installTasks.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../services/installTasks.ts')>()),
+  runInstallTasks: mockRunInstallTasks,
+}));
 
 vi.mock('../services/doctor.ts', () => ({
   runDoctor: mockRunDoctor,
@@ -77,21 +88,19 @@ vi.mock('../services/repair.ts', () => ({
 import { render } from 'ink';
 import {
   applyInstallOutcomeExitCode,
-  emitFlagWarnings,
-  handleCliArgs,
+  crash,
   recordInstallOutcome,
   reportFatal,
-  restoreTerminal,
+  routeCli,
+  runGlobalFlags,
   runHeadlessCommand,
 } from '../index.tsx';
 import { parseCliArgs } from '../services/args.ts';
-import { CliUsageError } from '../services/errors.ts';
-import { DEFAULT_STATE, type InstallTask, type WizardState } from '../types.ts';
+import { CliRunError, CliUsageError } from '../services/errors.ts';
+import { serializeState } from '../services/state.ts';
+import { DEFAULT_STATE, type InstallTask } from '../types.ts';
 
 describe('index CLI handling', () => {
-  const originalArgv = process.argv.slice();
-  const originalExitCode = process.exitCode;
-
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
   let stderrWrite: ReturnType<typeof vi.spyOn>;
 
@@ -101,59 +110,50 @@ describe('index CLI handling', () => {
   });
 
   afterEach(() => {
-    process.argv = originalArgv;
-    process.exitCode = originalExitCode;
     stdoutWrite.mockRestore();
     stderrWrite.mockRestore();
     vi.mocked(render).mockClear();
   });
 
   it.each(['--version', '-v'])('prints version for %s', (flag) => {
-    process.argv = ['node', 'index.tsx', flag];
-    const result = handleCliArgs();
-    expect(result).toBe(true);
+    expect(runGlobalFlags(parseCliArgs([flag]))).toBe(true);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringMatching(/^\d+\.\d+\.\d+\n$/));
   });
 
   it.each(['--help', '-h'])('prints help and exits for %s', (flag) => {
-    process.argv = ['node', 'index.tsx', flag];
-    const result = handleCliArgs();
-    expect(result).toBe(true);
+    expect(runGlobalFlags(parseCliArgs([flag]))).toBe(true);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Usage:'));
   });
 
   it('documents the --no-install alias in help', () => {
-    process.argv = ['node', 'index.tsx', '--help'];
-    handleCliArgs();
+    runGlobalFlags(parseCliArgs(['--help']));
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('--no-install'));
   });
 
   it('documents that flags can precede or follow the subcommand', () => {
-    process.argv = ['node', 'index.tsx', '--help'];
-    handleCliArgs();
+    runGlobalFlags(parseCliArgs(['--help']));
     expect(stdoutWrite).toHaveBeenCalledWith(
       expect.stringContaining('before or after the subcommand')
     );
   });
 
-  it('does not consume args when unknown flags are passed', () => {
-    process.argv = ['node', 'index.tsx', '--bogus'];
-    const result = handleCliArgs();
-    expect(result).toBe(false);
-    expect(stdoutWrite).not.toHaveBeenCalled();
+  it('lists every accepted flag in the help text', () => {
+    runGlobalFlags(parseCliArgs(['--help']));
+    const help = String(stdoutWrite.mock.calls[0]?.[0]);
+    expect(help).toContain('--restore, --undo');
+    expect(help).toContain('-o, --output <file>');
+    expect(help).toContain('--import, --state <file>');
+    expect(help).toContain('--shells is');
+    expect(help).not.toContain('read-only');
   });
 
-  it('treats non-flag args as not a flag request', () => {
-    process.argv = ['node', 'index.tsx', 'somefile'];
-    const result = handleCliArgs();
-    expect(result).toBe(false);
+  it('rejects unknown flags before the global flags run', () => {
+    expect(() => parseCliArgs(['--bogus'])).toThrow("Unknown flag '--bogus'");
+    expect(stdoutWrite).not.toHaveBeenCalled();
   });
 });
 
 describe('index restore flag', () => {
-  const originalArgv = process.argv.slice();
-  const originalExitCode = process.exitCode;
-
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -162,23 +162,22 @@ describe('index restore flag', () => {
   });
 
   afterEach(() => {
-    process.argv = originalArgv;
-    process.exitCode = originalExitCode;
     stdoutWrite.mockRestore();
   });
 
   it('prints the restored configs for --restore', () => {
     const backup = '/home/u/.config/starship.toml.bak-2026-09-09T09-30-00-000Z';
     const backup2 = '/home/u/.config/starship/zsh.toml.bak-2026-09-08T10-00-00-000Z';
-    mockRestoreConfigBackups.mockReturnValue([
-      { what: 'shared', restoredTo: '/home/u/.config/starship.toml', restoredFrom: backup },
-      { what: 'zsh', restoredTo: '/home/u/.config/starship/zsh.toml', restoredFrom: backup2 },
-    ]);
-    process.argv = ['node', 'index.tsx', '--restore'];
+    mockRestoreConfigBackups.mockReturnValue({
+      restored: [
+        { what: 'shared', restoredTo: '/home/u/.config/starship.toml', restoredFrom: backup },
+        { what: 'zsh', restoredTo: '/home/u/.config/starship/zsh.toml', restoredFrom: backup2 },
+      ],
+      failed: [],
+    });
 
-    const result = handleCliArgs();
+    expect(runGlobalFlags(parseCliArgs(['--restore']))).toBe(true);
 
-    expect(result).toBe(true);
     expect(stdoutWrite).toHaveBeenCalledWith(
       expect.stringContaining('shared: /home/u/.config/starship.toml')
     );
@@ -187,89 +186,74 @@ describe('index restore flag', () => {
     );
   });
 
-  it('accepts --undo as an alias for --restore', () => {
-    mockRestoreConfigBackups.mockReturnValue([]);
-    process.argv = ['node', 'index.tsx', '--undo'];
+  it('reports partial restore failures instead of claiming success', () => {
+    const backup = '/home/u/.config/starship/zsh.toml.bak-2026-09-08T10-00-00-000Z';
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+    const savedExitCode = process.exitCode;
+    mockRestoreConfigBackups.mockReturnValue({
+      restored: [
+        { what: 'shared', restoredTo: '/home/u/.config/starship.toml', restoredFrom: backup },
+      ],
+      failed: [{ what: 'zsh' as const, restoredFrom: backup, error: 'EACCES: permission denied' }],
+    });
 
-    expect(handleCliArgs()).toBe(true);
+    try {
+      expect(runGlobalFlags(parseCliArgs(['--restore']))).toBe(true);
+
+      expect(stdoutWrite).toHaveBeenCalledWith(
+        expect.stringContaining('shared: /home/u/.config/starship.toml')
+      );
+      expect(stderrWrite).toHaveBeenCalledWith(
+        expect.stringContaining('Could not restore some configs')
+      );
+      expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('EACCES'));
+      expect(process.exitCode).toBe(1);
+    } finally {
+      stderrWrite.mockRestore();
+      process.exitCode = savedExitCode;
+    }
+  });
+
+  it('accepts --undo as an alias for --restore', () => {
+    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
+
+    expect(runGlobalFlags(parseCliArgs(['--undo']))).toBe(true);
     expect(mockRestoreConfigBackups).toHaveBeenCalled();
   });
 
   it('reports when there is nothing to restore', () => {
-    mockRestoreConfigBackups.mockReturnValue([]);
-    process.argv = ['node', 'index.tsx', '--restore'];
+    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
 
-    handleCliArgs();
+    runGlobalFlags(parseCliArgs(['--restore']));
 
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Nothing to restore'));
   });
-});
 
-describe('index flag warnings', () => {
-  let stderrWrite: ReturnType<typeof vi.spyOn>;
+  it('prefers --version over --restore regardless of argv order', () => {
+    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
 
-  beforeEach(() => {
-    stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+    expect(runGlobalFlags(parseCliArgs(['--restore', '--version']))).toBe(true);
+    expect(runGlobalFlags(parseCliArgs(['--version', '--restore']))).toBe(true);
+    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringMatching(/^\d+\.\d+\.\d+\n$/));
   });
 
-  afterEach(() => {
-    stderrWrite.mockRestore();
-  });
+  it('refuses --restore in a dry run instead of restoring', () => {
+    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
 
-  it('prints each parser warning to stderr', () => {
-    emitFlagWarnings(parseCliArgs(['generate', '--bogus', '--preset']));
-
-    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining("Unknown flag '--bogus'"));
-    expect(stderrWrite).toHaveBeenCalledWith(
-      expect.stringContaining("Flag '--preset' needs a value")
+    expect(() => runGlobalFlags(parseCliArgs(['--dry-run', '--restore']))).toThrow(
+      /cannot run in a dry run/
     );
+    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
   });
 
-  it('stays silent for a clean parse', () => {
-    emitFlagWarnings(parseCliArgs(['generate', '--preset', 'pure']));
+  it('refuses --restore alongside a subcommand', () => {
+    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
 
-    expect(stderrWrite).not.toHaveBeenCalled();
-  });
-});
-
-describe('index restoreTerminal', () => {
-  let setRawMode: ReturnType<typeof vi.fn>;
-  let stdoutWrite: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    setRawMode = vi.fn();
-    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
-    Object.defineProperty(process.stdin, 'setRawMode', {
-      value: setRawMode,
-      configurable: true,
-    });
-    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('disables raw mode on a TTY stdin', () => {
-    restoreTerminal();
-    expect(setRawMode).toHaveBeenCalledWith(false);
-  });
-
-  it('shows the cursor again', () => {
-    restoreTerminal();
-    expect(stdoutWrite).toHaveBeenCalledWith('\u001B[?25h');
-  });
-
-  it('does not throw when stdin has no setRawMode', () => {
-    Object.defineProperty(process.stdin, 'setRawMode', { value: undefined, configurable: true });
-    expect(() => restoreTerminal()).not.toThrow();
-  });
-
-  it('swallows write errors', () => {
-    process.stdout.write = (() => {
-      throw new Error('EPIPE');
-    }) as typeof process.stdout.write;
-    expect(() => restoreTerminal()).not.toThrow();
+    expect(() =>
+      runGlobalFlags(parseCliArgs(['generate', '--preset', 'pure-prompt', '--restore']))
+    ).toThrow(/cannot be combined with the generate subcommand/);
+    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
   });
 });
 
@@ -301,8 +285,7 @@ describe('index wizard history recording', () => {
   const done = [{ id: 'config', label: 'Copy config', status: 'done' } as InstallTask];
 
   afterEach(() => {
-    mockAppendHistory.mockReset();
-    mockWriteSnapshot.mockReset();
+    mockRecordRun.mockReset();
     // Reset installFailed so later exit-code assertions are not poisoned.
     recordInstallOutcome(undefined);
   });
@@ -314,16 +297,10 @@ describe('index wizard history recording', () => {
       selectedShells: ['zsh'],
     });
 
-    expect(mockWriteSnapshot).toHaveBeenCalledTimes(1);
-    expect(mockWriteSnapshot.mock.calls.at(-1)?.[0]).toMatchObject({
-      preset: 'pure-prompt',
-      selectedShells: ['zsh'],
-    });
-    expect(mockAppendHistory).toHaveBeenCalledWith(
+    expect(mockRecordRun).toHaveBeenCalledWith(
       expect.objectContaining({
-        version: 1,
         kind: 'install',
-        snapshotId: 'snap-abc123',
+        state: expect.objectContaining({ preset: 'pure-prompt', selectedShells: ['zsh'] }),
         exitCode: 0,
         results: done,
       })
@@ -340,18 +317,17 @@ describe('index wizard history recording', () => {
       }
     );
 
-    expect(mockAppendHistory).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 1 }));
+    expect(mockRecordRun).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 1 }));
   });
 
   it('does not record history without a final state', () => {
     recordInstallOutcome(done);
 
-    expect(mockWriteSnapshot).not.toHaveBeenCalled();
-    expect(mockAppendHistory).not.toHaveBeenCalled();
+    expect(mockRecordRun).not.toHaveBeenCalled();
   });
 
   it('warns instead of dying when the history write fails', () => {
-    mockWriteSnapshot.mockImplementation(() => {
+    mockRecordRun.mockImplementation(() => {
       throw new Error('disk full');
     });
     const warn = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
@@ -365,6 +341,38 @@ describe('index wizard history recording', () => {
   });
 });
 
+describe('index routeCli', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+  let stderrWrite: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+    stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+  });
+
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+    stderrWrite.mockRestore();
+  });
+
+  it('rejects a mistyped flag instead of letting a global flag win', async () => {
+    await expect(routeCli(['--bogus', '--help'])).rejects.toThrow("Unknown flag '--bogus'");
+    expect(stdoutWrite).not.toHaveBeenCalledWith(expect.stringContaining('Usage:'));
+  });
+
+  it('routes a headless subcommand to completion', async () => {
+    const { handled } = await routeCli(['generate', '--preset', 'pure-prompt']);
+
+    expect(handled).toBe(true);
+    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('format'));
+  });
+
+  it('leaves a plain run to the interactive wizard', async () => {
+    expect((await routeCli([])).handled).toBe(false);
+    expect((await routeCli(['--dry-run'])).handled).toBe(false);
+  });
+});
+
 describe('index headless routing', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
 
@@ -375,7 +383,7 @@ describe('index headless routing', () => {
 
   beforeEach(() => {
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
-    mockAppendHistory.mockReset();
+    mockRecordRun.mockReset();
   });
 
   afterEach(() => {
@@ -392,7 +400,6 @@ describe('index headless routing', () => {
 
   it('returns false for a plain global flag, leaving it for the wizard', async () => {
     expect(await route(['--help'])).toBe(false);
-    expect(await route(['--bogus'])).toBe(false);
   });
 
   it('rejects adopt flags that lack the apply subcommand instead of dropping them', async () => {
@@ -400,6 +407,15 @@ describe('index headless routing', () => {
     await expect(route(['--import-url', 'https://example.com/starship.toml'])).rejects.toThrow(
       /require the apply subcommand/
     );
+  });
+
+  it('rejects headless flags that lack a subcommand instead of dropping them', async () => {
+    await expect(route(['--preset', 'pure', '-o', 'x.toml'])).rejects.toThrow(
+      /--preset, -o\/--output require a subcommand/
+    );
+    await expect(route(['--json'])).rejects.toThrow(/--json require a subcommand/);
+    await expect(route(['--shells', 'zsh'])).rejects.toThrow(/--shells require a subcommand/);
+    await expect(route(['--state', 'card.json'])).rejects.toThrow(/--state require a subcommand/);
   });
 
   it('surfaces a bogus flag as a CliUsageError', async () => {
@@ -415,7 +431,8 @@ describe('index headless routing', () => {
 
   it('refuses a bare apply before it ever installs', async () => {
     await expect(route(['apply'])).rejects.toThrow(/at least one shell/);
-    expect(mockAppendHistory).not.toHaveBeenCalled();
+    expect(mockRunInstallTasks).not.toHaveBeenCalled();
+    expect(mockRecordRun).not.toHaveBeenCalled();
   });
 
   it('runs an apply dry-run through the router and prints the plan', async () => {
@@ -424,7 +441,7 @@ describe('index headless routing', () => {
     expect(routed).toBe(true);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('dry run'));
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Targets: zsh'));
-    expect(mockAppendHistory).not.toHaveBeenCalled();
+    expect(mockRecordRun).not.toHaveBeenCalled();
   });
 
   it('accepts equals-syntax through the router', async () => {
@@ -435,6 +452,7 @@ describe('index headless routing', () => {
   });
 
   it('runs doctor and prints the human report', async () => {
+    process.exitCode = undefined;
     mockRunDoctor.mockResolvedValue({ ok: true, findings: [] });
     mockFormatDoctorReport.mockReturnValue('HEALTHY\n');
 
@@ -443,7 +461,33 @@ describe('index headless routing', () => {
     expect(routed).toBe(true);
     expect(mockRunDoctor).toHaveBeenCalledWith(null);
     expect(stdoutWrite).toHaveBeenCalledWith('HEALTHY\n');
-    expect(process.exitCode).not.toBe(1);
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('warns when doctor gets config flags without --state', async () => {
+    mockRunDoctor.mockResolvedValue({ ok: true, findings: [] });
+    mockFormatDoctorReport.mockReturnValue('HEALTHY\n');
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+
+    await route(['doctor', '--shells', 'zsh']);
+
+    expect(stderrWrite).toHaveBeenCalledWith(
+      expect.stringContaining('--shells is ignored by doctor without --state')
+    );
+    stderrWrite.mockRestore();
+  });
+
+  it('warns when repair gets config flags without --state', async () => {
+    mockRunRepair.mockResolvedValue({ ok: true, actions: [] });
+    mockFormatRepairReport.mockReturnValue('REPAIRED\n');
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+
+    await route(['repair', '--font', 'none']);
+
+    expect(stderrWrite).toHaveBeenCalledWith(
+      expect.stringContaining('--font is ignored by repair without --state')
+    );
+    stderrWrite.mockRestore();
   });
 
   it('prints the doctor report as JSON with --json', async () => {
@@ -454,6 +498,36 @@ describe('index headless routing', () => {
 
     expect(stdoutWrite).toHaveBeenCalledWith(`${JSON.stringify(report, null, 2)}\n`);
     expect(mockFormatDoctorReport).not.toHaveBeenCalled();
+  });
+
+  it('checks doctor and repair against a --state card', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-index-'));
+    try {
+      const card = path.join(dir, 'card.json');
+      fs.writeFileSync(card, serializeState({ ...DEFAULT_STATE, selectedShells: ['fish'] }));
+      mockRunDoctor.mockResolvedValue({ ok: true, findings: [] });
+      mockFormatDoctorReport.mockReturnValue('HEALTHY\n');
+      mockRunRepair.mockResolvedValue({ ok: true, actions: [] });
+      mockFormatRepairReport.mockReturnValue('REPAIRED\n');
+
+      await route(['doctor', '--state', card]);
+      await route(['repair', '--state', card]);
+
+      expect(mockRunDoctor.mock.calls[0]![0]).toMatchObject({ selectedShells: ['fish'] });
+      expect(mockRunRepair.mock.calls[0]![0]).toMatchObject({ selectedShells: ['fish'] });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('prints the repair report as JSON with --json', async () => {
+    const report = { ok: true, actions: [], dryRun: false };
+    mockRunRepair.mockResolvedValue(report);
+
+    await route(['repair', '--json']);
+
+    expect(stdoutWrite).toHaveBeenCalledWith(`${JSON.stringify(report, null, 2)}\n`);
+    expect(mockFormatRepairReport).not.toHaveBeenCalled();
   });
 
   it('sets a non-zero exit code when a doctor check fails', async () => {
@@ -473,7 +547,7 @@ describe('index headless routing', () => {
     const routed = await route(['repair']);
 
     expect(routed).toBe(true);
-    expect(mockRunRepair).toHaveBeenCalledWith(null);
+    expect(mockRunRepair).toHaveBeenCalledWith(null, undefined, { dryRun: undefined });
     expect(stdoutWrite).toHaveBeenCalledWith('REPAIRED\n');
     expect(mockRunDoctor).not.toHaveBeenCalled();
   });
@@ -485,8 +559,41 @@ describe('index headless routing', () => {
     const routed = await route(['doctor', '--fix']);
 
     expect(routed).toBe(true);
-    expect(mockRunRepair).toHaveBeenCalledWith(null);
+    expect(mockRunRepair).toHaveBeenCalledWith(null, undefined, { dryRun: undefined });
     expect(mockRunDoctor).not.toHaveBeenCalled();
+  });
+
+  it('passes --dry-run through to repair so nothing is applied', async () => {
+    mockRunRepair.mockResolvedValue({ ok: true, actions: [], dryRun: true });
+    mockFormatRepairReport.mockReturnValue('PLANNED\n');
+
+    const routed = await route(['repair', '--dry-run']);
+
+    expect(routed).toBe(true);
+    expect(mockRunRepair).toHaveBeenCalledWith(null, undefined, {
+      dryRun: true,
+      includeWarnings: undefined,
+    });
+    expect(stdoutWrite).toHaveBeenCalledWith('PLANNED\n');
+  });
+
+  it('passes --include-warnings through to repair and doctor --fix', async () => {
+    mockRunRepair.mockResolvedValue({ ok: true, actions: [], dryRun: false });
+    mockFormatRepairReport.mockReturnValue('');
+
+    await route(['repair', '--include-warnings']);
+    await route(['doctor', '--fix', '--include-warnings']);
+
+    for (const call of mockRunRepair.mock.calls) {
+      expect(call[2]).toMatchObject({ includeWarnings: true });
+    }
+    expect(mockRunRepair).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects --include-warnings outside a repair', async () => {
+    await expect(route(['doctor', '--include-warnings'])).rejects.toThrow(
+      '--include-warnings only applies to repair'
+    );
   });
 
   it('sets a non-zero exit code when a repair still fails a check', async () => {
@@ -497,6 +604,32 @@ describe('index headless routing', () => {
     await route(['repair']);
 
     expect(process.exitCode).toBe(1);
+  });
+});
+
+describe('index crash handler', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.exitCode = 0;
+  });
+
+  it('exits with 1 after reporting an uncaught error', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+
+    crash('ShellConfigurator crashed', new Error('boom'));
+
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Error: boom'));
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it('exits with 2 after reporting a CLI usage error', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+
+    crash('ShellConfigurator crashed', new CliUsageError('Unknown preset: nope'));
+
+    expect(exit).toHaveBeenCalledWith(2);
   });
 });
 
@@ -534,5 +667,16 @@ describe('index reportFatal', () => {
       expect.stringContaining('prefix:') as unknown as string
     );
     expect(process.exitCode).toBe(2);
+  });
+
+  it('reports a run failure cleanly and exits 1', () => {
+    reportFatal('prefix', new CliRunError("Could not write TOML to 'x': EACCES"));
+    expect(stderrWrite).toHaveBeenCalledWith(
+      "\nshell-configurator: Could not write TOML to 'x': EACCES\n"
+    );
+    expect(stderrWrite).not.toHaveBeenCalledWith(
+      expect.stringContaining('prefix:') as unknown as string
+    );
+    expect(process.exitCode).toBe(1);
   });
 });

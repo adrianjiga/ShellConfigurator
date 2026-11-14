@@ -10,9 +10,17 @@ import { NERD_FONT_SYMBOLS } from './promptSymbols.ts';
  * from the palette entry matching the module id. Only modules that carry their
  * colour in differently-named keys need `styleFor`.
  */
+/** The settings a static preview segment depends on beyond the font. */
+export type PreviewSample = Pick<
+  ModuleTomlContext,
+  'directoryTruncationLength' | 'directorySubstitutions'
+>;
+
 export interface ModuleTomlContext {
   hasNerdFont: boolean;
   powerline: boolean;
+  /** The generator writes this module's `format` itself (powerline or brackets). */
+  customFormat: boolean;
   /** Starship `directory.truncation_length`; `0` shows the full path. */
   directoryTruncationLength: number;
   /** Starship `directory.substitutions`, in insertion order. */
@@ -32,9 +40,12 @@ export interface ModuleDef {
   defaultLeft: boolean;
   defaultRight: boolean;
   // Returns a short colored preview string for the prompt preview.
-  // Only modules whose symbol is a genuine Nerd Font glyph branch on hasNerdFont;
-  // emoji and plain Unicode render without one, so those symbols are unconditional.
-  previewSegment: (hasNerdFont: boolean) => string;
+  // Modules whose preview symbol is a Nerd Font glyph branch on hasNerdFont; emoji
+  // and plain Unicode render without one (battery previews its emoji either way).
+  previewSegment: (hasNerdFont: boolean, sample: PreviewSample) => string;
+  /** The plain-prompt preview, where starship's default format adds words
+   *  or brackets the powerline content leaves out. */
+  plainPreview?: (hasNerdFont: boolean) => string;
   /**
    * The module's inner format — what sits inside the coloured segment. A normal
    * prompt leaves starship's own default format alone, but a powerline prompt has
@@ -99,10 +110,27 @@ export type ConfigurableModuleId =
 export type ModuleId = ConfigurableModuleId | 'character';
 
 /** The directory/git/character core that nearly every preset starts from. */
-export const CORE_MODULES: ModuleId[] = ['directory', 'git_branch', 'git_status', 'character'];
+export const CORE_MODULES: readonly ModuleId[] = [
+  'directory',
+  'git_branch',
+  'git_status',
+  'character',
+];
 
 export const isConfigurableModule = (id: ModuleId): id is ConfigurableModuleId =>
   id !== 'character';
+
+/** A module drawn as its symbol before a sample value, enabled explicitly. */
+function symbolModule(
+  symbol: (hasNerdFont: boolean) => string,
+  sample: string
+): Pick<ModuleDef, 'previewSegment' | 'settings'> {
+  return {
+    previewSegment: (hasNerdFont) => `${symbol(hasNerdFont)}${sample}`,
+    settings: ({ hasNerdFont }) =>
+      `symbol   = "${tomlBasic(symbol(hasNerdFont))}"\ndisabled = false`,
+  };
+}
 
 const MODULE_DEFS = {
   username: {
@@ -137,15 +165,31 @@ style_root  = "${tomlBasic(styleFor('err'))}"
     defaultLeft: true,
     defaultRight: false,
 
-    previewSegment: (hasNerdFont) =>
-      `${hasNerdFont ? NERD_FONT_SYMBOLS.directory : ''}~/projects/myapp`,
+    // Like starship, substitutions replace matching text anywhere in the path, and
+    // truncation keeps the last folders with no marker (the default symbol is empty).
+    previewSegment: (
+      hasNerdFont,
+      { directoryTruncationLength: length, directorySubstitutions }
+    ) => {
+      let full = '~/projects/myapp';
+      for (const { from, to } of directorySubstitutions) full = full.split(from).join(to);
+      const parts = full.split('/').filter(Boolean);
+      const shown =
+        length === 0 || parts.length <= length ? parts.join('/') : parts.slice(-length).join('/');
+      return `${hasNerdFont ? NERD_FONT_SYMBOLS.directory : ''}${shown}`;
+    },
     content: '$path$read_only',
-    settings: ({ hasNerdFont, powerline, directoryTruncationLength, directorySubstitutions }) => {
+    settings: ({
+      hasNerdFont,
+      customFormat,
+      directoryTruncationLength,
+      directorySubstitutions,
+    }) => {
       const lines = [
         `truncation_length = ${directoryTruncationLength}`,
         `truncate_to_repo  = true`,
       ];
-      if (hasNerdFont && !powerline) {
+      if (hasNerdFont && !customFormat) {
         lines.push(
           `format = "[${tomlBasic(NERD_FONT_SYMBOLS.directory)}]($style)[$path]($style)[$read_only]($read_only_style) "`
         );
@@ -165,10 +209,12 @@ style_root  = "${tomlBasic(styleFor('err'))}"
     defaultLeft: true,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.gitBranch : 'on '}main`,
+    previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.gitBranch : ''}main`,
+    plainPreview: (nf) => `on ${nf ? NERD_FONT_SYMBOLS.gitBranch : ''}main`,
     content: '$symbol$branch',
+    // starship's git_branch format already renders "on " before the symbol.
     settings: ({ hasNerdFont }) =>
-      `symbol = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.gitBranch : 'on ')}"`,
+      `symbol = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.gitBranch : '')}"`,
   },
   git_status: {
     label: 'Git Status',
@@ -177,6 +223,7 @@ style_root  = "${tomlBasic(styleFor('err'))}"
     defaultRight: false,
 
     previewSegment: () => '+1',
+    plainPreview: () => '[+1]',
     content: '$all_status$ahead_behind',
     settings: () =>
       `
@@ -195,13 +242,8 @@ deleted   = "-\${count}"
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.nodejs : 'node '}v22.0.0`,
+    ...symbolModule((nf) => (nf ? NERD_FONT_SYMBOLS.nodejs : 'node '), 'v22.0.0'),
     content: '$symbol$version',
-    settings: ({ hasNerdFont }) =>
-      `
-symbol   = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.nodejs : 'node ')}"
-disabled = false
-`.trim(),
   },
   python: {
     label: 'Python',
@@ -209,13 +251,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.python : 'py '}3.12.0`,
-    content: '$symbol$version',
-    settings: ({ hasNerdFont }) =>
-      `
-symbol   = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.python : 'py ')}"
-disabled = false
-`.trim(),
+    ...symbolModule((nf) => (nf ? NERD_FONT_SYMBOLS.python : 'py '), '3.12.0'),
+    content: '$symbol$version( \\($virtualenv\\))',
   },
   rust: {
     label: 'Rust',
@@ -223,13 +260,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.rust : 'rs '}1.80.0`,
+    ...symbolModule((nf) => (nf ? NERD_FONT_SYMBOLS.rust : 'rs '), '1.80.0'),
     content: '$symbol$version',
-    settings: ({ hasNerdFont }) =>
-      `
-symbol   = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.rust : 'rs ')}"
-disabled = false
-`.trim(),
   },
   docker_context: {
     label: 'Docker',
@@ -237,13 +269,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '🐳 default',
+    ...symbolModule(() => '🐳 ', 'dev'),
     content: '$symbol$context',
-    settings: () =>
-      `
-symbol   = "🐳 "
-disabled = false
-`.trim(),
   },
   kubernetes: {
     label: 'Kubernetes',
@@ -251,13 +278,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '☸ prod',
-    content: '$symbol$context',
-    settings: () =>
-      `
-symbol   = "☸ "
-disabled = false
-`.trim(),
+    ...symbolModule(() => '☸ ', 'prod'),
+    content: '$symbol$context( \\($namespace\\))',
   },
   aws: {
     label: 'AWS',
@@ -266,7 +288,7 @@ disabled = false
     defaultRight: false,
 
     previewSegment: () => '☁️ us-east-1',
-    content: '$symbol$profile$region',
+    content: '$symbol($profile )(\\($region\\))',
     settings: () =>
       `
 symbol   = "☁️  "
@@ -280,6 +302,7 @@ disabled = false
     defaultRight: false,
 
     previewSegment: () => '12:34',
+    plainPreview: () => 'at 12:34',
     content: '$time',
     settings: () =>
       `
@@ -289,16 +312,26 @@ time_format = "%H:%M"
   },
   battery: {
     label: 'Battery',
-    description: 'Battery percentage (shown when below threshold)',
+    description: 'Battery level (turns red below 30%)',
     defaultLeft: false,
     defaultRight: false,
 
     previewSegment: () => '🔋 85%',
     content: '$symbol$percentage',
     stylesItself: true,
-    settings: ({ styleFor }) =>
+    // Starship's default battery symbols are Nerd Font glyphs.
+    settings: ({ styleFor, hasNerdFont }) =>
       `
-disabled = false
+disabled = false${
+        hasNerdFont
+          ? ''
+          : `
+full_symbol        = "🔋 "
+charging_symbol    = "⚡️ "
+discharging_symbol = "🔋 "
+unknown_symbol     = "🔋 "
+empty_symbol       = "🪫 "`
+      }
 
 [[battery.display]]
 threshold = 30
@@ -311,13 +344,13 @@ style     = "${tomlBasic(styleFor('battery'))}"
   },
   cmd_duration: {
     label: 'Command Duration',
-    description: 'Time taken by the last command',
+    description: 'Time taken by the last command (when it ran 2s or longer)',
     defaultLeft: false,
     defaultRight: true,
 
     previewSegment: () => '2s',
+    plainPreview: () => 'took 2s',
     content: '$duration',
-    settings: () => `min_time = 0`,
   },
   jobs: {
     label: 'Background Jobs',
@@ -329,8 +362,8 @@ style     = "${tomlBasic(styleFor('battery'))}"
     content: '$symbol$number',
     settings: () =>
       `
-symbol    = "✦"
-threshold = 1
+symbol           = "✦"
+number_threshold = 1
 `.trim(),
   },
   status: {
@@ -384,7 +417,7 @@ threshold = 2
     defaultRight: false,
 
     previewSegment: () => '(a1b2c3d)',
-    content: '$hash',
+    content: '\\($hash$tag\\)',
   },
   golang: {
     label: 'Go',
@@ -392,13 +425,8 @@ threshold = 2
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '🐹 v1.22',
+    ...symbolModule(() => '🐹 ', 'v1.22'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "🐹 "
-disabled = false
-`.trim(),
   },
   java: {
     label: 'Java',
@@ -406,13 +434,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '☕ v21',
+    ...symbolModule(() => '☕ ', 'v21'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "☕ "
-disabled = false
-`.trim(),
   },
   dotnet: {
     label: '.NET',
@@ -420,13 +443,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '.NET 8.0',
+    ...symbolModule(() => '.NET ', '8.0'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = ".NET "
-disabled = false
-`.trim(),
   },
   ruby: {
     label: 'Ruby',
@@ -434,13 +452,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '💎 3.3',
+    ...symbolModule(() => '💎 ', '3.3'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "💎 "
-disabled = false
-`.trim(),
   },
   php: {
     label: 'PHP',
@@ -448,13 +461,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '🐘 8.3',
+    ...symbolModule(() => '🐘 ', '8.3'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "🐘 "
-disabled = false
-`.trim(),
   },
   c: {
     label: 'C',
@@ -462,13 +470,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => 'C 13.2',
+    ...symbolModule(() => 'C ', '13.2'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "C "
-disabled = false
-`.trim(),
   },
   cpp: {
     label: 'C++',
@@ -476,13 +479,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => 'C++ 13.2',
+    ...symbolModule(() => 'C++ ', '13.2'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "C++ "
-disabled = false
-`.trim(),
   },
   zig: {
     label: 'Zig',
@@ -490,13 +488,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '↯ 0.13',
+    ...symbolModule(() => '↯ ', '0.13'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "↯ "
-disabled = false
-`.trim(),
   },
   lua: {
     label: 'Lua',
@@ -504,13 +497,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '🌙 5.4',
+    ...symbolModule(() => '🌙 ', '5.4'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "🌙 "
-disabled = false
-`.trim(),
   },
   swift: {
     label: 'Swift',
@@ -518,13 +506,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '🐦 5.10',
+    ...symbolModule(() => '🐦 ', '5.10'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "🐦 "
-disabled = false
-`.trim(),
   },
   elixir: {
     label: 'Elixir',
@@ -532,13 +515,8 @@ disabled = false
     defaultLeft: false,
     defaultRight: false,
 
-    previewSegment: () => '💧 1.16',
+    ...symbolModule(() => '💧 ', '1.16'),
     content: '$symbol$version',
-    settings: () =>
-      `
-symbol   = "💧 "
-disabled = false
-`.trim(),
   },
   // `satisfies` (not a type annotation) so each callback still gets contextual
   // typing, while the Record makes the table exhaustive over ConfigurableModuleId.
@@ -550,4 +528,13 @@ export const MODULES: readonly ModuleDef[] = (
 
 export function getModule(id: string): ModuleDef | undefined {
   return MODULES.find((m) => m.id === id);
+}
+
+/** The modules as the prompt places them: each once, and one chosen for both sides only on the left. */
+export function placedModules(
+  left: readonly ModuleId[],
+  right: readonly ModuleId[]
+): { left: ModuleId[]; right: ModuleId[] } {
+  const placedLeft = [...new Set(left)];
+  return { left: placedLeft, right: [...new Set(right)].filter((id) => !placedLeft.includes(id)) };
 }

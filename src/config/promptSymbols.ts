@@ -7,10 +7,14 @@ import type { CharacterSymbol, ContinuationPrompt } from '../types.ts';
  * escape them before writing a symbol into the config; the preview renders the
  * symbols as-is. Both derive from this one table so the two never drift.
  */
-export const CHARACTER_SYMBOLS: Record<CharacterSymbol, { success: string; error: string }> = {
-  arrow: { success: '❯', error: '❯' },
-  lambda: { success: 'λ', error: 'λ' },
-  dollar: { success: '$', error: '$' },
+export const CHARACTER_SYMBOLS: Record<
+  CharacterSymbol,
+  { success: string; error: string; vim: string; vimStyle: string }
+> = {
+  // Vim normal mode: the arrow turns around; λ and $ keep their glyph, inverted.
+  arrow: { success: '❯', error: '❯', vim: '❮', vimStyle: 'bold ok' },
+  lambda: { success: 'λ', error: 'λ', vim: 'λ', vimStyle: 'bold inverted ok' },
+  dollar: { success: '$', error: '$', vim: '$', vimStyle: 'bold inverted ok' },
 };
 
 /**

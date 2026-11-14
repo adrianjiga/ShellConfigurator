@@ -41,6 +41,16 @@ describe('getNextStep', () => {
     expect(next.step).toBe('preset');
   });
 
+  it('decides the font_select skip on the choice the update carries', () => {
+    const declinedBefore = stateWith('fontcheck', { nerdFontToInstall: NO_NERD_FONT });
+    expect(getNextStep(declinedBefore, { nerdFontToInstall: { kind: 'select' } }).step).toBe(
+      'font_select'
+    );
+
+    const wantedBefore = stateWith('fontcheck', { nerdFontToInstall: { kind: 'select' } });
+    expect(getNextStep(wantedBefore, { nerdFontToInstall: NO_NERD_FONT }).step).toBe('preset');
+  });
+
   it('advances from font_select to preset', () => {
     const next = getNextStep(
       stateWith('font_select', {
@@ -48,12 +58,6 @@ describe('getNextStep', () => {
       })
     );
     expect(next.step).toBe('preset');
-  });
-
-  it('returns the state unchanged when skip lands beyond the last step', () => {
-    // Step 'done' is the final step; there is no skip to make it work.
-    const state = stateWith('done', { nerdFontToInstall: NO_NERD_FONT });
-    expect(getNextStep(state)).toBe(state);
   });
 
   it('routes shells to the review step in dry-run mode', () => {
@@ -74,11 +78,6 @@ describe('getNextStep', () => {
   it('skips installing from review in dry-run mode', () => {
     const next = getNextStep(stateWith('review', { dryRun: true, selectedShells: ['zsh'] }));
     expect(next.step).toBe('done');
-  });
-
-  it('can still not advance when a dry-run skip lands beyond the last step', () => {
-    const state = stateWith('done', { dryRun: true });
-    expect(getNextStep(state)).toBe(state);
   });
 });
 
@@ -125,5 +124,17 @@ describe('terminal steps', () => {
   it('does not walk back out of installing', () => {
     const state = { ...DEFAULT_STATE, step: 'installing' as const };
     expect(getPrevStep(state).step).toBe('installing');
+  });
+});
+
+describe('getNextStep at the end', () => {
+  it('stays on done instead of wrapping around', () => {
+    const state = { ...DEFAULT_STATE, step: 'done' as const };
+    expect(getNextStep(state).step).toBe('done');
+  });
+
+  it('does not restart the wizard from an unknown step', () => {
+    const state = { ...DEFAULT_STATE, step: 'bogus' as never };
+    expect(getNextStep(state).step).toBe('bogus');
   });
 });

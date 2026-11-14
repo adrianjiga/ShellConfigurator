@@ -72,3 +72,14 @@ describe('parseSubstitutions', () => {
     expect(() => parseSubstitutions('=target')).toThrow(/needs a folder name/);
   });
 });
+
+describe('substitution round trip', () => {
+  it('formats and parses names that contain the separators', () => {
+    const substitutions = [
+      { from: 'a=b', to: 'x,y' },
+      { from: 'C:\\code', to: '' },
+    ];
+
+    expect(parseSubstitutions(formatSubstitutions(substitutions))).toEqual(substitutions);
+  });
+});

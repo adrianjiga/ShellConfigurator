@@ -10,15 +10,13 @@ if command -v apt-get >/dev/null 2>&1; then
   fi
   DEBIAN_FRONTEND=noninteractive timeout 300 apt-get install -y -qq -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3 nodejs npm curl tar
 elif command -v dnf >/dev/null 2>&1; then
-  dnf install -y -q nodejs npm curl tar
+  timeout 600 dnf install -y -q nodejs npm curl tar
 elif command -v pacman >/dev/null 2>&1; then
   # --disable-sandbox keeps pacman working under qemu emulation (local dev
   # on arm64); harmless on native runners.
-  pacman -Syu --noconfirm --disable-sandbox nodejs npm curl tar
+  timeout 600 pacman -Syu --noconfirm --disable-sandbox nodejs npm curl tar
 elif command -v apk >/dev/null 2>&1; then
-  # bash is not preinstalled on Alpine but the smoke harness drives the
-  # container with bash -euxo pipefail, so install it alongside the toolchain.
-  apk add --no-cache nodejs npm curl tar bash
+  timeout 600 apk add --no-cache nodejs npm curl tar
 else
   echo "No supported package manager found" >&2
   exit 1
@@ -39,21 +37,31 @@ if [ "$node_major" -lt 24 ]; then
       exit 1
       ;;
   esac
-  node_version="${NODE_VERSION:-v24.22.2}"
+  node_version="${NODE_VERSION:?NODE_VERSION is passed in by distroSmoke.sh}"
   tarball="node-${node_version}-linux-${node_arch}.tar.gz"
 
   # Download once into the cache dir when provided (GitHub caches it across
-  # runs); otherwise fetch into a throwaway temp file. curl+extract is a single
-  # path either way.
+  # runs); otherwise fetch into a throwaway temp file. Either way the tarball
+  # must match the checksum nodejs.org publishes, or it is fetched again.
   if [ -n "${NODE_TARBALL_DIR:-}" ]; then
     mkdir -p "$NODE_TARBALL_DIR"
     tarball_path="$NODE_TARBALL_DIR/$tarball"
-    if [ ! -f "$tarball_path" ]; then
-      curl --max-time 300 -fsSL "https://nodejs.org/dist/${node_version}/${tarball}" -o "$tarball_path"
-    fi
   else
     tarball_path="/tmp/$tarball"
+  fi
+  expected="$(curl --max-time 60 -fsSL "https://nodejs.org/dist/${node_version}/SHASUMS256.txt" |
+    awk -v name="$tarball" '$2 == name { print $1 }')"
+  if [ -z "$expected" ]; then
+    echo "No published checksum for $tarball" >&2
+    exit 1
+  fi
+  if [ ! -f "$tarball_path" ] || [ "$(sha256sum "$tarball_path" | cut -d' ' -f1)" != "$expected" ]; then
     curl --max-time 300 -fsSL "https://nodejs.org/dist/${node_version}/${tarball}" -o "$tarball_path"
+  fi
+  if [ "$(sha256sum "$tarball_path" | cut -d' ' -f1)" != "$expected" ]; then
+    echo "Checksum mismatch for $tarball" >&2
+    rm -f "$tarball_path"
+    exit 1
   fi
 
   tar -xzf "$tarball_path" -C /usr/local --strip-components=1

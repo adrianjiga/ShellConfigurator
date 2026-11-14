@@ -3,8 +3,10 @@ import {
   getModule,
   isConfigurableModule,
   type ModuleId,
+  placedModules,
 } from '../config/modules.ts';
 import { getPalette, type PaletteColorName } from '../config/palettes.ts';
+import { bracketsSegments, drawsPowerline, rendersGlyphs } from '../config/presets.ts';
 import {
   CHARACTER_SYMBOLS,
   CONTINUATION_PROMPTS,
@@ -17,11 +19,11 @@ import { tomlBasic, tomlLiteral } from './toml.ts';
 
 /**
  * Escapes a character symbol for starship's format string. The symbols are stored
- * as the user sees them, but `$` opens a module variable and `\` escapes the next
- * character, so both must be backslash-escaped in the generated config.
+ * as the user sees them, but `$` opens a module variable, `[ ] ( )` delimit text
+ * groups and `\` escapes the next character, so all of them are backslash-escaped.
  */
-function escapeFormatLiteral(symbol: string): string {
-  return symbol.replace(/[\\$]/g, (c) => `\\${c}`);
+export function escapeFormatLiteral(symbol: string): string {
+  return symbol.replace(/[\\$[\]()]/g, (c) => `\\${c}`);
 }
 
 /**
@@ -40,39 +42,32 @@ function buildFormatString(segments: ConfigurableModuleId[]): string {
 }
 
 /**
- * Wraps a module's content in the separators for its position in the prompt.
- *
- * On the left the separator trails each segment and points right; on the right it
- * leads each segment and points left. Its foreground matches the current block
- * and its background matches the neighboring block, forming the conventional
- * interlocking powerline shape. The outer end fades into the terminal.
+ * Leading separator styled with starship's `prev_bg` (1.20+) so a collapsed
+ * module takes its separator with it.
  */
 function powerlineFormat(
   content: string,
   color: PaletteColorName,
-  neighbour: PaletteColorName | null,
-  side: 'left' | 'right'
+  side: 'left' | 'right',
+  separator: boolean
 ): string {
-  const separatorStyle = neighbour ? `fg:${color} bg:${neighbour}` : `fg:${color}`;
   const block = `[ ${content} ]($style)`;
-  const separator = `[${side === 'left' ? SEPARATOR_RIGHT : SEPARATOR_LEFT}](${separatorStyle})`;
-  // Wrapped in a conditional group: starship drops a `(…)` group whose variables
-  // are all empty, so a module with nothing to show (a clean repo's git_status, a
-  // command too fast for cmd_duration) collapses instead of leaving an empty
-  // coloured block and a stray separator in the prompt.
-  return side === 'left' ? `(${block}${separator})` : `(${separator}${block})`;
+  if (!separator) return `(${block})`;
+  const separatorStyle = side === 'left' ? `fg:prev_bg bg:${color}` : `fg:${color} bg:prev_bg`;
+  const glyph = `[${side === 'left' ? SEPARATOR_RIGHT : SEPARATOR_LEFT}](${separatorStyle})`;
+  return `(${glyph}${block})`;
 }
 
 interface BlockContext {
   state: WizardState;
   powerline: boolean;
-  /** The colour of the segment the separator points into, if there is one. */
-  neighbour: PaletteColorName | null;
+  bracketed: boolean;
+  separator: boolean;
   side: 'left' | 'right';
 }
 
 function moduleBlock(id: ModuleId, ctx: BlockContext): string {
-  const { state, powerline, neighbour, side } = ctx;
+  const { state, powerline, bracketed, separator, side } = ctx;
 
   // The character is not a placeable module, so it has no MODULES entry. It also
   // sits on its own line below the prompt, where there is nothing to interlock
@@ -83,7 +78,8 @@ function moduleBlock(id: ModuleId, ctx: BlockContext): string {
     const error = escapeFormatLiteral(symbol.error);
     // `vimcmd_symbol` only changes the glyph in normal mode; starship's default
     // character format already reads the `symbol` variable for every mode.
-    const vim = state.vimMode ? `\nvimcmd_symbol  = ${tomlLiteral('[❮](bold ok)')}` : '';
+    const vimSymbol = `[${escapeFormatLiteral(symbol.vim)}](${symbol.vimStyle})`;
+    const vim = state.vimMode ? `\nvimcmd_symbol  = ${tomlLiteral(vimSymbol)}` : '';
     return `
 [character]
 success_symbol = ${tomlLiteral(`[${success}](bold ok)`)}
@@ -92,13 +88,7 @@ error_symbol   = ${tomlLiteral(`[${error}](bold err)`)}${vim}
   }
 
   const def = getModule(id);
-  if (!def) {
-    // Unknown id (malformed state) — emit a harmless enabling stub.
-    return `
-[${id}]
-disabled = false
-`.trim();
-  }
+  if (!def) return '';
 
   const styleFor = (name: PaletteColorName) => styleExpression(name, powerline);
 
@@ -108,17 +98,20 @@ disabled = false
   if (!def.stylesItself) {
     lines.push(`style  = "${tomlBasic(styleFor(def.id))}"`);
   }
+  const content =
+    id === 'directory' && state.hasNerdFont
+      ? `${NERD_FONT_SYMBOLS.directory}${def.content}`
+      : def.content;
   if (powerline) {
-    const content =
-      id === 'directory' && state.hasNerdFont
-        ? `${NERD_FONT_SYMBOLS.directory}${def.content}`
-        : def.content;
-    lines.push(`format = "${tomlBasic(powerlineFormat(content, def.id, neighbour, side))}"`);
+    lines.push(`format = "${tomlBasic(powerlineFormat(content, def.id, side, separator))}"`);
+  } else if (bracketed) {
+    lines.push(`format = "${tomlBasic(`(\\[[${content}]($style)\\] )`)}"`);
   }
 
   const settings = def.settings?.({
     hasNerdFont: state.hasNerdFont,
     powerline,
+    customFormat: powerline || bracketed,
     styleFor,
     directoryTruncationLength: state.directoryTruncationLength,
     directorySubstitutions: state.directorySubstitutions,
@@ -139,20 +132,28 @@ function paletteBlock(state: WizardState): string {
   return [`[palettes.${palette.id}]`, ...entries].join('\n');
 }
 
-export function generateToml(state: WizardState): string {
+export function generateToml(chosen: WizardState): string {
+  const state = { ...chosen, hasNerdFont: rendersGlyphs(chosen) };
   // Powerline separators are Nerd Font glyphs. Promising one without the font
   // would fill the prompt with tofu, so the plain layout is used instead.
-  const powerline = state.powerline && state.hasNerdFont;
+  const powerline = drawsPowerline(chosen);
+  const bracketed = bracketsSegments(state);
 
-  // A module chosen on both sides would otherwise be emitted twice in the format
-  // string and render twice in the prompt. The left side wins.
-  const leftModules = [...new Set(state.leftModules)];
-  const rightModules = [...new Set(state.rightModules)].filter((id) => !leftModules.includes(id));
+  const { left: leftModules, right: rightModules } = placedModules(
+    state.leftModules,
+    state.rightModules
+  );
 
-  const leftSegments = leftModules.filter(isConfigurableModule);
-  const rightSegments = rightModules.filter(isConfigurableModule);
+  // An id with no module definition would put a `$bogus` starship warns about.
+  const placeable = (id: ModuleId): id is ConfigurableModuleId =>
+    isConfigurableModule(id) && getModule(id) !== undefined;
+  const leftSegments = leftModules.filter(placeable);
+  const rightSegments = rightModules.filter(placeable);
 
-  const leftFormat = buildFormatString(leftSegments);
+  // The fade-out arrow follows whatever module rendered last.
+  const leftFormat =
+    buildFormatString(leftSegments) +
+    (powerline && leftSegments.length > 0 ? `[${SEPARATOR_RIGHT}](fg:prev_bg)` : '');
   const rightFormat = buildFormatString(rightSegments);
 
   // Use $fill to right-align modules on the same line, then \n$character
@@ -162,20 +163,26 @@ export function generateToml(state: WizardState): string {
   if (rightFormat) {
     parts.push('$fill', rightFormat);
   }
-  parts.push('\\n$character');
+  parts.push('\n$character');
   const format = parts.filter(Boolean).join('');
 
-  // On the left the separator points at the next segment; on the right, the
-  // previous one. Either way the segment at the outer end has no neighbour.
+  // The first left-side segment starts flush; every other one is preceded by
+  // its separator.
   const blocksFor = (segments: ConfigurableModuleId[], at: 'left' | 'right') =>
-    segments.map((id, i) => {
-      const neighbour = segments[at === 'left' ? i + 1 : i - 1] ?? null;
-      return moduleBlock(id, { state, powerline, neighbour, side: at });
-    });
+    segments.map((id, i) =>
+      moduleBlock(id, {
+        state,
+        powerline,
+        bracketed,
+        separator: at === 'right' || i > 0,
+        side: at,
+      })
+    );
 
-  const characterBlock = leftModules.includes('character')
-    ? [moduleBlock('character', { state, powerline, neighbour: null, side: 'left' })]
-    : [];
+  // `$character` always ends the format, so its block is always written.
+  const characterBlock = [
+    moduleBlock('character', { state, powerline, bracketed, separator: false, side: 'left' }),
+  ];
 
   const blocks = [
     ...blocksFor(leftSegments, 'left'),
@@ -189,7 +196,7 @@ export function generateToml(state: WizardState): string {
     `# Generated by ShellConfigurator`,
     `# https://github.com/adrianjiga/ShellConfigurator`,
     ``,
-    `format              = "${format}"`,
+    `format              = "${tomlBasic(format)}"`,
     `continuation_prompt = "${tomlBasic(CONTINUATION_PROMPTS[state.continuationPrompt])}"`,
     `add_newline         = ${state.addNewline}`,
     `palette             = "${tomlBasic(state.palette)}"`,

@@ -1,5 +1,7 @@
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getShell } from '../../config/shells.ts';
+import { getShellConfigPath } from '../../generators/shellRc.ts';
 import { DoneScreen } from '../../screens/DoneScreen.tsx';
 import { type InstallTaskDeps, runInstallTasks } from '../../services/installTasks.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
@@ -55,25 +57,24 @@ describe('DoneScreen over real install results', () => {
     const frame = await runAndRender(
       { selectedShells: ['nushell'], installedShells: ['nushell'] },
       fakeDeps({
-        applyShellConfig: vi.fn(() => ({
-          applied: false,
-          note: 'Run the above command once in Nushell to set up Starship.',
-        })),
+        applyShellConfig: vi.fn(() => ({ applied: false, note: getShell('nushell')!.manualNote })),
       })
     );
     const row = rowFor(frame, 'Nushell');
 
     expect(row).not.toContain('✓');
     expect(row).not.toContain('init line added');
-    expect(frame).toContain('Run the above command once in Nushell');
+    expect(frame.replace(/\s+/g, ' ')).toContain(getShell('nushell')!.manualNote);
     // The command the user has to run must be on screen, not just described.
-    expect(frame).toContain('starship init nu');
+    // Whitespace is dropped so the narrow test frame's wrapping does not matter.
+    const flat = frame.replace(/\s+/g, '');
+    expect(flat).toContain('starshipinitnu');
     // It must create the autoload directory first, or save -f fails on a fresh install.
-    expect(frame).toContain('mkdir ($nu.data-dir');
+    expect(flat).toContain('mkdir$d');
     // ...and pin STARSHIP_CONFIG to the per-shell config, or nu falls back to
     // the shared ~/.config/starship.toml (no rc file to export it).
-    expect(frame).toContain('starship-config.nu');
-    expect(frame).toContain('path join starship nushell.toml');
+    expect(flat).toContain('starship-config.nu');
+    expect(flat).toContain(getShellConfigPath('nushell').replace(/\s+/g, ''));
   });
 
   it('shows a manual-setup shell as already configured when its init was applied', async () => {
@@ -194,18 +195,21 @@ describe('DoneScreen over real install results', () => {
   });
 
   it('restores the newest backups and lists them with r', async () => {
-    mocks.restoreConfigBackups.mockReturnValue([
-      {
-        what: 'zsh',
-        restoredTo: '/home/u/.config/starship/zsh.toml',
-        restoredFrom: '/home/u/.config/starship/zsh.toml.bak-x',
-      },
-      {
-        what: 'shared',
-        restoredTo: '/home/u/.config/starship.toml',
-        restoredFrom: '/home/u/.config/starship.toml.bak-x',
-      },
-    ]);
+    mocks.restoreConfigBackups.mockReturnValue({
+      restored: [
+        {
+          what: 'zsh',
+          restoredTo: '/home/u/.config/starship/zsh.toml',
+          restoredFrom: '/home/u/.config/starship/zsh.toml.bak-x',
+        },
+        {
+          what: 'shared',
+          restoredTo: '/home/u/.config/starship.toml',
+          restoredFrom: '/home/u/.config/starship.toml.bak-x',
+        },
+      ],
+      failed: [],
+    });
     const instance = render(<DoneScreen state={DEFAULT_STATE} />);
     await flush();
 
@@ -220,8 +224,56 @@ describe('DoneScreen over real install results', () => {
     expect(frame).toContain('shared: /home/u/.config/starship.toml (from');
   });
 
+  it('restores only once when r is pressed again', async () => {
+    mocks.restoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
+    const instance = render(<DoneScreen state={DEFAULT_STATE} />);
+    await flush();
+
+    instance.stdin.write('r');
+    await flush();
+    instance.stdin.write('r');
+    await flush();
+
+    expect(mocks.restoreConfigBackups).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells a run that skipped Starship how to install it before re-running', () => {
+    const { lastFrame } = render(
+      <DoneScreen state={{ ...DEFAULT_STATE, skipStarshipInstall: true, installResults: [] }} />
+    );
+    const text = (lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(text).toContain('Starship is not installed, so shell init lines were not added');
+    expect(text).toContain('curl -sS https://starship.rs/install.sh | sh');
+  });
+
+  it('lists restore failures instead of hiding them', async () => {
+    mocks.restoreConfigBackups.mockReturnValue({
+      restored: [
+        {
+          what: 'shared',
+          restoredTo: '/home/u/.config/starship.toml',
+          restoredFrom: '/home/u/.config/starship.toml.bak-x',
+        },
+      ],
+      failed: [
+        { what: 'zsh', restoredFrom: '/home/u/.config/starship/zsh.toml.bak-x', error: 'EACCES' },
+      ],
+    });
+    const instance = render(<DoneScreen state={DEFAULT_STATE} />);
+    await flush();
+
+    instance.stdin.write('r');
+    await flush();
+
+    const frame = instance.lastFrame() ?? '';
+    expect(frame).toContain('Restored configs from their newest backups:');
+    expect(frame).toContain('shared: /home/u/.config/starship.toml (from');
+    expect(frame).toContain('zsh: could not restore');
+    expect(frame).toContain('EACCES');
+  });
+
   it('reports when there are no backups to restore with r', async () => {
-    mocks.restoreConfigBackups.mockReturnValue([]);
+    mocks.restoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
     const instance = render(<DoneScreen state={DEFAULT_STATE} />);
     await flush();
 
@@ -229,5 +281,192 @@ describe('DoneScreen over real install results', () => {
     await flush();
 
     expect(instance.lastFrame()).toContain('nothing to restore');
+  });
+
+  it('never restores backups from a dry-run session with r', async () => {
+    mocks.restoreConfigBackups.mockReturnValue({
+      restored: [
+        {
+          what: 'shared',
+          restoredTo: '/home/u/.config/starship.toml',
+          restoredFrom: '/home/u/.config/starship.toml.bak-x',
+        },
+      ],
+      failed: [],
+    });
+    const instance = render(<DoneScreen state={{ ...DEFAULT_STATE, dryRun: true }} />);
+    await flush();
+
+    instance.stdin.write('r');
+    await flush();
+
+    expect(mocks.restoreConfigBackups).not.toHaveBeenCalled();
+    expect(instance.lastFrame()).not.toContain('Restored configs');
+    expect(instance.lastFrame()).not.toContain('Press r');
+  });
+});
+
+describe('DoneScreen dry run', () => {
+  it('describes the dry run without reporting missing results or failed rows', () => {
+    const { lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          dryRun: true,
+          selectedShells: ['zsh'],
+          installedShells: [],
+          setDefaultShell: 'zsh',
+          nerdFontToInstall: { kind: 'install', id: 'Hack' },
+        }}
+      />
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('Dry run — no changes were made');
+    expect(frame).not.toContain('reported nothing back');
+    expect(frame).not.toContain('not installed');
+    expect(frame).not.toContain('install failed');
+    expect(frame).not.toContain('Default shell not set');
+    expect(frame).not.toContain('print-config');
+  });
+
+  it('shows the kept shared config, not a generated one, in adopt mode', () => {
+    const { lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          dryRun: true,
+          keepExistingConfig: true,
+          selectedShells: ['zsh'],
+        }}
+      />
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('Config to keep');
+    expect(frame).not.toContain(getShellConfigPath('zsh'));
+    expect(frame).not.toContain('$character');
+  });
+});
+
+describe('DoneScreen in a container', () => {
+  it('says why the font and default shell were skipped', () => {
+    const { lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          container: true,
+          selectedShells: ['zsh'],
+          installedShells: ['zsh'],
+          setDefaultShell: 'zsh',
+          nerdFontToInstall: { kind: 'install', id: 'Hack' },
+          installResults: [{ id: 'config', label: 'Write config files', status: 'done' }],
+        }}
+      />
+    );
+    const frame = (lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(frame).toContain('fonts belong to the host terminal');
+    expect(frame).toContain('left to the container image');
+    expect(frame).not.toContain('Nerd Font not installed');
+  });
+});
+
+describe('DoneScreen task rows', () => {
+  it('shows why Starship, Verify and the terminal font ended as they did', () => {
+    const { lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          selectedShells: ['zsh'],
+          installedShells: ['zsh'],
+          installResults: [
+            { id: 'starship', label: 'Starship', status: 'failed', error: 'curl: timed out' },
+            {
+              id: 'terminal',
+              label: 'Set kitty font',
+              status: 'skipped',
+              note: 'font already set',
+            },
+            { id: 'verify', label: 'Verify config', status: 'done', note: 'verified 1 config(s)' },
+          ],
+        }}
+      />
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('curl: timed out');
+    expect(frame).toContain('font already set');
+    expect(frame).toContain('verified 1 config(s)');
+  });
+});
+
+describe('DoneScreen default shell', () => {
+  it('shows why chsh failed', () => {
+    const { lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          selectedShells: ['zsh'],
+          installedShells: ['zsh'],
+          setDefaultShell: 'zsh',
+          installResults: [
+            { id: 'chsh', label: 'Set zsh', status: 'failed', error: 'chsh: wrong password' },
+          ],
+        }}
+      />
+    );
+    expect(lastFrame()).toContain('chsh: wrong password');
+  });
+});
+
+describe('DoneScreen font reminder', () => {
+  it('names the family the terminal font picker lists', () => {
+    const { lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          selectedShells: ['zsh'],
+          installedShells: ['zsh'],
+          nerdFontToInstall: { kind: 'install', id: 'CascadiaCode' },
+          installResults: [{ id: 'font', label: 'Nerd Font', status: 'done' }],
+        }}
+      />
+    );
+    expect((lastFrame() ?? '').replace(/\s+/g, ' ')).toContain('CaskaydiaCove Nerd Font');
+  });
+});
+
+describe('DoneScreen restore failure', () => {
+  it('shows a restore that throws instead of crashing', async () => {
+    mocks.restoreConfigBackups.mockImplementationOnce(() => {
+      throw new Error('EACCES: permission denied');
+    });
+    const { stdin, lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          selectedShells: ['zsh'],
+          installResults: [{ id: 'config', label: 'Write config files', status: 'done' }],
+        }}
+      />
+    );
+    stdin.write('r');
+    await flush();
+    expect(lastFrame()).toContain('EACCES: permission denied');
+  });
+});
+
+describe('DoneScreen after a failed config write', () => {
+  it('does not promise a new prompt after a restart', () => {
+    const { lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          selectedShells: ['zsh'],
+          installedShells: ['zsh'],
+          installResults: [
+            { id: 'config', label: 'Write config files', status: 'failed', error: 'EACCES' },
+          ],
+        }}
+      />
+    );
+    expect(lastFrame()).not.toContain('Restart your terminal');
   });
 });

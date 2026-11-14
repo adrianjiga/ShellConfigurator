@@ -15,25 +15,33 @@ if [ -z "$current" ]; then
   exit 1
 fi
 
-prev="$(git tag --sort=-version:refname | grep -vFx "$current" | sed -n '1p' || true)"
+# The nearest v* tag reachable from the commit before this one: the previous
+# release on this line of history, whatever other tags sort higher.
+prev="$(git describe --tags --abbrev=0 --match 'v*' "${current}^" 2>/dev/null || true)"
 
 if [ -z "$prev" ]; then
-  range="HEAD"
+  range="$current"
   label="$current"
 else
-  range="${prev}..HEAD"
+  range="${prev}..${current}"
   label="${prev}...${current}"
 fi
 
 category() {
-  case "$1" in
-    feat!*) echo break ;;
-    fix!*) echo break ;;
-    feat*) echo feat ;;
-    fix*) echo fix ;;
-    docs*) echo docs ;;
-    test*) echo test ;;
-    chore* | ci* | build* | refactor* | perf* | style*) echo maintenance ;;
+  local subject="$1" hash="$2"
+  if [[ "$subject" =~ ^[a-z]+(\([^\)]*\))?!: ]] ||
+    git log -1 --format=%b "$hash" | grep -q '^BREAKING[ -]CHANGE:'; then
+    echo break
+    return
+  fi
+  case "$subject" in
+    feat:* | feat\(*) echo feat ;;
+    fix:* | fix\(*) echo fix ;;
+    docs:* | docs\(*) echo docs ;;
+    test:* | test\(*) echo test ;;
+    chore:* | chore\(* | ci:* | ci\(* | build:* | build\(* | refactor:* | refactor\(* | perf:* | perf\(* | style:* | style\(*)
+      echo maintenance
+      ;;
     *) echo other ;;
   esac
 }
@@ -44,7 +52,7 @@ while IFS= read -r line; do
   hash="${line%%$'\x1f'*}"
   subject="${line#*$'\x1f'}"
   entry="* ${subject} (${hash:0:7})"
-  case "$(category "$subject")" in
+  case "$(category "$subject" "$hash")" in
     break) breaks+=("$entry") ;;
     feat) features+=("$entry") ;;
     fix) fixes+=("$entry") ;;
@@ -53,15 +61,14 @@ while IFS= read -r line; do
     maintenance) maintenance+=("$entry") ;;
     *) other+=("$entry") ;;
   esac
-done < <(git log --format='%H%x1f%s' "$range")
+done < <(git log --no-merges --format='%H%x1f%s' "$range")
 
 print_section() {
   local name="$1"
   shift
-  local -a entries=("$@")
-  if [ "${#entries[@]}" -gt 0 ]; then
+  if [ "$#" -gt 0 ]; then
     printf '### %s\n\n' "$name"
-    for entry in "${entries[@]}"; do
+    for entry in "$@"; do
       printf '%s\n' "$entry"
     done
     printf '\n'
@@ -69,14 +76,17 @@ print_section() {
 }
 
 notes="$(mktemp)"
-printf '## What changed in %s\n\n' "$label" > "$notes"
-print_section 'Breaking changes' "${breaks[@]}" >> "$notes"
-print_section 'New features' "${features[@]}" >> "$notes"
-print_section 'Bug fixes' "${fixes[@]}" >> "$notes"
-print_section 'Documentation' "${docs[@]}" >> "$notes"
-print_section 'Tests' "${tests[@]}" >> "$notes"
-print_section 'Maintenance' "${maintenance[@]}" >> "$notes"
-print_section 'Other' "${other[@]}" >> "$notes"
+trap 'rm -f "$notes"' EXIT
+{
+  printf '## What changed in %s\n\n' "$label"
+  print_section 'Breaking changes' ${breaks[@]+"${breaks[@]}"}
+  print_section 'New features' ${features[@]+"${features[@]}"}
+  print_section 'Bug fixes' ${fixes[@]+"${fixes[@]}"}
+  print_section 'Documentation' ${docs[@]+"${docs[@]}"}
+  print_section 'Tests' ${tests[@]+"${tests[@]}"}
+  print_section 'Maintenance' ${maintenance[@]+"${maintenance[@]}"}
+  print_section 'Other' ${other[@]+"${other[@]}"}
+} > "$notes"
 
 # Only the header line plus its blank line means the range had no commits.
 if [ "$(wc -l < "$notes")" -eq 2 ]; then
@@ -84,4 +94,3 @@ if [ "$(wc -l < "$notes")" -eq 2 ]; then
 fi
 
 cat "$notes"
-rm "$notes"

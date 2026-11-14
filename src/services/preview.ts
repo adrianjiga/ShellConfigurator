@@ -1,12 +1,13 @@
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import * as os from 'node:os';
 import * as nodePath from 'node:path';
 import { promisify } from 'node:util';
 import { generateToml } from '../generators/starship.ts';
 import type { WizardState } from '../types.ts';
-import { isStarshipInstalledAsync } from './detector.ts';
+import { findStarshipAsync } from './detector.ts';
 import { runCapture } from './exec.ts';
-import { cacheDir } from './paths.ts';
+import { getMissingStarshipPathDir } from './installer.ts';
 
 const execFileP = promisify(execFile);
 
@@ -14,9 +15,9 @@ const execFileP = promisify(execFile);
 export const STARSHIP_CONFIG_FILE = 'starship.toml';
 
 /**
- * The width the real render is told to target. Starship's `$fill` computes the
- * gap to this width; a fixed value keeps the preview stable regardless of the
- * user's terminal size.
+ * The width the real render targets when the caller gives none. Starship's
+ * `$fill` computes the gap to this width, so the caller passes the width of the
+ * panel the prompt is drawn in.
  */
 export const PREVIEW_TERMINAL_WIDTH = 110;
 
@@ -46,7 +47,7 @@ export interface PreviewDeps {
    */
   scaffoldProject(scratch: string): Promise<string>;
   /** Runs `starship prompt` against the scratch config and sample cwd. */
-  runStarshipPrompt(scratch: string, projectDir: string): Promise<string>;
+  runStarshipPrompt(scratch: string, projectDir: string, width: number): Promise<string>;
   /** Removes the scratch dir. Must not throw. */
   cleanup(scratch: string): Promise<void>;
 }
@@ -54,12 +55,11 @@ export interface PreviewDeps {
 const SAMPLE_PROJECT_NAME = 'myapp';
 
 export const DEFAULT_PREVIEW_DEPS: PreviewDeps = {
-  isStarshipInstalled: async () => (await isStarshipInstalledAsync()).installed,
-  createScratch: async () => {
-    // mkdtemp does not create parents; on a first run the app cache dir is absent.
-    await mkdir(cacheDir(), { recursive: true });
-    return mkdtemp(nodePath.join(cacheDir(), 'preview-'));
-  },
+  // A script install off PATH still renders the preview.
+  isStarshipInstalled: async () => (await findStarshipAsync()).installed,
+  // The system temp dir, not the app cache: a dry run writes nothing of the
+  // app's, and a scratch dir a crash leaves behind is cleaned by the OS.
+  createScratch: async () => mkdtemp(nodePath.join(os.tmpdir(), 'shellconf-preview-')),
   writeConfig: async (scratch, toml) =>
     writeFile(nodePath.join(scratch, STARSHIP_CONFIG_FILE), toml, 'utf8'),
   scaffoldProject: async (scratch) => {
@@ -73,9 +73,21 @@ export const DEFAULT_PREVIEW_DEPS: PreviewDeps = {
       ),
       writeFile(nodePath.join(project, 'src', 'index.ts'), '// sample source file\n', 'utf8'),
     ]);
+    // The sample repo must not touch the user's git: no inherited GIT_DIR (which
+    // would commit into their real repo), no global config, hooks or signing.
+    const gitEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      HOME: scratch,
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_CONFIG_GLOBAL: nodePath.join(scratch, 'no-gitconfig'),
+    };
+    for (const name of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CONFIG']) {
+      delete gitEnv[name];
+    }
+    const gitOptions = { cwd: project, env: gitEnv, timeout: 10_000 };
     try {
       // Best-effort: without git the branch/status modules just stay hidden.
-      await execFileP('git', ['init', '-q', '-b', 'main'], { cwd: project });
+      await execFileP('git', ['init', '-q', '-b', 'main'], gitOptions);
       await execFileP(
         'git',
         [
@@ -83,32 +95,38 @@ export const DEFAULT_PREVIEW_DEPS: PreviewDeps = {
           'user.name=ShellConfigurator',
           '-c',
           'user.email=preview@localhost',
+          '-c',
+          'commit.gpgsign=false',
+          '-c',
+          'core.hooksPath=/dev/null',
           'commit',
           '--allow-empty',
           '-q',
           '-m',
           'init',
         ],
-        { cwd: project }
+        gitOptions
       );
     } catch {
       // Non-fatal: the preview still renders everything git does not drive.
     }
     return project;
   },
-  runStarshipPrompt: async (scratch, projectDir) => {
+  runStarshipPrompt: async (scratch, projectDir, width) => {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       HOME: scratch,
       PWD: projectDir,
       STARSHIP_CONFIG: nodePath.join(scratch, STARSHIP_CONFIG_FILE),
     };
+    const pathDir = getMissingStarshipPathDir();
+    if (pathDir) env.PATH = `${pathDir}${nodePath.delimiter}${process.env.PATH ?? ''}`;
     // Starship formats its output for the calling shell when STARSHIP_SHELL is
     // set (e.g. bash's literal `\[`/`\]` markers). Ink needs raw ANSI output.
     delete env.STARSHIP_SHELL;
     return runCapture(
       'starship',
-      ['prompt', '--path', projectDir, '--terminal-width', String(PREVIEW_TERMINAL_WIDTH)],
+      ['prompt', '--path', projectDir, '--terminal-width', String(width)],
       { env }
     );
   },
@@ -129,7 +147,8 @@ export const DEFAULT_PREVIEW_DEPS: PreviewDeps = {
  */
 export async function renderPromptAsync(
   state: WizardState,
-  deps: PreviewDeps = DEFAULT_PREVIEW_DEPS
+  deps: PreviewDeps = DEFAULT_PREVIEW_DEPS,
+  width: number = PREVIEW_TERMINAL_WIDTH
 ): Promise<PreviewResult> {
   if (!(await deps.isStarshipInstalled())) {
     return { mode: 'static', reason: 'starship-missing' };
@@ -140,7 +159,7 @@ export async function renderPromptAsync(
     scratch = await deps.createScratch();
     await deps.writeConfig(scratch, generateToml(state));
     const projectDir = await deps.scaffoldProject(scratch);
-    const text = await deps.runStarshipPrompt(scratch, projectDir);
+    const text = await deps.runStarshipPrompt(scratch, projectDir, width);
     if (text.trim().length === 0) return { mode: 'static', reason: 'render-failed' };
     return { mode: 'real', text };
   } catch {

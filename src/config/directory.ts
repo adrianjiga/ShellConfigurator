@@ -13,9 +13,41 @@ export function clampTruncationLength(value: number): number {
   return Math.min(MAX_TRUNCATION_LENGTH, Math.max(MIN_TRUNCATION_LENGTH, Math.round(value)));
 }
 
-/** Renders substitutions into the compact editor syntax: `from=to, from=to`. */
+/** Backslash-escapes the editor syntax's own characters inside a folder name. */
+function escapePart(value: string): string {
+  return value.replace(/[\\,=]/g, (c) => `\\${c}`);
+}
+
+/**
+ * Renders substitutions into the compact editor syntax: `from=to, from=to`.
+ * A `,`, `=` or `\` inside a name is backslash-escaped so it parses back.
+ */
 export function formatSubstitutions(substitutions: readonly DirectorySubstitution[]): string {
-  return substitutions.map(({ from, to }) => `${from}=${to}`).join(', ');
+  return substitutions.map(({ from, to }) => `${escapePart(from)}=${escapePart(to)}`).join(', ');
+}
+
+/** Splits on `separator` where it is not backslash-escaped, keeping the escapes. */
+function splitUnescaped(text: string, separator: string, limit = Infinity): string[] {
+  const parts: string[] = [];
+  let current = '';
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!;
+    if (c === '\\' && i + 1 < text.length) {
+      current += c + text[i + 1];
+      i++;
+    } else if (c === separator && parts.length < limit - 1) {
+      parts.push(current);
+      current = '';
+    } else {
+      current += c;
+    }
+  }
+  parts.push(current);
+  return parts;
+}
+
+function unescapePart(value: string): string {
+  return value.replace(/\\(.)/g, '$1');
 }
 
 /**
@@ -27,19 +59,18 @@ export function formatSubstitutions(substitutions: readonly DirectorySubstitutio
  * would reject.
  */
 export function parseSubstitutions(text: string): DirectorySubstitution[] {
-  // A Map keeps the last entry for a repeated source, matching how starship
-  // resolves duplicate TOML keys.
+  // A repeated source keeps its last target; a TOML table could not hold both.
   const parsed = new Map<string, DirectorySubstitution>();
 
-  for (const rawPair of text.split(',')) {
+  for (const rawPair of splitUnescaped(text, ',')) {
     const pair = rawPair.trim();
     if (!pair) continue;
 
-    const equals = pair.indexOf('=');
-    if (equals < 0) throw new Error(`Missing '=' in "${pair}"`);
+    const [rawFrom, rawTo] = splitUnescaped(pair, '=', 2);
+    if (rawTo === undefined) throw new Error(`Missing '=' in "${pair}"`);
 
-    const from = pair.slice(0, equals).trim();
-    const to = pair.slice(equals + 1).trim();
+    const from = unescapePart(rawFrom!.trim());
+    const to = unescapePart(rawTo.trim());
     if (!from) throw new Error('A substitution needs a folder name before the =');
 
     parsed.set(from, { from, to });

@@ -3,32 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 import { parse } from '@iarna/toml';
-import { PRESETS } from '../dist/config/presets.js';
-import { getShell, getShellBinary } from '../dist/config/shells.js';
-import {
-  applyShellConfig,
-  backupSharedConfig,
-  getSharedConfigPath,
-  getShellConfigPath,
-  resetSharedShellConfig,
-  restoreConfigBackups,
-  writeShellConfig,
-} from '../dist/generators/shellRc.js';
-import { generateToml } from '../dist/generators/starship.js';
-import {
-  detectCurrentShellAsync,
-  detectInstalledShellsAsync,
-  detectPackageManagerAsync,
-  isStarshipInstalledAsync,
-} from '../dist/services/detector.js';
-import { commandExistsAsync } from '../dist/services/exec.js';
-import {
-  getMissingStarshipPathDir,
-  installStarship,
-  SCRIPT_INSTALL_BIN_DIR,
-} from '../dist/services/installer.js';
-import { DEFAULT_STATE } from '../dist/types.js';
-import { die, requireScratchHome } from './ci/smokeHome.mjs';
+import { assertRcWired, die, requireScratchHome } from './ci/smokeHome.mjs';
 
 const expectedPm = process.env.EXPECTED_PM;
 let failures = 0;
@@ -38,6 +13,31 @@ const homeDir = requireScratchHome();
 if (!existsSync(new URL('../dist', import.meta.url))) {
   die('Missing ../dist — run "npm run build" before the smoke harness.');
 }
+if (!expectedPm) die('Set EXPECTED_PM to the package manager this image should detect.');
+
+const { PRESETS } = await import('../dist/config/presets.js');
+const { getShell, getShellBinary } = await import('../dist/config/shells.js');
+const {
+  applyShellConfig,
+  backupSharedConfig,
+  getSharedConfigPath,
+  getShellConfigPath,
+  resetSharedShellConfig,
+  restoreConfigBackups,
+  writeShellConfig,
+} = await import('../dist/generators/shellRc.js');
+const { generateToml } = await import('../dist/generators/starship.js');
+const {
+  detectCurrentShellAsync,
+  detectInstalledShellsAsync,
+  detectPackageManagerAsync,
+  isStarshipInstalledAsync,
+} = await import('../dist/services/detector.js');
+const { commandExistsAsync } = await import('../dist/services/exec.js');
+const { getMissingStarshipPathDir, installStarship, scriptInstallBinDir } = await import(
+  '../dist/services/installer.js'
+);
+const { DEFAULT_STATE } = await import('../dist/types.js');
 
 async function check(name, fn) {
   try {
@@ -55,12 +55,7 @@ await check('node engine floor is met', () => {
 });
 
 await check('detects the configured package manager', async () => {
-  const pm = await detectPackageManagerAsync();
-  if (expectedPm) {
-    assert.equal(pm, expectedPm);
-  } else {
-    console.log(`WARN EXPECTED_PM not set; package manager detected as ${pm}`);
-  }
+  assert.equal(await detectPackageManagerAsync(), expectedPm);
 });
 
 await check('detects at least bash as an installed shell', async () => {
@@ -115,12 +110,13 @@ await check(
   'generateToml: every preset parses, wires $fill (not right_format), and covers its modules',
   () => {
     for (const preset of PRESETS) {
+      /** @type {import('../dist/types.js').WizardState} */
       const state = {
         ...DEFAULT_STATE,
         preset: preset.id,
         hasNerdFont: preset.requiresNerdFont,
-        leftModules: preset.leftModules ?? [],
-        rightModules: preset.rightModules ?? [],
+        leftModules: [...preset.leftModules],
+        rightModules: [...preset.rightModules],
         characterSymbol: 'lambda',
         palette: preset.palette,
         powerline: preset.powerline,
@@ -131,14 +127,14 @@ await check(
         !toml.includes('right_format'),
         `preset ${preset.id} uses right_format instead of $fill`
       );
-      const parsed = parse(toml);
+      const parsed = /** @type {any} */ (parse(toml));
       assert.equal(typeof parsed.format, 'string', `preset ${preset.id} format not parseable`);
       assert.equal(parsed.palette, preset.palette, `preset ${preset.id} palette mismatch`);
       assert.ok(
         parsed.format.includes('$character'),
         `preset ${preset.id} format missing $character`
       );
-      for (const moduleId of [...(preset.leftModules ?? []), ...(preset.rightModules ?? [])]) {
+      for (const moduleId of [...preset.leftModules, ...preset.rightModules]) {
         assert.ok(
           parsed[moduleId] !== undefined,
           `preset ${preset.id} missing [${moduleId}] block`
@@ -174,12 +170,12 @@ await check('generateToml emits the expanded prompt and directory options', () =
     directoryTruncationLength: 1,
     directorySubstitutions: [{ from: 'projects', to: 'code' }],
   });
-  const parsed = parse(toml);
+  const parsed = /** @type {any} */ (parse(toml));
 
   assert.equal(parsed.palette, 'vivid');
   assert.equal(parsed.add_newline, false);
   assert.equal(parsed.continuation_prompt, '[❯](bright-black) ');
-  assert.equal(parsed.character?.vimcmd_symbol, '[❮](bold ok)');
+  assert.equal(parsed.character?.vimcmd_symbol, '[λ](bold inverted ok)');
   assert.equal(parsed.directory?.truncation_length, 1);
   assert.deepEqual(parsed.directory?.substitutions, { projects: 'code' });
 });
@@ -191,9 +187,7 @@ await check('applyShellConfig writes banner + init line and is idempotent', () =
   const first = applyShellConfig('bash');
   assert.equal(first.applied, true);
 
-  const content = readFileSync(rcPath, 'utf8');
-  assert.ok(content.includes('# Added by ShellConfigurator'), 'missing banner');
-  assert.ok(content.includes('eval "$(starship init bash)"'), 'missing init line');
+  assertRcWired(rcPath, 'bash');
 
   const second = applyShellConfig('bash');
   assert.equal(second.applied, false);
@@ -211,25 +205,37 @@ await check('nushell manual command resolves to its own per-shell config', () =>
   assert.ok(nu.initLine.includes('STARSHIP_CONFIG'), 'command missing STARSHIP_CONFIG');
   assert.ok(nu.initLine.includes('starship init nu'), 'command missing starship init');
 
-  const configHome =
-    process.env.XDG_CONFIG_HOME?.trim() || nodePath.join(process.env.HOME, '.config');
+  const configHome = process.env.XDG_CONFIG_HOME;
   assert.equal(
     getShellConfigPath('nushell'),
     nodePath.join(configHome, 'starship', 'nushell.toml')
   );
 });
 
-await check('resetSharedShellConfig replaces a per-shell block with the unset guard', () => {
+await check('resetSharedShellConfig points per-shell wiring back at the shared config', () => {
   const rcPath = nodePath.join(homeDir, '.bashrc');
   rmSync(rcPath, { force: true });
   applyShellConfig('bash');
+
+  assert.equal(resetSharedShellConfig('bash').applied, true);
+  const content = readFileSync(rcPath, 'utf8');
+  assert.ok(!content.includes('export STARSHIP_CONFIG'), 'per-shell export survived');
+  assert.ok(content.includes('unset STARSHIP_CONFIG'), 'missing unset guard');
+  assert.equal(content.match(/starship init bash/g)?.length, 1, 'init line lost or doubled');
+
+  assert.equal(resetSharedShellConfig('bash').applied, false, 'reset is not idempotent');
+  assert.equal(readFileSync(rcPath, 'utf8'), content, 'second reset changed the rc');
+});
+
+await check('resetSharedShellConfig guards a shell that only inits starship', () => {
+  const rcPath = nodePath.join(homeDir, '.bashrc');
+  writeFileSync(rcPath, 'eval "$(starship init bash)"\n');
 
   const result = resetSharedShellConfig('bash');
   assert.equal(result.applied, true);
 
   const content = readFileSync(rcPath, 'utf8');
   assert.ok(content.includes('unset STARSHIP_CONFIG'), 'missing unset guard');
-  assert.ok(!content.includes('export STARSHIP_CONFIG'), 'per-shell export survived reset');
   assert.ok(content.includes('starship init bash'), 'Starship init line was removed');
 });
 
@@ -257,7 +263,7 @@ await check('applyShellConfig drops a stale fish unset guard and stays configure
     [
       '',
       '# Added by ShellConfigurator',
-      `set -gx STARSHIP_CONFIG ${fishConfig}`,
+      `set -gx STARSHIP_CONFIG '${fishConfig}'`,
       'starship init fish | source',
       '',
       '# Added by ShellConfigurator',
@@ -276,17 +282,16 @@ await check('applyShellConfig drops a stale fish unset guard and stays configure
   assert.ok(!content.includes('set -e STARSHIP_CONFIG'), 'stale unset guard survived');
 });
 
-await check('resetSharedShellConfig switches fish back to the shared config', () => {
+await check('resetSharedShellConfig guards fish with its own syntax', () => {
   const fishRc = nodePath.join(homeDir, '.config', 'fish', 'config.fish');
-  rmSync(fishRc, { force: true });
-  assert.equal(applyShellConfig('fish').applied, true, 'fish not configured first');
+  mkdirSync(nodePath.dirname(fishRc), { recursive: true });
+  writeFileSync(fishRc, 'starship init fish | source\n');
 
   const result = resetSharedShellConfig('fish');
   assert.equal(result.applied, true);
 
   const content = readFileSync(fishRc, 'utf8');
   assert.ok(content.includes('set -e STARSHIP_CONFIG'), 'missing unset guard');
-  assert.ok(!content.includes('set -gx STARSHIP_CONFIG'), 'per-shell wiring survived reset');
   assert.ok(content.includes('starship init fish | source'), 'Starship init line was removed');
 });
 
@@ -295,8 +300,8 @@ await check('getMissingStarshipPathDir flags ~/.local/bin when starship is unrea
   process.env.PATH = '/usr/bin:/bin';
   try {
     assert.equal(getMissingStarshipPathDir(), null, 'no fix expected without the binary');
-    mkdirSync(SCRIPT_INSTALL_BIN_DIR, { recursive: true });
-    writeFileSync(nodePath.join(SCRIPT_INSTALL_BIN_DIR, 'starship'), '#!/bin/sh\nexit 0\n', {
+    mkdirSync(scriptInstallBinDir(), { recursive: true });
+    writeFileSync(nodePath.join(scriptInstallBinDir(), 'starship'), '#!/bin/sh\nexit 0\n', {
       mode: 0o755,
     });
     try {
@@ -304,7 +309,7 @@ await check('getMissingStarshipPathDir flags ~/.local/bin when starship is unrea
       assert.ok(dir, 'expected the PATH fix-up directory');
       assert.ok(dir.endsWith(nodePath.join('.local', 'bin')), `unexpected dir: ${dir}`);
     } finally {
-      rmSync(SCRIPT_INSTALL_BIN_DIR, { recursive: true, force: true });
+      rmSync(scriptInstallBinDir(), { recursive: true, force: true });
     }
   } finally {
     process.env.PATH = prevPath;
@@ -312,7 +317,7 @@ await check('getMissingStarshipPathDir flags ~/.local/bin when starship is unrea
 });
 
 await check('writeShellConfig backs up and restoreConfigBackups restores', () => {
-  const configBaseDir = nodePath.join(homeDir, '.config');
+  const configBaseDir = process.env.XDG_CONFIG_HOME;
   const configDir = nodePath.join(configBaseDir, 'starship');
   rmSync(configBaseDir, { recursive: true, force: true });
   mkdirSync(configDir, { recursive: true });
@@ -332,7 +337,8 @@ await check('writeShellConfig backs up and restoreConfigBackups restores', () =>
   assert.ok(backup, 'expected a shared-config backup');
   writeFileSync(shared, '# shared-v2\n');
 
-  const restored = restoreConfigBackups();
+  const { restored, failed } = restoreConfigBackups();
+  assert.deepEqual(failed, [], 'some backups failed to restore');
   assert.ok(
     restored.some((r) => r.what === 'bash'),
     'no per-shell config restored'
@@ -364,11 +370,11 @@ await check('installStarship downloads and runs a working binary', async () => {
   assert.equal((await isStarshipInstalledAsync()).installed, false, 'container must start clean');
   await withRetry(() => installStarship('script'));
 
-  const binary = nodePath.join(SCRIPT_INSTALL_BIN_DIR, 'starship');
+  const binary = nodePath.join(scriptInstallBinDir(), 'starship');
   assert.ok(existsSync(binary), 'no binary after install');
 
   const prevPath = process.env.PATH;
-  process.env.PATH = `${SCRIPT_INSTALL_BIN_DIR}${nodePath.delimiter}${prevPath ?? ''}`;
+  process.env.PATH = `${scriptInstallBinDir()}${nodePath.delimiter}${prevPath ?? ''}`;
   try {
     const detected = await isStarshipInstalledAsync();
     assert.equal(detected.installed, true, 'installed binary not detected');

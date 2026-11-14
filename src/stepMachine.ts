@@ -6,7 +6,7 @@ const TERMINAL_STEPS: WizardStep[] = ['installing', 'done'];
 /**
  * The first step after `currentIndex` that this state must actually visit,
  * walking past conditional steps whose condition is false:
- * - font_select is skipped when no font is being installed;
+ * - font_select is skipped when the user declined a Nerd Font;
  * - installing is skipped entirely in dry-run mode.
  * Returns undefined when the walk runs off the end of the order.
  */
@@ -28,7 +28,10 @@ function skipConditional(state: WizardState, currentIndex: number): WizardStep |
  */
 export function getNextStep(state: WizardState, update?: Partial<WizardState>): WizardState {
   const merged = { ...state, ...update };
-  const nextStep = skipConditional(merged, STEP_ORDER.indexOf(merged.step));
+  const index = STEP_ORDER.indexOf(merged.step);
+  // `done` is the end, and an unknown step must not restart the wizard at welcome.
+  if (merged.step === 'done' || index === -1) return update ? merged : state;
+  const nextStep = skipConditional(merged, index);
   if (!nextStep) return update ? merged : state;
   return { ...merged, step: nextStep };
 }

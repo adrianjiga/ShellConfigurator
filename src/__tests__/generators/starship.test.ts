@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { MODULES } from '../../config/modules.ts';
 import { PALETTES } from '../../config/palettes.ts';
 import { PRESETS } from '../../config/presets.ts';
-import { SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../../config/promptSymbols.ts';
-import { generateToml } from '../../generators/starship.ts';
+import { NERD_FONT_SYMBOLS, SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../../config/promptSymbols.ts';
+import { escapeFormatLiteral, generateToml } from '../../generators/starship.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
 const base: WizardState = {
@@ -52,9 +52,10 @@ describe('generateToml', () => {
     expect(toml).toContain('symbol = " "');
   });
 
-  it('uses text fallback for git_branch when hasNerdFont is false', () => {
+  it('uses an empty symbol for git_branch when hasNerdFont is false', () => {
     const toml = generateToml({ ...base, hasNerdFont: false });
-    expect(toml).toContain('symbol = "on "');
+    expect(toml).toContain('[git_branch]');
+    expect(toml).toContain('symbol = ""');
   });
 
   it('uses Nerd Font glyphs for the directory and runtime modules', () => {
@@ -195,8 +196,8 @@ describe('generateToml', () => {
     for (const preset of PRESETS) {
       const state: WizardState = {
         ...DEFAULT_STATE,
-        leftModules: preset.leftModules ?? ['directory'],
-        rightModules: preset.rightModules ?? [],
+        leftModules: [...preset.leftModules],
+        rightModules: [...preset.rightModules],
       };
       const parsed = toml.parse(generateToml(state));
       expect(parsed, `${preset.id} produced invalid TOML`).toBeTruthy();
@@ -365,20 +366,26 @@ describe('powerline segments', () => {
     expect(generated).toContain('style  = "bold fg:fg bg:directory"');
   });
 
-  it('interlocks left separators using the next segment background', () => {
+  it('leads left segments with a separator on their own background', () => {
     const generated = generateToml(powerlineState);
-    expect(generated).toContain(`[${SEPARATOR_RIGHT}](fg:directory bg:git_branch)`);
+    expect(generated).toContain(`[${SEPARATOR_RIGHT}](fg:prev_bg bg:git_branch)`);
   });
 
-  it('leaves the outermost separator without a background', () => {
+  it('leaves the first left segment without a separator', () => {
     const generated = generateToml(powerlineState);
-    expect(generated).toContain(`[${SEPARATOR_RIGHT}](fg:git_branch)`);
+    expect(generated).toContain(`[ ${NERD_FONT_SYMBOLS.directory}$path$read_only ]($style)`);
+    expect(generated).not.toContain(`bg:directory)`);
   });
 
-  it('points right-hand separators back at the previous segment', () => {
+  it('ends the left side with a fade-out literal coloured by prev_bg', () => {
     const generated = generateToml(powerlineState);
-    expect(generated).toContain(`[${SEPARATOR_LEFT}](fg:nodejs)`);
-    expect(generated).toContain(`[${SEPARATOR_LEFT}](fg:cmd_duration bg:nodejs)`);
+    expect(generated).toContain(`$directory$git_branch[${SEPARATOR_RIGHT}](fg:prev_bg)$fill`);
+  });
+
+  it('fades right-hand separators in from the previous segment', () => {
+    const generated = generateToml(powerlineState);
+    expect(generated).toContain(`[${SEPARATOR_LEFT}](fg:nodejs bg:prev_bg)`);
+    expect(generated).toContain(`[${SEPARATOR_LEFT}](fg:cmd_duration bg:prev_bg)`);
   });
 
   it('collapses an empty module instead of leaving a blank block', () => {
@@ -414,8 +421,8 @@ describe('presets are visually distinct', () => {
       const config = generateToml({
         ...DEFAULT_STATE,
         hasNerdFont: true,
-        leftModules: preset.leftModules ?? DEFAULT_STATE.leftModules,
-        rightModules: preset.rightModules ?? DEFAULT_STATE.rightModules,
+        leftModules: [...preset.leftModules],
+        rightModules: [...preset.rightModules],
         palette: preset.palette,
         powerline: preset.powerline,
       });
@@ -431,5 +438,174 @@ describe('presets are visually distinct', () => {
   it('gives every preset a palette of its own', () => {
     const palettes = PRESETS.map((p) => p.palette);
     expect(new Set(palettes).size).toBe(PRESETS.length);
+  });
+});
+
+describe('text-only presets', () => {
+  it('writes no Nerd Font glyphs for a text-only preset even when the font is present', () => {
+    const toml = generateToml({
+      ...DEFAULT_STATE,
+      preset: 'plain-text',
+      hasNerdFont: true,
+      leftModules: ['directory', 'git_branch', 'character'],
+      rightModules: ['nodejs'],
+    });
+
+    expect(toml).not.toMatch(/[\ue000-\uf8ff]/u);
+    expect(toml).toContain('symbol   = "node "');
+  });
+});
+
+describe('vim mode symbol', () => {
+  it.each([
+    ['arrow', '[❮](bold ok)'],
+    ['lambda', '[λ](bold inverted ok)'],
+    ['dollar', '[\\$](bold inverted ok)'],
+  ] as const)('matches the %s character', (characterSymbol, expected) => {
+    const parsed = toml.parse(
+      generateToml({ ...DEFAULT_STATE, characterSymbol, vimMode: true })
+    ) as { character: { vimcmd_symbol: string } };
+    expect(parsed.character.vimcmd_symbol).toBe(expected);
+  });
+});
+
+describe('format escaping', () => {
+  it('escapes every starship format metacharacter in a symbol', () => {
+    expect(escapeFormatLiteral('$[x](y)\\')).toBe('\\$\\[x\\]\\(y\\)\\\\');
+  });
+});
+
+describe('unknown module ids', () => {
+  it('leaves a module with no definition out of the format and the blocks', () => {
+    const out = generateToml({
+      ...DEFAULT_STATE,
+      leftModules: ['directory', 'bogus' as never, 'character'],
+    });
+
+    expect(out).not.toContain('bogus');
+    expect((toml.parse(out) as { format: string }).format).toBe('$directory\n$character');
+  });
+});
+
+describe('battery symbols', () => {
+  it('uses emoji instead of Nerd Font glyphs when there is no Nerd Font', () => {
+    const parsed = toml.parse(
+      generateToml({ ...DEFAULT_STATE, hasNerdFont: false, leftModules: ['battery', 'character'] })
+    ) as { battery: Record<string, unknown> };
+    expect(parsed.battery.full_symbol).toBe('🔋 ');
+    expect(parsed.battery.empty_symbol).toBe('🪫 ');
+  });
+
+  it("keeps starship's glyph defaults with a Nerd Font", () => {
+    const parsed = toml.parse(
+      generateToml({ ...DEFAULT_STATE, hasNerdFont: true, leftModules: ['battery', 'character'] })
+    ) as { battery: Record<string, unknown> };
+    expect(parsed.battery.full_symbol).toBeUndefined();
+  });
+});
+
+describe('character block', () => {
+  it('writes the chosen character even when the module list omits it', () => {
+    const parsed = toml.parse(
+      generateToml({ ...DEFAULT_STATE, characterSymbol: 'lambda', leftModules: ['directory'] })
+    ) as { character?: { success_symbol: string } };
+    expect(parsed.character?.success_symbol).toBe('[λ](bold ok)');
+  });
+});
+
+describe('palette coverage', () => {
+  const STYLE_WORDS = new Set([
+    'bold',
+    'italic',
+    'underline',
+    'dimmed',
+    'inverted',
+    'blink',
+    'hidden',
+    'strikethrough',
+    'none',
+    'prev_fg',
+    'prev_bg',
+  ]);
+  const ANSI = /^(bright-)?(black|red|green|yellow|blue|purple|cyan|white)$/;
+
+  function styleStrings(config: Record<string, unknown>): string[] {
+    const found: string[] = [];
+    const walk = (value: unknown, key: string) => {
+      if (typeof value === 'string') {
+        if (/style/.test(key)) found.push(value);
+        for (const match of value.matchAll(/\]\(([^)]*)\)/g)) {
+          if (!match[1]!.includes('$')) found.push(match[1]!);
+        }
+      } else if (value && typeof value === 'object' && key !== 'palettes') {
+        for (const [child, inner] of Object.entries(value)) walk(inner, child);
+      }
+    };
+    walk(config, '');
+    return found;
+  }
+
+  it('defines every colour a generated config names in the palette it emits', () => {
+    const everyModule = [...MODULES.map((m) => m.id), 'character'] as WizardState['leftModules'];
+    for (const preset of PRESETS) {
+      for (const palette of PALETTES) {
+        for (const powerline of [false, true]) {
+          for (const hasNerdFont of [false, true]) {
+            const state = {
+              ...DEFAULT_STATE,
+              preset: preset.id,
+              palette: palette.id,
+              powerline,
+              hasNerdFont,
+              leftModules: everyModule,
+            };
+            const config = toml.parse(generateToml(state)) as Record<string, unknown>;
+            const defined = (config.palettes as Record<string, Record<string, string>>)[
+              config.palette as string
+            ]!;
+            for (const style of styleStrings(config)) {
+              for (const token of style.split(/\s+/).filter(Boolean)) {
+                const colour = token.replace(/^(fg|bg):/, '');
+                const known =
+                  STYLE_WORDS.has(colour) ||
+                  ANSI.test(colour) ||
+                  /^#[0-9a-f]{6}$/i.test(colour) ||
+                  /^\d{1,3}$/.test(colour) ||
+                  colour in defined;
+                expect(
+                  known,
+                  `${preset.id}/${palette.id}/pl=${powerline}/nf=${hasNerdFont}: '${token}' in '${style}'`
+                ).toBe(true);
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+});
+
+describe('modules that style themselves under powerline', () => {
+  const powerline = (leftModules: WizardState['leftModules']) =>
+    toml.parse(
+      generateToml({
+        ...DEFAULT_STATE,
+        preset: 'custom',
+        hasNerdFont: true,
+        powerline: true,
+        leftModules,
+      })
+    ) as Record<string, Record<string, unknown>>;
+
+  it('puts the username colours behind the segment as backgrounds', () => {
+    const { username } = powerline(['username', 'character']);
+    expect(username!.style_user).toBe('bold fg:fg bg:username');
+    expect(username!.style_root).toBe('bold fg:fg bg:err');
+  });
+
+  it('puts each battery level colour behind the segment as a background', () => {
+    const { battery } = powerline(['battery', 'character']);
+    const styles = (battery!.display as Array<{ style: string }>).map((d) => d.style);
+    expect(styles).toEqual(['bold fg:fg bg:err', 'bold fg:fg bg:battery']);
   });
 });

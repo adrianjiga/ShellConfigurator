@@ -1,5 +1,5 @@
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { configHome, homeDir, xdgBaseDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 
 export interface ShellDef {
@@ -20,89 +20,149 @@ export interface ShellDef {
   additionalInitPaths?: string[];
   /** Renders a PATH addition in this shell's own syntax, when one is needed. */
   pathLine?: (dir: string) => string;
+  /**
+   * For shells without an rc file: the setup command in adopt mode, which reads
+   * the shared starship.toml instead of pinning a per-shell config.
+   */
+  adoptInitLine?: string;
+  /** For shells with an rc file: how it exports and clears STARSHIP_CONFIG. */
+  configEnv?: ConfigEnvSyntax;
 }
+
+export interface ConfigEnvSyntax {
+  /** Text the export starts with; the quoted config path follows it. */
+  exportPrefix: string;
+  unsetLine: string;
+}
+
+const POSIX_CONFIG_ENV: ConfigEnvSyntax = {
+  exportPrefix: 'export STARSHIP_CONFIG=',
+  unsetLine: 'unset STARSHIP_CONFIG',
+};
 
 export const SHELLS: ShellDef[] = [
   {
     id: 'zsh',
     binary: 'zsh',
     label: 'Zsh',
-    rcFile: path.join(os.homedir(), '.zshrc'),
+    get rcFile() {
+      const zdotdir = process.env.ZDOTDIR?.trim();
+      return path.join(zdotdir && path.isAbsolute(zdotdir) ? zdotdir : homeDir(), '.zshrc');
+    },
     initLine: 'eval "$(starship init zsh)"',
-    pathLine: (dir) => `export PATH="${dir}:$PATH"`,
+    pathLine: (dir) => `export PATH=${posixShellQuote(dir)}:"$PATH"`,
+    configEnv: POSIX_CONFIG_ENV,
   },
   {
     id: 'bash',
     binary: 'bash',
     label: 'Bash',
-    rcFile: path.join(os.homedir(), '.bashrc'),
+    get rcFile() {
+      return path.join(homeDir(), '.bashrc');
+    },
     initLine: 'eval "$(starship init bash)"',
-    pathLine: (dir) => `export PATH="${dir}:$PATH"`,
+    pathLine: (dir) => `export PATH=${posixShellQuote(dir)}:"$PATH"`,
+    configEnv: POSIX_CONFIG_ENV,
   },
   {
     id: 'fish',
     binary: 'fish',
     label: 'Fish',
-    rcFile: path.join(os.homedir(), '.config', 'fish', 'config.fish'),
+    get rcFile() {
+      return path.join(configHome(), 'fish', 'config.fish');
+    },
     initLine: 'starship init fish | source',
-    pathLine: (dir) => `fish_add_path ${dir}`,
+    pathLine: (dir) => `fish_add_path ${posixShellQuote(dir)}`,
+    configEnv: { exportPrefix: 'set -gx STARSHIP_CONFIG ', unsetLine: 'set -e STARSHIP_CONFIG' },
   },
   {
-    // Executable from Bash: quote the Nushell program as a single argument to
-    // `nu -c`, escaping any embedded apostrophes for POSIX shells.
     id: 'nushell',
     binary: 'nu',
     label: 'Nushell',
     rcFile: null,
-    initLine: `nu -c ${posixShellQuote(`mkdir ($nu.data-dir | path join "vendor/autoload"); $"export-env { $env.STARSHIP_CONFIG = '($nu.default-config-dir | path dirname | path join starship nushell.toml)' }" | save -f ($nu.data-dir | path join "vendor/autoload/starship-config.nu"); starship init nu | save -f ($nu.data-dir | path join "vendor/autoload/starship.nu")`)}`,
+    // Run from Bash: the Nushell program is one POSIX-quoted argument to `nu -c`.
+    // The config path is written in literally, so it is the file the wizard wrote.
+    get initLine() {
+      const pin = `export-env { $env.STARSHIP_CONFIG = ${nuString(perShellConfigPath('nushell'))} }`;
+      return nushellAutoloadCommand(
+        `${nuString(pin)} | save -f ($d | path join starship-config.nu)`
+      );
+    },
+    get adoptInitLine() {
+      return nushellAutoloadCommand('rm -f ($d | path join starship-config.nu)');
+    },
     manualNote: 'Run the command above from Bash (it invokes Nushell to write its autoload files).',
-    initPath: path.join(
-      os.homedir(),
-      '.local',
-      'share',
-      'nushell',
-      'vendor',
-      'autoload',
-      'starship.nu'
-    ),
-    additionalInitPaths: [
-      path.join(
-        os.homedir(),
-        '.local',
-        'share',
-        'nushell',
-        'vendor',
-        'autoload',
-        'starship-config.nu'
-      ),
-    ],
+    get initPath() {
+      return path.join(nushellDataDir(), 'vendor', 'autoload', 'starship.nu');
+    },
+    get additionalInitPaths() {
+      return [path.join(nushellDataDir(), 'vendor', 'autoload', 'starship-config.nu')];
+    },
   },
   {
     id: 'powershell',
     binary: 'pwsh',
     label: 'PowerShell',
     rcFile: null,
-    initLine: 'Invoke-Expression (&starship init powershell)',
+    // Must be set before init, or PowerShell reads the shared starship.toml.
+    get initLine() {
+      const configPath = perShellConfigPath('powershell').replaceAll("'", "''");
+      return `$env:STARSHIP_CONFIG = '${configPath}'; Invoke-Expression (&starship init powershell)`;
+    },
+    adoptInitLine: 'Invoke-Expression (&starship init powershell)',
     manualNote: 'Add the above line to your $PROFILE file in PowerShell.',
-    initPath: path.join(os.homedir(), '.config', 'powershell', 'Microsoft.PowerShell_profile.ps1'),
+    get initPath() {
+      return path.join(configHome(), 'powershell', 'Microsoft.PowerShell_profile.ps1');
+    },
   },
 ];
 
-function posixShellQuote(value: string): string {
+/** The per-shell config the wizard writes; mirrors getShellConfigPath in shellRc.ts. */
+function perShellConfigPath(id: ShellId): string {
+  return path.join(configHome(), 'starship', `${id}.toml`);
+}
+
+/** A Nushell double-quoted string literal holding `value` exactly. */
+function nuString(value: string): string {
+  return `"${value.replace(/[\\"]/g, '\\$&')}"`;
+}
+
+/** `nu -c` writing Starship's autoload file, then `configStep` with `$d` as the autoload folder. */
+function nushellAutoloadCommand(configStep: string): string {
+  return `nu -c ${posixShellQuote(
+    'let d = ($nu.data-dir | path join vendor/autoload); mkdir $d; ' +
+      `starship init nu | save -f ($d | path join starship.nu); ${configStep}`
+  )}`;
+}
+
+/** Nushell's `$nu.data-dir`. */
+function nushellDataDir(): string {
+  if (process.platform === 'darwin') {
+    return path.join(homeDir(), 'Library', 'Application Support', 'nushell');
+  }
+  return path.join(xdgBaseDir('XDG_DATA_HOME', path.join(homeDir(), '.local', 'share')), 'nushell');
+}
+
+export function posixShellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/** The setup command for a shell, in adopt mode when it reads the shared config. */
+export function setupCommand(shell: ShellDef, pointAtSharedConfig: boolean): string {
+  return pointAtSharedConfig && shell.adoptInitLine ? shell.adoptInitLine : shell.initLine;
 }
 
 export function getShell(id: ShellId): ShellDef | undefined {
   return SHELLS.find((s) => s.id === id);
 }
 
-/** Executable name for a shell, e.g. 'nu' for nushell. */
 const SHELL_IDS: readonly ShellId[] = SHELLS.map((s) => s.id);
 
 export function isShellId(id: unknown): id is ShellId {
   return typeof id === 'string' && (SHELL_IDS as readonly string[]).includes(id);
 }
 
+/** Executable name for a shell, e.g. 'nu' for nushell. */
 export function getShellBinary(id: ShellId): string {
   const shell = getShell(id);
   if (!shell) throw new Error(`Unknown shell: ${id}`);

@@ -4,10 +4,10 @@ import type { ConfigurableModuleId } from './modules.ts';
  * Named colour palettes — one per preset, so no two presets render alike, plus
  * accessibility palettes (`high-contrast`, `colorblind`) that any preset can use.
  *
- * A palette gives every module its own colour rather than grouping modules into
- * shared roles. That costs a wider table here, but it is what makes a powerline
- * prompt read as distinct blocks (adjacent segments sharing a colour would merge
- * into one), and it is the only way "Gruvbox Rainbow" can actually rainbow.
+ * A palette gives every module its own colour entry rather than grouping modules
+ * into shared roles (entries may still share a value). That costs a wider table
+ * here, but it lets a powerline preset keep neighbouring segments apart, and it
+ * is the only way "Gruvbox Rainbow" can actually rainbow.
  *
  * The generator emits the chosen palette as a starship `[palettes.<id>]` table and
  * refers to colours by name, so the generated config stays readable and a user can
@@ -190,12 +190,12 @@ const PALETTE_DEFS = {
       sudo: 'white',
       git_commit: 'bright-black',
       golang: 'white',
-      java: 'red',
+      java: 'bright-black',
       dotnet: 'bright-black',
-      ruby: 'red',
+      ruby: 'bright-black',
       php: 'white',
       c: 'white',
-      cpp: 'red',
+      cpp: 'bright-black',
       zig: 'white',
       lua: 'white',
       swift: 'white',
@@ -302,7 +302,7 @@ const PALETTE_DEFS = {
       aws: '#fdffb6',
       time: '#d8d8e8',
       battery: '#caffbf',
-      cmd_duration: '#fdffb6',
+      cmd_duration: '#9bf6ff',
       jobs: '#bdb2ff',
       status: '#ffadad',
       os: '#9bf6ff',
@@ -462,7 +462,7 @@ const PALETTE_DEFS = {
       aws: '#f9e2af',
       time: '#bac2de',
       battery: '#a6e3a1',
-      cmd_duration: '#f9e2af',
+      cmd_duration: '#94e2d5',
       jobs: '#cba6f7',
       status: '#f38ba8',
       os: '#94e2d5',

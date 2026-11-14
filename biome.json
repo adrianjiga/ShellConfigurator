@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/package-lock.json", "!**/scripts/ci/**/*.sh"]
+    "includes": ["**", "!**/package-lock.json"]
   },
   "formatter": {
     "enabled": true,

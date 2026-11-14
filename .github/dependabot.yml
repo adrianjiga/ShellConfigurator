@@ -11,10 +11,14 @@ updates:
       development-dependencies:
         dependency-type: development
     ignore:
-      # Ink and react are pinned as a pair with ink-select-input peer deps;
-      # bump them together deliberately, not via individual dependabot PRs.
+      # Ink, react and ink-select-input move together across majors, so those are
+      # bumped by hand; minor, patch and security updates still come through.
       - dependency-name: "ink"
+        update-types: ["version-update:semver-major"]
       - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "ink-select-input"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

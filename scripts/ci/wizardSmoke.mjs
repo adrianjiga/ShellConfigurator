@@ -4,12 +4,11 @@ import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 import { promisify } from 'node:util';
-import { parse } from '@iarna/toml';
 import { render } from 'ink-testing-library';
 import React from 'react';
 import { App } from '../../dist/app.js';
 import { getMissingStarshipPathDir } from '../../dist/services/installer.js';
-import { requireScratchHome } from './smokeHome.mjs';
+import { assertRcWired, assertStarshipConfig, requireScratchHome } from './smokeHome.mjs';
 
 const execFileP = promisify(execFile);
 const homeDir = requireScratchHome();
@@ -76,21 +75,19 @@ try {
   const done = show();
   assert.ok(done.includes('All done!'), `install reported errors:\n${done}`);
 
-  const bashrc = nodePath.join(homeDir, '.bashrc');
-  const rcLines = readFileSync(bashrc, 'utf8');
-  assert.ok(rcLines.includes('# Added by ShellConfigurator'), '.bashrc missing banner');
-  assert.ok(rcLines.includes('export STARSHIP_CONFIG='), '.bashrc missing STARSHIP_CONFIG');
-  assert.ok(rcLines.includes('eval "$(starship init bash)"'), '.bashrc missing init line');
+  const rcLines = assertRcWired(nodePath.join(homeDir, '.bashrc'), 'bash');
   assert.ok(
-    rcLines.includes(`export PATH="${nodePath.join(homeDir, '.local', 'bin')}:$PATH"`),
+    rcLines.includes(`export PATH='${nodePath.join(homeDir, '.local', 'bin')}':"$PATH"`),
     `.bashrc missing PATH fix-up\nPATH=${process.env.PATH}\n` +
       `getMissingStarshipPathDir()=${getMissingStarshipPathDir()}\nrcLines:\n${rcLines}`
   );
 
   const perShellConfig = nodePath.join(homeDir, '.config', 'starship', 'bash.toml');
-  const toml = parse(readFileSync(perShellConfig, 'utf8'));
-  assert.equal(typeof toml.format, 'string', 'bash config unparseable');
-  assert.ok(toml.format.includes('$character'), 'bash config missing $character');
+  assertStarshipConfig(perShellConfig, 'bash config');
+  assert.ok(
+    readFileSync(perShellConfig, 'utf8').includes('$character'),
+    'bash config missing $character'
+  );
 
   const binary = nodePath.join(homeDir, '.local', 'bin', 'starship');
   assert.ok(existsSync(binary), 'starship binary missing');
@@ -99,6 +96,7 @@ try {
 
   unmount();
   console.log('\nWizard smoke passed.');
+  process.exit(0);
 } catch (err) {
   const last = show();
   console.error(`FAIL wizard smoke: ${err instanceof Error ? err.message : String(err)}`);

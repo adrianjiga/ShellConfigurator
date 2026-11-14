@@ -1,50 +1,85 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { SHELLS } from '../config/shells.ts';
 import type { PackageManager, ShellId, TerminalId } from '../types.ts';
-import { commandExistsAsync, runCapture } from './exec.ts';
+import { commandExistsAsync, commandPathAsync, runCapture } from './exec.ts';
+import { getMissingStarshipPathDir } from './installer.ts';
 
 const readFileP = promisify(fs.readFile);
 
 // Async throughout: these run during the Ink render loop and must not block it.
 
 const APT_DISTROS = ['ubuntu', 'debian', 'linuxmint', 'pop', 'elementary'];
-const DNF_DISTROS = ['fedora', 'rhel', 'centos', 'rocky', 'alma'];
+const DNF_DISTROS = ['fedora', 'rhel', 'centos', 'rocky', 'almalinux'];
 const PACMAN_DISTROS = ['arch', 'manjaro', 'endeavouros', 'cachyos', 'garuda'];
 
-/** Reads the distro id from /etc/os-release, e.g. "ubuntu" or "fedora". */
-async function readOsReleaseIdAsync(): Promise<string | null> {
-  try {
-    const content = await readFileP('/etc/os-release', 'utf8');
-    const match = content.match(/^ID=(.+)$/m);
-    if (!match) return null;
-    return match[1]!.replace(/["']/g, '').toLowerCase().trim();
-  } catch {
-    return null;
+const OS_RELEASE_FILES = ['/etc/os-release', '/usr/lib/os-release'];
+
+function osReleaseValue(content: string, key: string): string | null {
+  const match = content.match(new RegExp(`^${key}=(.+)$`, 'm'));
+  return match ? match[1]!.replace(/["']/g, '').toLowerCase().trim() : null;
+}
+
+/**
+ * The distro id followed by its ID_LIKE parents (e.g. ["kali", "debian"]), so
+ * a derivative maps to its parent's package manager.
+ */
+async function readOsReleaseIdsAsync(): Promise<string[]> {
+  for (const file of OS_RELEASE_FILES) {
+    let content: string;
+    try {
+      content = await readFileP(file, 'utf8');
+    } catch {
+      continue;
+    }
+    const id = osReleaseValue(content, 'ID');
+    const like = osReleaseValue(content, 'ID_LIKE')?.split(/\s+/) ?? [];
+    return [...(id ? [id] : []), ...like].filter(Boolean);
   }
+  return [];
+}
+
+function packageManagerForDistro(id: string): PackageManager | null {
+  if (APT_DISTROS.includes(id)) return 'apt';
+  if (DNF_DISTROS.includes(id)) return 'dnf';
+  if (PACMAN_DISTROS.includes(id)) return 'pacman';
+  if (id === 'alpine') return 'apk';
+  return null;
 }
 
 export async function detectPackageManagerAsync(): Promise<PackageManager> {
-  const [hasBrew, hasPacman] = await Promise.all([
+  const [hasBrew, pacmanPath] = await Promise.all([
     commandExistsAsync('brew'),
-    commandExistsAsync('pacman'),
+    commandPathAsync('pacman'),
   ]);
+  // Debian and Ubuntu ship a Pac-Man game as /usr/games/pacman.
+  const hasPacman = pacmanPath !== null && !pacmanPath.split('/').includes('games');
   if (hasBrew) return 'brew';
   if (hasPacman) return 'pacman';
 
-  const id = await readOsReleaseIdAsync();
-  if (id) {
-    if (APT_DISTROS.includes(id)) return 'apt';
-    if (DNF_DISTROS.includes(id)) return 'dnf';
-    if (PACMAN_DISTROS.includes(id)) return 'pacman';
-    if (id === 'alpine') return 'apk';
-  }
-
-  const [hasApt, hasDnf, hasApk] = await Promise.all([
+  const [ids, hasApt, hasDnf, hasApk] = await Promise.all([
+    readOsReleaseIdsAsync(),
     commandExistsAsync('apt-get'),
     commandExistsAsync('dnf'),
     commandExistsAsync('apk'),
   ]);
+  const present: Record<PackageManager, boolean> = {
+    brew: false,
+    pacman: false,
+    apt: hasApt,
+    dnf: hasDnf,
+    apk: hasApk,
+    script: false,
+  };
+
+  // The distro id breaks a tie between several package managers, but is only
+  // trusted when its binary is really there (CentOS 7 has yum, not dnf).
+  for (const id of ids) {
+    const distroPm = packageManagerForDistro(id);
+    if (distroPm && present[distroPm]) return distroPm;
+  }
+
   if (hasApt) return 'apt';
   if (hasDnf) return 'dnf';
   if (hasApk) return 'apk';
@@ -57,9 +92,34 @@ export async function isStarshipInstalledAsync(): Promise<{
   version?: string;
 }> {
   try {
-    return { installed: true, version: await runCapture('starship', ['--version']) };
+    // -V prints only the version line; --version adds branch/commit/build time,
+    // which made the task label multi-line and drift compare build stamps.
+    return { installed: true, version: await runCapture('starship', ['-V']) };
   } catch {
     return { installed: false };
+  }
+}
+
+/**
+ * Starship on PATH, or else an earlier script install in its bin dir that PATH
+ * does not reach yet (`pathDir` says where).
+ */
+export async function findStarshipAsync(): Promise<{
+  installed: boolean;
+  version?: string;
+  pathDir?: string;
+}> {
+  const onPath = await isStarshipInstalledAsync();
+  if (onPath.installed) return onPath;
+  const pathDir = getMissingStarshipPathDir();
+  if (!pathDir) return onPath;
+  try {
+    const version = await runCapture('starship', ['-V'], {
+      env: { ...process.env, PATH: `${pathDir}${path.delimiter}${process.env.PATH ?? ''}` },
+    });
+    return { installed: true, version, pathDir };
+  } catch {
+    return onPath;
   }
 }
 
@@ -90,10 +150,23 @@ export async function detectTerminalAsync(): Promise<TerminalId | null> {
 }
 
 /** Env vars that mean "this is a sandbox, not the user's own machine". */
-const CONTAINER_ENV_MARKERS = ['CODESPACES', 'REMOTE_CONTAINERS', 'DEVCONTAINER', 'CI'];
+const CONTAINER_ENV_MARKERS = [
+  'CODESPACES',
+  'REMOTE_CONTAINERS',
+  'DEVCONTAINER',
+  'CI',
+  'KUBERNETES_SERVICE_HOST',
+  'container',
+];
+
+/** An env flag counts as set unless it is empty or an explicit false/0/no. */
+function isTruthyEnv(value: string | undefined): boolean {
+  if (!value) return false;
+  return !['false', '0', 'no'].includes(value.trim().toLowerCase());
+}
 
 /** Files the container runtimes drop at the filesystem root. */
-const CONTAINER_MARKER_FILES = ['/run/.containerenv', '/.dockerenv'];
+const CONTAINER_MARKER_FILES = ['/run/.containerenv', '/.dockerenv', '/run/systemd/container'];
 
 /**
  * Detects a container/CI sandbox: fonts are per-host and `chsh` is meaningless
@@ -101,7 +174,7 @@ const CONTAINER_MARKER_FILES = ['/run/.containerenv', '/.dockerenv'];
  * stat'd) to keep this on the same promisified-fs seam the other detectors use.
  */
 export async function detectContainerAsync(): Promise<boolean> {
-  if (CONTAINER_ENV_MARKERS.some((name) => Boolean(process.env[name]))) return true;
+  if (CONTAINER_ENV_MARKERS.some((name) => isTruthyEnv(process.env[name]))) return true;
   for (const marker of CONTAINER_MARKER_FILES) {
     try {
       await readFileP(marker, 'utf8');
@@ -116,9 +189,9 @@ export async function detectContainerAsync(): Promise<boolean> {
 const byName = (name: string) => SHELLS.find((s) => s.binary === name || s.id === name);
 
 /**
- * Best-effort detection of the shell the wizard is running in, so it can be
- * pre-selected. Reads $SHELL first, falling back to the process command name.
- * Returns null when it can't be mapped to a known shell.
+ * Best-effort detection of the user's shell, so it can be pre-selected: $SHELL
+ * (the login shell) first, else the command name of the process that launched
+ * the tool. Returns null when it can't be mapped to a known shell.
  */
 export async function detectCurrentShellAsync(): Promise<ShellId | null> {
   const envPath = process.env.SHELL?.trim();
@@ -127,8 +200,10 @@ export async function detectCurrentShellAsync(): Promise<ShellId | null> {
     if (match) return match.id;
   }
   try {
-    const comm = (await runCapture('ps', ['-p', `${process.pid}`, '-o', 'comm='])).trim();
-    const match = byName(comm.split('/').pop() ?? '');
+    // The parent is the shell that launched the wizard; a login shell's name
+    // carries a leading '-' (e.g. "-zsh").
+    const comm = (await runCapture('ps', ['-p', `${process.ppid}`, '-o', 'comm='])).trim();
+    const match = byName((comm.split('/').pop() ?? '').replace(/^-/, ''));
     if (match) return match.id;
   } catch {
     // fall through to null

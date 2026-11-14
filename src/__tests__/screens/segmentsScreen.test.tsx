@@ -11,6 +11,9 @@ const DOWN = '\u001B[B';
 const SHIFT_DOWN = '\u001B[1;2B';
 const SHIFT_UP = '\u001B[1;2A';
 const BACKSPACE = '\u007F';
+const LEFT = '\u001B[D';
+const RIGHT = '\u001B[C';
+const CTRL_DOWN = '\u001B[1;5B';
 
 function setup(overrides: Partial<WizardState> = {}, side: 'left' | 'right' = 'left') {
   const state: WizardState = {
@@ -62,8 +65,8 @@ describe('SegmentsScreen', () => {
     const descriptionLine = lines.find((l) => l.includes('Current directory path'));
     expect(toggleLine).toBeTruthy();
     expect(descriptionLine).toBeTruthy();
-    // The description is indented one column past the checkbox marker, in the
-    // same margin-based convention ShellScreen uses (margin 4).
+    // The description starts two columns past the checkbox marker, PickerRow's
+    // hint margin.
     expect(descriptionLine!.indexOf('Current directory')).toBe(toggleLine!.indexOf('[✓]') + 2);
     // And it sits on its own line, never on the toggle/label line.
     expect(descriptionLine).not.toContain('[✓]');
@@ -75,6 +78,16 @@ describe('SegmentsScreen', () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
+  it('takes a module off the right side when it is picked on the left', async () => {
+    const { instance, onUpdate } = setup({ rightModules: ['username', 'time'] });
+    await flush();
+    await press(instance, DOWN, DOWN, ' ');
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      leftModules: ['directory', 'git_branch', 'username', 'character'],
+      rightModules: ['time'],
+    });
+  });
+
   it('appends a newly enabled module to the end of the prompt order', async () => {
     const { instance, onUpdate } = setup();
     await flush();
@@ -82,6 +95,7 @@ describe('SegmentsScreen', () => {
     await press(instance, DOWN, DOWN, ' ');
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['directory', 'git_branch', 'username', 'character'],
+      rightModules: [],
     });
   });
 
@@ -91,6 +105,7 @@ describe('SegmentsScreen', () => {
     await press(instance, ' ');
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['git_branch', 'character'],
+      rightModules: [],
     });
   });
 
@@ -100,6 +115,7 @@ describe('SegmentsScreen', () => {
     await press(instance, DOWN, ' ');
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['directory', 'character'],
+      rightModules: [],
     });
   });
 
@@ -109,6 +125,7 @@ describe('SegmentsScreen', () => {
     await press(instance, '\r');
     expect(onNext).toHaveBeenCalledWith({
       leftModules: ['directory', 'git_branch', 'character'],
+      rightModules: [],
     });
   });
 
@@ -117,6 +134,50 @@ describe('SegmentsScreen', () => {
     await flush();
     await pressEsc(instance.stdin);
     expect(onBack).toHaveBeenCalled();
+  });
+
+  it('goes back on ← when no filter is typed', async () => {
+    const { instance, onBack } = setup();
+    await flush();
+    await press(instance, LEFT);
+    expect(onBack).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Tab', '\t'],
+    ['→', RIGHT],
+  ])('saves and moves on with %s', async (_name, key) => {
+    const { instance, onNext } = setup();
+    await flush();
+    await press(instance, key);
+    expect(onNext).toHaveBeenCalledWith({
+      leftModules: ['directory', 'git_branch', 'character'],
+      rightModules: [],
+    });
+  });
+
+  it('saves the right side without adding the prompt character', async () => {
+    const { instance, onNext } = setup({ rightModules: ['nodejs'] }, 'right');
+    await flush();
+    await press(instance, '\r');
+    expect(onNext).toHaveBeenCalledWith({ rightModules: ['nodejs'] });
+  });
+
+  it('reorders the prompt with Ctrl+Down as well', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+    await press(instance, CTRL_DOWN);
+    expect(onUpdate).toHaveBeenCalledWith({
+      leftModules: ['git_branch', 'directory', 'character'],
+      rightModules: [],
+    });
+  });
+
+  it('keeps Ctrl and Meta combos out of the filter', async () => {
+    const { instance } = setup();
+    await flush();
+    await press(instance, '\u0001', '\u001Bb');
+    expect(instance.lastFrame()).toContain('type to search');
   });
 
   it('filters the list by label', async () => {
@@ -173,6 +234,7 @@ describe('SegmentsScreen', () => {
     await press(instance, SHIFT_DOWN);
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['git_branch', 'directory', 'character'],
+      rightModules: [],
     });
   });
 
@@ -182,6 +244,7 @@ describe('SegmentsScreen', () => {
     await press(instance, DOWN, SHIFT_UP);
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['git_branch', 'directory', 'character'],
+      rightModules: [],
     });
   });
 
@@ -212,6 +275,7 @@ describe('SegmentsScreen', () => {
     await press(instance, SHIFT_DOWN);
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['directory', 'git_status', 'git_branch', 'character'],
+      rightModules: [],
     });
   });
 
@@ -224,6 +288,7 @@ describe('SegmentsScreen', () => {
     await press(instance, ' ');
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['directory', 'git_status', 'character'],
+      rightModules: [],
     });
   });
 
@@ -244,5 +309,43 @@ describe('SegmentsScreen', () => {
     await flush();
     const frame = instance.lastFrame() ?? '';
     expect(frame.indexOf('1. Node.js')).toBeLessThan(frame.indexOf('2. Python'));
+  });
+});
+
+describe('SegmentsScreen filter', () => {
+  it('moves the cursor to the first match when the filter changes', async () => {
+    const { instance } = setup();
+    await flush();
+    // Many modules match "o", so a clamped cursor would stay on the fourth row.
+    await press(instance, DOWN, DOWN, DOWN, 'o');
+    expect(instance.lastFrame()).toMatch(/›.*Directory/);
+  });
+
+  it('drops line breaks from pasted text', async () => {
+    const { instance } = setup();
+    await flush();
+    await press(instance, 'no\nde');
+    expect(instance.lastFrame()).toContain('Filter: node');
+  });
+
+  it('does not leave the screen on ← while a filter is typed', async () => {
+    const { instance, onBack } = setup();
+    await flush();
+    await press(instance, 'g', '\u001B[D');
+    expect(onBack).not.toHaveBeenCalled();
+    expect(instance.lastFrame()).toContain('Filter: g');
+  });
+});
+
+describe('SegmentsScreen key bursts', () => {
+  it('applies every key in a burst that arrives as one chunk', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+    instance.stdin.write(`${DOWN}${DOWN} `);
+    await flush();
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      leftModules: ['directory', 'git_branch', 'username', 'character'],
+      rightModules: [],
+    });
   });
 });

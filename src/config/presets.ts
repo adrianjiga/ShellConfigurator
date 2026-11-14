@@ -7,14 +7,18 @@ export interface PresetDef {
   description: string;
   requiresNerdFont: boolean;
   // Overrides for left/right modules when this preset is selected
-  leftModules?: ModuleId[];
-  rightModules?: ModuleId[];
+  leftModules: readonly ModuleId[];
+  rightModules: readonly ModuleId[];
   /** The colour theme this preset starts from. Every preset names a different
    *  one, so no two presets generate the same colours. The Style screen seeds
    *  its picker from this and the user can then change it. */
   palette: PaletteId;
   /** Whether this preset draws segments as interlocking coloured blocks. */
   powerline: boolean;
+  /** Text symbols only, even for a user whose terminal has a Nerd Font. */
+  textOnly?: boolean;
+  /** Wraps each segment in square brackets, e.g. `[main]`. */
+  bracketed?: boolean;
 }
 
 export const PRESETS: PresetDef[] = [
@@ -47,16 +51,18 @@ export const PRESETS: PresetDef[] = [
     rightModules: ['cmd_duration'],
     palette: 'terminal',
     powerline: false,
+    textOnly: true,
   },
   {
     id: 'plain-text',
     label: 'Plain Text',
-    description: 'ASCII-only in white and grey, maximum compatibility',
+    description: 'Text symbols only, in white and grey, for maximum compatibility',
     requiresNerdFont: false,
     leftModules: CORE_MODULES,
     rightModules: [],
     palette: 'mono',
     powerline: false,
+    textOnly: true,
   },
   {
     id: 'bracketed-segments',
@@ -67,11 +73,12 @@ export const PRESETS: PresetDef[] = [
     rightModules: ['time'],
     palette: 'muted',
     powerline: false,
+    bracketed: true,
   },
   {
     id: 'pure-prompt',
     label: 'Pure Prompt',
-    description: 'Minimal, emulates the Pure zsh theme',
+    description: 'Minimal two-line prompt inspired by the Pure zsh theme',
     requiresNerdFont: false,
     leftModules: ['directory', 'git_branch', 'character'],
     rightModules: ['cmd_duration'],
@@ -91,7 +98,7 @@ export const PRESETS: PresetDef[] = [
   {
     id: 'tokyo-night',
     label: 'Tokyo Night',
-    description: 'Dark theme with blue and purple tones',
+    description: 'Nerd Font icons in deep blues and purples, runtimes on the right',
     requiresNerdFont: true,
     leftModules: CORE_MODULES,
     rightModules: ['nodejs', 'python', 'cmd_duration'],
@@ -139,3 +146,31 @@ export const PRESETS: PresetDef[] = [
     powerline: false,
   },
 ];
+
+/**
+ * Whether the prompt may use Nerd Font glyphs: the terminal must have the font
+ * and the chosen preset must not be a text-only one.
+ */
+export function rendersGlyphs(state: { hasNerdFont: boolean; preset: string | null }): boolean {
+  return state.hasNerdFont && !PRESETS.find((p) => p.id === state.preset)?.textOnly;
+}
+
+type GlyphState = { hasNerdFont: boolean; preset: string | null; powerline: boolean };
+
+/** Whether powerline separators are drawn: they are Nerd Font glyphs too. */
+export function drawsPowerline(state: GlyphState): boolean {
+  return state.powerline && rendersGlyphs(state);
+}
+
+/** Why powerline was asked for but will not be drawn, or null when it will be (or was not asked for). */
+export function powerlineDroppedReason(state: GlyphState): string | null {
+  if (!state.powerline || drawsPowerline(state)) return null;
+  if (!state.hasNerdFont) return 'Powerline separators need a Nerd Font';
+  const label = PRESETS.find((p) => p.id === state.preset)?.label ?? state.preset;
+  return `The ${label} preset uses text symbols only, so it has no powerline separators`;
+}
+
+/** Whether segments are drawn as `[content]`: the bracketed preset, without powerline. */
+export function bracketsSegments(state: { preset: string | null; powerline: boolean }): boolean {
+  return !state.powerline && Boolean(PRESETS.find((p) => p.id === state.preset)?.bracketed);
+}

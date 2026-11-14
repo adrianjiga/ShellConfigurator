@@ -2,14 +2,17 @@
  * Minimal CLI argument parser for the public headless flag surface (D2).
  *
  * Deliberately dependency-free and hand-rolled: the tool ships a bundled,
- * offline tarball, so a flag parser must not add a runtime dependency. It
- * recognises the subcommand as the first positional token and then walks the
- * flags. Anything unknown is collected as a warning rather than an error so
- * the same argv can still fall through to the existing global-flag handling —
- * a typo'd flag must be surfaced, but it must not abort the run.
+ * offline tarball, so a flag parser must not add a runtime dependency. The
+ * subcommand is the first positional token, and anything the parser does not
+ * recognize is a usage error rather than a warning — a typo must never start
+ * the real installer.
  */
+import { posixShellQuote } from '../config/shells.ts';
+import { CliUsageError } from './errors.ts';
 
 export type Subcommand = 'generate' | 'apply' | 'doctor' | 'repair';
+
+export const SUBCOMMANDS: readonly Subcommand[] = ['generate', 'apply', 'doctor', 'repair'];
 
 export interface CliFlags {
   /** The subcommand, or null when the run is interactive or a plain flag. */
@@ -43,19 +46,13 @@ export interface CliFlags {
   json?: boolean;
   /** Apply the repairs the doctor can perform (--fix). */
   fix?: boolean;
-  // Global flags, kept for parity with index.tsx's existing surface.
+  /** Let repair also apply the fixes warnings carry (--include-warnings). */
+  includeWarnings?: boolean;
   help: boolean;
   version: boolean;
   restore: boolean;
-  /**
-   * Problems found while parsing: unknown flags, values given to boolean flags,
-   * and known value flags that got no value. Ignored for the run — the caller
-   * prints them to stderr so the user sees the typo.
-   */
-  warnings: string[];
 }
 
-/** A flag that takes no value, so the next token is not consumed as its value. */
 const SHORT_FLAGS: Record<string, string> = {
   '-o': '--output',
   '-d': '--dry-run',
@@ -63,38 +60,100 @@ const SHORT_FLAGS: Record<string, string> = {
   '-h': '--help',
 };
 
-/** Flags whose presence alone is the value. An `=` form is a contradiction. */
-const BOOLEAN_FLAGS = new Set<string>([
-  '--help',
-  '--version',
-  '--restore',
-  '--undo',
-  '--dry-run',
-  '--no-install',
-  '--powerline',
-  '--no-powerline',
-  '--has-nerd-font',
-  '--no-nerd-font',
-  '--skip-starship',
-  '--adopt',
-  '--json',
-  '--fix',
-]);
+/** Boolean flags; the handler applies the value (the bare form means true). */
+const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> = {
+  '--help': (r, v) => {
+    r.help = v;
+  },
+  '--version': (r, v) => {
+    r.version = v;
+  },
+  '--restore': (r, v) => {
+    r.restore = v;
+  },
+  '--undo': (r, v) => {
+    r.restore = v;
+  },
+  '--dry-run': (r, v) => {
+    r.dryRun = v;
+  },
+  '--no-install': (r, v) => {
+    r.dryRun = v;
+  },
+  '--powerline': (r, v) => {
+    r.powerline = v;
+  },
+  '--no-powerline': (r, v) => {
+    r.powerline = !v;
+  },
+  '--has-nerd-font': (r, v) => {
+    r.hasNerdFont = v;
+  },
+  '--no-nerd-font': (r, v) => {
+    r.hasNerdFont = !v;
+  },
+  '--skip-starship': (r, v) => {
+    r.skipStarship = v;
+  },
+  '--adopt': (r, v) => {
+    r.adopt = v;
+  },
+  '--json': (r, v) => {
+    r.json = v;
+  },
+  '--fix': (r, v) => {
+    r.fix = v;
+  },
+  '--include-warnings': (r, v) => {
+    r.includeWarnings = v;
+  },
+};
 
-/** Flags that consume the next token (or an inline `=value`) as their value. */
-const VALUE_FLAGS = new Set<string>([
-  '--preset',
-  '--palette',
-  '--shells',
-  '--font',
-  '--character',
-  '--set-default',
-  '--import',
-  '--state',
-  '--import-url',
-  '--output',
-  '--export',
-]);
+/** Value flags; the handler stores the consumed value. */
+const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
+  '--preset': (r, v) => {
+    r.preset = v;
+  },
+  '--palette': (r, v) => {
+    r.palette = v;
+  },
+  '--shells': (r, v) => {
+    r.shells = v
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  },
+  '--font': (r, v) => {
+    r.font = v;
+  },
+  '--character': (r, v) => {
+    r.characterSymbol = v;
+  },
+  '--set-default': (r, v) => {
+    r.setDefaultShell = v;
+  },
+  '--import': (r, v) => {
+    r.stateFile = v;
+  },
+  '--state': (r, v) => {
+    r.stateFile = v;
+  },
+  '--import-url': (r, v) => {
+    r.importUrl = v;
+  },
+  '--output': (r, v) => {
+    r.outputFile = v;
+  },
+  '--export': (r, v) => {
+    r.exportFile = v;
+  },
+};
+
+const SHORT_BOOLEAN_FLAGS = new Set(
+  Object.entries(SHORT_FLAGS)
+    .filter(([, long]) => BOOLEAN_FLAGS[long] !== undefined)
+    .map(([short]) => short)
+);
 
 /** Splits a token into its long-form name and any inline `=` value. */
 function splitToken(token: string): { name: string; inlineValue?: string } {
@@ -103,13 +162,26 @@ function splitToken(token: string): { name: string; inlineValue?: string } {
   return { name: token.slice(0, eq), inlineValue: token.slice(eq + 1) };
 }
 
+/** Parses the `=value` form of a boolean flag; undefined when unrecognizable. */
+function parseBooleanValue(raw: string): boolean | undefined {
+  const normalized = raw.toLowerCase();
+  if (['true', '1', 'yes'].includes(normalized)) return true;
+  if (['false', '0', 'no'].includes(normalized)) return false;
+  return undefined;
+}
+
+export function quoteArgv(argv: string[]): string {
+  return argv
+    .map((arg) => (arg === '' || /[^\w@%+=:,./-]/.test(arg) ? posixShellQuote(arg) : arg))
+    .join(' ');
+}
+
 export function parseCliArgs(argv: string[]): CliFlags {
   const result: CliFlags = {
     subcommand: null,
     help: false,
     version: false,
     restore: false,
-    warnings: [],
   };
 
   let subcommandSeen = false;
@@ -119,119 +191,65 @@ export function parseCliArgs(argv: string[]): CliFlags {
     const flag = SHORT_FLAGS[token.name] ?? token.name;
 
     if (!flag.startsWith('-')) {
-      if (
-        !subcommandSeen &&
-        (flag === 'generate' || flag === 'apply' || flag === 'doctor' || flag === 'repair')
-      ) {
-        result.subcommand = flag;
+      if (subcommandSeen) {
+        throw new CliUsageError(`Unexpected argument '${arg}'`);
+      }
+      if (SUBCOMMANDS.includes(flag as Subcommand)) {
+        result.subcommand = flag as Subcommand;
         subcommandSeen = true;
-      }
-      continue;
-    }
-
-    // Boolean flags — the value is the flag itself. `--flag=x` is not boolean:
-    // a value on a boolean flag is a contradiction, so warn and drop the token.
-    if (token.inlineValue === undefined) {
-      switch (flag) {
-        case '--help':
-          result.help = true;
-          continue;
-        case '--version':
-          result.version = true;
-          continue;
-        case '--restore':
-        case '--undo':
-          result.restore = true;
-          continue;
-        case '--dry-run':
-          result.dryRun = true;
-          continue;
-        case '--no-install':
-          result.dryRun = true;
-          continue;
-        case '--powerline':
-          result.powerline = true;
-          continue;
-        case '--no-powerline':
-          result.powerline = false;
-          continue;
-        case '--has-nerd-font':
-          result.hasNerdFont = true;
-          continue;
-        case '--no-nerd-font':
-          result.hasNerdFont = false;
-          continue;
-        case '--skip-starship':
-          result.skipStarship = true;
-          continue;
-        case '--adopt':
-          result.adopt = true;
-          continue;
-        case '--json':
-          result.json = true;
-          continue;
-        case '--fix':
-          result.fix = true;
-          continue;
-      }
-    } else if (BOOLEAN_FLAGS.has(flag)) {
-      result.warnings.push(`Flag '${flag}' does not take a value; ignoring '${arg}'`);
-      continue;
-    }
-
-    // Value flags — the inline `=` value, else the next token (skip it only when
-    // it exists; the token we consumed is never reused).
-    const value = token.inlineValue ?? argv[i + 1];
-    const hasValue = value !== undefined && !value.startsWith('-');
-
-    if (!hasValue) {
-      if (VALUE_FLAGS.has(flag)) {
-        result.warnings.push(`Flag '${flag}' needs a value; ignoring it`);
-      } else if (flag.startsWith('-')) {
-        result.warnings.push(`Unknown flag '${flag}'; ignoring it`);
-      }
-      continue;
-    }
-
-    switch (flag) {
-      case '--preset':
-        result.preset = value;
-        break;
-      case '--palette':
-        result.palette = value;
-        break;
-      case '--shells':
-        result.shells = value
-          .split(',')
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0);
-        break;
-      case '--font':
-        result.font = value;
-        break;
-      case '--character':
-        result.characterSymbol = value;
-        break;
-      case '--set-default':
-        result.setDefaultShell = value;
-        break;
-      case '--import':
-      case '--state':
-        result.stateFile = value;
-        break;
-      case '--import-url':
-        result.importUrl = value;
-        break;
-      case '--output':
-        result.outputFile = value;
-        break;
-      case '--export':
-        result.exportFile = value;
-        break;
-      default:
-        result.warnings.push(`Unknown flag '${flag}'; ignoring it`);
         continue;
+      }
+      throw new CliUsageError(`Unknown command '${arg}' (available: ${SUBCOMMANDS.join(', ')})`);
     }
+
+    if (token.inlineValue === undefined && /^-[^-]{2,}$/.test(token.name)) {
+      const chars = [...token.name.slice(1)];
+      if (chars.every((c) => SHORT_BOOLEAN_FLAGS.has(`-${c}`))) {
+        for (const c of chars) {
+          BOOLEAN_FLAGS[SHORT_FLAGS[`-${c}`]!](result, true);
+        }
+        continue;
+      }
+    }
+
+    const booleanFlag = BOOLEAN_FLAGS[flag];
+    if (booleanFlag !== undefined) {
+      if (token.inlineValue === undefined) {
+        booleanFlag(result, true);
+      } else {
+        const parsed = parseBooleanValue(token.inlineValue);
+        if (parsed === undefined) {
+          throw new CliUsageError(`Cannot parse '${arg}': '${flag}' takes true or false`);
+        }
+        booleanFlag(result, parsed);
+      }
+      continue;
+    }
+
+    // Value flags — the inline `=` value, else the next token.
+    const valueFlag = VALUE_FLAGS[flag];
+    if (valueFlag === undefined) {
+      throw new CliUsageError(`Unknown flag '${flag}'`);
+    }
+    const value = token.inlineValue ?? argv[i + 1];
+
+    if (
+      token.inlineValue === undefined &&
+      value !== undefined &&
+      SUBCOMMANDS.includes(value as Subcommand)
+    ) {
+      throw new CliUsageError(`Flag '${flag}' needs a value; '${value}' is a subcommand name`);
+    }
+
+    const hasValue =
+      token.inlineValue !== undefined
+        ? token.inlineValue !== ''
+        : value !== undefined && value !== '' && !value.startsWith('-');
+    if (!hasValue) {
+      throw new CliUsageError(`Flag '${flag}' needs a value`);
+    }
+
+    valueFlag(result, value);
     if (token.inlineValue === undefined) i++;
   }
 

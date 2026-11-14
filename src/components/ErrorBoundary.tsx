@@ -12,9 +12,8 @@ interface ErrorBoundaryState {
 }
 
 /**
- * Renders a readable message instead of dumping a React stack trace over a
- * half-drawn TUI. Ink has no built-in boundary, and a throw inside a screen
- * would otherwise tear down the render mid-frame.
+ * Renders a readable message instead of Ink's own error screen, which prints the
+ * stack trace over a half-drawn TUI, and hands the error to `onError`.
  */
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { error: null };
@@ -38,8 +37,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
         </Text>
         <Text color={uiColor('red')}>{error.message}</Text>
         <Text color={uiColor('gray')}>
-          Nothing further was changed. Please re-run the wizard; if it keeps failing, report this
-          with the message above.
+          The wizard stopped here; anything it changed before this point was kept. Run
+          shell-configurator doctor to check the setup, and report this with the message above if it
+          keeps happening.
         </Text>
       </Box>
     );

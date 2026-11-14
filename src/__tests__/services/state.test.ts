@@ -4,7 +4,7 @@ import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
 const sampleState: WizardState = {
   ...DEFAULT_STATE,
-  preset: 'catppuccin',
+  preset: 'catppuccin-powerline',
   leftModules: ['directory', 'git_branch', 'git_status', 'character'],
   rightModules: ['time', 'battery'],
   characterSymbol: 'lambda',
@@ -15,6 +15,9 @@ const sampleState: WizardState = {
   setDefaultShell: 'zsh',
   skipStarshipInstall: true,
   hasNerdFont: false,
+  continuationPrompt: 'arrow',
+  addNewline: false,
+  vimMode: true,
 };
 
 describe('serializeState', () => {
@@ -23,7 +26,7 @@ describe('serializeState', () => {
     expect(card.endsWith('\n')).toBe(true);
     const parsed = JSON.parse(card) as StateCard;
     expect(parsed.version).toBe(STATE_VERSION);
-    expect(parsed.wizard.preset).toBe('catppuccin');
+    expect(parsed.wizard.preset).toBe('catppuccin-powerline');
     expect(parsed.wizard.leftModules).toEqual(sampleState.leftModules);
     expect(parsed.wizard.rightModules).toEqual(sampleState.rightModules);
     expect(parsed.wizard.characterSymbol).toBe('lambda');
@@ -56,6 +59,19 @@ describe('parseState', () => {
     expect(() => parseState('{nope')).toThrow(/Invalid state card/);
   });
 
+  it('reads a card that starts with a UTF-8 BOM', () => {
+    const restored = parseState(`\uFEFF${serializeState(sampleState)}`);
+    expect(restored.selectedShells).toEqual(['zsh', 'fish']);
+  });
+
+  it('rejects a card with no version', () => {
+    const card = JSON.parse(serializeState(sampleState)) as Record<string, unknown>;
+    delete card.version;
+    expect(() => parseState(JSON.stringify(card))).toThrow(
+      /Unsupported state card version: undefined/
+    );
+  });
+
   it('rejects an unknown version', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
     card.version = 2;
@@ -64,8 +80,24 @@ describe('parseState', () => {
     );
   });
 
+  it('blames an older tool for an older card version', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.version = 0;
+    expect(() => parseState(JSON.stringify(card))).toThrow(/older ShellConfigurator/);
+  });
+
+  it('blames a newer tool for an unknown non-numeric version', () => {
+    expect(() => parseState(JSON.stringify({ version: 'one', wizard: {} }))).toThrow(
+      /newer ShellConfigurator/
+    );
+  });
+
   it('rejects a card without a wizard object', () => {
     expect(() => parseState(JSON.stringify({ version: 1 }))).toThrow(/missing wizard/);
+  });
+
+  it('rejects an array in place of the wizard object', () => {
+    expect(() => parseState(JSON.stringify({ version: 1, wizard: [] }))).toThrow(/missing wizard/);
   });
 
   it('starts runtime fields at their defaults', () => {
@@ -78,14 +110,71 @@ describe('parseState', () => {
     expect(restored.installResults).toEqual([]);
   });
 
-  it('defaults present-but-malformed choices instead of crashing', () => {
+  it.each([
+    ['leftModules', [42], /leftModules must be an array of module ids/],
+    ['palette', 7, /palette '7' is not one of/],
+    ['palette', 'gruvbx', /palette 'gruvbx' is not one of/],
+    ['characterSymbol', 'twirl', /characterSymbol 'twirl' is not one of/],
+    ['continuationPrompt', 'wave', /continuationPrompt 'wave' is not one of/],
+    ['preset', 'not-a-preset', /preset 'not-a-preset' is not one of/],
+    ['setDefaultShell', 'csh', /setDefaultShell 'csh' is not one of/],
+    ['directoryTruncationLength', '3', /directoryTruncationLength must be a number/],
+  ])('rejects a card whose %s is %j instead of defaulting it', (field, value, message) => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
-    card.wizard.leftModules = [42] as never;
-    card.wizard.palette = 7 as never;
-    card.wizard.characterSymbol = 'twirl' as never;
+    (card.wizard as unknown as Record<string, unknown>)[field] = value;
+    expect(() => parseState(JSON.stringify(card))).toThrow(message);
+  });
+
+  it('defaults choices that are absent from the card', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    const wizard = card.wizard as unknown as Record<string, unknown>;
+    for (const field of [
+      'preset',
+      'palette',
+      'characterSymbol',
+      'continuationPrompt',
+      'addNewline',
+      'vimMode',
+      'setDefaultShell',
+      'directoryTruncationLength',
+    ]) {
+      delete wizard[field];
+    }
     const restored = parseState(JSON.stringify(card));
-    expect(restored.leftModules).toEqual(['directory', 'git_branch', 'git_status', 'character']);
+    expect(restored.preset).toBeNull();
+    expect(restored.palette).toBe('default');
     expect(restored.characterSymbol).toBe('arrow');
+    expect(restored.continuationPrompt).toBe('dot');
+    expect(restored.addNewline).toBe(true);
+    expect(restored.vimMode).toBe(false);
+    expect(restored.setDefaultShell).toBeNull();
+    expect(restored.directoryTruncationLength).toBe(3);
+  });
+
+  it('rejects an unknown shell id in selectedShells', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.selectedShells = ['zsh', 'csh'] as never;
+    expect(() => parseState(JSON.stringify(card))).toThrow(/unknown shell 'csh'/);
+  });
+
+  it('deduplicates selectedShells', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.selectedShells = ['zsh', 'zsh', 'fish'] as never;
+    expect(parseState(JSON.stringify(card)).selectedShells).toEqual(['zsh', 'fish']);
+  });
+
+  it('says which selectedShells entry is not a shell id', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.selectedShells = ['zsh', 42] as never;
+    expect(() => parseState(JSON.stringify(card))).toThrow(/entry 42 is not a shell id/);
+  });
+
+  it('rejects a string where a card boolean belongs', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.skipStarshipInstall = 'true' as never;
+    expect(() => parseState(JSON.stringify(card))).toThrow(
+      /skipStarshipInstall must be true or false/
+    );
   });
 
   it('round-trips the directory truncation length and substitutions', () => {
@@ -106,16 +195,16 @@ describe('parseState', () => {
     expect(parseState(JSON.stringify(card)).directoryTruncationLength).toBe(5);
   });
 
-  it('defaults an unknown palette in a hand-edited card', () => {
-    const card = JSON.parse(serializeState(sampleState)) as StateCard;
-    card.wizard.palette = 'not-a-palette' as never;
-    expect(parseState(JSON.stringify(card)).palette).toBe('default');
-  });
-
   it('rejects an unknown module id in a hand-edited card', () => {
     const card = JSON.parse(serializeState(sampleState)) as StateCard;
     card.wizard.leftModules = ['directory', 'unknown', 'directory', 'character'] as never;
     expect(() => parseState(JSON.stringify(card))).toThrow(/unknown module 'unknown'/);
+  });
+
+  it('explains that character belongs on the left when a card puts it on the right', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.rightModules = ['character'] as never;
+    expect(() => parseState(JSON.stringify(card))).toThrow(/belongs in leftModules/);
   });
 
   it('deduplicates valid module ids and removes right-side duplicates of left modules', () => {
@@ -125,6 +214,23 @@ describe('parseState', () => {
     const restored = parseState(JSON.stringify(card));
     expect(restored.leftModules).toEqual(['directory', 'character']);
     expect(restored.rightModules).toEqual(['time']);
+  });
+
+  it('keeps an empty left module list instead of restoring the defaults', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.leftModules = [];
+    card.wizard.rightModules = ['time'];
+    const restored = parseState(JSON.stringify(card));
+    expect(restored.leftModules).toEqual([]);
+    expect(restored.rightModules).toEqual(['time']);
+  });
+
+  it('hands out its own default module list, not the shared constant', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    delete (card.wizard as Partial<StateCard['wizard']>).leftModules;
+    const restored = parseState(JSON.stringify(card));
+    restored.leftModules.push('time');
+    expect(parseState(JSON.stringify(card)).leftModules).not.toContain('time');
   });
 
   it('drops malformed substitution entries and keeps the last duplicate source', () => {
@@ -162,6 +268,23 @@ describe('parseState', () => {
       wizard: { nerdFontToInstall: { kind: 'mystery' } },
     };
     expect(() => parseState(JSON.stringify(card))).toThrow(/unknown nerdFontToInstall kind/);
+  });
+
+  it('rejects a wrong-shape nerdFontToInstall instead of reading it as no font', () => {
+    const asString = {
+      version: STATE_VERSION,
+      wizard: { nerdFontToInstall: 'JetBrainsMono' },
+    };
+    expect(() => parseState(JSON.stringify(asString))).toThrow(/must be an object/);
+
+    const noKind = { version: STATE_VERSION, wizard: { nerdFontToInstall: { id: 'Hack' } } };
+    expect(() => parseState(JSON.stringify(noKind))).toThrow(/needs a kind/);
+  });
+
+  it('treats an absent nerdFontToInstall as no font', () => {
+    const card = JSON.parse(serializeState(sampleState)) as StateCard;
+    card.wizard.nerdFontToInstall = undefined as never;
+    expect(parseState(JSON.stringify(card)).nerdFontToInstall).toEqual({ kind: 'none' });
   });
 
   it('defaults absent modules to the core set', () => {

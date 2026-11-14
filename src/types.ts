@@ -1,3 +1,4 @@
+import { DEFAULT_TRUNCATION_LENGTH } from './config/directory.ts';
 import { CORE_MODULES, type ModuleId } from './config/modules.ts';
 import type { PaletteId } from './config/palettes.ts';
 
@@ -24,7 +25,8 @@ export type InstallTaskId =
   | 'verify'
   | 'terminal'
   | `shell_${ShellId}`
-  | `rc_${ShellId}`;
+  | `rc_${ShellId}`
+  | `reset_${ShellId}`;
 
 /**
  * What the user decided about a Nerd Font. A discriminated union rather than a
@@ -66,20 +68,7 @@ export interface InstallTask {
   note?: string;
 }
 
-export type WizardStep =
-  | 'welcome'
-  | 'fontcheck'
-  | 'font_select'
-  | 'preset'
-  | 'segments_left'
-  | 'segments_right'
-  | 'style'
-  | 'shells'
-  | 'review'
-  | 'installing'
-  | 'done';
-
-export const STEP_ORDER: WizardStep[] = [
+export const STEP_ORDER = [
   'welcome',
   'fontcheck',
   'font_select',
@@ -91,7 +80,9 @@ export const STEP_ORDER: WizardStep[] = [
   'review',
   'installing',
   'done',
-];
+] as const;
+
+export type WizardStep = (typeof STEP_ORDER)[number];
 
 export interface WizardState {
   step: WizardStep;
@@ -156,7 +147,7 @@ export const DEFAULT_STATE: WizardState = {
   continuationPrompt: 'dot',
   addNewline: true,
   vimMode: false,
-  directoryTruncationLength: 3,
+  directoryTruncationLength: DEFAULT_TRUNCATION_LENGTH,
   directorySubstitutions: [],
   keepExistingConfig: false,
   sharedConfigToml: null,

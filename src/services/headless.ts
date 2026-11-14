@@ -1,9 +1,11 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { MODULES } from '../config/modules.ts';
 import { PALETTES } from '../config/palettes.ts';
-import { PRESETS } from '../config/presets.ts';
+import { PRESETS, powerlineDroppedReason } from '../config/presets.ts';
 import { SHELLS } from '../config/shells.ts';
-import { statusMark } from '../config/status.ts';
+import { statusLine, statusMark } from '../config/status.ts';
+import { getSharedConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import {
   type CharacterSymbol,
@@ -19,10 +21,15 @@ import {
   detectPackageManagerAsync,
   detectTerminalAsync,
 } from './detector.ts';
-import { CliUsageError, errorMessage } from './errors.ts';
-import { appendHistory } from './history.ts';
+import { CliRunError, CliUsageError, errorMessage } from './errors.ts';
+import { recordRunSafely } from './history.ts';
 import { NERD_FONTS } from './installer.ts';
-import { buildTaskList, DEFAULT_INSTALL_TASK_DEPS, runInstallTasks } from './installTasks.ts';
+import {
+  buildTaskList,
+  DEFAULT_INSTALL_TASK_DEPS,
+  plannedResetShells,
+  runInstallTasks,
+} from './installTasks.ts';
 import { parseState, serializeState } from './state.ts';
 
 const SHELL_IDS = new Set<string>(SHELLS.map((s) => s.id));
@@ -70,11 +77,9 @@ export function validateFlagValues(flags: CliFlags): void {
 }
 
 /**
- * Same fail-fast discipline for a merged state — mainly the values that come
- * from a state card rather than the flags, which the parser's lenient coercion
- * lets through. `stateFromFlags` re-checks so the card path cannot bypass it.
- * Module ids are checked here too (left/right), since a hand-edited card can
- * carry one the generator would otherwise render as a dead `[bogus]` stub.
+ * Same fail-fast discipline for the merged flags-and-card state: the card parser
+ * checks each value on its own, but only the merged state shows an unknown font
+ * id, a default shell that is not being configured, or a font left to the picker.
  */
 function assertValidState(state: WizardState): void {
   if (state.preset !== null && !PRESET_IDS.includes(state.preset)) {
@@ -94,6 +99,12 @@ function assertValidState(state: WizardState): void {
   }
   for (const shell of state.selectedShells) {
     if (!SHELL_IDS.has(shell)) throw unknown('shell id', shell, [...SHELL_IDS]);
+  }
+  if (state.setDefaultShell !== null && !state.selectedShells.includes(state.setDefaultShell)) {
+    throw new CliUsageError(
+      `Cannot set '${state.setDefaultShell}' as the default shell: it is not one of the ` +
+        `shells being configured (${state.selectedShells.join(', ') || 'none'}).`
+    );
   }
   const font = state.nerdFontToInstall;
   if (font.kind === 'install' && !FONT_IDS.has(font.id)) {
@@ -134,29 +145,35 @@ export function stateFromFlags(flags: CliFlags): WizardState {
   }
 
   if (flags.preset) {
-    const preset = PRESETS.find((p) => p.id === flags.preset);
-    if (preset) {
-      state = {
-        ...state,
-        preset: preset.id,
-        leftModules: preset.leftModules ?? state.leftModules,
-        rightModules: preset.rightModules ?? state.rightModules,
-        palette: preset.palette,
-        powerline: preset.powerline,
-      };
-      // A preset that needs Nerd Font glyphs implies the machine renders them —
-      // the wizard only offers those presets to users who already have a font.
-      // An explicit --has-nerd-font / --no-nerd-font (or a later --font) still wins.
-      if (flags.hasNerdFont === undefined) {
-        state = { ...state, hasNerdFont: preset.requiresNerdFont };
-      }
+    const preset = PRESETS.find((p) => p.id === flags.preset)!;
+    state = {
+      ...state,
+      preset: preset.id,
+      leftModules: [...preset.leftModules],
+      rightModules: [...preset.rightModules],
+      palette: preset.palette,
+      powerline: preset.powerline,
+    };
+    // A preset that needs Nerd Font glyphs implies the machine renders them —
+    // the wizard only offers those presets to users who already have a font.
+    // An explicit --has-nerd-font / --no-nerd-font (or a later --font) still wins.
+    if (flags.hasNerdFont === undefined && !flags.stateFile) {
+      state = { ...state, hasNerdFont: preset.requiresNerdFont };
+    }
+    if (
+      preset.requiresNerdFont &&
+      flags.hasNerdFont === undefined &&
+      flags.font === undefined &&
+      !flags.stateFile
+    ) {
+      state = { ...state, nerdFontToInstall: { kind: 'install', id: NERD_FONTS[0].id } };
     }
   }
 
   if (flags.palette) state = { ...state, palette: flags.palette as WizardState['palette'] };
   if (flags.powerline !== undefined) state = { ...state, powerline: flags.powerline };
   if (flags.shells) {
-    const shells = flags.shells.filter((id) => SHELL_IDS.has(id)) as ShellId[];
+    const shells = [...new Set(flags.shells)] as ShellId[];
     state = { ...state, selectedShells: shells };
   }
   if (flags.characterSymbol) {
@@ -183,6 +200,12 @@ export function stateFromFlags(flags: CliFlags): WizardState {
   }
 
   assertValidState(state);
+  const droppedPowerline = powerlineDroppedReason(state);
+  if (droppedPowerline) {
+    process.stderr.write(
+      `shell-configurator: warning: ${droppedPowerline}; a plain prompt will be generated.\n`
+    );
+  }
   return state;
 }
 
@@ -192,43 +215,47 @@ export function runGenerate(flags: CliFlags): void {
     throw new CliUsageError('--adopt and --import-url are only valid with the apply subcommand.');
   }
   const state = stateFromFlags(flags);
+  if (state.keepExistingConfig) {
+    throw new CliUsageError(
+      'generate has nothing to write for an adopt-mode card; use apply, or drop keepExistingConfig.'
+    );
+  }
+  const toml = generateToml(state);
 
-  // --export and -o are siblings, not alternatives: the versioned card records
-  // the decisions while the TOML is the artifact. When only the card is wanted,
-  // nothing else goes to stdout.
+  if (
+    flags.outputFile &&
+    flags.exportFile &&
+    path.resolve(flags.outputFile) === path.resolve(flags.exportFile)
+  ) {
+    throw new CliUsageError(
+      `Refusing to write the TOML and the state card to the same file: ${flags.outputFile}`
+    );
+  }
+
   if (flags.exportFile) {
     try {
-      fs.writeFileSync(flags.exportFile, serializeState(state));
+      writeFileAtomic(flags.exportFile, serializeState(state));
     } catch (err) {
-      throw new CliUsageError(
+      throw new CliRunError(
         `Could not write state card to '${flags.exportFile}': ${errorMessage(err)}`
       );
     }
   }
 
-  const toml = generateToml(state);
   if (flags.outputFile) {
     try {
-      fs.writeFileSync(flags.outputFile, toml);
+      writeFileAtomic(flags.outputFile, toml);
     } catch (err) {
-      throw new CliUsageError(
-        `Could not write TOML to '${flags.outputFile}': ${errorMessage(err)}`
-      );
+      throw new CliRunError(`Could not write TOML to '${flags.outputFile}': ${errorMessage(err)}`);
     }
   } else if (!flags.exportFile) {
     process.stdout.write(toml);
   }
 }
 
-/** ONE-line status marks, padded for the plain-text headless summary. */
-function statusWord(status: InstallTask['status'] | 'unknown'): string {
-  const icon = statusMark(status).icon;
-  return `${icon} ${status.toUpperCase().padEnd(7)}`;
-}
-
 function formatTask(t: InstallTask): string {
   const suffix = t.error ? ` — ${t.error}` : t.note ? ` (${t.note})` : '';
-  return `${statusWord(t.status)} ${t.label}${suffix}`;
+  return `${statusMark(t.status).icon} ${statusLine(t.status, `${t.label}${suffix}`)}`;
 }
 
 /** The plain-text plan/applied view `apply` prints to stdout. */
@@ -262,12 +289,20 @@ export async function fetchImportedConfig(
   url: string,
   options: FetchConfigOptions = {}
 ): Promise<string> {
-  if (!/^https?:\/\//.test(url)) {
+  const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(url)?.[1]?.toLowerCase();
+  if (scheme !== 'http' && scheme !== 'https') {
     throw new CliUsageError(`--import-url expects an http(s) URL, got '${url}'`);
+  }
+  if (scheme !== 'https') {
+    throw new CliUsageError(
+      `--import-url requires an https URL, got '${url}' — the downloaded config runs ` +
+        'commands on every prompt, so it must not travel over plain http.'
+    );
   }
 
   const timeoutMs = options.timeoutMs ?? IMPORT_FETCH_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? IMPORT_FETCH_MAX_BYTES;
+  const shown = url.replace(/\/\/[^/@]*@/, '//');
 
   let response: Response;
   try {
@@ -275,31 +310,61 @@ export async function fetchImportedConfig(
   } catch (err) {
     // AbortSignal.timeout rejects with a TimeoutError DOMException on timeout.
     if (err instanceof DOMException && err.name === 'TimeoutError') {
-      throw new CliUsageError(`Could not fetch '${url}': request timed out after ${timeoutMs}ms`);
+      throw new CliRunError(`Could not fetch '${shown}': request timed out after ${timeoutMs}ms`);
     }
-    throw new CliUsageError(`Could not fetch '${url}': ${errorMessage(err)}`);
+    throw new CliRunError(`Could not fetch '${shown}': ${errorMessage(err)}`);
   }
   if (!response.ok) {
-    throw new CliUsageError(`Could not fetch '${url}': HTTP ${response.status}`);
+    throw new CliRunError(`Could not fetch '${shown}': HTTP ${response.status}`);
+  }
+  if (response.url && !response.url.toLowerCase().startsWith('https://')) {
+    throw new CliRunError(
+      `Could not fetch '${shown}': redirected to a non-https URL ${response.url}`
+    );
   }
 
   // A declared content-length is a cheap first gate; the actual byte count is
   // the real check, so a lying or chunked server cannot sneak past.
   const declaredSize = Number(response.headers.get('content-length') ?? '0');
   if (declaredSize > maxBytes) {
-    throw new CliUsageError(
-      `Could not fetch '${url}': server reports ${declaredSize} bytes, ` +
+    throw new CliRunError(
+      `Could not fetch '${shown}': server reports ${declaredSize} bytes, ` +
         `above the ${maxBytes} byte limit.`
     );
   }
 
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.byteLength > maxBytes) {
-    throw new CliUsageError(`Could not fetch '${url}': config exceeds ${maxBytes} bytes`);
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const reader = response.body?.getReader();
+  if (reader) {
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          await reader.cancel();
+          throw new CliRunError(`Could not fetch '${shown}': config exceeds ${maxBytes} bytes`);
+        }
+        chunks.push(value);
+      }
+    } catch (err) {
+      if (err instanceof CliRunError) throw err;
+      if (err instanceof DOMException && err.name === 'TimeoutError') {
+        throw new CliRunError(`Could not fetch '${shown}': request timed out after ${timeoutMs}ms`);
+      }
+      throw new CliRunError(`Could not fetch '${shown}': ${errorMessage(err)}`);
+    } finally {
+      reader.releaseLock();
+    }
   }
-  const content = buffer.toString('utf8');
+
+  const content = Buffer.concat(chunks).toString('utf8');
   if (content.trim().length === 0) {
-    throw new CliUsageError(`'${url}' returned no config content`);
+    throw new CliRunError(`'${shown}' returned no config content`);
+  }
+  if (content.trimStart().startsWith('<')) {
+    throw new CliRunError(`'${shown}' returned HTML, not a TOML config — use the raw file URL.`);
   }
   return content;
 }
@@ -310,6 +375,14 @@ export async function fetchImportedConfig(
  */
 async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
   let state = stateFromFlags(flags);
+
+  if (!flags.dryRun && state.selectedShells.length === 0) {
+    throw new CliUsageError(
+      'apply configures at least one shell, but none are selected. ' +
+        'Pass --shells <id,...> or a --state card that selects shells.'
+    );
+  }
+
   if (flags.importUrl) {
     state = {
       ...state,
@@ -335,17 +408,7 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
 export async function runApply(flags: CliFlags, command?: string): Promise<void> {
   const state = await prepareApplyState(flags);
 
-  // Refuse a real run with no targets before it touches the system: the config
-  // task would only fail after Starship was already installed. (A --dry-run of
-  // an empty plan is still a useful preview.)
-  if (!flags.dryRun && state.selectedShells.length === 0) {
-    throw new CliUsageError(
-      'apply configures at least one shell, but none are selected. ' +
-        'Pass --shells <id,...> or a --state card that selects shells.'
-    );
-  }
-
-  const tasks = buildTaskList(state);
+  const tasks = buildTaskList(state, plannedResetShells(state));
 
   if (flags.dryRun) {
     process.stdout.write('shell-configurator apply (dry run) — nothing will be changed.\n\n');
@@ -355,10 +418,17 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
     );
     printTasks(tasks);
     if (state.keepExistingConfig) {
-      process.stdout.write('\nConfig to keep (no per-shell TOML is generated):\n\n');
       if (state.sharedConfigToml) {
+        process.stdout.write('\nConfig to keep (no per-shell TOML is generated):\n\n');
         process.stdout.write(state.sharedConfigToml);
         if (!state.sharedConfigToml.endsWith('\n')) process.stdout.write('\n');
+      } else {
+        const shared = getSharedConfigPath();
+        process.stdout.write(
+          fs.existsSync(shared)
+            ? `\nConfig to keep: ${shared} (left untouched)\n`
+            : `\nNo config to keep yet: ${shared} does not exist, and a real run would leave that as is.\n`
+        );
       }
     } else {
       process.stdout.write('\nGenerated starship.toml:\n\n');
@@ -373,18 +443,11 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
 
   if (failed) process.exitCode = 1;
 
-  // The ledger is best-effort: a run that just installed must not die because
-  // the history file could not be written.
-  try {
-    appendHistory({
-      version: 1,
-      timestamp: new Date().toISOString(),
-      kind: 'apply',
-      command,
-      results,
-      exitCode: failed ? 1 : 0,
-    });
-  } catch (err) {
-    process.stderr.write(`Warning: could not record this run in history: ${errorMessage(err)}\n`);
-  }
+  recordRunSafely({
+    kind: 'apply',
+    state,
+    command,
+    results,
+    exitCode: failed ? 1 : 0,
+  });
 }

@@ -1,7 +1,8 @@
 import { Box, Text, useInput } from 'ink';
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { PickerRow } from '../components/PickerRow.tsx';
+import { editedText } from '../components/textInput.ts';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { colorsEnabled, uiColor } from '../config/colors.ts';
 import {
@@ -10,6 +11,9 @@ import {
   parseSubstitutions,
 } from '../config/directory.ts';
 import { inkColor, PALETTES, type PaletteColorName, type PaletteId } from '../config/palettes.ts';
+import { powerlineDroppedReason } from '../config/presets.ts';
+import { useUpdateEffect } from '../hooks/useUpdateEffect.ts';
+import { errorMessage } from '../services/errors.ts';
 import type {
   CharacterSymbol,
   ContinuationPrompt,
@@ -52,6 +56,11 @@ const CONTINUATION_OPTIONS: {
   { value: 'none', label: 'None', description: 'No marker on wrapped lines' },
 ];
 
+const CHAR_VALUES = CHAR_OPTIONS.map((o) => o.value);
+const PALETTE_IDS = PALETTES.map((p) => p.id);
+const POWERLINE_VALUES = POWERLINE_OPTIONS.map((o) => o.value);
+const CONTINUATION_VALUES = CONTINUATION_OPTIONS.map((o) => o.value);
+
 type FocusSection = 'char' | 'color' | 'powerline' | 'continuation' | 'extras' | 'directory';
 
 const FOCUS_ORDER: FocusSection[] = [
@@ -67,33 +76,78 @@ const FOCUS_ORDER: FocusSection[] = [
 const EXTRA_ROWS = ['addNewline', 'vimMode'] as const;
 type ExtraRow = (typeof EXTRA_ROWS)[number];
 
+/**
+ * useState whose setter also updates a ref at once. Ink can deliver several keys
+ * from one input chunk before re-rendering, so key handlers read the ref.
+ */
+function useLive<T>(initial: T) {
+  const [value, setValue] = useState<T>(initial);
+  const ref = useRef(value);
+  const set = (next: T | ((prev: T) => T)) => {
+    ref.current = typeof next === 'function' ? (next as (prev: T) => T)(ref.current) : next;
+    setValue(ref.current);
+  };
+  return [value, set, ref] as const;
+}
+
+/** The option `delta` steps away from `current`, clamped to the list. */
+function step<T>(options: readonly T[], current: T, delta: number): T {
+  const index = options.indexOf(current);
+  return options[Math.min(options.length - 1, Math.max(0, index + delta))]!;
+}
+
+/**
+ * One Style section: only the focused one lists its options, the rest show a
+ * one-line summary, so the screen fits a normal-height terminal.
+ */
+function Section({
+  title,
+  focused,
+  summary,
+  children,
+}: {
+  title: string;
+  focused: boolean;
+  summary: string;
+  children: ReactNode;
+}) {
+  return (
+    <Box flexDirection="column">
+      <Text color={uiColor(focused ? 'cyan' : 'gray')} bold={focused}>
+        {focused ? title : `${title}: ${summary}`}
+      </Text>
+      {focused && children}
+    </Box>
+  );
+}
+
 function depthLabel(value: number): string {
   if (value === 0) return 'Full path';
   return `${value} folder${value === 1 ? '' : 's'}`;
 }
 
 export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProps) {
-  const [characterSymbol, setCharacterSymbol] = useState<CharacterSymbol>(state.characterSymbol);
-  const [palette, setPalette] = useState<PaletteId>(state.palette);
-  const [powerline, setPowerline] = useState<boolean>(state.powerline);
-  const [continuationPrompt, setContinuationPrompt] = useState<ContinuationPrompt>(
-    state.continuationPrompt
+  const [characterSymbol, setCharacterSymbol, characterSymbolRef] = useLive<CharacterSymbol>(
+    state.characterSymbol
   );
-  const [addNewline, setAddNewline] = useState<boolean>(state.addNewline);
-  const [vimMode, setVimMode] = useState<boolean>(state.vimMode);
-  const [directoryTruncationLength, setDirectoryTruncationLength] = useState<number>(
-    state.directoryTruncationLength
-  );
-  const [directorySubstitutions, setDirectorySubstitutions] = useState<DirectorySubstitution[]>(
-    state.directorySubstitutions
-  );
-  const [focus, setFocus] = useState<FocusSection>('char');
-  const [extraCursor, setExtraCursor] = useState(0);
-  const [dirCursor, setDirCursor] = useState(0);
-  const [editingSubs, setEditingSubs] = useState(false);
-  const [subsDraft, setSubsDraft] = useState('');
+  const [palette, setPalette, paletteRef] = useLive<PaletteId>(state.palette);
+  const [powerline, setPowerline, powerlineRef] = useLive<boolean>(state.powerline);
+  const droppedPowerline = powerlineDroppedReason({ ...state, powerline });
+  const [continuationPrompt, setContinuationPrompt, continuationPromptRef] =
+    useLive<ContinuationPrompt>(state.continuationPrompt);
+  const [addNewline, setAddNewline, addNewlineRef] = useLive<boolean>(state.addNewline);
+  const [vimMode, setVimMode, vimModeRef] = useLive<boolean>(state.vimMode);
+  const [directoryTruncationLength, setDirectoryTruncationLength, directoryTruncationLengthRef] =
+    useLive<number>(state.directoryTruncationLength);
+  const [directorySubstitutions, setDirectorySubstitutions, directorySubstitutionsRef] = useLive<
+    DirectorySubstitution[]
+  >(state.directorySubstitutions);
+  const [focus, setFocus, focusRef] = useLive<FocusSection>('char');
+  const [extraCursor, setExtraCursor, extraCursorRef] = useLive(0);
+  const [dirCursor, setDirCursor, dirCursorRef] = useLive(0);
+  const [editingSubs, setEditingSubs, editingSubsRef] = useLive(false);
+  const [subsDraft, setSubsDraft, subsDraftRef] = useLive('');
   const [subsError, setSubsError] = useState<string | null>(null);
-  const isInitialMount = useRef(true);
 
   const charIdx = CHAR_OPTIONS.findIndex((o) => o.value === characterSymbol);
   const colorIdx = PALETTES.findIndex((o) => o.id === palette);
@@ -101,36 +155,31 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
   const continuationIdx = CONTINUATION_OPTIONS.findIndex((o) => o.value === continuationPrompt);
 
   const selection = (): Partial<WizardState> => ({
-    characterSymbol,
-    palette,
-    powerline,
-    continuationPrompt,
-    addNewline,
-    vimMode,
-    directoryTruncationLength,
-    directorySubstitutions,
+    characterSymbol: characterSymbolRef.current,
+    palette: paletteRef.current,
+    powerline: powerlineRef.current,
+    continuationPrompt: continuationPromptRef.current,
+    addNewline: addNewlineRef.current,
+    vimMode: vimModeRef.current,
+    directoryTruncationLength: directoryTruncationLengthRef.current,
+    directorySubstitutions: directorySubstitutionsRef.current,
   });
 
-  // Push live updates to parent state so preview stays in sync (skip initial
-  // mount). onUpdate is a fresh closure each render; including it would loop on
-  // every state push.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: onUpdate is a fresh closure each render.
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    onUpdate(selection());
-  }, [
-    characterSymbol,
-    palette,
-    powerline,
-    continuationPrompt,
-    addNewline,
-    vimMode,
-    directoryTruncationLength,
-    directorySubstitutions,
-  ]);
+  // Push live updates to parent state so preview stays in sync. onUpdate is a
+  // fresh closure each render; including it would loop on every state push.
+  useUpdateEffect(
+    () => onUpdate(selection()),
+    [
+      characterSymbol,
+      palette,
+      powerline,
+      continuationPrompt,
+      addNewline,
+      vimMode,
+      directoryTruncationLength,
+      directorySubstitutions,
+    ]
+  );
 
   function toggleExtra(row: ExtraRow) {
     if (row === 'addNewline') setAddNewline((v) => !v);
@@ -138,25 +187,25 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
   }
 
   function startEditingSubs() {
-    setSubsDraft(formatSubstitutions(directorySubstitutions));
+    setSubsDraft(formatSubstitutions(directorySubstitutionsRef.current));
     setSubsError(null);
     setEditingSubs(true);
   }
 
   function commitSubs() {
     try {
-      setDirectorySubstitutions(parseSubstitutions(subsDraft));
+      setDirectorySubstitutions(parseSubstitutions(subsDraftRef.current));
       setSubsError(null);
       setEditingSubs(false);
     } catch (error) {
-      setSubsError(error instanceof Error ? error.message : String(error));
+      setSubsError(errorMessage(error));
     }
   }
 
   useInput((char, key) => {
-    // The substitution editor owns the keyboard while it is open, so a typed
-    // `q` or arrow cannot navigate the wizard underneath it.
-    if (editingSubs) {
+    // The substitution editor owns the keyboard while it is open, so typed text
+    // or an arrow cannot navigate the wizard underneath it.
+    if (editingSubsRef.current) {
       if (key.escape) {
         setEditingSubs(false);
         setSubsError(null);
@@ -166,12 +215,11 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
         commitSubs();
         return;
       }
-      if (key.backspace || key.delete) {
-        setSubsDraft((d) => d.slice(0, -1));
-        return;
-      }
-      if (char && !key.ctrl && !key.meta) {
-        setSubsDraft((d) => d + char);
+      // Editing the draft clears the error the last attempt left.
+      const draft = editedText(subsDraftRef.current, char, key);
+      if (draft !== null) {
+        setSubsDraft(draft);
+        setSubsError(null);
       }
       return;
     }
@@ -182,12 +230,15 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
     }
 
     if (key.tab) {
-      setFocus((f) => FOCUS_ORDER[(FOCUS_ORDER.indexOf(f) + 1) % FOCUS_ORDER.length]!);
+      const delta = key.shift ? FOCUS_ORDER.length - 1 : 1;
+      setFocus((f) => FOCUS_ORDER[(FOCUS_ORDER.indexOf(f) + delta) % FOCUS_ORDER.length]!);
       return;
     }
 
+    const focused = focusRef.current;
+
     // On the substitutions row, Enter opens the editor instead of confirming.
-    if (focus === 'directory' && dirCursor === 1 && key.return) {
+    if (focused === 'directory' && dirCursorRef.current === 1 && key.return) {
       startEditingSubs();
       return;
     }
@@ -197,34 +248,21 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
       return;
     }
 
-    if (focus === 'char') {
-      if (key.upArrow) setCharacterSymbol(CHAR_OPTIONS[Math.max(0, charIdx - 1)].value);
-      if (key.downArrow)
-        setCharacterSymbol(CHAR_OPTIONS[Math.min(CHAR_OPTIONS.length - 1, charIdx + 1)].value);
-    } else if (focus === 'color') {
-      if (key.upArrow) setPalette(PALETTES[Math.max(0, colorIdx - 1)].id);
-      if (key.downArrow) setPalette(PALETTES[Math.min(PALETTES.length - 1, colorIdx + 1)].id);
-    } else if (focus === 'powerline') {
-      if (key.upArrow) setPowerline(POWERLINE_OPTIONS[Math.max(0, powerlineIdx - 1)].value);
-      if (key.downArrow)
-        setPowerline(
-          POWERLINE_OPTIONS[Math.min(POWERLINE_OPTIONS.length - 1, powerlineIdx + 1)].value
-        );
-    } else if (focus === 'continuation') {
-      if (key.upArrow)
-        setContinuationPrompt(CONTINUATION_OPTIONS[Math.max(0, continuationIdx - 1)].value);
-      if (key.downArrow)
-        setContinuationPrompt(
-          CONTINUATION_OPTIONS[Math.min(CONTINUATION_OPTIONS.length - 1, continuationIdx + 1)].value
-        );
-    } else if (focus === 'extras') {
-      if (key.upArrow) setExtraCursor((i) => Math.max(0, i - 1));
-      if (key.downArrow) setExtraCursor((i) => Math.min(EXTRA_ROWS.length - 1, i + 1));
-      if (char === ' ') toggleExtra(EXTRA_ROWS[extraCursor]!);
+    const delta = key.upArrow ? -1 : key.downArrow ? 1 : 0;
+    if (focused === 'char') {
+      if (delta) setCharacterSymbol((v) => step(CHAR_VALUES, v, delta));
+    } else if (focused === 'color') {
+      if (delta) setPalette((v) => step(PALETTE_IDS, v, delta));
+    } else if (focused === 'powerline') {
+      if (delta) setPowerline((v) => step(POWERLINE_VALUES, v, delta));
+    } else if (focused === 'continuation') {
+      if (delta) setContinuationPrompt((v) => step(CONTINUATION_VALUES, v, delta));
+    } else if (focused === 'extras') {
+      if (delta) setExtraCursor((i) => Math.min(EXTRA_ROWS.length - 1, Math.max(0, i + delta)));
+      if (char === ' ') toggleExtra(EXTRA_ROWS[extraCursorRef.current]!);
     } else {
-      if (key.upArrow) setDirCursor((i) => Math.max(0, i - 1));
-      if (key.downArrow) setDirCursor((i) => Math.min(1, i + 1));
-      if (dirCursor === 0) {
+      if (delta) setDirCursor((i) => Math.min(1, Math.max(0, i + delta)));
+      if (dirCursorRef.current === 0) {
         if (key.leftArrow) {
           setDirectoryTruncationLength((v) => clampTruncationLength(v - 1));
         }
@@ -240,31 +278,31 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
       <Box flexDirection="column" gap={1}>
         <Text bold>Style options</Text>
 
-        {/* Character symbol picker */}
-        <Box flexDirection="column" marginTop={1}>
-          <Text color={uiColor(focus === 'char' ? 'cyan' : 'gray')} bold={focus === 'char'}>
-            Prompt character
-          </Text>
+        <Section
+          title="Prompt character"
+          focused={focus === 'char'}
+          summary={`${CHAR_OPTIONS[charIdx]!.preview} ${CHAR_OPTIONS[charIdx]!.label}`}
+        >
           {CHAR_OPTIONS.map((opt, i) => (
             <PickerRow
               key={opt.value}
-              focused={focus === 'char' && i === charIdx}
+              focused={i === charIdx}
               selected={i === charIdx}
               indent={1}
               label={`${opt.preview} ${opt.label}`}
             />
           ))}
-        </Box>
+        </Section>
 
-        {/* Palette picker */}
-        <Box flexDirection="column" marginTop={1}>
-          <Text color={uiColor(focus === 'color' ? 'cyan' : 'gray')} bold={focus === 'color'}>
-            Colour palette
-          </Text>
+        <Section
+          title="Colour palette"
+          focused={focus === 'color'}
+          summary={PALETTES[colorIdx]!.label}
+        >
           {PALETTES.map((opt, i) => (
             <PickerRow
               key={opt.id}
-              focused={focus === 'color' && i === colorIdx}
+              focused={i === colorIdx}
               selected={i === colorIdx}
               indent={1}
               label={opt.label}
@@ -282,20 +320,17 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
               }
             />
           ))}
-        </Box>
+        </Section>
 
-        {/* Powerline toggle */}
-        <Box flexDirection="column" marginTop={1}>
-          <Text
-            color={uiColor(focus === 'powerline' ? 'cyan' : 'gray')}
-            bold={focus === 'powerline'}
-          >
-            Segment style
-          </Text>
+        <Section
+          title="Segment style"
+          focused={focus === 'powerline'}
+          summary={POWERLINE_OPTIONS[powerlineIdx]!.label}
+        >
           {POWERLINE_OPTIONS.map((opt, i) => (
             <PickerRow
               key={opt.label}
-              focused={focus === 'powerline' && i === powerlineIdx}
+              focused={i === powerlineIdx}
               selected={i === powerlineIdx}
               indent={1}
               label={opt.label}
@@ -306,26 +341,23 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
               }
             />
           ))}
-          {powerline && !state.hasNerdFont && (
-            <Text color={uiColor('yellow')}>
-              {'  '}Powerline separators need a Nerd Font — a plain prompt will be generated
-              instead.
-            </Text>
-          )}
-        </Box>
-
-        {/* Continuation prompt picker */}
-        <Box flexDirection="column" marginTop={1}>
-          <Text
-            color={uiColor(focus === 'continuation' ? 'cyan' : 'gray')}
-            bold={focus === 'continuation'}
-          >
-            Wrapped-line marker
+        </Section>
+        {droppedPowerline && (
+          <Text color={uiColor('yellow')}>
+            {'  '}
+            {droppedPowerline} — a plain prompt will be generated instead.
           </Text>
+        )}
+
+        <Section
+          title="Wrapped-line marker (fish has none)"
+          focused={focus === 'continuation'}
+          summary={CONTINUATION_OPTIONS[continuationIdx]!.label}
+        >
           {CONTINUATION_OPTIONS.map((opt, i) => (
             <PickerRow
               key={opt.value}
-              focused={focus === 'continuation' && i === continuationIdx}
+              focused={i === continuationIdx}
               selected={i === continuationIdx}
               indent={1}
               label={opt.label}
@@ -336,15 +368,18 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
               }
             />
           ))}
-        </Box>
+        </Section>
 
-        {/* Prompt extras: two independent checkboxes. */}
-        <Box flexDirection="column" marginTop={1}>
-          <Text color={uiColor(focus === 'extras' ? 'cyan' : 'gray')} bold={focus === 'extras'}>
-            Prompt extras
-          </Text>
+        <Section
+          title="Prompt extras"
+          focused={focus === 'extras'}
+          summary={
+            [addNewline && 'blank line', vimMode && 'vim symbol'].filter(Boolean).join(', ') ||
+            'none'
+          }
+        >
           <PickerRow
-            focused={focus === 'extras' && extraCursor === 0}
+            focused={extraCursor === 0}
             selected={addNewline}
             marker={addNewline ? '[✓]' : '[ ]'}
             indent={1}
@@ -352,31 +387,32 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
             hint="Space toggles · starship add_newline"
           />
           <PickerRow
-            focused={focus === 'extras' && extraCursor === 1}
+            focused={extraCursor === 1}
             selected={vimMode}
             marker={vimMode ? '[✓]' : '[ ]'}
             indent={1}
             label="Vim mode symbol"
-            hint="Shows ❮ in vim normal mode (cmd, fish, zsh)"
+            hint="Marks vim normal mode (cmd, fish and zsh only)"
           />
-        </Box>
+        </Section>
 
-        {/* Directory display: depth plus optional folder substitutions. */}
-        <Box flexDirection="column" marginTop={1}>
-          <Text
-            color={uiColor(focus === 'directory' ? 'cyan' : 'gray')}
-            bold={focus === 'directory'}
-          >
-            Directory display
-          </Text>
+        <Section
+          title="Directory display"
+          focused={focus === 'directory'}
+          summary={`${depthLabel(directoryTruncationLength)}, ${
+            directorySubstitutions.length > 0
+              ? `${directorySubstitutions.length} substitution(s)`
+              : 'no substitutions'
+          }`}
+        >
           <PickerRow
-            focused={focus === 'directory' && dirCursor === 0}
+            focused={dirCursor === 0}
             indent={1}
             label={`Depth: ${depthLabel(directoryTruncationLength)}`}
             hint="←→ adjusts · 0 shows the full path"
           />
           <PickerRow
-            focused={focus === 'directory' && dirCursor === 1}
+            focused={dirCursor === 1}
             indent={1}
             label={
               directorySubstitutions.length > 0
@@ -401,17 +437,29 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
               )}
             </Box>
           )}
-        </Box>
+        </Section>
       </Box>
 
       <NavHints
-        hints={[
-          { key: '↑↓', label: 'navigate' },
-          { key: 'Tab', label: 'switch section' },
-          { key: 'Space', label: 'toggle' },
-          { key: 'Enter', label: 'confirm' },
-          { key: 'Esc', label: 'back' },
-        ]}
+        hints={
+          editingSubs
+            ? [
+                { key: 'Enter', label: 'save' },
+                { key: 'Esc', label: 'cancel' },
+              ]
+            : [
+                { key: '↑↓', label: 'navigate' },
+                { key: 'Tab/Shift+Tab', label: 'switch section' },
+                ...(focus === 'extras' ? [{ key: 'Space', label: 'toggle' }] : []),
+                ...(focus === 'directory' && dirCursor === 0
+                  ? [{ key: '←→', label: 'depth' }]
+                  : []),
+                focus === 'directory' && dirCursor === 1
+                  ? { key: 'Enter', label: 'edit' }
+                  : { key: 'Enter', label: 'confirm' },
+                { key: 'Esc', label: 'back' },
+              ]
+        }
       />
     </WizardLayout>
   );

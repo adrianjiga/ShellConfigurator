@@ -7,7 +7,8 @@ body:
     attributes:
       value: |
         Thanks for taking the time to file a bug. Before you start, please run
-        `npx shell-configurator --version` so we know exactly which version you had.
+        `shell-configurator --version` (the copy you ran, not `npx`, which fetches
+        the latest release) so we know exactly which version you had.
   - type: textarea
     id: description
     attributes:
@@ -31,7 +32,7 @@ body:
     id: version
     attributes:
       label: ShellConfigurator version
-      description: Output of `npx shell-configurator --version`
+      description: Output of `shell-configurator --version`
     validations:
       required: true
   - type: input
@@ -50,6 +51,7 @@ body:
         - apt
         - dnf
         - pacman
+        - apk
         - brew
         - fallback script
         - Not sure / not detected

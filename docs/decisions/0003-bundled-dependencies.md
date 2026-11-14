@@ -24,8 +24,8 @@ into the tarball. The release pipeline verifies the tarball boots
 
 - The tarball is larger, but remains a single download with zero post-install
   steps — acceptable for a CLI installer.
-- Adding a new runtime dependency requires updating `bundledDependencies` and the
-  args to `bundledDependencies`/`dependencies` in `package.json`; forgetting it
+- Adding a new runtime dependency requires listing it in both `dependencies` and
+  `bundledDependencies` in `package.json`; forgetting the second
   only shows up at release time, which is exactly why the pack-and-run check is
   part of the release workflow.
 - Dev dependencies stay out of the bundle, which is why `dependabot-automerge`

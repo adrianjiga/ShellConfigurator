@@ -1,30 +1,55 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { getShellBinary } from '../config/shells.ts';
+import { getShellBinary, posixShellQuote } from '../config/shells.ts';
 import type { PackageManager, ShellId } from '../types.ts';
 import { cachedFont, cacheFont, sha256Digest } from './cache.ts';
-import { commandExists, commandPath, runCommand } from './exec.ts';
+import { errorMessage } from './errors.ts';
+import {
+  CommandCancelledError,
+  commandExists,
+  commandPath,
+  runCapture,
+  runCaptureBoth,
+  runCommand,
+} from './exec.ts';
 import { type ExtractedFontFile, extractFontFiles } from './fontExtractor.ts';
+import { homeDir, xdgBaseDir } from './paths.ts';
 
 // Package names per shell per package manager. Missing combos are intentional
-// (powershell is brew/pacman-only), so `undefined` is a valid lookup.
+// (powershell is AUR-only on Arch, nushell is absent from Debian/Ubuntu
+// repos), so `undefined` is a valid lookup.
 const SHELL_PACKAGES: Record<ShellId, Partial<Record<PackageManager, string>>> = {
   bash: { pacman: 'bash', apt: 'bash', dnf: 'bash', brew: 'bash', apk: 'bash' },
   zsh: { pacman: 'zsh', apt: 'zsh', dnf: 'zsh', brew: 'zsh', apk: 'zsh' },
   fish: { pacman: 'fish', apt: 'fish', dnf: 'fish', brew: 'fish', apk: 'fish' },
-  nushell: { pacman: 'nushell', apt: 'nushell', dnf: 'nushell', brew: 'nushell', apk: 'nushell' },
-  powershell: { pacman: 'powershell', brew: 'powershell' },
+  nushell: { pacman: 'nushell', dnf: 'nushell', brew: 'nushell', apk: 'nushell' },
+  powershell: { brew: 'powershell' },
 };
+
+/** Root (common in containers) has no sudo to call. */
+function needsSudo(): boolean {
+  return typeof process.getuid === 'function' && process.getuid() !== 0;
+}
 
 /** The scripted path is a separate code branch; omitting it here makes a stray lookup a type error. */
 const INSTALL_CMDS: Record<Exclude<PackageManager, 'script'>, (pkg: string) => string[]> = {
-  pacman: (pkg) => ['sudo', 'pacman', '-S', '--noconfirm', pkg],
-  apt: (pkg) => ['sudo', 'apt-get', 'install', '-y', pkg],
-  dnf: (pkg) => ['sudo', 'dnf', 'install', '-y', pkg],
+  pacman: (pkg) => [...sudo(), 'pacman', '-Syu', '--noconfirm', '--needed', pkg],
+  apt: (pkg) => [...sudo(), 'apt-get', 'install', '-y', pkg],
+  dnf: (pkg) => [...sudo(), 'dnf', 'install', '-y', pkg],
   brew: (pkg) => ['brew', 'install', pkg],
-  apk: (pkg) => ['sudo', 'apk', 'add', '--no-cache', pkg],
+  apk: (pkg) => [...sudo(), 'apk', 'add', '--no-cache', pkg],
 };
+
+function sudo(): string[] {
+  return needsSudo() ? ['sudo'] : [];
+}
+
+/** A fresh image has no package index, so the first apt install would 404. */
+async function refreshPackageIndex(pm: PackageManager, signal?: AbortSignal): Promise<void> {
+  if (pm !== 'apt') return;
+  await runCommand([...sudo(), 'apt-get', 'update', '-qq'], { signal });
+}
 
 // Nerd Font definitions: id → GitHub release zip name. `family` is the font
 // family name the archive installs (nerd-fonts appends " Nerd Font").
@@ -67,68 +92,85 @@ const NERD_FONTS_BASE_URL = 'https://github.com/ryanoasis/nerd-fonts/releases/la
 /** GitHub REST endpoint whose asset digests are the checksums we verify against. */
 const NERD_FONTS_API_URL = 'https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest';
 
-/** Cap on how long the font download may hang before it is aborted. */
-const FONT_DOWNLOAD_TIMEOUT_MS = 60_000;
+/** Font archives are 100 MB+, so a slow link must still be able to finish. */
+const FONT_DOWNLOAD_TIMEOUT_MS = 5 * 60_000;
 
 /**
  * The same idea for the checksum lookup: a stuck metadata fetch must not wedge the install.
  */
 const FONT_CHECKSUM_TIMEOUT_MS = 30_000;
 
-/** Nerd Font archives run to tens of MB; anything far past that is not a font archive. */
+/** The largest Nerd Font archives are over 100 MB; anything far past that is not a font archive. */
 const MAX_FONT_ARCHIVE_BYTES = 200 * 1024 * 1024;
 
 /** Where the official install script puts the binary when run without sudo. */
-export const SCRIPT_INSTALL_BIN_DIR = path.join(os.homedir(), '.local', 'bin');
+export function scriptInstallBinDir(): string {
+  return path.join(homeDir(), '.local', 'bin');
+}
 
 const STARSHIP_INSTALL_URL = 'https://starship.rs/install.sh';
 
-export async function installStarship(pm: PackageManager): Promise<void> {
-  if (pm === 'script') {
-    // Accepted risk: when no package manager is detected we fall back to piping
-    // Starship's official install script, which we deliberately run unchanged
-    // (only pinning --bin-dir). That trusts starship.rs, its CDN and the script
-    // over another first-party channel; it is the documented installation path
-    // and the practical only option on package-manager-less systems. The script
-    // is downloaded to a temp dir first and vetted for an empty body, so a
-    // failed or empty download fails the step instead of running garbage.
-    if (!commandExists('curl')) {
-      throw new Error(
-        'Cannot download Starship: "curl" is not installed. Install curl and try again, ' +
-          'or install Starship manually (see https://starship.rs/install).'
-      );
-    }
+export const MANUAL_STARSHIP_INSTALL = `curl -sS ${STARSHIP_INSTALL_URL} | sh`;
 
-    // Downloaded to a file rather than piped into sh: a pipeline reports only the
-    // last command's exit status, so a failed curl would look like a clean install.
-    // -f also turns an HTTP error into a curl failure instead of an HTML error page.
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-starship-'));
-    const scriptPath = path.join(tmpDir, 'install.sh');
-    try {
-      await runCommand(['curl', '-fsS', '-o', scriptPath, STARSHIP_INSTALL_URL]);
-      if (!fs.existsSync(scriptPath) || fs.statSync(scriptPath).size === 0) {
-        throw new Error(`Downloaded an empty install script from ${STARSHIP_INSTALL_URL}`);
-      }
-      // --bin-dir pins the drop location: without it the script defaults to
-      // /usr/local/bin, which is root-owned and would trigger a sudo prompt.
-      // POSIXLY_CORRECT keeps the script happy on distros where /bin/sh is bash.
-      fs.mkdirSync(SCRIPT_INSTALL_BIN_DIR, { recursive: true });
-      await runCommand([
-        'env',
-        'POSIXLY_CORRECT=1',
-        'sh',
+async function installStarshipViaScript(signal?: AbortSignal): Promise<void> {
+  // Accepted risk: we deliberately run Starship's official install script
+  // unchanged (only pinning --bin-dir). That trusts starship.rs, its CDN and
+  // the script over another first-party channel; it is the documented
+  // installation path and the practical only option on package-manager-less
+  // systems. The script is downloaded to a temp dir first and vetted for an
+  // empty body, so a failed or empty download fails the step instead of
+  // running garbage.
+  if (!commandExists('curl')) {
+    throw new Error(
+      'Cannot download Starship: "curl" is not installed. Install curl and try again, ' +
+        'or install Starship manually (see https://starship.rs/install).'
+    );
+  }
+
+  // Downloaded to a file rather than piped into sh: a pipeline reports only the
+  // last command's exit status, so a failed curl would look like a clean install.
+  // -f also turns an HTTP error into a curl failure instead of an HTML error page.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-starship-'));
+  const scriptPath = path.join(tmpDir, 'install.sh');
+  try {
+    await runCommand(
+      [
+        'curl',
+        '-fsS',
+        '--connect-timeout',
+        '15',
+        '--max-time',
+        '120',
+        '-o',
         scriptPath,
-        '--yes',
-        '--bin-dir',
-        SCRIPT_INSTALL_BIN_DIR,
-      ]);
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+        STARSHIP_INSTALL_URL,
+      ],
+      { signal }
+    );
+    if (!fs.existsSync(scriptPath) || fs.statSync(scriptPath).size === 0) {
+      throw new Error(`Downloaded an empty install script from ${STARSHIP_INSTALL_URL}`);
     }
+    // --bin-dir pins the drop location: without it the script defaults to
+    // /usr/local/bin, which is root-owned and would trigger a sudo prompt.
+    // POSIXLY_CORRECT keeps the script happy on distros where /bin/sh is bash.
+    fs.mkdirSync(scriptInstallBinDir(), { recursive: true });
+    await runCommand(
+      ['env', 'POSIXLY_CORRECT=1', 'sh', scriptPath, '--yes', '--bin-dir', scriptInstallBinDir()],
+      { signal }
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+export async function installStarship(pm: PackageManager, signal?: AbortSignal): Promise<void> {
+  // Debian 12, Ubuntu 22.04/24.04 and Fedora carry no starship package.
+  if (pm === 'script' || pm === 'apt' || pm === 'dnf') {
+    await installStarshipViaScript(signal);
     return;
   }
 
-  await runCommand(INSTALL_CMDS[pm]('starship'));
+  await runCommand(INSTALL_CMDS[pm]('starship'), { signal });
 }
 
 /**
@@ -141,9 +183,52 @@ export async function installStarship(pm: PackageManager): Promise<void> {
  */
 export function getMissingStarshipPathDir(): string | null {
   if (commandExists('starship')) return null;
-  return fs.existsSync(path.join(SCRIPT_INSTALL_BIN_DIR, 'starship'))
-    ? SCRIPT_INSTALL_BIN_DIR
-    : null;
+  return fs.existsSync(path.join(scriptInstallBinDir(), 'starship')) ? scriptInstallBinDir() : null;
+}
+
+/** PATH with `dir` in front, for running a script install that PATH lacks. */
+function withPathDir(dir: string | null): NodeJS.ProcessEnv['PATH'] {
+  const current = process.env.PATH;
+  if (!dir) return current;
+  return current ? `${dir}${path.delimiter}${current}` : dir;
+}
+
+/** `starship -V`, with `pathDir` on PATH for a script install PATH lacks; null when it fails. */
+export async function readStarshipVersion(pathDir: string | null): Promise<string | null> {
+  try {
+    return await runCapture('starship', ['-V'], {
+      env: { ...process.env, PATH: withPathDir(pathDir) },
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Rejects when starship cannot load the config at `configPath`. `print-config`
+ * exits 0 even on a broken config, so its warnings on stderr are the failure.
+ */
+export async function verifyStarshipConfig(
+  configPath: string,
+  pathDir: string | null = getMissingStarshipPathDir()
+): Promise<void> {
+  const env = { ...process.env, STARSHIP_CONFIG: configPath, PATH: withPathDir(pathDir) };
+  const { stderr } = await runCaptureBoth('starship', ['print-config'], { env });
+  if (stderr) throw new Error(stderr);
+}
+
+/**
+ * The directory the rc files will add to PATH for this run, known before the
+ * install: an existing script install off PATH, or the bin dir a script install
+ * is about to use when PATH does not include it. Null when starship is reachable.
+ */
+export function plannedPathDir(pm: PackageManager): string | null {
+  const existing = getMissingStarshipPathDir();
+  if (existing) return existing;
+  if (commandExists('starship')) return null;
+  if (pm !== 'script' && pm !== 'apt' && pm !== 'dnf') return null;
+  const dir = scriptInstallBinDir();
+  return (process.env.PATH ?? '').split(path.delimiter).includes(dir) ? null : dir;
 }
 
 /**
@@ -158,7 +243,11 @@ export function shellInstallSupported(shellId: ShellId, pm: PackageManager): boo
   return SHELL_PACKAGES[shellId][pm] != null;
 }
 
-export async function installShell(shellId: ShellId, pm: PackageManager): Promise<void> {
+export async function installShell(
+  shellId: ShellId,
+  pm: PackageManager,
+  signal?: AbortSignal
+): Promise<void> {
   if (pm === 'script') {
     throw new Error(
       `Cannot auto-install ${shellId}: no package manager detected. ` +
@@ -175,24 +264,31 @@ export async function installShell(shellId: ShellId, pm: PackageManager): Promis
     );
   }
 
-  await runCommand(INSTALL_CMDS[pm](pkg));
+  await refreshPackageIndex(pm, signal);
+  await runCommand(INSTALL_CMDS[pm](pkg), { signal });
 }
 
 export function getNerdFontsDir(): string {
-  return process.platform === 'darwin'
-    ? path.join(os.homedir(), 'Library', 'Fonts')
-    : path.join(os.homedir(), '.local', 'share', 'fonts');
+  if (process.platform === 'darwin') return path.join(homeDir(), 'Library', 'Fonts');
+  return path.join(xdgBaseDir('XDG_DATA_HOME', path.join(homeDir(), '.local', 'share')), 'fonts');
+}
+
+interface FontAsset {
+  url: string;
+  digest: string;
 }
 
 /**
- * The SHA-256 GitHub publishes for a release asset, as a bare hex string.
+ * The download URL and SHA-256 GitHub publishes for a release asset.
  *
  * GitHub's releases API returns `assets[].digest` (a "sha256:<hex>" string) for
  * every uploaded file. Total verification without a second trust domain: the
  * digest comes from GitHub's API over the same HTTPS channel the download uses,
  * so a MITM that swapped the archive would have to rewrite the API metadata too.
+ * The asset URL is taken from the same response, so a release published between
+ * the lookup and the download cannot hand us a different archive.
  */
-async function fetchAssetChecksum(assetName: string, signal: AbortSignal): Promise<string> {
+async function resolveFontAsset(assetName: string, signal: AbortSignal): Promise<FontAsset> {
   const response = await fetch(NERD_FONTS_API_URL, {
     headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'shell-configurator' },
     signal,
@@ -202,22 +298,36 @@ async function fetchAssetChecksum(assetName: string, signal: AbortSignal): Promi
   }
 
   const release = (await response.json()) as {
-    assets?: Array<{ name?: string; digest?: string }>;
+    assets?: Array<{ name?: string; digest?: string; browser_download_url?: string }>;
   };
-  const digest = release.assets?.find((asset) => asset.name === assetName)?.digest;
+  const asset = release.assets?.find((entry) => entry.name === assetName);
+  const digest = asset?.digest;
   if (!digest?.startsWith('sha256:')) {
     throw new Error(
       `No sha256 digest published for ${assetName}; refusing to install an unverified archive.`
     );
   }
-  return digest.slice('sha256:'.length);
+  return {
+    url: asset?.browser_download_url ?? `${NERD_FONTS_BASE_URL}/${assetName}`,
+    digest: digest.slice('sha256:'.length),
+  };
 }
 
-async function downloadFont(zipName: string): Promise<Buffer> {
-  const url = `${NERD_FONTS_BASE_URL}/${zipName}`;
+/** A user cancel and the download timeout share one signal; only the former is "Cancelled". */
+function downloadSignal(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
 
-  // A hung connection would otherwise block the install phase with no way to cancel.
-  const response = await fetch(url, { signal: AbortSignal.timeout(FONT_DOWNLOAD_TIMEOUT_MS) });
+async function downloadFont(zipName: string, url: string, signal?: AbortSignal): Promise<Buffer> {
+  let response: Response;
+  try {
+    // A hung connection would otherwise block the install phase with no way to cancel.
+    response = await fetch(url, { signal: downloadSignal(signal, FONT_DOWNLOAD_TIMEOUT_MS) });
+  } catch (err) {
+    if (signal?.aborted) throw new CommandCancelledError(`download ${zipName}`);
+    throw err;
+  }
   if (!response.ok) throw new Error(`Failed to download font: HTTP ${response.status}`);
 
   const declaredSize = Number(response.headers.get('content-length') ?? '0');
@@ -228,13 +338,32 @@ async function downloadFont(zipName: string): Promise<Buffer> {
     );
   }
 
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.byteLength > MAX_FONT_ARCHIVE_BYTES) {
-    throw new Error(
-      `Refusing to install ${zipName}: archive is larger than ` + `${MAX_FONT_ARCHIVE_BYTES} bytes.`
-    );
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error(`Failed to download font: empty body for ${zipName}`);
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      // Enforced while reading: content-length is absent on chunked responses,
+      // and reading 200 MB before rejecting wastes the user's bandwidth.
+      if (total > MAX_FONT_ARCHIVE_BYTES) {
+        await reader.cancel();
+        throw new Error(
+          `Refusing to install ${zipName}: archive is larger than ` +
+            `${MAX_FONT_ARCHIVE_BYTES} bytes.`
+        );
+      }
+      chunks.push(value);
+    }
+  } catch (err) {
+    if (signal?.aborted) throw new CommandCancelledError(`download ${zipName}`);
+    throw err;
   }
-  return buffer;
+  return Buffer.concat(chunks);
 }
 
 function verifyChecksum(zipName: string, buffer: Buffer, expectedDigest: string): void {
@@ -253,7 +382,7 @@ async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> 
   try {
     fontFiles = await extractFontFiles(buffer);
   } catch (err) {
-    throw new Error(`Could not extract ${zipName}: ${err instanceof Error ? err.message : err}`, {
+    throw new Error(`Could not extract ${zipName}: ${errorMessage(err)}`, {
       cause: err,
     });
   }
@@ -269,10 +398,12 @@ async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> 
     fs.writeFileSync(path.join(fontsDir, file.name), file.bytes);
   }
 
-  // Non-fatal: fc-cache may be absent on minimal systems.
+  // Captured rather than inherited: fc-cache never reads stdin, and suspending
+  // the UI for it would blank the install screen for no reason. Non-fatal:
+  // fc-cache may be absent on minimal systems.
   if (process.platform !== 'darwin') {
     try {
-      await runCommand(['fc-cache', '-f']);
+      await runCapture('fc-cache', ['-f', fontsDir]);
     } catch {
       // ignore
     }
@@ -280,52 +411,104 @@ async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> 
 }
 
 /**
- * Installs a Nerd Font (or confirms it is on the machine). A verified archive in
- * the font cache (P1.1) skips the download entirely — so re-runs, repair (#20)
- * and rollback survive offline / rate-limit situations. Returns a note when the
- * font came from cache, so the task list can explain why there was no download.
+ * Installs a Nerd Font. A verified archive in the font cache skips the download
+ * when it matches the latest release or the release cannot be looked up. Returns
+ * a note when the font came from cache, so the task list can explain why there
+ * was no download.
  */
-export async function installNerdFont(fontId: string): Promise<string | undefined> {
+export async function installNerdFont(
+  fontId: string,
+  signal?: AbortSignal
+): Promise<string | undefined> {
   const font = NERD_FONTS.find((f) => f.id === fontId);
   if (!font) throw new Error(`Unknown font: ${fontId}`);
 
   const cached = cachedFont(fontId);
-  if (cached) {
-    await installFontFiles(font.zipName, fs.readFileSync(cached.path));
+
+  // The cache is reused while it still matches the latest release, and when the
+  // lookup fails, so an offline or rate-limited re-run keeps working.
+  let asset: FontAsset;
+  try {
+    asset = await resolveFontAsset(font.zipName, downloadSignal(signal, FONT_CHECKSUM_TIMEOUT_MS));
+  } catch (err) {
+    if (signal?.aborted) throw new CommandCancelledError(`look up ${font.zipName} checksum`);
+    if (!cached) throw err;
+    await installFontFiles(font.zipName, cached.buffer);
+    return `installed ${font.label} from cache`;
+  }
+  if (cached && cached.digest === asset.digest) {
+    await installFontFiles(font.zipName, cached.buffer);
     return `installed ${font.label} from cache`;
   }
 
-  const buffer = await downloadFont(font.zipName);
-  const expectedDigest = await fetchAssetChecksum(
-    font.zipName,
-    AbortSignal.timeout(FONT_CHECKSUM_TIMEOUT_MS)
-  );
-  verifyChecksum(font.zipName, buffer, expectedDigest);
+  const buffer = await downloadFont(font.zipName, asset.url, signal);
+  verifyChecksum(font.zipName, buffer, asset.digest);
   await installFontFiles(font.zipName, buffer);
 
   // Pin the verified archive so a later run reuses it without re-downloading.
-  cacheFont(fontId, buffer);
+  // A cache that cannot be written (no space, read-only ~/.cache) must not undo
+  // a font that is already installed on disk.
+  try {
+    cacheFont(fontId, buffer);
+  } catch {
+    // Best-effort only.
+  }
   return undefined;
 }
 
-export async function setDefaultShell(shellId: ShellId): Promise<void> {
+function listedLoginShells(): string[] {
+  try {
+    return fs
+      .readFileSync('/etc/shells', 'utf8')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('/'));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * chsh only accepts paths listed in /etc/shells, and the first binary on PATH
+ * (e.g. Homebrew's /opt/homebrew/bin/zsh) is often not one of them while
+ * /bin/zsh is.
+ */
+function loginShellPath(binary: string, onPath: string): { path: string; listed: boolean } {
+  const listed = listedLoginShells();
+  if (listed.includes(onPath)) return { path: onPath, listed: true };
+  const match = listed.find((entry) => path.basename(entry) === binary && fs.existsSync(entry));
+  return match ? { path: match, listed: true } : { path: onPath, listed: false };
+}
+
+export async function setDefaultShell(shellId: ShellId, signal?: AbortSignal): Promise<void> {
   const binary = getShellBinary(shellId);
 
-  const shellPath = commandPath(binary);
-  if (!shellPath) {
+  const onPath = commandPath(binary);
+  if (!onPath) {
     throw new Error(`${binary} not found in PATH`);
   }
+  const { path: shellPath, listed } = loginShellPath(binary, onPath);
 
   // chsh prompts for current user's password itself — run with stdio: 'inherit'
   try {
-    await runCommand(['chsh', '-s', shellPath]);
+    await runCommand(['chsh', '-s', shellPath], { signal });
   } catch (err) {
-    // Brew-installed shells usually aren't listed in /etc/shells, so chsh rejects
-    // them. Surface an actionable hint instead of the raw chsh error.
+    if (err instanceof CommandCancelledError) throw err;
+    if ((err as { code?: string }).code === 'ENOENT') {
+      throw new Error(
+        'Could not set the default shell: chsh is not installed ' +
+          '(Fedora ships it in util-linux-user, Alpine in shadow).',
+        { cause: err }
+      );
+    }
+    const reason = errorMessage(err);
+    if (listed) {
+      throw new Error(`Could not set ${binary} as the default shell: ${reason}`, { cause: err });
+    }
     throw new Error(
-      `Could not set ${binary} as the default shell. If ${shellPath} isn't listed in ` +
-        `/etc/shells, add it first (e.g. 'echo ${shellPath} | sudo tee -a /etc/shells'). ` +
-        `${err instanceof Error ? err.message : err}`,
+      `Could not set ${binary} as the default shell: ${shellPath} is not listed in ` +
+        `/etc/shells. Add it first (e.g. echo ${posixShellQuote(shellPath)} | sudo tee -a /etc/shells). ` +
+        reason,
       { cause: err }
     );
   }

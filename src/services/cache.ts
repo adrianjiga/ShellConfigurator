@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { isMissingFile } from './errors.ts';
 import { cacheDir } from './paths.ts';
 
 /** SHA-256 of a byte buffer as a lowercase hex string. */
@@ -21,6 +22,8 @@ export interface CachedFont {
   digest: string;
   /** Archive size in bytes. */
   bytes: number;
+  /** The verified archive itself, so callers install the exact bytes checked. */
+  buffer: Buffer;
 }
 
 /** Per-app font store: <cacheDir>/fonts/. */
@@ -38,30 +41,23 @@ function pinFilePath(fontId: string): string {
   return path.join(fontsDir(), `${fontId}.sha256`);
 }
 
-/** True when the failure is simply that the file does not exist. */
-function isMissingFile(err: unknown): boolean {
-  return (err as { code?: string }).code === 'ENOENT';
-}
-
 /**
  * The pinned SHA-256 recorded for a font, or null when the cache has no pin for
- * it. The pin survives the archive being evicted, so repair can tell "we had
- * this font once" apart from "never seen it".
+ * it.
  */
 export function pinnedDigest(fontId: string): string | null {
   try {
     return fs.readFileSync(pinFilePath(fontId), 'utf8').trim() || null;
-  } catch (err) {
-    if (isMissingFile(err)) return null;
-    throw err;
+  } catch {
+    return null;
   }
 }
 
 /**
  * Writes a (already verified) archive into the cache and pins its SHA-256 so a
  * later reinstall can trust it offline. Returns the pinned digest. The archive
- * is written before the pin; a crash between the two leaves an unpinned file,
- * which cachedFont treats as absent.
+ * is written before the pin; a crash between the two leaves an archive that no
+ * pin matches, which cachedFont treats as absent.
  */
 export function cacheFont(fontId: string, buffer: Buffer): string {
   const dir = fontsDir();
@@ -74,9 +70,9 @@ export function cacheFont(fontId: string, buffer: Buffer): string {
 
 /**
  * The cached archive for a font that still verifies against its pinned digest,
- * or null when there is none (no pin, missing file, or tamper). A cache that
- * fails verification is treated as absent so callers fall back to re-downloading
- * rather than installing a corrupted font.
+ * or null when there is none (no pin, missing file, or a mismatch). The pin sits
+ * beside the archive, so this catches damage, not deliberate tampering; a cache
+ * that fails verification is treated as absent and the font is downloaded again.
  */
 export function cachedFont(fontId: string): CachedFont | null {
   const digest = pinnedDigest(fontId);
@@ -86,24 +82,23 @@ export function cachedFont(fontId: string): CachedFont | null {
   let buffer: Buffer;
   try {
     buffer = fs.readFileSync(file);
-  } catch (err) {
-    if (isMissingFile(err)) return null;
-    throw err;
+  } catch {
+    return null;
   }
   if (sha256Digest(buffer) !== digest) return null;
 
-  return { id: fontId, path: file, digest, bytes: buffer.byteLength };
+  return { id: fontId, path: file, digest, bytes: buffer.byteLength, buffer };
 }
 
-/** <cacheDir>/starship.version — the version the last apply produced. */
+/** <cacheDir>/starship.version — the version the last fresh install produced. */
 function starshipVersionFilePath(): string {
   return path.join(cacheDir(), 'starship.version');
 }
 
 /**
- * The starship version the last apply recorded, or null when none was recorded.
- * Doctor compares this against what `starship --version` reports to flag drift
- * (a newer PM install, or a downgrade) that the rc stamp cannot see.
+ * The starship version the last fresh install recorded, or null when none was.
+ * Doctor compares this against what `starship -V` reports to flag drift
+ * (a newer PM install, or a downgrade).
  */
 export function cachedStarshipVersion(): string | null {
   try {

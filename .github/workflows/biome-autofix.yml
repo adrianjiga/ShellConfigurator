@@ -1,73 +1,87 @@
 name: Biome autofix
 
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, synchronize, reopened]
     paths:
       - package.json
       - package-lock.json
 
 permissions:
-  contents: write
-  actions: write # `gh workflow run` below re-triggers CI on the new commit
+  contents: read
 
 concurrency:
   group: biome-autofix-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  autofix:
+  fix:
     if: >
       github.event.pull_request.user.login == 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      patch: ${{ steps.diff.outputs.patch }}
     steps:
-      - name: Checkout PR branch
+      - name: Checkout the PR commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
-          cache: "npm"
 
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      - name: Apply Biome migrations and formatting
+      - name: Apply Biome migrations, safe lint fixes and formatting
         run: |
           npx --no-install biome migrate --write
+          npx --no-install biome check --write src || true
           npm run format
 
-      - name: Commit and push if changed
-        id: commit
+      - name: Hand the changes on as a patch
+        id: diff
+        run: echo "patch=$(git diff --binary | base64 -w0)" >> "$GITHUB_OUTPUT"
+
+  push:
+    needs: fix
+    if: needs.fix.outputs.patch != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout the PR commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Commit and push the patch
         env:
+          PATCH: ${{ needs.fix.outputs.patch }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "Biome config and formatting are already up to date."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit --no-verify -m "chore: apply Biome migrations and formatting"
+          printf '%s' "$PATCH" | base64 -d > "$RUNNER_TEMP/biome.patch"
+          git apply --index "$RUNNER_TEMP/biome.patch"
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --no-verify -m "chore: apply Biome migrations and formatting"
           git push --no-verify \
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
             "HEAD:${HEAD_REF}"
-          echo "changed=true" >> "$GITHUB_OUTPUT"
 
       # Commits pushed with GITHUB_TOKEN do not start new workflow runs;
       # workflow_dispatch is the documented exception. Both required-check
       # workflows are dispatched so every check lands on the new commit.
       - name: Re-run CI on the new commit
-        if: steps.commit.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}

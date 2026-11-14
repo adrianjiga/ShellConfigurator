@@ -1,5 +1,6 @@
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getShell } from '../../config/shells.ts';
 import { ShellScreen } from '../../screens/ShellScreen.tsx';
 import { detectCurrentShellAsync, detectInstalledShellsAsync } from '../../services/detector.ts';
 import { DEFAULT_STATE, type ShellId } from '../../types.ts';
@@ -90,6 +91,32 @@ describe('ShellScreen', () => {
     });
   });
 
+  it('ignores D on a shell that is not selected', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh']);
+    const { instance } = setup();
+    await flush();
+    await flush();
+
+    instance.stdin.write('d');
+    await flush();
+
+    expect(instance.lastFrame()).not.toContain('[will set as login shell]');
+  });
+
+  it('takes the login shell back with a second D', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh']);
+    const { instance, onNext } = setup();
+    await flush();
+    await flush();
+
+    for (const key of [' ', 'd', 'd', '\r']) {
+      instance.stdin.write(key);
+      await flush();
+    }
+
+    expect(onNext).toHaveBeenCalledWith(expect.objectContaining({ setDefaultShell: null }));
+  });
+
   it('clears the default shell when the selected shell is deselected', async () => {
     vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh']);
     const { instance, onNext } = setup();
@@ -125,6 +152,15 @@ describe('ShellScreen', () => {
     expect(instance.lastFrame()).toContain('› [✓] Bash');
   });
 
+  it('shows the focused shell rc file it will edit', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh']);
+    const { instance } = setup();
+    await flush();
+    await flush();
+
+    expect(instance.lastFrame()).toContain(`→ ${getShell('zsh')!.rcFile}`);
+  });
+
   it('warns about manual shells without implying a command is already shown', async () => {
     vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh', 'nushell']);
     const { instance } = setup();
@@ -140,9 +176,7 @@ describe('ShellScreen', () => {
     await flush();
 
     expect(instance.lastFrame()).toContain('Manual setup required');
-    // "Run the above command" only makes sense on the summary screen, where the
-    // command is actually shown above the note — never here, before installation.
-    expect(instance.lastFrame()).not.toContain('Run the above command');
+    expect(instance.lastFrame()).not.toContain(getShell('nushell')!.manualNote!);
   });
 
   it('pre-selects the detected current shell', async () => {
@@ -154,6 +188,42 @@ describe('ShellScreen', () => {
     await flush();
 
     expect(instance.lastFrame()).toContain('[✓] Bash');
+  });
+
+  it('does not re-add a shell the user deselected before detection finished', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh', 'bash']);
+    let answer: (shell: ShellId) => void = () => {};
+    vi.mocked(detectCurrentShellAsync).mockReturnValue(
+      new Promise<ShellId | null>((resolve) => {
+        answer = resolve;
+      })
+    );
+    const { instance } = setup();
+    await flush();
+    instance.stdin.write(' '); // zsh on
+    await flush();
+    instance.stdin.write(' '); // zsh off again
+    await flush();
+
+    answer('zsh');
+    await flush();
+    await flush();
+
+    expect(instance.lastFrame()).toContain('[ ] Zsh');
+  });
+
+  it('keeps the selection when going back with Esc', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh']);
+    vi.mocked(detectCurrentShellAsync).mockResolvedValue(null);
+    const { instance, onUpdate, onBack } = setup();
+    await flush();
+    await flush();
+    instance.stdin.write(' '); // zsh on
+    await flush();
+    await pressEsc(instance.stdin);
+
+    expect(onUpdate).toHaveBeenLastCalledWith({ selectedShells: ['zsh'], setDefaultShell: null });
+    expect(onBack).toHaveBeenCalled();
   });
 
   it('does not clobber an existing selection with detection', async () => {
@@ -218,5 +288,47 @@ describe('selection order', () => {
 
     const selected = onNext.mock.calls[0]?.[0]?.selectedShells;
     expect(selected).toEqual(['zsh', 'fish']);
+  });
+});
+
+describe('ShellScreen in a container', () => {
+  it('does not offer a login shell, which a container never changes', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh']);
+    vi.mocked(detectCurrentShellAsync).mockResolvedValue(null);
+    const instance = render(
+      <ShellScreen
+        state={{ ...DEFAULT_STATE, container: true }}
+        onNext={vi.fn()}
+        onUpdate={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    await flush();
+    instance.stdin.write(' ');
+    await flush();
+    instance.stdin.write('d');
+    await flush();
+    expect(instance.lastFrame()).not.toContain('will set as login shell');
+    expect(instance.lastFrame()).toContain('left to the image');
+  });
+});
+
+describe('ShellScreen install tags', () => {
+  it('says a shell the package manager cannot install must be installed by hand', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue([]);
+    vi.mocked(detectCurrentShellAsync).mockResolvedValue(null);
+    const instance = render(
+      <ShellScreen
+        state={{ ...DEFAULT_STATE, packageManager: 'script' }}
+        onNext={vi.fn()}
+        onUpdate={vi.fn()}
+        onBack={vi.fn()}
+      />
+    );
+    await flush();
+    instance.stdin.write(' ');
+    await flush();
+    expect(instance.lastFrame()).toContain('[install it yourself]');
+    expect(instance.lastFrame()).not.toContain('[will install]');
   });
 });

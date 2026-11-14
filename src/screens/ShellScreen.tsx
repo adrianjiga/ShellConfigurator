@@ -1,10 +1,12 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
+import { PickerRow } from '../components/PickerRow.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { SHELLS } from '../config/shells.ts';
 import { detectCurrentShellAsync, detectInstalledShellsAsync } from '../services/detector.ts';
+import { shellInstallSupported } from '../services/installer.ts';
 import type { ShellId, WizardState } from '../types.ts';
 
 interface ShellScreenProps {
@@ -19,13 +21,13 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
   const [selected, setSelected] = useState<Set<ShellId>>(() => new Set(state.selectedShells));
   const [installedShells, setInstalledShells] = useState<ShellId[] | null>(null);
   const [defaultShell, setDefaultShell] = useState<ShellId | null>(state.setDefaultShell);
-  // Both pieces of state read inside useInput go through refs. Ink re-registers the
-  // handler each render so a direct read usually works, but mixing the two styles
-  // invites a stale-closure bug the next time this handler changes.
+  // The selection and default shell are read through refs inside useInput, so a
+  // burst of keys in one input chunk sees each earlier key's change.
   const defaultShellRef = useRef(defaultShell);
   defaultShellRef.current = defaultShell;
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  const touched = useRef(false);
 
   // Shell detection runs once on mount; onUpdate is a fresh closure each render
   // and would re-trigger it.
@@ -46,13 +48,12 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
     if (selectedRef.current.size === 0) {
       (async () => {
         const current = await detectCurrentShellAsync();
-        if (!cancelled && current) {
-          setSelected((prev) => {
-            if (prev.has(current)) return prev;
-            const next = new Set(prev);
-            next.add(current);
-            return next;
-          });
+        // A choice the user made while detection ran wins over the guess.
+        if (!cancelled && current && !touched.current && !selectedRef.current.has(current)) {
+          const next = new Set(selectedRef.current);
+          next.add(current);
+          selectedRef.current = next;
+          setSelected(next);
         }
       })();
     }
@@ -62,8 +63,15 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
     };
   }, []);
 
+  // Sorted against SHELLS rather than click order, so install order and the
+  // Done-screen rows are deterministic.
+  const orderedSelection = (): ShellId[] =>
+    SHELLS.filter((s) => selectedRef.current.has(s.id)).map((s) => s.id);
+
   useInput((char, key) => {
     if (key.escape) {
+      // Keep the choices for when the user comes back, as the other screens do.
+      onUpdate({ selectedShells: orderedSelection(), setDefaultShell: defaultShellRef.current });
       onBack();
       return;
     }
@@ -80,21 +88,21 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
 
     if (char === ' ') {
       const shellId = SHELLS[cursor]!.id;
-      setSelected((prev) => {
-        const next = new Set(prev);
-        if (next.has(shellId)) {
-          next.delete(shellId);
-          // Clear default shell if deselected
-          if (defaultShellRef.current === shellId) setDefaultShell(null);
-        } else {
-          next.add(shellId);
-        }
-        return next;
-      });
+      touched.current = true;
+      const next = new Set(selectedRef.current);
+      if (next.has(shellId)) {
+        next.delete(shellId);
+        if (defaultShellRef.current === shellId) setDefaultShell(null);
+      } else {
+        next.add(shellId);
+      }
+      selectedRef.current = next;
+      setSelected(next);
       return;
     }
 
-    if (char === 'd' || char === 'D') {
+    // A container's login shell belongs to the image, so chsh is never run there.
+    if ((char === 'd' || char === 'D') && !state.container) {
       const shellId = SHELLS[cursor]!.id;
       if (selectedRef.current.has(shellId)) {
         setDefaultShell((prev) => (prev === shellId ? null : shellId));
@@ -104,10 +112,8 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
 
     if (key.return && selectedRef.current.size > 0 && installedShells !== null) {
       onNext({
-        // Sorted against SHELLS rather than click order, so install order and the
-        // Done-screen rows are deterministic.
-        selectedShells: SHELLS.filter((s) => selectedRef.current.has(s.id)).map((s) => s.id),
-        installedShells: installedShells ?? [],
+        selectedShells: orderedSelection(),
+        installedShells,
         setDefaultShell: defaultShell,
       });
     }
@@ -118,10 +124,16 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
       <Box flexDirection="column" gap={1}>
         <Text bold>Select your shell(s)</Text>
         <Text color={uiColor('gray')}>Which shells should be configured to use Starship?</Text>
-        <Text color={uiColor('gray')}>
-          Press <Text color={uiColor('cyan')}>D</Text> on any selected shell to make it your login
-          shell (runs <Text color={uiColor('cyan')}>chsh</Text>). Optional.
-        </Text>
+        {state.container ? (
+          <Text color={uiColor('gray')}>
+            Inside a container the login shell is left to the image, so none is set here.
+          </Text>
+        ) : (
+          <Text color={uiColor('gray')}>
+            Press <Text color={uiColor('cyan')}>D</Text> on any selected shell to make it your login
+            shell (runs <Text color={uiColor('cyan')}>chsh</Text>). Optional.
+          </Text>
+        )}
 
         <Box flexDirection="column" marginTop={1}>
           {SHELLS.map((shell, i) => {
@@ -131,38 +143,37 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
             const isDefault = defaultShell === shell.id;
 
             return (
-              <Box key={shell.id} flexDirection="column">
-                <Box flexDirection="row" gap={1}>
-                  <Text color={uiColor(isActive ? 'cyan' : 'gray')}>{isActive ? '›' : ' '}</Text>
-                  <Text color={uiColor(isChecked ? 'green' : 'gray')}>
-                    {isChecked ? '[✓]' : '[ ]'}
-                  </Text>
-                  <Text color={uiColor(isActive ? 'white' : 'gray')} bold={isActive}>
-                    {shell.label}
-                  </Text>
-                  {isChecked && (
-                    <Text color={uiColor(isInstalled ? 'green' : 'yellow')}>
-                      {isInstalled ? '[installed]' : '[will install]'}
-                    </Text>
-                  )}
-                  {isDefault && <Text color={uiColor('cyan')}>[will set as login shell]</Text>}
-                </Box>
-                {isActive && shell.rcFile && (
-                  <Box marginLeft={4}>
-                    <Text color={uiColor('gray')} italic>
-                      → {shell.rcFile}
-                    </Text>
-                  </Box>
-                )}
-                {isActive && shell.manualNote && (
-                  <Box marginLeft={4}>
+              <PickerRow
+                key={shell.id}
+                focused={isActive}
+                selected={isChecked}
+                marker={isChecked ? '[✓]' : '[ ]'}
+                label={shell.label}
+                suffix={
+                  <>
+                    {isChecked && (
+                      <Text color={uiColor(isInstalled ? 'green' : 'yellow')}>
+                        {isInstalled
+                          ? '[installed]'
+                          : shellInstallSupported(shell.id, state.packageManager)
+                            ? '[will install]'
+                            : '[install it yourself]'}
+                      </Text>
+                    )}
+                    {isDefault && <Text color={uiColor('cyan')}>[will set as login shell]</Text>}
+                  </>
+                }
+                hint={
+                  shell.rcFile ? (
+                    `→ ${shell.rcFile}`
+                  ) : shell.manualNote ? (
                     <Text color={uiColor('yellow')} italic>
-                      ⚠ Manual setup required — Starship will show a setup command after
+                      ⚠ Manual setup required — the wizard shows the setup command after
                       installation.
                     </Text>
-                  </Box>
-                )}
-              </Box>
+                  ) : undefined
+                }
+              />
             );
           })}
         </Box>
@@ -183,7 +194,7 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
         hints={[
           { key: '↑↓', label: 'navigate' },
           { key: 'Space', label: 'toggle' },
-          { key: 'D', label: 'set as login shell' },
+          ...(state.container ? [] : [{ key: 'D', label: 'set as login shell' }]),
           {
             key: 'Enter',
             label:

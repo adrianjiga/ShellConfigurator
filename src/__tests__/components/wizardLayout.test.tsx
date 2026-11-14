@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { render, Text } from 'ink';
+import { render as renderForTest } from 'ink-testing-library';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WizardLayout } from '../../components/WizardLayout.tsx';
 import { DEFAULT_STATE } from '../../types.ts';
@@ -69,5 +70,52 @@ describe('WizardLayout responsive preview', () => {
 
   it('keeps the wizard content visible at narrow widths', () => {
     expect(frame(80)).toContain('step body');
+  });
+});
+
+describe('WizardLayout progress', () => {
+  it('numbers only the steps this run visits', () => {
+    const { lastFrame } = renderForTest(
+      <WizardLayout
+        state={{ ...DEFAULT_STATE, step: 'preset', nerdFontToInstall: { kind: 'none' } }}
+        hidePreview
+      >
+        <Text>body</Text>
+      </WizardLayout>
+    );
+    // welcome, fontcheck, preset: font_select is skipped for this run.
+    expect(lastFrame()).toContain('3. Preset');
+    expect(lastFrame()?.match(/[●◉○]/g)).toHaveLength(10);
+  });
+
+  it('marks the steps already done, the current one and the rest', () => {
+    const { lastFrame } = renderForTest(
+      <WizardLayout
+        state={{ ...DEFAULT_STATE, step: 'preset', nerdFontToInstall: { kind: 'none' } }}
+        hidePreview
+      >
+        <Text>body</Text>
+      </WizardLayout>
+    );
+    expect(lastFrame()?.match(/[●◉○]/g)?.join('')).toBe('●●◉○○○○○○○');
+  });
+
+  it('leaves out the preview and its hint when the step hides it', () => {
+    const stdout = new FakeStdout(160);
+    const instance = render(
+      <WizardLayout state={DEFAULT_STATE} hidePreview>
+        <Text>body</Text>
+      </WizardLayout>,
+      {
+        stdout: stdout as unknown as NodeJS.WriteStream,
+        stderr: new FakeStderr() as unknown as NodeJS.WriteStream,
+        debug: true,
+        exitOnCtrlC: false,
+        patchConsole: false,
+      }
+    );
+    instances.push(instance);
+    expect(stdout.lastFrame).not.toContain('Preview');
+    expect(stdout.lastFrame).toContain('body');
   });
 });

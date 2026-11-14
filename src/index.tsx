@@ -5,11 +5,11 @@ import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { restoreConfigBackups } from './generators/shellRc.ts';
 import type { CliFlags } from './services/args.ts';
-import { parseCliArgs } from './services/args.ts';
+import { parseCliArgs, quoteArgv } from './services/args.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
-import { CliUsageError, errorMessage } from './services/errors.ts';
+import { CliRunError, CliUsageError } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags } from './services/headless.ts';
-import { appendHistory, writeSnapshot } from './services/history.ts';
+import { lastRunShells, recordRunSafely } from './services/history.ts';
 import { formatRepairReport, runRepair } from './services/repair.ts';
 import { restoreTty } from './services/tty.ts';
 import type { InstallTask, WizardState } from './types.ts';
@@ -19,35 +19,14 @@ const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.u
 
 let installFailed = false;
 
-/** Records whether the install finished with any failed task. */
+/** Records whether the install finished with any failed task, and the run in history. */
 export function recordInstallOutcome(
   results: InstallTask[] | undefined,
   state?: WizardState
 ): void {
   installFailed = results?.some((t) => t.status === 'failed') ?? false;
-  if (results && state) recordWizardInstall(results, state);
-}
-
-/**
- * Snapshots the run's state card and appends it to history.jsonl (P1.1). The
- * ledger is best-effort: a wizard that just installed must not die because the
- * history file could not be written. The snapshot id is the rollback handle #14
- * resolves later.
- */
-function recordWizardInstall(results: InstallTask[], state: WizardState): void {
-  const timestamp = new Date().toISOString();
-  try {
-    const snapshotId = writeSnapshot(state, timestamp);
-    appendHistory({
-      version: 1,
-      timestamp,
-      kind: 'install',
-      snapshotId,
-      results,
-      exitCode: results.some((t) => t.status === 'failed') ? 1 : 0,
-    });
-  } catch (err) {
-    process.stderr.write(`Warning: could not record this run in history: ${errorMessage(err)}\n`);
+  if (results && state) {
+    recordRunSafely({ kind: 'install', state, results, exitCode: installFailed ? 1 : 0 });
   }
 }
 
@@ -56,20 +35,11 @@ export function applyInstallOutcomeExitCode(): void {
   if (installFailed) process.exitCode = 1;
 }
 
-/**
- * Ink puts the terminal in raw mode and hides the cursor; if the process dies
- * without unwinding that, the user's shell is left unusable.
- */
-export function restoreTerminal(): void {
-  restoreTty();
-}
-
 export function reportFatal(prefix: string, err: unknown): void {
-  restoreTerminal();
-  // A user mistake in the headless flags/card reads clean — no stack, exit 2.
-  if (err instanceof CliUsageError) {
+  restoreTty();
+  if (err instanceof CliUsageError || err instanceof CliRunError) {
     process.stderr.write(`\nshell-configurator: ${err.message}\n`);
-    process.exitCode = 2;
+    process.exitCode = err instanceof CliUsageError ? 2 : 1;
     return;
   }
   const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
@@ -93,12 +63,13 @@ Usage:
   shell-configurator --restore    restore configs from their newest backup
 
 Options:
-  -h, --help       Show this help and exit
-  -v, --version    Print the version and exit
-  -d, --dry-run    Generate config in-memory and show a summary; installs nothing
-  --no-install     Alias for --dry-run
-  --restore        Copy the newest .bak-* snapshot back over the shared and
-                   per-shell configs created by earlier wizard runs
+  -h, --help          Show this help and exit
+  -v, --version       Print the version and exit
+  -d, --dry-run       Install nothing; print what would happen (generate still
+                     writes -o/--export files)
+  --no-install        Alias for --dry-run
+  --restore, --undo   Copy the newest .bak-* snapshot back over the shared and
+                     per-shell configs created by earlier wizard runs
 
   Flags may appear before or after the subcommand (e.g. "--dry-run generate"
   works like "generate --dry-run"); when a flag is repeated the last one wins.
@@ -113,9 +84,9 @@ generate options (the config — a versioned state card with --export):
   --character <arrow|lambda|dollar> The prompt character symbol
   --set-default <shell>  Make a shell the login default
   --skip-starship      Do not install or require Starship
-  -o <file>            Write the TOML here instead of stdout
+  -o, --output <file>  Write the TOML here instead of stdout
   --export <file>      Write the state card here (add -o to keep the TOML too)
-  --import <file>      Start from a saved state card instead of flags
+  --import, --state <file>  Start from a saved state card instead of flags
 
 apply options (a headless install from a state card):
   --state <file>       The state card describing the install (also: --import)
@@ -123,50 +94,101 @@ apply options (a headless install from a state card):
   --adopt              Keep the existing shared starship.toml instead of
                        regenerating it (per-shell files are never written)
   --import-url <url>   Fetch a starship.toml over the web and adopt it (implies --adopt)
+  Without --state, apply also takes the generate options above; --shells is
+  then required.
 
-doctor options (read-only; exits non-zero when a check fails):
+doctor options (checks the setup; exits non-zero when a check fails):
   --state <file>       Check the setup described by a saved state card
   --json               Print the report as JSON instead of the text summary
-  --fix                Apply the available repairs, then re-check (like 'repair')
+  --fix                Apply the repairs for failing checks, then re-check (like 'repair')
+  --include-warnings   With --fix, also apply the repairs warnings suggest
+
+repair options (fixes the failing checks; exits non-zero when one still fails):
+  --state <file>       Repair the setup described by a saved state card
+  --dry-run            Print the fixes it would apply; change nothing
+  --include-warnings   Also apply the fixes warnings suggest (e.g. the terminal font);
+                       a warning may describe a choice you made on purpose
+  --json               Print the report as JSON instead of the text summary
 `);
 }
 
 /** Restore the shared and per-shell configs from their newest backups. */
 export function runRestore(): void {
-  const restored = restoreConfigBackups();
-  if (restored.length === 0) {
+  const { restored, failed } = restoreConfigBackups(lastRunShells() ?? undefined);
+  if (restored.length === 0 && failed.length === 0) {
     process.stdout.write('Nothing to restore — no ShellConfigurator backups found.\n');
     return;
   }
-  process.stdout.write('Restored configs from their newest backups:\n');
-  for (const r of restored) {
-    process.stdout.write(`  ${r.what}: ${r.restoredTo} (from ${r.restoredFrom})\n`);
+  if (restored.length > 0) {
+    process.stdout.write('Restored configs from their newest backups:\n');
+    for (const r of restored) {
+      const saved = r.previousSavedTo ? `; previous saved to ${r.previousSavedTo}` : '';
+      process.stdout.write(`  ${r.what}: ${r.restoredTo} (from ${r.restoredFrom}${saved})\n`);
+    }
+  }
+  if (failed.length > 0) {
+    process.stderr.write('Could not restore some configs:\n');
+    for (const f of failed) {
+      process.stderr.write(`  ${f.what} (from ${f.restoredFrom}): ${f.error}\n`);
+    }
+    process.exitCode = 1;
   }
 }
 
-export function handleCliArgs(): boolean {
-  const args = process.argv.slice(2);
-  for (const arg of args) {
-    if (arg === '--version' || arg === '-v') {
-      process.stdout.write(`${VERSION}\n`);
-      return true;
+export function runGlobalFlags(flags: CliFlags): boolean {
+  if (flags.help) {
+    printHelp();
+    return true;
+  }
+  if (flags.version) {
+    process.stdout.write(`${VERSION}\n`);
+    return true;
+  }
+  if (flags.restore) {
+    if (flags.subcommand) {
+      throw new CliUsageError(
+        `--restore cannot be combined with the ${flags.subcommand} subcommand; ` +
+          'run it on its own.'
+      );
     }
-    if (arg === '--help' || arg === '-h') {
-      printHelp();
-      return true;
+    if (flags.dryRun) {
+      throw new CliUsageError(
+        '--restore rewrites config files from their backups; it cannot run in a dry run.'
+      );
     }
-    if (arg === '--restore' || arg === '--undo') {
-      runRestore();
-      return true;
-    }
+    runRestore();
+    return true;
   }
   return false;
 }
 
-/** Prints parser warnings (unknown/malformed flags) to stderr. */
-export function emitFlagWarnings(flags: CliFlags): void {
-  for (const warning of flags.warnings) {
-    process.stderr.write(`shell-configurator: warning: ${warning}\n`);
+/** The config flags present on the command line, by the name shown to the user. */
+function presentConfigFlags(flags: CliFlags): string[] {
+  const present: string[] = [];
+  if (flags.preset) present.push('--preset');
+  if (flags.palette) present.push('--palette');
+  if (flags.powerline !== undefined)
+    present.push(flags.powerline ? '--powerline' : '--no-powerline');
+  if (flags.shells) present.push('--shells');
+  if (flags.font) present.push('--font');
+  if (flags.hasNerdFont !== undefined)
+    present.push(flags.hasNerdFont ? '--has-nerd-font' : '--no-nerd-font');
+  if (flags.characterSymbol) present.push('--character');
+  if (flags.setDefaultShell) present.push('--set-default');
+  if (flags.skipStarship) present.push('--skip-starship');
+  if (flags.adopt) present.push('--adopt');
+  if (flags.importUrl) present.push('--import-url');
+  if (flags.outputFile) present.push('-o/--output');
+  if (flags.exportFile) present.push('--export');
+  return present;
+}
+
+function warnIgnoredFlags(flags: CliFlags, subcommand: string): void {
+  if (flags.stateFile) return;
+  for (const flag of presentConfigFlags(flags)) {
+    process.stderr.write(
+      `shell-configurator: warning: ${flag} is ignored by ${subcommand} without --state\n`
+    );
   }
 }
 
@@ -181,6 +203,7 @@ export async function runDoctorCommand(flags: CliFlags): Promise<void> {
     await runRepairCommand(flags);
     return;
   }
+  warnIgnoredFlags(flags, 'doctor');
   const state = flags.stateFile ? stateFromFlags(flags) : null;
   const report = await runDoctor(state);
   if (flags.json) {
@@ -193,8 +216,12 @@ export async function runDoctorCommand(flags: CliFlags): Promise<void> {
 
 /** Runs the doctor's fixes, then re-checks; a still-failing check exits non-zero. */
 export async function runRepairCommand(flags: CliFlags): Promise<void> {
+  warnIgnoredFlags(flags, 'repair');
   const state = flags.stateFile ? stateFromFlags(flags) : null;
-  const report = await runRepair(state);
+  const report = await runRepair(state, undefined, {
+    dryRun: flags.dryRun,
+    includeWarnings: flags.includeWarnings,
+  });
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {
@@ -204,13 +231,17 @@ export async function runRepairCommand(flags: CliFlags): Promise<void> {
 }
 
 /**
- * Runs a headless subcommand (`generate`, `apply` or `doctor`) to completion,
+ * Runs a headless subcommand (`generate`, `apply`, `doctor` or `repair`) to completion,
  * returning true when the flags targeted one so the Ink wizard is skipped
  * entirely. Errors propagate for the caller's fatal handler — headless runs
  * never render. `command` is the original invocation line, recorded for
  * reproducibility.
  */
 export async function runHeadlessCommand(flags: CliFlags, command: string): Promise<boolean> {
+  const repairs = flags.subcommand === 'repair' || (flags.subcommand === 'doctor' && flags.fix);
+  if (flags.includeWarnings && !repairs) {
+    throw new CliUsageError('--include-warnings only applies to repair (or doctor --fix).');
+  }
   if (flags.subcommand === 'generate') {
     runGenerate(flags);
     return true;
@@ -227,40 +258,64 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
     await runRepairCommand(flags);
     return true;
   }
-  // No subcommand: the interactive wizard runs next — adopt/import are headless
-  // apply-options, so silently dropping them here would fake a successful adopt.
+  // No subcommand: the interactive wizard runs next — silently dropping
+  // headless flags here would fake the run the user asked for.
   if (flags.adopt || flags.importUrl) {
     throw new CliUsageError(
       '--adopt and --import-url require the apply subcommand. ' +
-        'Usage: shell-configurator apply --adopt [--shells <id,...>]'
+        'Usage: shell-configurator apply --adopt --shells <id,...>'
+    );
+  }
+  const dropped = presentConfigFlags(flags);
+  if (flags.stateFile) dropped.push('--state');
+  if (flags.json) dropped.push('--json');
+  if (flags.fix) dropped.push('--fix');
+  if (dropped.length > 0) {
+    throw new CliUsageError(
+      `${dropped.join(', ')} require a subcommand (generate, apply, doctor or repair).`
     );
   }
   return false;
 }
 
-process.on('uncaughtException', (err) => reportFatal('ShellConfigurator crashed', err));
-process.on('unhandledRejection', (err) => reportFatal('ShellConfigurator crashed', err));
+/** Reports the crash and exits immediately, so a dead process cannot hang on Ink's stdin. */
+export function crash(prefix: string, err: unknown): void {
+  reportFatal(prefix, err);
+  process.exit(process.exitCode ?? 1);
+}
+
+process.on('uncaughtException', (err) => crash('ShellConfigurator crashed', err));
+process.on('unhandledRejection', (err) => crash('ShellConfigurator crashed', err));
+
+/** Everything before the wizard: global flags, headless subcommands. */
+export async function routeCli(argv: string[]): Promise<{ handled: boolean; flags: CliFlags }> {
+  const flags: CliFlags = parseCliArgs(argv);
+  if (runGlobalFlags(flags)) return { handled: true, flags };
+  const handled = await runHeadlessCommand(flags, quoteArgv(argv));
+  return { handled, flags };
+}
 
 async function main(): Promise<void> {
-  // Global flags first (--version/--help/--restore), then headless subcommands;
-  // whichever consumes the args keeps the process from starting Ink. The flags
-  // are parsed once and shared by the router and the wizard's dry-run choice.
-  const args = process.argv.slice(2);
-  const flags: CliFlags = parseCliArgs(args);
-
-  if (handleCliArgs()) return;
-  emitFlagWarnings(flags);
-  if (await runHeadlessCommand(flags, args.join(' '))) return;
+  const { handled, flags } = await routeCli(process.argv.slice(2));
+  if (handled) return;
 
   const app = render(
-    <ErrorBoundary onError={(err) => reportFatal('ShellConfigurator hit a render error', err)}>
+    <ErrorBoundary
+      onError={(err) => {
+        reportFatal('ShellConfigurator hit a render error', err);
+        // Leave the message on screen and exit instead of waiting for Ctrl+C.
+        setImmediate(() => app.unmount());
+      }}
+    >
       <App dryRun={flags.dryRun ?? false} onInstallOutcome={recordInstallOutcome} />
-    </ErrorBoundary>
+    </ErrorBoundary>,
+    // Ctrl+C during the install must cancel it, not leave it running unseen.
+    { exitOnCtrlC: false }
   );
 
   await app.waitUntilExit();
   applyInstallOutcomeExitCode();
-  restoreTerminal();
+  restoreTty();
 }
 
 main().catch((err) => reportFatal('ShellConfigurator exited abnormally', err));

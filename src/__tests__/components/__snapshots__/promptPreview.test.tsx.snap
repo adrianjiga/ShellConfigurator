@@ -11,7 +11,7 @@ exports[`PromptPreview > matches the snapshot of the static fallback frame 1`] =
 │ ~/projects/myapp on main                                                                         │
 │ ❯                                                                                                │
 │                                                                                                  │
-│ right: 2s                                                                                        │
+│ right: took 2s                                                                                   │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 

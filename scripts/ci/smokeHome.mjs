@@ -1,39 +1,115 @@
-import { existsSync, mkdirSync } from 'node:fs';
-import * as os from 'node:os';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
+import { parse } from '@iarna/toml';
 
 export function die(message) {
   console.error(message);
   process.exit(2);
 }
 
+/** True when `dir` is `root` itself or somewhere below it. */
+function isWithin(dir, root) {
+  return dir === root || dir.startsWith(`${root}${nodePath.sep}`);
+}
+
 export function requireScratchHome() {
-  const homeDir = process.env.HOME;
-  if (!homeDir) die('Refusing to run: HOME is not set.');
+  if (!process.env.HOME) die('Refusing to run: HOME is not set.');
+  const homeDir = nodePath.resolve(process.env.HOME);
 
-  const underTmp = homeDir.startsWith('/tmp/');
-  const acknowledged = existsSync(nodePath.join(homeDir, '.shellconfigurator-smoke'));
-  if (!underTmp && !acknowledged) {
+  if (!isWithin(homeDir, '/tmp') || homeDir === '/tmp') {
     die(
-      `Refusing to run: HOME (${homeDir}) is not a scratch directory. This smoke harness ` +
-        'writes into and deletes files under HOME. Run it in a container with HOME under ' +
-        `/tmp, or create '${nodePath.join(homeDir, '.shellconfigurator-smoke')}' to acknowledge ` +
-        'a scratch home.'
-    );
-  }
-
-  if (!os.homedir().startsWith(homeDir)) {
-    die(
-      `Refusing to run: os.homedir() resolves ${os.homedir()}, outside HOME (${homeDir}), ` +
-        'which would redirect rc writes to the wrong location.'
+      `Refusing to run: HOME (${homeDir}) is not a scratch directory under /tmp. This smoke ` +
+        'harness writes into and deletes files under HOME. Run it with HOME=/tmp/<something>.'
     );
   }
 
   // The scratch home may not exist yet (e.g. HOME=/tmp/macos-smoke-home on a
   // fresh runner). Create it so config/rc writes land where expected.
   mkdirSync(homeDir, { recursive: true });
+  process.env.HOME = homeDir;
 
-  const xdg = process.env.XDG_CONFIG_HOME?.trim();
-  process.env.XDG_CONFIG_HOME = xdg?.startsWith(homeDir) ? xdg : nodePath.join(homeDir, '.config');
+  const xdgDefaults = {
+    XDG_CONFIG_HOME: '.config',
+    XDG_STATE_HOME: nodePath.join('.local', 'state'),
+    XDG_CACHE_HOME: '.cache',
+    XDG_DATA_HOME: nodePath.join('.local', 'share'),
+  };
+  for (const [name, fallback] of Object.entries(xdgDefaults)) {
+    const value = process.env[name]?.trim();
+    process.env[name] =
+      value && isWithin(nodePath.resolve(value), homeDir)
+        ? nodePath.resolve(value)
+        : nodePath.join(homeDir, fallback);
+  }
   return homeDir;
+}
+
+const entry = nodePath.resolve('dist/index.js');
+
+/** Runs the built CLI; a failure carries the CLI's own output so CI shows why. */
+export function runCli(args) {
+  try {
+    return execFileSync(process.execPath, [entry, ...args], { encoding: 'utf8' });
+  } catch (err) {
+    throw new Error(
+      `shell-configurator ${args.join(' ')} exited ${err.status}:\n${err.stdout ?? ''}${err.stderr ?? ''}`
+    );
+  }
+}
+
+/** Runs one smoke and exits non-zero with its message when an assertion fails. */
+export async function runSmoke(name, body) {
+  try {
+    await body();
+    console.log(`\n${name} passed.`);
+  } catch (err) {
+    console.error(`FAIL ${name}: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+}
+
+/** Asserts the file exists and parses as a Starship config with a format string. */
+export function assertStarshipConfig(filePath, label) {
+  assert.ok(existsSync(filePath), `${label} was not written`);
+  const parsed = /** @type {any} */ (parse(readFileSync(filePath, 'utf8')));
+  assert.equal(typeof parsed.format, 'string', `${label} unparseable`);
+}
+
+/** Runs `generate` to stdout and with -o/--export, asserting every artifact. */
+export function assertGenerate(homeDir, shell) {
+  const generated = runCli([
+    'generate',
+    '--preset',
+    'pastel-powerline',
+    '--shells',
+    shell,
+    '--no-nerd-font',
+  ]);
+  assert.ok(generated.includes('format = "'), 'generate printed no TOML');
+  assert.ok(generated.includes('$character'), 'generate missing $character');
+
+  const tomlPath = nodePath.join(homeDir, 'generated.toml');
+  const cardPath = nodePath.join(homeDir, 'card.json');
+  runCli(['generate', '--preset', 'pastel-powerline', '-o', tomlPath, '--export', cardPath]);
+  assert.ok(existsSync(cardPath), 'generate --export did not write the card');
+  assertStarshipConfig(tomlPath, 'generate -o TOML');
+}
+
+/** Asserts a real `apply` ran the Verify config task and nothing failed. */
+export function assertApplyVerified(out) {
+  assert.ok(out.includes('Verify config'), `apply plan missing the verify task:\n${out}`);
+  assert.match(out, /verified \d+ config\(s\)/, `apply did not verify the config:\n${out}`);
+  assert.ok(!out.includes('FAIL'), `apply reported a failed task:\n${out}`);
+}
+
+/** Asserts a bash/zsh rc carries the managed block: banner, per-shell export and init line. */
+export function assertRcWired(rcPath, shell) {
+  const content = readFileSync(rcPath, 'utf8');
+  const name = nodePath.basename(rcPath);
+  assert.ok(content.includes('# Added by ShellConfigurator'), `${name} missing the banner`);
+  assert.ok(content.includes('export STARSHIP_CONFIG='), `${name} missing STARSHIP_CONFIG`);
+  assert.ok(content.includes(`eval "$(starship init ${shell})"`), `${name} missing the init line`);
+  return content;
 }

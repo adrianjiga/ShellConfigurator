@@ -9,14 +9,14 @@ const {
   mockDetectContainer,
   mockDetectTerminal,
   mockRunInstallTasks,
-  mockAppendHistory,
+  mockRecordRun,
 } = vi.hoisted(() => ({
   mockDetectInstalledShells: vi.fn(),
   mockDetectPackageManager: vi.fn(),
   mockDetectContainer: vi.fn(),
   mockDetectTerminal: vi.fn(),
   mockRunInstallTasks: vi.fn(),
-  mockAppendHistory: vi.fn(),
+  mockRecordRun: vi.fn(),
 }));
 
 vi.mock('../../services/detector.ts', async () => {
@@ -42,19 +42,27 @@ vi.mock('../../services/installTasks.ts', async () => {
   };
 });
 
-vi.mock('../../services/history.ts', () => ({
-  appendHistory: mockAppendHistory,
-}));
+vi.mock('../../services/history.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../services/history.ts')>(
+    '../../services/history.ts'
+  );
+  return {
+    recordRun: mockRecordRun,
+    recordRunSafely: (options: Parameters<typeof actual.recordRun>[0]) =>
+      actual.recordRunSafely(options, mockRecordRun),
+  };
+});
 
 import type { ModuleId } from '../../config/modules.ts';
 import type { CliFlags } from '../../services/args.ts';
-import { CliUsageError } from '../../services/errors.ts';
+import { CliRunError, CliUsageError } from '../../services/errors.ts';
 import {
   fetchImportedConfig,
   runApply,
   runGenerate,
   stateFromFlags,
 } from '../../services/headless.ts';
+import { NERD_FONTS } from '../../services/installer.ts';
 import { DEFAULT_INSTALL_TASK_DEPS } from '../../services/installTasks.ts';
 import { STATE_VERSION, serializeState } from '../../services/state.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
@@ -64,7 +72,6 @@ const flags = (partial: Partial<CliFlags>): CliFlags => ({
   help: false,
   version: false,
   restore: false,
-  warnings: [],
   ...partial,
 });
 
@@ -97,10 +104,63 @@ describe('stateFromFlags', () => {
     expect(stateFromFlags(flags({ preset: 'pure-prompt' })).hasNerdFont).toBe(false);
   });
 
+  it('plans the font install a Nerd Font preset needs', () => {
+    const state = stateFromFlags(flags({ preset: 'pastel-powerline' }));
+    expect(state.nerdFontToInstall).toEqual({ kind: 'install', id: NERD_FONTS[0].id });
+    expect(stateFromFlags(flags({ preset: 'pure-prompt' })).nerdFontToInstall).toEqual({
+      kind: 'none',
+    });
+  });
+
+  it('does not plan a font install when the user says glyphs already render', () => {
+    const state = stateFromFlags(flags({ preset: 'pastel-powerline', hasNerdFont: true }));
+    expect(state.nerdFontToInstall).toEqual({ kind: 'none' });
+  });
+
+  it('keeps the font facts a card recorded when a preset is layered on top', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const haveFont = writeFixtureCard(dir, { hasNerdFont: true });
+      expect(
+        stateFromFlags(flags({ stateFile: haveFont, preset: 'pure-prompt' })).hasNerdFont
+      ).toBe(true);
+
+      const noFont = writeFixtureCard(dir, { hasNerdFont: false });
+      const state = stateFromFlags(flags({ stateFile: noFont, preset: 'pastel-powerline' }));
+      expect(state.hasNerdFont).toBe(false);
+      expect(state.nerdFontToInstall).toEqual({ kind: 'none' });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('lets an explicit --no-nerd-font beat the preset inference', () => {
     const state = stateFromFlags(flags({ preset: 'pastel-powerline', hasNerdFont: false }));
     expect(state.hasNerdFont).toBe(false);
     expect(state.powerline).toBe(true);
+  });
+
+  it('warns when powerline is on without a Nerd Font', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+    stateFromFlags(flags({ preset: 'pastel-powerline', font: 'none' }));
+    expect(stderr).toHaveBeenCalledWith(
+      expect.stringContaining('Powerline separators need a Nerd Font')
+    );
+    stderr.mockRestore();
+  });
+
+  it('warns when powerline is on with a text-only preset', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+    stateFromFlags(flags({ preset: 'plain-text', powerline: true, hasNerdFont: true }));
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining('uses text symbols only'));
+    stderr.mockRestore();
+  });
+
+  it('does not warn when the preset has a font to render glyphs with', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+    stateFromFlags(flags({ preset: 'pastel-powerline' }));
+    expect(stderr).not.toHaveBeenCalled();
+    stderr.mockRestore();
   });
 
   it('lets a --font install imply hasNerdFont after a plain preset', () => {
@@ -115,6 +175,22 @@ describe('stateFromFlags', () => {
     );
     expect(state.palette).toBe('tokyo-night');
     expect(state.powerline).toBe(false);
+  });
+
+  it('rejects a default shell that is not one of the shells being configured', () => {
+    expect(() => stateFromFlags(flags({ shells: ['bash'], setDefaultShell: 'zsh' }))).toThrow(
+      /not one of the shells being configured/
+    );
+    expect(() =>
+      stateFromFlags(flags({ shells: ['bash'], setDefaultShell: 'bash' }))
+    ).not.toThrow();
+  });
+
+  it('deduplicates --shells', () => {
+    expect(stateFromFlags(flags({ shells: ['zsh', 'zsh', 'bash'] })).selectedShells).toEqual([
+      'zsh',
+      'bash',
+    ]);
   });
 
   it('throws CliUsageError for an unknown shell id', () => {
@@ -153,6 +229,17 @@ describe('stateFromFlags', () => {
     expect(state.hasNerdFont).toBe(false);
   });
 
+  it('--font none on a Nerd Font preset plans no font and drops the glyphs', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+    const state = stateFromFlags(flags({ preset: 'pastel-powerline', font: 'none' }));
+    expect(state.nerdFontToInstall).toEqual({ kind: 'none' });
+    expect(state.hasNerdFont).toBe(false);
+    expect(stderr).toHaveBeenCalledWith(
+      expect.stringContaining('Powerline separators need a Nerd Font')
+    );
+    stderr.mockRestore();
+  });
+
   it('--no-nerd-font beats the --font inference', () => {
     const state = stateFromFlags(flags({ font: 'Meslo', hasNerdFont: false }));
     expect(state.nerdFontToInstall).toEqual({ kind: 'install', id: 'Meslo' });
@@ -166,7 +253,12 @@ describe('stateFromFlags', () => {
 
   it('applies the remaining scalar flags', () => {
     const state = stateFromFlags(
-      flags({ characterSymbol: 'lambda', setDefaultShell: 'zsh', skipStarship: true })
+      flags({
+        characterSymbol: 'lambda',
+        shells: ['zsh'],
+        setDefaultShell: 'zsh',
+        skipStarship: true,
+      })
     );
     expect(state.characterSymbol).toBe('lambda');
     expect(state.setDefaultShell).toBe('zsh');
@@ -181,6 +273,30 @@ describe('stateFromFlags', () => {
       expect(state.palette).toBe('vivid');
       expect(state.powerline).toBe(true);
       expect(state.selectedShells).toEqual(['bash']);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a card whose font id is not a known Nerd Font', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = writeFixtureCard(dir, { nerdFontToInstall: { kind: 'install', id: 'Bogus' } });
+      expect(() => stateFromFlags(flags({ stateFile: card }))).toThrow(
+        /Unknown Nerd Font: 'Bogus'/
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a card whose default shell is not one it configures', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = writeFixtureCard(dir, { selectedShells: ['bash'], setDefaultShell: 'zsh' });
+      expect(() => stateFromFlags(flags({ stateFile: card }))).toThrow(
+        /Cannot set 'zsh' as the default shell/
+      );
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -274,11 +390,23 @@ describe('runGenerate', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('rejects an adopt-mode state card', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = writeFixtureCard(dir, { keepExistingConfig: true });
+      expect(() => runGenerate(flags({ stateFile: card }))).toThrow(CliUsageError);
+      expect(() => runGenerate(flags({ stateFile: card }))).toThrow(/adopt-mode/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('rejects --adopt on the generate subcommand', () => {
@@ -342,24 +470,76 @@ describe('runGenerate', () => {
     }
   });
 
-  it('reports an unwritable -o path as a usage error', () => {
+  it('still writes -o under --dry-run, since generate installs nothing', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const out = path.join(dir, 'out.toml');
+      runGenerate(flags({ preset: 'pure-prompt', outputFile: out, dryRun: true }));
+      expect(fs.readFileSync(out, 'utf8')).toContain('$character');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the card it wrote when the TOML write then fails', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = path.join(dir, 'card.json');
+      const out = path.join(dir, 'missing-dir', 'out.toml');
+      expect(() =>
+        runGenerate(flags({ preset: 'pure-prompt', exportFile: card, outputFile: out }))
+      ).toThrow(/Could not write TOML/);
+      expect(JSON.parse(fs.readFileSync(card, 'utf8')).version).toBe(STATE_VERSION);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects writing the card and the TOML to the same file', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const out = path.join(dir, 'starship.toml');
+      expect(() =>
+        runGenerate(flags({ preset: 'pure-prompt', exportFile: out, outputFile: out }))
+      ).toThrow(CliUsageError);
+      expect(fs.existsSync(out)).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('leaves no temp file behind when the atomic write fails', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const out = path.join(dir, 'starship.toml');
+      fs.mkdirSync(out);
+      expect(() => runGenerate(flags({ preset: 'pure-prompt', outputFile: out }))).toThrow(
+        CliRunError
+      );
+      expect(fs.readdirSync(dir)).toEqual(['starship.toml']);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports an unwritable -o path as a run failure', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
     try {
       const out = path.join(dir, 'missing-dir', 'starship.toml');
       expect(() => runGenerate(flags({ preset: 'pure-prompt', outputFile: out }))).toThrow(
-        CliUsageError
+        CliRunError
       );
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('reports an unwritable --export path as a usage error', () => {
+  it('reports an unwritable --export path as a run failure', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
     try {
       const out = path.join(dir, 'missing-dir', 'card.json');
       expect(() => runGenerate(flags({ preset: 'pure-prompt', exportFile: out }))).toThrow(
-        CliUsageError
+        CliRunError
       );
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -377,13 +557,14 @@ describe('runApply', () => {
   ];
 
   beforeEach(() => {
+    vi.clearAllMocks();
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
     stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
     mockDetectInstalledShells.mockResolvedValue(['zsh']);
     mockDetectPackageManager.mockResolvedValue('apt');
     mockDetectContainer.mockResolvedValue(false);
     mockDetectTerminal.mockResolvedValue(null);
-    mockAppendHistory.mockReturnValue(undefined);
+    mockRecordRun.mockReturnValue(undefined);
     process.exitCode = undefined;
   });
 
@@ -396,7 +577,7 @@ describe('runApply', () => {
     await runApply(flags({ subcommand: 'apply', shells: ['bash'], dryRun: true }));
 
     expect(mockRunInstallTasks).not.toHaveBeenCalled();
-    expect(mockAppendHistory).not.toHaveBeenCalled();
+    expect(mockRecordRun).not.toHaveBeenCalled();
     const output = stdoutWrite.mock.calls
       .map((call: [string, ...unknown[]]) => String(call[0]))
       .join('');
@@ -405,14 +586,67 @@ describe('runApply', () => {
     expect(output).toContain('Generated starship.toml');
   });
 
+  it('says plainly when --adopt --dry-run finds no config to keep', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    const previous = process.env.HOME;
+    process.env.HOME = dir;
+    fs.mkdirSync(path.join(dir, '.config'));
+    try {
+      await runApply(flags({ subcommand: 'apply', shells: ['bash'], adopt: true, dryRun: true }));
+      const output = stdoutWrite.mock.calls
+        .map((call: [string, ...unknown[]]) => String(call[0]))
+        .join('');
+      expect(output).toContain('No config to keep yet');
+      expect(output).toContain(path.join(dir, '.config', 'starship.toml'));
+    } finally {
+      process.env.HOME = previous;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('names the config --adopt --dry-run would keep', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    const previous = process.env.HOME;
+    process.env.HOME = dir;
+    fs.mkdirSync(path.join(dir, '.config'));
+    fs.writeFileSync(path.join(dir, '.config', 'starship.toml'), 'format = "x"\n');
+    try {
+      await runApply(flags({ subcommand: 'apply', shells: ['bash'], adopt: true, dryRun: true }));
+      const output = stdoutWrite.mock.calls
+        .map((call: [string, ...unknown[]]) => String(call[0]))
+        .join('');
+      expect(output).toContain(`Config to keep: ${path.join(dir, '.config', 'starship.toml')}`);
+    } finally {
+      process.env.HOME = previous;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a real run with no shells selected', async () => {
+    await expect(runApply(flags({ subcommand: 'apply' }))).rejects.toThrow(/none are selected/);
+    expect(mockRunInstallTasks).not.toHaveBeenCalled();
+  });
+
+  it('does not download an import URL when the plan has no shells', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('[a]', { status: 200 }));
+
+    await expect(
+      runApply(flags({ subcommand: 'apply', importUrl: 'https://example.com/raw' }))
+    ).rejects.toThrow(/none are selected/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('runs the install pipeline and records a successful run in history', async () => {
     mockRunInstallTasks.mockResolvedValue(doneTasks as never);
     await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }), 'apply --shells zsh');
 
     expect(mockRunInstallTasks).toHaveBeenCalled();
-    expect(mockAppendHistory).toHaveBeenCalledWith(
+    expect(mockRecordRun).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'apply',
+        state: expect.objectContaining({ selectedShells: ['zsh'] }),
         command: 'apply --shells zsh',
         results: doneTasks,
         exitCode: 0,
@@ -432,7 +666,7 @@ describe('runApply', () => {
     mockRunInstallTasks.mockResolvedValue(failedTasks as never);
     await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }));
 
-    expect(mockAppendHistory).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 1 }));
+    expect(mockRecordRun).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 1 }));
     expect(process.exitCode).toBe(1);
     expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Install Starship'));
   });
@@ -441,7 +675,7 @@ describe('runApply', () => {
     await expect(runApply(flags({ subcommand: 'apply' }))).rejects.toThrow(/at least one shell/);
 
     expect(mockRunInstallTasks).not.toHaveBeenCalled();
-    expect(mockAppendHistory).not.toHaveBeenCalled();
+    expect(mockRecordRun).not.toHaveBeenCalled();
     expect(process.exitCode).toBeUndefined();
   });
 
@@ -471,7 +705,7 @@ describe('runApply', () => {
 
   it('survives a history write failure', async () => {
     mockRunInstallTasks.mockResolvedValue(doneTasks as never);
-    mockAppendHistory.mockImplementation(() => {
+    mockRecordRun.mockImplementation(() => {
       throw new Error('ENOSPC');
     });
     await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }));
@@ -567,25 +801,64 @@ describe('runApply', () => {
   });
 
   it('adopts the existing shared config when --adopt is passed without --import-url', async () => {
-    const fakeTask = { id: 'config', label: 'Keep existing Starship config', status: 'done' };
-    mockRunInstallTasks.mockResolvedValue([fakeTask] as never);
-
-    await runApply(flags({ subcommand: 'apply', shells: ['zsh'], adopt: true, dryRun: true }));
-
-    const output = stdoutWrite.mock.calls
-      .map((call: [string, ...unknown[]]) => String(call[0]))
-      .join('');
-    expect(output).toContain('Config to keep');
-    expect(output).not.toContain('Generated starship.toml');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    const previous = process.env.HOME;
+    process.env.HOME = dir;
+    fs.mkdirSync(path.join(dir, '.config'));
+    try {
+      await runApply(flags({ subcommand: 'apply', shells: ['zsh'], adopt: true, dryRun: true }));
+      const output = stdoutWrite.mock.calls
+        .map((call: [string, ...unknown[]]) => String(call[0]))
+        .join('');
+      expect(output).toContain('No config to keep yet');
+      expect(output).not.toContain('Generated starship.toml');
+    } finally {
+      process.env.HOME = previous;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
-  it('rejects a non-http import URL', async () => {
+  it('rejects a non-http import URL as a usage error', async () => {
     await expect(
       runApply(flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'ftp://nope' }))
-    ).rejects.toThrow(/http\(s\) URL/);
+    ).rejects.toThrow(CliUsageError);
   });
 
-  it('rejects an HTTP error when fetching an imported config', async () => {
+  it('refuses a plain-http import URL', async () => {
+    await expect(fetchImportedConfig('http://example.com/starship.toml')).rejects.toThrow(
+      /requires an https URL/
+    );
+  });
+
+  it('accepts an uppercase scheme', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('[a]', { status: 200 }));
+
+    await expect(fetchImportedConfig('HTTPS://example.com/starship.toml')).resolves.toBe('[a]');
+  });
+
+  it('rejects a redirect that lands on plain http', async () => {
+    const response = new Response('[a]', { status: 200 });
+    Object.defineProperty(response, 'url', { value: 'http://mirror.example.com/config.toml' });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+
+    await expect(fetchImportedConfig('https://example.com/starship.toml')).rejects.toThrow(
+      /redirected to a non-https URL/
+    );
+  });
+
+  it('keeps credentials out of fetch error messages', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('boom'));
+
+    const error = await fetchImportedConfig('https://user:s3cret@example.com/config.toml').catch(
+      (err: Error) => err
+    );
+    expect(error instanceof Error ? error.message : String(error)).not.toContain('s3cret');
+    expect(error instanceof Error ? error.message : String(error)).toContain(
+      "'https://example.com/config.toml'"
+    );
+  });
+
+  it('rejects an HTTP error when fetching an imported config as a run failure', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
 
     await expect(
@@ -593,6 +866,9 @@ describe('runApply', () => {
         flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'https://example.com/404' })
       )
     ).rejects.toThrow(/HTTP 404/);
+    await expect(fetchImportedConfig('https://example.com/404', { timeoutMs: 5 })).rejects.toThrow(
+      CliRunError
+    );
   });
 
   it('rejects an empty body from a URL fetch', async () => {
@@ -603,6 +879,32 @@ describe('runApply', () => {
         flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'https://example.com/empty' })
       )
     ).rejects.toThrow(/no config content/);
+  });
+
+  it('rejects a whitespace-only body from a URL fetch', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(' \n\t\n', { status: 200 }));
+    await expect(fetchImportedConfig('https://example.com/blank')).rejects.toThrow(
+      /no config content/
+    );
+  });
+
+  it('ignores a content-length that is not a number and checks the real bytes', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('format = "$all"\n', { status: 200, headers: { 'content-length': 'lots' } })
+    );
+    await expect(fetchImportedConfig('https://example.com/odd-length')).resolves.toContain(
+      'format = "$all"'
+    );
+  });
+
+  it('rejects an HTML page instead of adopting it as a config', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('<!DOCTYPE html><html><body>gist</body></html>', { status: 200 })
+    );
+
+    await expect(fetchImportedConfig('https://gist.example.com/not-raw')).rejects.toThrow(
+      /returned HTML, not a TOML config/
+    );
   });
 
   it('rejects an oversized imported config based on the declared content-length', async () => {
@@ -629,6 +931,28 @@ describe('runApply', () => {
     ).rejects.toThrow(/config exceeds 1000000 bytes/);
   });
 
+  it('stops reading an oversized streamed body instead of buffering it whole', async () => {
+    let cancelled = false;
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        if (pulled > 50) throw new Error('kept reading past the cap');
+        controller.enqueue(new Uint8Array(100_000));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(body, { status: 200 }));
+
+    await expect(
+      fetchImportedConfig('https://example.com/stream', { maxBytes: 1_000_000 })
+    ).rejects.toThrow(/config exceeds 1000000 bytes/);
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThanOrEqual(12);
+  });
+
   it('times out a hung import fetch and says how long it waited', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(
       new DOMException('The operation was aborted', 'TimeoutError')
@@ -639,6 +963,19 @@ describe('runApply', () => {
     );
   });
 
+  it('reports a body that fails mid-read as a run failure, not a stack trace', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(10));
+        controller.error(new Error('ECONNRESET'));
+      },
+    });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(body, { status: 200 }));
+
+    await expect(fetchImportedConfig('https://example.com/reset')).rejects.toThrow(CliRunError);
+    await expect(fetchImportedConfig('https://example.com/reset')).rejects.toThrow(/ECONNRESET/);
+  });
+
   it('passes a timeout signal to fetch so a hung request aborts', async () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
@@ -646,10 +983,11 @@ describe('runApply', () => {
 
     await fetchImportedConfig('https://example.com/fast', { timeoutMs: 5 });
 
-    expect(fetchSpy).toHaveBeenCalledWith(
-      'https://example.com/fast',
-      expect.objectContaining({ signal: expect.any(AbortSignal) })
-    );
+    const signal = (fetchSpy.mock.calls[0]![1] as RequestInit).signal!;
+    expect(signal.aborted).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(signal.aborted).toBe(true);
+    expect((signal.reason as Error).name).toBe('TimeoutError');
   });
 
   it('reports a network failure when fetching an imported config', async () => {

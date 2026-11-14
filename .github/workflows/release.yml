@@ -6,6 +6,10 @@ on:
 
 permissions: read-all
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Publish to npm + GitHub Releases
@@ -19,34 +23,48 @@ jobs:
           # The release notes script walks git log back to the previous v* tag,
           # which needs full history rather than the shallow default.
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
-          cache: "npm"
-      - run: npm ci
-      # master is gated on lint/format/typecheck, the full suite, and the
-      # distro-smoke matrix before this tag could exist, so the suite is not
-      # re-run here. Only the packed-tarball boot check below adds signal.
+      - name: Check the tag is a master commit with the package version
+        run: |
+          git fetch --no-tags origin master
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "$GITHUB_REF_NAME is not on master" >&2
+            exit 1
+          fi
+          version="$(node -p "require('./package.json').version")"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "$GITHUB_REF_NAME does not match package.json version $version" >&2
+            exit 1
+          fi
+      - run: npm ci --ignore-scripts
+      - run: npm run build
       # --silent keeps prepare output off stdout so only the tarball name lands
       # in GITHUB_ENV.
       - name: Package release tarball
-        run: echo "artifact=$(npm pack --silent --ignore-scripts)" >> "$GITHUB_ENV"
+        run: |
+          artifact="$(npm pack --silent --ignore-scripts)"
+          test -f "$artifact"
+          echo "artifact=$artifact" >> "$GITHUB_ENV"
       # Smoke-boots the packed tarball: guards against a release that extracts
       # but cannot launch (e.g. missing bundled dependencies).
       - name: Verify tarball boots
         run: |
           tmp=$(mktemp -d)
-          tar -xzf "${{ env.artifact }}" -C "$tmp"
-          node "$tmp/package/dist/index.js" --version
+          tar -xzf "$artifact" -C "$tmp"
+          booted="$(node "$tmp/package/dist/index.js" --version)"
           rm -rf "$tmp"
+          if [ "v$booted" != "$GITHUB_REF_NAME" ]; then
+            echo "the tarball reports $booted, not $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
       # OIDC trusted publishing: npm negotiates a short-lived token from the
       # ACTIONS_ID_TOKEN_REQUEST_URL. No NODE_AUTH_TOKEN is set so the exchange
       # is used. Stage defers 2FA to a later maintainer approval.
       - name: Stage on npm (OIDC)
-        shell: bash
-        run: |
-          set -o pipefail
-          npm stage publish --provenance --access public --ignore-scripts
+        run: npm stage publish --provenance --access public --ignore-scripts
       - name: Build release notes from conventional commits
         shell: bash
         run: scripts/releaseNotes.sh > "$RUNNER_TEMP/release-notes.md"
@@ -54,4 +72,6 @@ jobs:
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           files: ${{ env.artifact }}
+          fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
           body_path: ${{ runner.temp }}/release-notes.md

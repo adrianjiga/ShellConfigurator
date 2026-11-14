@@ -1,7 +1,9 @@
+import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getShell, isShellId, type ShellDef } from '../config/shells.ts';
-import { configHome } from '../services/paths.ts';
+import { getShell, isShellId, posixShellQuote, type ShellDef } from '../config/shells.ts';
+import { errorMessage } from '../services/errors.ts';
+import { configHome, homeDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 
 export interface WriteConfigResult {
@@ -20,12 +22,13 @@ export function getShellConfigPath(shellId: ShellId): string {
 }
 
 /**
- * The shared config the wizard never writes but shadows with per-shell configs:
- * ~/.config/starship.toml. Copied aside before an install so it can be restored
- * (see backupSharedConfig / restoreConfigBackups).
+ * The shared config, ~/.config/starship.toml: per-shell configs shadow it, and
+ * only an adopt run with an imported config writes it. Copied aside before an
+ * install so it can be restored (see backupSharedConfig / restoreConfigBackups).
  */
 export function getSharedConfigPath(): string {
-  return path.join(configHome(), 'starship.toml');
+  // Starship's own default ignores XDG_CONFIG_HOME.
+  return path.join(homeDir(), '.config', 'starship.toml');
 }
 
 export function backupStamp(): string {
@@ -33,16 +36,74 @@ export function backupStamp(): string {
 }
 
 /**
- * Writes a file atomically: the content goes to a temp file in the same
- * directory, which is then renamed over the target. A crash or error can never
- * leave a half-written config or rc file, and a reader never sees a truncated
- * file. On failure the temp file is removed and the original error re-thrown.
+ * A fresh `<file>.bak-<stamp>` path. A second backup in the same millisecond
+ * gets a `-2`, `-3`… suffix instead of overwriting the first.
  */
-function writeFileAtomic(filePath: string, content: string): void {
-  const tmpPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.tmp`);
+export function backupPath(filePath: string): string {
+  const base = `${filePath}.bak-${backupStamp()}`;
+  let candidate = base;
+  for (let n = 2; n < 100 && fs.existsSync(candidate); n++) candidate = `${base}-${n}`;
+  return candidate;
+}
+
+/** Copies the file to a fresh backup when it exists; returns where it went. */
+export function backupIfExists(filePath: string): string | undefined {
+  if (!fs.existsSync(filePath)) return undefined;
+  const backup = backupPath(filePath);
+  fs.copyFileSync(filePath, backup);
+  return backup;
+}
+
+/** Writes a config file, creating its folder and backing up what it replaces. */
+function writeWithBackup(configPath: string, toml: string): WriteConfigResult {
+  const configDir = path.dirname(configPath);
+  if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+  const backedUpTo = backupIfExists(configPath);
+  writeFileAtomic(configPath, toml);
+  return { path: configPath, backedUpTo };
+}
+
+/** A name `backupPath` produced: an ISO stamp with `:`/`.` replaced, maybe a suffix. */
+const BACKUP_STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z(-\d+)?$/;
+
+/**
+ * Where a write to `filePath` must land, and the mode it must keep. A symlink
+ * (stow, chezmoi, yadm) is written through to its target so the link survives;
+ * a dangling one is refused rather than replaced; a read-only file is refused
+ * rather than silently made writable.
+ */
+function resolveWriteTarget(filePath: string): { target: string; mode?: number } {
+  const link = fs.lstatSync(filePath, { throwIfNoEntry: false });
+  if (!link) return { target: filePath };
+  let target = filePath;
+  if (link.isSymbolicLink()) {
+    try {
+      target = fs.realpathSync(filePath);
+    } catch (err) {
+      throw new Error(`${filePath} is a symlink to a file that does not exist`, { cause: err });
+    }
+  }
+  fs.accessSync(target, fs.constants.W_OK);
+  const stat = fs.statSync(target, { throwIfNoEntry: false });
+  return { target, mode: stat ? stat.mode & 0o7777 : undefined };
+}
+
+/**
+ * Writes a file atomically: the content goes to a uniquely named temp file in
+ * the same directory, flushed to disk, then renamed over the target, keeping
+ * its permissions. A reader never sees a truncated file. On failure the temp
+ * file is removed and the original error re-thrown.
+ */
+export function writeFileAtomic(filePath: string, content: string): void {
+  const { target, mode } = resolveWriteTarget(filePath);
+  const tmpPath = path.join(
+    path.dirname(target),
+    `.${path.basename(target)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
+  );
   try {
-    fs.writeFileSync(tmpPath, content, 'utf8');
-    fs.renameSync(tmpPath, filePath);
+    fs.writeFileSync(tmpPath, content, { encoding: 'utf8', flush: true });
+    if (mode !== undefined) fs.chmodSync(tmpPath, mode);
+    fs.renameSync(tmpPath, target);
   } catch (err) {
     try {
       fs.rmSync(tmpPath, { force: true });
@@ -62,13 +123,17 @@ function writeFileAtomic(filePath: string, content: string): void {
 export function backupSharedConfig(): string | null {
   const shared = getSharedConfigPath();
   if (!fs.existsSync(shared)) return null;
-  const backup = `${shared}.bak-${backupStamp()}`;
   try {
-    fs.copyFileSync(shared, backup);
+    const previous = newestBackup(path.dirname(shared), path.basename(shared));
+    if (previous && fs.readFileSync(previous).equals(fs.readFileSync(shared))) return previous;
+  } catch {
+    // Fall through to a fresh copy.
+  }
+  try {
+    return backupIfExists(shared) ?? null;
   } catch {
     return null;
   }
-  return backup;
 }
 
 export interface RestoredConfig {
@@ -76,6 +141,19 @@ export interface RestoredConfig {
   what: 'shared' | ShellId;
   restoredTo: string;
   restoredFrom: string;
+  /** Where the file it replaced was saved, so a restore can itself be undone. */
+  previousSavedTo?: string;
+}
+
+export interface RestoreFailure {
+  what: 'shared' | ShellId;
+  restoredFrom: string;
+  error: string;
+}
+
+export interface RestoreOutcome {
+  restored: RestoredConfig[];
+  failed: RestoreFailure[];
 }
 
 /** Newest *.bak-* entry for `prefix` inside `dir`, by ISO-stamped file name. */
@@ -86,27 +164,60 @@ function newestBackup(dir: string, prefix: string): string | null {
   } catch {
     return null;
   }
-  const candidates = entries.filter((e) => e.startsWith(`${prefix}.bak-`)).sort();
+  const marker = `${prefix}.bak-`;
+  const candidates = entries
+    .filter((e) => e.startsWith(marker) && BACKUP_STAMP.test(e.slice(marker.length)))
+    .sort((a, b) => {
+      const [stampA, nA = '1'] = a.slice(marker.length).split(/Z-?/);
+      const [stampB, nB = '1'] = b.slice(marker.length).split(/Z-?/);
+      return stampA === stampB ? Number(nA || 1) - Number(nB || 1) : stampA < stampB ? -1 : 1;
+    });
   const newest = candidates[candidates.length - 1];
   return newest ? path.join(dir, newest) : null;
 }
 
-function restoreOne(what: 'shared' | ShellId, target: string, backup: string): RestoredConfig {
-  fs.copyFileSync(backup, target);
-  return { what, restoredTo: target, restoredFrom: backup };
+function restoreOne(
+  what: 'shared' | ShellId,
+  target: string,
+  backup: string,
+  outcome: RestoreOutcome
+): void {
+  try {
+    let previousSavedTo: string | undefined;
+    if (fs.existsSync(target)) {
+      previousSavedTo = `${target}.pre-restore-${backupStamp()}`;
+      fs.copyFileSync(target, previousSavedTo);
+    }
+    fs.copyFileSync(backup, target);
+    outcome.restored.push({
+      what,
+      restoredTo: target,
+      restoredFrom: backup,
+      ...(previousSavedTo ? { previousSavedTo } : {}),
+    });
+  } catch (err) {
+    outcome.failed.push({
+      what,
+      restoredFrom: backup,
+      error: errorMessage(err),
+    });
+  }
 }
 
 /**
  * Copies the newest .bak-* snapshot back over the live config for the shared
- * config and every per-shell config that has one. Backups are kept, not deleted.
- * Returns every restored config; an empty array means nothing to restore.
+ * config and every per-shell config that has one (only `onlyShells`, when the
+ * shells the last run touched are known). Backups are kept, not deleted.
+ * A config that fails to copy is reported in `failed` and does not stop the
+ * rest; an empty outcome means nothing to restore.
  */
-export function restoreConfigBackups(): RestoredConfig[] {
+export function restoreConfigBackups(onlyShells?: readonly ShellId[]): RestoreOutcome {
   const base = configHome();
-  const restored: RestoredConfig[] = [];
+  const outcome: RestoreOutcome = { restored: [], failed: [] };
 
-  const newestShared = newestBackup(base, 'starship.toml');
-  if (newestShared) restored.push(restoreOne('shared', getSharedConfigPath(), newestShared));
+  const shared = getSharedConfigPath();
+  const newestShared = newestBackup(path.dirname(shared), path.basename(shared));
+  if (newestShared) restoreOne('shared', shared, newestShared, outcome);
 
   const shellsDir = path.join(base, 'starship');
   if (fs.existsSync(shellsDir)) {
@@ -120,13 +231,67 @@ export function restoreConfigBackups(): RestoredConfig[] {
       entries.map((e) => /^(.+)\.toml\.bak-.*$/.exec(e)?.[1]).filter(isShellId)
     );
     for (const shellId of shells) {
+      if (onlyShells && !onlyShells.includes(shellId)) continue;
       const backup = newestBackup(shellsDir, `${shellId}.toml`);
       if (!backup) continue;
-      restored.push(restoreOne(shellId, getShellConfigPath(shellId), backup));
+      restoreOne(shellId, getShellConfigPath(shellId), backup, outcome);
     }
   }
 
-  return restored;
+  return outcome;
+}
+
+const INIT_COMMAND: Record<ShellId, string> = {
+  bash: 'starship init bash',
+  zsh: 'starship init zsh',
+  fish: 'starship init fish',
+  nushell: 'starship init nu',
+  powershell: 'starship init powershell',
+};
+
+/**
+ * True when a non-comment line runs the shell's init, in any spelling the shell
+ * accepts: the line we write, `source <(starship init zsh)`, an absolute binary
+ * path, or fish's conf.d file (checked by callers via `fishInitFile`).
+ */
+export function hasStarshipInit(content: string, shellId: ShellId): boolean {
+  const command = INIT_COMMAND[shellId];
+  return content
+    .split('\n')
+    .some((line) => !line.trimStart().startsWith('#') && line.includes(command));
+}
+
+/** Fish's drop-in init file, which `hasStarshipInit` cannot see from config.fish. */
+export function fishInitFile(rcFile: string): string {
+  return path.join(path.dirname(rcFile), 'conf.d', 'starship.fish');
+}
+
+export interface RcIo {
+  exists: (path: string) => boolean;
+  readFile: (path: string) => string;
+}
+
+const FS_RC_IO: RcIo = {
+  exists: (filePath) => fs.existsSync(filePath),
+  readFile: (filePath) => fs.readFileSync(filePath, 'utf8'),
+};
+
+/**
+ * Of the given installed shells, the ones whose rc actually loads Starship.
+ * Clearing a leaked STARSHIP_CONFIG only makes sense where Starship runs.
+ */
+export function shellsWithStarshipInit(shells: ShellId[], io: RcIo = FS_RC_IO): ShellId[] {
+  return shells.filter((shellId) => {
+    const shell = getShell(shellId);
+    if (!shell?.rcFile) return false;
+    try {
+      if (!io.exists(shell.rcFile)) return false;
+      if (hasStarshipInit(io.readFile(shell.rcFile), shellId)) return true;
+      return shellId === 'fish' && io.exists(fishInitFile(shell.rcFile));
+    } catch {
+      return false;
+    }
+  });
 }
 
 /**
@@ -134,39 +299,42 @@ export function restoreConfigBackups(): RestoredConfig[] {
  * nushell's autoload file exists (written by the documented one-liner), or
  * powershell's $PROFILE contains the init line.
  */
-function manualSetupApplied(shell: ShellDef): boolean {
-  if (!shell.initPath || !fs.existsSync(shell.initPath)) return false;
+export function manualSetupAppliedWith(
+  shell: ShellDef,
+  io: RcIo,
+  pointAtSharedConfig = false
+): boolean {
+  if (!shell.initPath) return false;
   if (shell.id === 'powershell') {
-    try {
-      return fs.readFileSync(shell.initPath, 'utf8').includes(shell.initLine);
-    } catch {
-      return false;
-    }
+    // The all-hosts profile.ps1 beside the current-host profile is loaded too.
+    const profiles = [shell.initPath, path.join(path.dirname(shell.initPath), 'profile.ps1')];
+    return profiles.some((profile) => {
+      try {
+        return io.exists(profile) && hasStarshipInit(io.readFile(profile), shell.id);
+      } catch {
+        return false;
+      }
+    });
   }
-  return (shell.additionalInitPaths ?? []).every((filePath) => fs.existsSync(filePath));
+  if (!io.exists(shell.initPath)) return false;
+  // Adopt mode reads the shared config, so the per-shell pin must be gone.
+  const pins = shell.additionalInitPaths ?? [];
+  return pointAtSharedConfig
+    ? pins.every((filePath) => !io.exists(filePath))
+    : pins.every((filePath) => io.exists(filePath));
+}
+
+export function manualSetupApplied(shell: ShellDef, pointAtSharedConfig = false): boolean {
+  return manualSetupAppliedWith(shell, FS_RC_IO, pointAtSharedConfig);
 }
 
 /**
- * Writes one shell's config, backing up any existing file first (overwriting is
- * the one irreversible step). Never touches the shared starship.toml.
+ * Writes one shell's config, backing up any existing file first. Never touches
+ * the shared starship.toml.
  */
 export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigResult {
   const configPath = getShellConfigPath(shellId);
-  const configDir = path.dirname(configPath);
-
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
-  }
-
-  let backedUpTo: string | undefined;
-  if (fs.existsSync(configPath)) {
-    backedUpTo = `${configPath}.bak-${backupStamp()}`;
-    fs.copyFileSync(configPath, backedUpTo);
-  }
-
-  writeFileAtomic(configPath, toml);
-
-  return { path: configPath, backedUpTo };
+  return writeWithBackup(configPath, toml);
 }
 
 /**
@@ -176,45 +344,82 @@ export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigRes
  */
 export function writeSharedConfig(toml: string): WriteConfigResult {
   const configPath = getSharedConfigPath();
-
-  let backedUpTo: string | undefined;
-  if (fs.existsSync(configPath)) {
-    backedUpTo = `${configPath}.bak-${backupStamp()}`;
-    fs.copyFileSync(configPath, backedUpTo);
-  }
-
-  writeFileAtomic(configPath, toml);
-
-  return { path: configPath, backedUpTo };
+  return writeWithBackup(configPath, toml);
 }
 
-const BLOCK_MARKER = '# Added by ShellConfigurator';
+export const BLOCK_MARKER = '# Added by ShellConfigurator';
 /**
  * Adopt-mode block marker: these blocks carry only the init line (no
  * STARSHIP_CONFIG export), so a later non-adopt run can recognise and drop them.
  */
 export const ADOPT_MARKER = '# Added by ShellConfigurator (shared config)';
 
+function isBlockMarkerLine(line: string): boolean {
+  const t = line.trim();
+  return t === BLOCK_MARKER || t === ADOPT_MARKER;
+}
+
+function isPathLine(shell: ShellDef, line: string): boolean {
+  const t = line.trim();
+  return shell.id === 'fish'
+    ? t.startsWith('fish_add_path ')
+    : t.startsWith('export PATH=') && (t.endsWith(':$PATH"') || t.endsWith(':"$PATH"'));
+}
+
+/**
+ * The lines a managed block may contain: anything else (a blank line, a user
+ * line) ends the block.
+ */
+function isManagedLine(shell: ShellDef, line: string): boolean {
+  const t = line.trim();
+  if (t === shell.initLine || isPathLine(shell, t)) return true;
+  const env = shell.configEnv;
+  return Boolean(env && (t.startsWith(env.exportPrefix) || t === env.unsetLine));
+}
+
+/** Matches a managed line by its trimmed text, so CRLF files and stray spaces still match. */
+type LineNeedle = string | ((trimmed: string) => boolean);
+
+function lineMatches(line: string, needle: LineNeedle): boolean {
+  const t = line.trim();
+  return typeof needle === 'string' ? t === needle.trim() : needle(t);
+}
+
+/** Any per-shell STARSHIP_CONFIG export, whatever path an earlier run wrote. */
+function isConfigExport(shell: ShellDef): LineNeedle {
+  const prefix = shell.configEnv?.exportPrefix;
+  return (t) => prefix !== undefined && t.startsWith(prefix);
+}
+
 /**
  * Drops every "Added by ShellConfigurator" block containing any needle, so a
  * re-run can repair an rc polluted by the opposite block from an earlier run.
  */
-function removeShellConfiguratorBlocks(content: string, needles: string[]): string {
+function removeShellConfiguratorBlocks(
+  content: string,
+  shell: ShellDef,
+  needles: LineNeedle[],
+  removedPathLines: string[] = []
+): string {
   const lines = content.split('\n');
   const out: string[] = [];
+  let removed = false;
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
     // Adopt-mode blocks share the marker prefix, so both are recognised here.
-    if (line.trim() === BLOCK_MARKER || line.trim().startsWith(`${BLOCK_MARKER} `)) {
+    if (isBlockMarkerLine(line)) {
       const block = [line];
       let j = i + 1;
-      while (j < lines.length && lines[j].trim() !== '') {
+      while (j < lines.length && !isBlockMarkerLine(lines[j]) && isManagedLine(shell, lines[j])) {
         block.push(lines[j]);
         j++;
       }
-      if (needles.some((n) => block.includes(n))) {
-        // Drop the stale block (and the blank line that follows it).
+      if (needles.some((n) => block.some((blockLine) => lineMatches(blockLine, n)))) {
+        // Drop the stale block (and the blank line that follows it), keeping
+        // note of its PATH line: without it starship may not be found at all.
+        removedPathLines.push(...block.filter((l) => isPathLine(shell, l)).map((l) => l.trim()));
+        removed = true;
         i = j;
         if (i < lines.length && lines[i].trim() === '') i++;
         continue;
@@ -229,7 +434,14 @@ function removeShellConfiguratorBlocks(content: string, needles: string[]): stri
       i++;
     }
   }
-  return out.join('\n');
+  return removed ? out.join('\n') : content;
+}
+
+/** Whether a ShellConfigurator block in `content` exports STARSHIP_CONFIG (an adopt run removes it). */
+export function hasManagedConfigExport(shellId: ShellId, content: string): boolean {
+  const shell = getShell(shellId);
+  if (!shell) return false;
+  return removeShellConfiguratorBlocks(content, shell, [isConfigExport(shell)]) !== content;
 }
 
 export interface ApplyShellConfigOptions {
@@ -246,13 +458,9 @@ export interface ApplyShellConfigOptions {
  * shells without a script rc file (nushell, powershell).
  */
 export function starshipConfigLine(shellId: ShellId): string | null {
-  const shell = getShell(shellId);
-  if (!shell?.rcFile) return null;
-  const configPath = getShellConfigPath(shellId);
-  if (shellId === 'fish') {
-    return `set -gx STARSHIP_CONFIG ${configPath}`;
-  }
-  return `export STARSHIP_CONFIG="${configPath}"`;
+  const env = getShell(shellId)?.configEnv;
+  if (!env) return null;
+  return `${env.exportPrefix}${posixShellQuote(getShellConfigPath(shellId))}`;
 }
 
 /** Creates the rc file's parent directory (important for fish) when missing. */
@@ -262,30 +470,77 @@ function ensureRcDir(rcPath: string): void {
   try {
     fs.mkdirSync(rcDir, { recursive: true });
   } catch (err) {
-    throw new Error(
-      `Cannot create directory ${rcDir}: ${err instanceof Error ? err.message : err}`,
-      { cause: err }
-    );
+    throw new Error(`Cannot create directory ${rcDir}: ${errorMessage(err)}`, { cause: err });
   }
 }
 
+/** True when a non-comment line of `content` is exactly `line`. */
+function hasLine(content: string, line: string): boolean {
+  return content.split('\n').some((l) => l.trim() === line);
+}
+
 /**
- * Computes the PATH, STARSHIP_CONFIG, and init lines that should be appended,
- * skipping any already present in the cleaned rc file.
+ * The PATH, STARSHIP_CONFIG, and init lines still missing from the cleaned rc
+ * file, each checked on its own so a removed init line or a newly needed PATH
+ * line is never skipped as "already configured".
  */
 function buildAdditionLines(
   shell: ShellDef,
   cleaned: string,
-  options: ApplyShellConfigOptions
+  pathDir: string | null | undefined,
+  configLine: string | null,
+  initPresent: boolean
+): { lines: string[]; pathLine: string | null } {
+  const wantedPath = pathDir && shell.pathLine ? shell.pathLine(pathDir) : null;
+  const pathLine = wantedPath && !hasLine(cleaned, wantedPath) ? wantedPath : null;
+  return {
+    lines: [
+      ...(pathLine ? [pathLine] : []),
+      ...(configLine && !hasLine(cleaned, configLine) ? [configLine] : []),
+      ...(!initPresent ? [shell.initLine] : []),
+    ],
+    pathLine,
+  };
+}
+
+/** The block a run appends to an rc file that has no Starship lines yet; empty for shells without one. */
+export function plannedRcBlock(
+  shellId: ShellId,
+  pointAtSharedConfig: boolean,
+  pathDir: string | null
 ): string[] {
-  const pathDir = options.ensurePathDir;
-  const pathLine = pathDir && shell.pathLine ? shell.pathLine(pathDir) : null;
-  const configLine = options.pointAtSharedConfig ? null : starshipConfigLine(shell.id);
-  return [
-    ...(pathLine && !cleaned.includes(pathLine) ? [pathLine] : []),
-    ...(configLine && !cleaned.includes(configLine) ? [configLine] : []),
-    ...(!cleaned.includes(shell.initLine) ? [shell.initLine] : []),
-  ];
+  const shell = getShell(shellId);
+  if (!shell?.rcFile) return [];
+  const configLine = pointAtSharedConfig ? null : starshipConfigLine(shellId);
+  const { lines } = buildAdditionLines(shell, '', pathDir, configLine, false);
+  return [pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER, ...lines];
+}
+
+/**
+ * Puts `lines` just above the first init line: PATH must be set before
+ * `starship init` runs, and zsh/bash read the config at init time for the
+ * continuation prompt. Inside a managed block the lines join it; above a user's
+ * own init line they form a block of their own, closed by a blank line so the
+ * user's line never becomes part of it. Null when no init line is in the file.
+ */
+function insertBeforeInit(
+  content: string,
+  shell: ShellDef,
+  marker: string,
+  lines: string[]
+): string | null {
+  const all = content.split('\n');
+  const command = INIT_COMMAND[shell.id];
+  const index = all.findIndex((l) => !l.trimStart().startsWith('#') && l.includes(command));
+  if (index === -1) return null;
+
+  let above = index - 1;
+  while (above >= 0 && !isBlockMarkerLine(all[above]) && isManagedLine(shell, all[above])) {
+    above--;
+  }
+  const inBlock = above >= 0 && isBlockMarkerLine(all[above]);
+  all.splice(index, 0, ...(inBlock ? lines : [marker, ...lines, '']));
+  return all.join('\n');
 }
 
 export function applyShellConfig(
@@ -299,7 +554,7 @@ export function applyShellConfig(
   // If the init command has already been applied, a re-run should say so rather
   // than always reporting "set up manually".
   if (!shell.rcFile) {
-    if (manualSetupApplied(shell)) {
+    if (manualSetupApplied(shell, options.pointAtSharedConfig)) {
       return { applied: false, note: 'already configured' };
     }
     return { applied: false, note: shell.manualNote };
@@ -314,39 +569,48 @@ export function applyShellConfig(
   // exclusive: a leftover "unset" guard from a reset run, an adopt-mode block
   // when writing per-shell configs, and — in adopt mode — a per-shell export a
   // previous non-adopt run left pointing at a per-shell TOML.
-  const cleanNeedles = [starshipUnsetLine(shellId)!];
+  const configLine = options.pointAtSharedConfig ? null : starshipConfigLine(shellId);
+  const cleanNeedles: LineNeedle[] = [starshipUnsetLine(shellId)!];
   if (options.pointAtSharedConfig) {
-    const perShellExport = starshipConfigLine(shellId);
-    if (perShellExport) cleanNeedles.push(perShellExport);
+    cleanNeedles.push(isConfigExport(shell));
   } else {
     cleanNeedles.push(ADOPT_MARKER);
+    // An export an earlier run wrote for a different config path is stale too.
+    cleanNeedles.push((t) => lineMatches(t, isConfigExport(shell)) && t !== configLine);
   }
-  const cleaned = removeShellConfiguratorBlocks(existing, cleanNeedles);
+  const carriedPathLines: string[] = [];
+  const cleaned = removeShellConfiguratorBlocks(existing, shell, cleanNeedles, carriedPathLines);
 
-  // The PATH and STARSHIP_CONFIG lines must come before the init line, or
-  // `starship init` cannot resolve either the binary or its config.
-  const configLine = options.pointAtSharedConfig ? null : starshipConfigLine(shellId);
+  const initPresent =
+    hasStarshipInit(cleaned, shell.id) ||
+    (shell.id === 'fish' && fs.existsSync(fishInitFile(rcPath)));
 
-  // Idempotent: skip if already configured (check for the full block we'd add).
-  if (cleaned.includes(configLine ?? shell.initLine)) {
+  const added = buildAdditionLines(shell, cleaned, options.ensurePathDir, configLine, initPresent);
+  const carried = [...new Set(carriedPathLines)].filter(
+    (line) => line !== added.pathLine && !hasLine(cleaned, line)
+  );
+  const lines = [...carried, ...added.lines];
+  const { pathLine } = added;
+  if (lines.length === 0) {
     // An already-configured rc may still carry a stale opposite-mode block;
     // write the cleaned file so the modes stay mutually exclusive.
     if (cleaned !== existing) writeFileAtomic(rcPath, cleaned);
     return { applied: false, note: 'already configured' };
   }
 
-  const lines = buildAdditionLines(shell, cleaned, options);
   const marker = options.pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
-  const addition = `\n${marker}\n${lines.join('\n')}\n`;
-  writeFileAtomic(rcPath, cleaned + addition);
+  const inserted = initPresent ? insertBeforeInit(cleaned, shell, marker, lines) : null;
+  writeFileAtomic(rcPath, inserted ?? appendManagedBlock(cleaned, marker, lines));
 
   return {
     applied: true,
-    note:
-      options.ensurePathDir && shell.pathLine
-        ? `${options.ensurePathDir} added to PATH`
-        : undefined,
+    note: pathLine ? `${options.ensurePathDir} added to PATH` : undefined,
   };
+}
+
+/** Appends a managed block at the end, after a blank line unless the file is empty. */
+function appendManagedBlock(content: string, marker: string, lines: string[]): string {
+  return `${content === '' ? '' : `${content}\n`}${marker}\n${lines.join('\n')}\n`;
 }
 
 /**
@@ -354,14 +618,35 @@ export function applyShellConfig(
  * leaked export from a configured parent shell. Null for shells without an rc file.
  */
 function starshipUnsetLine(shellId: ShellId): string | null {
-  const shell = getShell(shellId);
-  if (!shell?.rcFile) return null;
-  return shellId === 'fish' ? 'set -e STARSHIP_CONFIG' : 'unset STARSHIP_CONFIG';
+  return getShell(shellId)?.configEnv?.unsetLine ?? null;
+}
+
+/** True when the line sets STARSHIP_CONFIG, in any form a user or an earlier run wrote. */
+function setsStarshipConfig(shell: ShellDef, line: string): boolean {
+  const t = line.trim();
+  if (t.startsWith('#')) return false;
+  return shell.id === 'fish'
+    ? fishExportsStarshipConfig(t)
+    : /^(export\s+)?STARSHIP_CONFIG=/.test(t);
+}
+
+function fishExportsStarshipConfig(line: string): boolean {
+  const [command, ...rest] = line.split(/\s+/);
+  if (command !== 'set') return false;
+  const nameAt = rest.findIndex((word) => !word.startsWith('-'));
+  const flags = rest.slice(0, nameAt === -1 ? rest.length : nameAt);
+  const exported = flags.some((flag) =>
+    flag.startsWith('--') ? flag === '--export' : flag.includes('x')
+  );
+  return exported && rest[nameAt] === 'STARSHIP_CONFIG';
 }
 
 /**
- * Points a Starship-running shell that wasn't given its own config back at the
- * shared config, so it never inherits a leaked STARSHIP_CONFIG. Idempotent.
+ * Points a Starship-running shell that wasn't selected this run back at the
+ * shared config: removes the per-shell block an earlier run wrote (keeping its
+ * PATH line and init), and adds an unset guard above the init line against a
+ * STARSHIP_CONFIG leaked from a configured parent shell. A shell whose rc sets
+ * STARSHIP_CONFIG itself keeps that export and gets no guard. Idempotent.
  */
 export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; note?: string } {
   const shell = getShell(shellId);
@@ -372,23 +657,36 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
   ensureRcDir(rcPath);
 
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
-  // Drop any per-shell wiring an earlier "configure" run may have added.
-  // Keep the Starship init line: an unselected shell should use the shared
-  // config, not lose Starship entirely on its next launch.
-  const cleanedBlocks = removeShellConfiguratorBlocks(existing, [starshipConfigLine(shellId)!]);
-  const cleaned =
-    existing.includes(shell.initLine) && !cleanedBlocks.includes(shell.initLine)
-      ? `${cleanedBlocks.trimEnd()}\n${BLOCK_MARKER}\n${shell.initLine}\n`
-      : cleanedBlocks;
   const unsetLine = starshipUnsetLine(shellId)!;
+  const carried: string[] = [];
 
-  if (cleaned.includes(unsetLine)) {
-    // The unset guard is what we'd add; still write the cleaned rc so a stale
-    // per-shell block survives the whole run rather than tainting the shell.
-    if (cleaned !== existing) writeFileAtomic(rcPath, cleaned);
-    return { applied: false, note: 'already configured' };
+  let content = removeShellConfiguratorBlocks(existing, shell, [isConfigExport(shell)], carried);
+  const ownExport = content.split('\n').some((line) => setsStarshipConfig(shell, line));
+  // A stale unset guard after the shell's own export would cancel it.
+  if (ownExport && hasLine(content, unsetLine)) {
+    content = removeShellConfiguratorBlocks(content, shell, [unsetLine], carried);
   }
 
-  writeFileAtomic(rcPath, `${cleaned}\n${BLOCK_MARKER}\n${unsetLine}\n`);
-  return { applied: true };
+  const initPresent =
+    hasStarshipInit(content, shellId) ||
+    (shell.id === 'fish' && fs.existsSync(fishInitFile(rcPath)));
+  const needsInit = !initPresent && hasStarshipInit(existing, shellId);
+  const lines = [
+    ...[...new Set(carried)].filter((line) => !hasLine(content, line)),
+    ...(!ownExport && !hasLine(content, unsetLine) ? [unsetLine] : []),
+  ];
+  const note = ownExport ? 'sets its own STARSHIP_CONFIG' : undefined;
+
+  if (lines.length === 0 && !needsInit) {
+    if (content !== existing) writeFileAtomic(rcPath, content);
+    return { applied: false, note: note ?? 'already configured' };
+  }
+
+  const inserted = initPresent ? insertBeforeInit(content, shell, BLOCK_MARKER, lines) : null;
+  writeFileAtomic(
+    rcPath,
+    inserted ??
+      appendManagedBlock(content, BLOCK_MARKER, needsInit ? [...lines, shell.initLine] : lines)
+  );
+  return note ? { applied: true, note } : { applied: true };
 }

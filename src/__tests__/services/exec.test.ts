@@ -1,28 +1,31 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockExecFileSync, mockSpawn } = vi.hoisted(() => ({
+const { mockExecFileSync, mockSpawn, mockExecFileP } = vi.hoisted(() => ({
   mockExecFileSync: vi.fn(),
   mockSpawn: vi.fn(),
+  mockExecFileP: vi.fn(),
 }));
 
 vi.mock('child_process', () => ({
   execFileSync: mockExecFileSync,
   spawn: mockSpawn,
   execFile: Object.assign(vi.fn(), {
-    [Symbol.for('nodejs.util.promisify.custom')]: vi.fn(),
+    [Symbol.for('nodejs.util.promisify.custom')]: mockExecFileP,
   }),
 }));
 
 import {
+  CAPTURE_TIMEOUT_MS,
   CommandCancelledError,
   commandExists,
   commandPath,
   KILL_ESCALATION_DELAY_MS,
-  killActiveCommand,
+  runCapture,
+  runCaptureBoth,
   runCommand,
 } from '../../services/exec.ts';
-import { isUiSuspended, resetUiSuspension } from '../../services/tty.ts';
+import { isUiSuspended, resetUiSuspension, resumeUi, suspendUi } from '../../services/tty.ts';
 
 interface SpawnOutcome {
   status?: number | null;
@@ -35,7 +38,10 @@ interface SpawnOutcome {
 function childFor(outcome: SpawnOutcome) {
   const child = new EventEmitter() as EventEmitter & { kill: ReturnType<typeof vi.fn> };
   // runCommand settles on 'exit' (not 'close' — see exec.ts), so the mock must emit it.
-  child.kill = vi.fn(() => child.emit('exit', null, 'SIGTERM'));
+  child.kill = vi.fn(() => {
+    setImmediate(() => child.emit('exit', null, 'SIGTERM'));
+    return true;
+  });
   if (!outcome.hang) {
     setImmediate(() => {
       if (outcome.error) child.emit('error', outcome.error);
@@ -57,6 +63,29 @@ beforeEach(() => {
 });
 
 afterEach(() => resetUiSuspension());
+
+describe('runCapture / runCaptureBoth', () => {
+  it('bounds a captured command with a timeout and passes the env through', async () => {
+    mockExecFileP.mockResolvedValue({ stdout: ' 1.2.3\n', stderr: ' warn\n' });
+    const env = { PATH: '/x' };
+
+    await expect(runCapture('starship', ['-V'], { env })).resolves.toBe('1.2.3');
+    await expect(runCaptureBoth('starship', ['print-config'])).resolves.toEqual({
+      stdout: '1.2.3',
+      stderr: 'warn',
+    });
+
+    expect(mockExecFileP).toHaveBeenNthCalledWith(1, 'starship', ['-V'], {
+      encoding: 'utf8',
+      timeout: CAPTURE_TIMEOUT_MS,
+      env,
+    });
+    expect(mockExecFileP).toHaveBeenNthCalledWith(2, 'starship', ['print-config'], {
+      encoding: 'utf8',
+      timeout: CAPTURE_TIMEOUT_MS,
+    });
+  });
+});
 
 describe('commandExists', () => {
   it('passes the command as an argument rather than splicing it into the script', () => {
@@ -149,7 +178,7 @@ describe('runCommand', () => {
     const realStdin = process.stdin;
     Object.defineProperty(process, 'stdin', {
       configurable: true,
-      value: { isTTY: true, setRawMode },
+      value: { isTTY: true, isRaw: true, setRawMode },
     });
 
     try {
@@ -168,12 +197,37 @@ describe('runCommand', () => {
     }
   });
 
+  it('settles once when an error is followed by an exit', async () => {
+    const child = new EventEmitter() as EventEmitter & { kill: ReturnType<typeof vi.fn> };
+    child.kill = vi.fn();
+    mockSpawn.mockImplementationOnce(() => child);
+    suspendUi();
+
+    const promise = runCommand(['x']);
+    child.emit('error', new Error('boom'));
+    child.emit('exit', 1, null);
+
+    await expect(promise).rejects.toThrow('boom');
+    // The outer suspend is still held: a second resume would have dropped it.
+    expect(isUiSuspended()).toBe(true);
+    resumeUi();
+  });
+
+  it('resumes the UI when spawn throws before a child exists', async () => {
+    mockSpawn.mockImplementationOnce(() => {
+      throw new TypeError('invalid argument');
+    });
+
+    await expect(runCommand(['bad'])).rejects.toThrow('invalid argument');
+    expect(isUiSuspended()).toBe(false);
+  });
+
   it('re-arms raw mode even when the child fails', async () => {
     const setRawMode = vi.fn();
     const realStdin = process.stdin;
     Object.defineProperty(process, 'stdin', {
       configurable: true,
-      value: { isTTY: true, setRawMode },
+      value: { isTTY: true, isRaw: true, setRawMode },
     });
 
     try {
@@ -241,58 +295,23 @@ describe('runCommand', () => {
   it('does not arm an escalation when the child reacts to SIGTERM', async () => {
     vi.useFakeTimers();
     try {
-      spawnOutcome({ hang: true });
+      const child = childFor({ hang: true });
+      mockSpawn.mockImplementation(() => child);
       const controller = new AbortController();
-      const promise = runCommand(['sleep', '100'], { signal: controller.signal });
-      const result = promise.then(
-        () => undefined,
-        () => undefined
+      const result = runCommand(['sleep', '100'], { signal: controller.signal }).catch(
+        (err) => err
       );
 
       controller.abort();
-      expect(await result).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await result).toBeInstanceOf(CommandCancelledError);
 
-      // The settle path cleared the escalation timer, so the SIGKILL fallback
-      // never fires even after the grace period elapses.
       await vi.advanceTimersByTimeAsync(KILL_ESCALATION_DELAY_MS * 2);
-      expect(isUiSuspended()).toBe(false);
+      expect(child.kill).toHaveBeenCalledTimes(1);
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it('killActiveCommand terminates the running child', async () => {
-    spawnOutcome({ hang: true });
-    const promise = runCommand(['sleep', '100']);
-    // Let spawn register before killing.
-    await new Promise((r) => setImmediate(r));
-
-    killActiveCommand();
-
-    await expect(promise).rejects.toThrow('killed by signal SIGTERM');
-  });
-
-  it('does not clear another command when a superseded child exits late', async () => {
-    // runCommand holds the active child while it runs. A second command started
-    // first overwrites it; when that superseding child settles, the first one's
-    // late exit must not clear the now-empty active-child slot again — the guard
-    // `activeChild === child` covers that, but the null case never runs unless a
-    // child settles after a successor already did.
-    const childA = new EventEmitter() as EventEmitter & { kill: ReturnType<typeof vi.fn> };
-    childA.kill = vi.fn();
-    mockSpawn
-      .mockImplementationOnce(() => childA)
-      .mockImplementationOnce(() => childFor({ status: 0 }));
-
-    const a = runCommand(['sleep', '100']);
-    const b = runCommand(['true']);
-
-    await b;
-    // Sure-fire ordering: B has already settled before A emits its exit.
-    setImmediate(() => childA.emit('exit', 0, null));
-
-    await a;
-    expect(isUiSuspended()).toBe(false);
   });
 
   it('settles and resumes the UI when the child exits but its stdio is left open', async () => {

@@ -26,14 +26,21 @@ export function commandExists(cmd: string): boolean {
   return probe(cmd) !== null;
 }
 
-export async function commandExistsAsync(cmd: string): Promise<boolean> {
+export async function commandPathAsync(cmd: string): Promise<string | null> {
   try {
     const { stdout } = await execFileP('sh', probeArgs(cmd), { encoding: 'utf8' });
-    return stdout.trim().length > 0;
+    return stdout.trim() || null;
   } catch {
-    return false;
+    return null;
   }
 }
+
+export async function commandExistsAsync(cmd: string): Promise<boolean> {
+  return (await commandPathAsync(cmd)) !== null;
+}
+
+/** A captured command is killed after this long, so a hung binary cannot block detection. */
+export const CAPTURE_TIMEOUT_MS = 30_000;
 
 /**
  * Runs a command and resolves its trimmed stdout; rejects on a non-zero exit.
@@ -47,21 +54,32 @@ export async function runCapture(
 ): Promise<string> {
   const { stdout } = await execFileP(cmd, args, {
     encoding: 'utf8',
+    timeout: CAPTURE_TIMEOUT_MS,
     ...(options.env ? { env: options.env } : {}),
   });
   return stdout.trim();
 }
 
-export function commandPath(cmd: string): string | null {
-  return probe(cmd);
+/**
+ * Like `runCapture`, but keeps stderr as well. Starship's `print-config`
+ * exits 0 even when the TOML produces parse warnings, so the exit status alone
+ * cannot tell a clean config from a broken one.
+ */
+export async function runCaptureBoth(
+  cmd: string,
+  args: string[],
+  options: { env?: NodeJS.ProcessEnv } = {}
+): Promise<{ stdout: string; stderr: string }> {
+  const { stdout, stderr } = await execFileP(cmd, args, {
+    encoding: 'utf8',
+    timeout: CAPTURE_TIMEOUT_MS,
+    ...(options.env ? { env: options.env } : {}),
+  });
+  return { stdout: stdout.trim(), stderr: stderr.trim() };
 }
 
-/** The child currently holding the terminal, so a cancel request can kill it. */
-let activeChild: ChildProcess | null = null;
-
-/** Kills the running command, if any. Used to abort the install phase. */
-export function killActiveCommand(signal: NodeJS.Signals = 'SIGTERM'): void {
-  activeChild?.kill(signal);
+export function commandPath(cmd: string): string | null {
+  return probe(cmd);
 }
 
 export class CommandCancelledError extends Error {
@@ -72,6 +90,12 @@ export class CommandCancelledError extends Error {
 }
 
 /**
+ * How long a cancelled command is given to stop on SIGTERM before the
+ * cancellation is escalated to SIGKILL, which no process can ignore.
+ */
+export const KILL_ESCALATION_DELAY_MS = 5000;
+
+/**
  * Runs a command with stdio: 'inherit' so sudo password prompts appear in the
  * terminal.
  *
@@ -79,12 +103,6 @@ export class CommandCancelledError extends Error {
  * and gives no way to cancel. Because the child writes to the same TTY Ink draws
  * on, the UI is suspended for the child's lifetime so the two cannot interleave.
  */
-/**
- * How long a cancelled command is given to stop on SIGTERM before the
- * cancellation is escalated to SIGKILL, which no process can ignore.
- */
-export const KILL_ESCALATION_DELAY_MS = 5000;
-
 export function runCommand(args: string[], options: { signal?: AbortSignal } = {}): Promise<void> {
   const [cmd, ...rest] = args;
   if (!cmd) return Promise.reject(new Error('Empty command'));
@@ -96,8 +114,14 @@ export function runCommand(args: string[], options: { signal?: AbortSignal } = {
 
   return new Promise<void>((resolve, reject) => {
     suspendUi();
-    const child = spawn(cmd, rest, { stdio: 'inherit' });
-    activeChild = child;
+    let child: ChildProcess;
+    try {
+      child = spawn(cmd, rest, { stdio: 'inherit' });
+    } catch (err) {
+      resumeUi();
+      reject(err);
+      return;
+    }
 
     let cancelled = false;
     let escalationTimer: NodeJS.Timeout | undefined;
@@ -114,18 +138,18 @@ export function runCommand(args: string[], options: { signal?: AbortSignal } = {
     };
     options.signal?.addEventListener('abort', onAbort, { once: true });
 
+    let settled = false;
     const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
       options.signal?.removeEventListener('abort', onAbort);
       if (escalationTimer) clearTimeout(escalationTimer);
-      if (activeChild === child) activeChild = null;
       resumeUi();
       fn();
     };
 
     child.on('error', (err) => settle(() => reject(err)));
 
-    // 'exit' not 'close': a child that backgrounds a grandchild keeps its stdio
-    // open, so 'close' never fires even though the process has ended.
     child.on('exit', (status, signal) => {
       if (cancelled) {
         settle(() => reject(new CommandCancelledError(printable)));
