@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cacheDir, configHome, stateDir } from '../../services/paths.ts';
+import { cacheDir, homeDir, stateDir } from '../../services/paths.ts';
 
 vi.mock('node:os', () => ({
   homedir: vi.fn(() => '/real/home'),
@@ -71,6 +71,6 @@ describe('homeDir', () => {
   it('uses the passwd entry when HOME is set but empty', () => {
     vi.mocked(os.homedir).mockReturnValue('');
     vi.mocked(os.userInfo).mockReturnValue({ homedir: '/home/from-passwd' } as never);
-    expect(configHome()).toBe(path.join('/home/from-passwd', '.config'));
+    expect(homeDir()).toBe('/home/from-passwd');
   });
 });
