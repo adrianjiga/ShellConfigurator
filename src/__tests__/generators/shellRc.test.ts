@@ -1467,6 +1467,21 @@ describe('removing ShellConfigurator lines', () => {
     expect(result.note).toBe('your own Starship init line stays; kept the PATH line it needs');
   });
 
+  it('keeps the PATH line a fish conf.d init still needs', () => {
+    const fishRc = getShell('fish')!.rcFile!;
+    const confD = path.join(path.dirname(fishRc), 'conf.d', 'starship.fish');
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === fishRc || p === confD);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () =>
+        "set -g fish_greeting\n\n# Added by ShellConfigurator\nfish_add_path '/h/.local/bin'\nset -gx STARSHIP_CONFIG '/h/fish.toml'\n"
+    );
+
+    const result = removeManagedRcBlocks('fish');
+
+    expect(lastWrittenContent()).toBe("set -g fish_greeting\nfish_add_path '/h/.local/bin'\n");
+    expect(result.note).toBe('your conf.d/starship.fish init stays; kept the PATH line it needs');
+  });
+
   it('writes nothing when the rc has no managed block', () => {
     rcHolds('eval "$(starship init bash)"\n');
 

@@ -716,8 +716,8 @@ export interface RemovalResult {
 
 /**
  * Removes every ShellConfigurator block from the shell's rc file, after backing
- * it up. A PATH line a block carried stays when the user's own init line still
- * needs it to find Starship.
+ * it up. A PATH line a block carried stays when the user's own init line (or
+ * fish's conf.d init) still needs it to find Starship.
  */
 export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
   const shell = getShell(shellId);
@@ -733,14 +733,22 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
   }
 
   const ownInit = hasStarshipInit(stripped, shellId);
-  const kept = ownInit ? [...new Set(carried)].filter((line) => !hasLine(stripped, line)) : [];
+  const confDInit = !ownInit && shellId === 'fish' && fs.existsSync(fishInitFile(rcPath));
+  const kept =
+    ownInit || confDInit ? [...new Set(carried)].filter((line) => !hasLine(stripped, line)) : [];
   const lines = stripped.split('\n');
-  if (kept.length > 0) lines.splice(initLineIndex(lines, shellId), 0, ...kept);
+  if (kept.length > 0) {
+    const at = ownInit
+      ? initLineIndex(lines, shellId)
+      : lines.length - (lines.at(-1) === '' ? 1 : 0);
+    lines.splice(at, 0, ...kept);
+  }
 
   const backedUpTo = backupIfExists(rcPath);
   writeFileAtomic(rcPath, lines.join('\n'));
   const notes = [
     ...(ownInit ? ['your own Starship init line stays'] : []),
+    ...(confDInit ? ['your conf.d/starship.fish init stays'] : []),
     ...(kept.length > 0 ? ['kept the PATH line it needs'] : []),
   ];
   return {
