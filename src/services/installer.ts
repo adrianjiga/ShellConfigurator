@@ -465,9 +465,9 @@ const OWNS_STARSHIP: Partial<Record<PackageManager, (binary: string) => Promise<
   pacman: async (binary) => /^starship$/m.test(await runCapture('pacman', ['-Qqo', binary])),
   apk: async (binary) =>
     /owned by starship-/.test(await runCapture('apk', ['info', '--who-owns', binary])),
-  brew: async () => {
-    await runCapture('brew', ['list', '--formula', 'starship']);
-    return true;
+  brew: async (binary) => {
+    const prefix = fs.realpathSync(await runCapture('brew', ['--prefix', 'starship']));
+    return fs.realpathSync(binary).startsWith(`${prefix}${path.sep}`);
   },
 };
 

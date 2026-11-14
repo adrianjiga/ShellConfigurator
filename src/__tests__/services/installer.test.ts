@@ -18,6 +18,7 @@ const {
   mockStatSync,
   mockReadFileSync,
   mockRunCapture,
+  mockRealpathSync,
 } = vi.hoisted(() => ({
   mockSpawn: vi.fn(),
   mockExecFileSync: vi.fn(),
@@ -31,6 +32,7 @@ const {
   mockStatSync: vi.fn(),
   mockReadFileSync: vi.fn(),
   mockRunCapture: vi.fn(),
+  mockRealpathSync: vi.fn((p: string) => p),
 }));
 
 vi.mock('child_process', () => ({
@@ -52,6 +54,7 @@ vi.mock('fs', () => ({
   existsSync: mockExistsSync,
   statSync: mockStatSync,
   readFileSync: mockReadFileSync,
+  realpathSync: mockRealpathSync,
 }));
 
 import {
@@ -195,6 +198,7 @@ beforeEach(() => {
   mockWriteFileSync.mockImplementation(() => undefined);
   mockCopyFileSync.mockImplementation(() => undefined);
   mockRmSync.mockImplementation(() => undefined);
+  mockRealpathSync.mockImplementation((p: string) => p);
   mockExistsSync.mockReturnValue(true);
   mockStatSync.mockReturnValue({ size: 1024 });
   // No font cache by default: the pin file is "missing" so cachedFont() is null.
@@ -1030,8 +1034,13 @@ describe('plannedStarshipRemoval', () => {
     starshipAt('/usr/bin/starship', {
       pacman: 'starship\n',
       apk: '/usr/bin/starship is owned by starship-1.27.0-r0\n',
-      brew: '/opt/homebrew/Cellar/starship/1.27.0/bin/starship\n',
+      brew: '/opt/homebrew/opt/starship',
     });
+    const real: Record<string, string> = {
+      '/usr/bin/starship': '/opt/homebrew/Cellar/starship/1.27.0/bin/starship',
+      '/opt/homebrew/opt/starship': '/opt/homebrew/Cellar/starship/1.27.0',
+    };
+    mockRealpathSync.mockImplementation((p: string) => real[p] ?? p);
     const getuid = vi.spyOn(process, 'getuid').mockReturnValue(1000);
     try {
       expect(await plannedStarshipRemoval('pacman')).toEqual({
@@ -1057,6 +1066,7 @@ describe('plannedStarshipRemoval', () => {
 
   it.each([
     ['brew', { brew: new Error('No such keg') }],
+    ['brew', { brew: '/opt/homebrew/opt/starship' }],
     ['pacman', { pacman: new Error('No package owns /home/u/.cargo/bin/starship') }],
     ['pacman', { pacman: 'some-other-package\n' }],
     ['apk', { apk: 'ERROR: /home/u/.cargo/bin/starship: Could not find owner package\n' }],
