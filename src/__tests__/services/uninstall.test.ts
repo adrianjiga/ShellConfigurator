@@ -18,6 +18,8 @@ function makeDeps(
   return {
     hasManagedRcBlock: vi.fn((id: ShellId) => wired.includes(id)),
     hasShellConfig: vi.fn((id: ShellId) => configs.includes(id)),
+    bashLoginBlockFiles: vi.fn(() => []),
+    removeBashLoginBlock: vi.fn(() => ({ removed: true })),
     startsStarship: vi.fn(() => false),
     removeManagedRcBlocks: vi.fn(() => ({ removed: true, backedUpTo: '/h/.zshrc.bak-1' })),
     removeShellConfigFile: vi.fn(() => ({ removed: true, backedUpTo: '/h/zsh.toml.bak-1' })),

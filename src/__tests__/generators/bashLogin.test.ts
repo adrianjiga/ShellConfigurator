@@ -8,10 +8,10 @@ import {
   bashLoginContent,
   bashLoginFile,
   LOGIN_MARKER,
-  removeManagedRcBlocks,
 } from '../../generators/shellRc.ts';
 import { plannedFileChanges } from '../../services/fileDiff.ts';
 import { trackedFiles } from '../../services/runCapture.ts';
+import { planUninstall, runUninstall } from '../../services/uninstall.ts';
 import { DEFAULT_STATE } from '../../types.ts';
 import { stubPlatform } from '../helpers/platform.ts';
 
@@ -105,16 +105,41 @@ describe('the Bash login file on macOS', () => {
     expect(fs.readFileSync(at('.bashrc'), 'utf8')).toContain('starship init bash');
   });
 
-  it('is taken back out by uninstall, deleting a login file that held nothing else', () => {
+  it('is taken back out by uninstall, deleting a login file that held nothing else', async () => {
     applyShellConfig('bash');
-    fs.writeFileSync(at('.profile'), 'export EDITOR=vim\n');
-    fs.appendFileSync(at('.profile'), `\n${LOGIN_MARKER}\n${LINE}\n`);
+    fs.writeFileSync(at('.profile'), `export EDITOR=vim\n\n${LOGIN_MARKER}\n${LINE}\n`);
 
-    const result = removeManagedRcBlocks('bash');
+    const report = await runUninstall(await planUninstall({ shells: ['bash'] }));
 
+    expect(report.ok).toBe(true);
     expect(fs.existsSync(at('.bash_profile'))).toBe(false);
     expect(fs.readFileSync(at('.profile'), 'utf8')).toBe('export EDITOR=vim\n');
-    expect(result.note).toContain('took the line that loads .bashrc out of .bash_profile');
+    expect(fs.readdirSync(home).some((name) => name.startsWith('.profile.bak-'))).toBe(true);
+  });
+
+  it('is taken out by uninstall also when .bashrc has no ShellConfigurator block', async () => {
+    fs.writeFileSync(at('.bashrc'), 'eval "$(starship init bash)"\n');
+    applyShellConfig('bash', { pointAtSharedConfig: true });
+    expect(fs.readFileSync(at('.bashrc'), 'utf8')).not.toContain('ShellConfigurator');
+    expect(fs.existsSync(at('.bash_profile'))).toBe(true);
+
+    const steps = await planUninstall({});
+    expect(steps.map((step) => step.title)).toContain('Bash login file');
+    await runUninstall(steps);
+
+    expect(fs.existsSync(at('.bash_profile'))).toBe(false);
+  });
+
+  it('fails only its own uninstall step when the login file cannot be changed', async () => {
+    fs.writeFileSync(at('.bash_profile'), 'export EDITOR=vim\n');
+    applyShellConfig('bash');
+    fs.chmodSync(at('.bash_profile'), 0o444);
+
+    const report = await runUninstall(await planUninstall({ shells: ['bash'] }));
+
+    const status = (title: string) => report.actions.find((a) => a.title === title)?.status;
+    expect(status('Bash rc')).toBe('removed');
+    expect(status('Bash login file')).toBe('failed');
   });
 
   it('is not touched on Linux, where terminals start Bash without a login', () => {

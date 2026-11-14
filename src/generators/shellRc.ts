@@ -812,24 +812,26 @@ export function bashLoginBlockFiles(io: RcIo = FS_RC_IO): string[] {
 }
 
 /**
- * Takes the block that loads ~/.bashrc back out of every Bash login file, and
- * deletes a login file that held nothing else. The files it changed.
+ * Takes the block that loads ~/.bashrc back out of a Bash login file, after
+ * backing it up, and deletes the file when it held nothing else.
  */
-export function removeBashLoginBlocks(): string[] {
-  return bashLoginFiles().flatMap((file) => {
-    if (!fs.existsSync(file)) return [];
-    const existing = fs.readFileSync(file, 'utf8');
-    const lines = existing.split('\n');
-    const at = lines.findIndex((line) => line.trim() === LOGIN_MARKER);
-    if (at === -1) return [];
-    const end = lines[at + 1]?.trim() === LOGIN_LINE ? at + 2 : at + 1;
-    const start = at > 0 && lines[at - 1].trim() === '' ? at - 1 : at;
-    lines.splice(start, end - start);
-    const content = lines.join('\n');
-    if (content.trim() === '') fs.rmSync(file);
-    else writeFileAtomic(file, content);
-    return [file];
-  });
+export function removeBashLoginBlock(file: string): RemovalResult {
+  if (!fs.existsSync(file)) return { removed: false, note: `${file} does not exist` };
+  const lines = fs.readFileSync(file, 'utf8').split('\n');
+  const at = lines.findIndex((line) => line.trim() === LOGIN_MARKER);
+  if (at === -1) return { removed: false, note: `no ShellConfigurator line in ${file}` };
+  const end = lines[at + 1]?.trim() === LOGIN_LINE ? at + 2 : at + 1;
+  const start = at > 0 && lines[at - 1].trim() === '' ? at - 1 : at;
+  lines.splice(start, end - start);
+  const content = lines.join('\n');
+  const backedUpTo = backupIfExists(file);
+  if (content.trim() === '') fs.rmSync(file);
+  else writeFileAtomic(file, content);
+  return {
+    removed: true,
+    ...(backedUpTo ? { backedUpTo } : {}),
+    ...(content.trim() === '' ? { note: 'it held nothing else, so it is gone' } : {}),
+  };
 }
 
 /** Appends a managed block at the end, after a blank line unless the file is empty. */
@@ -893,9 +895,7 @@ function startupFiles(shell: ShellDef): string[] {
       ]),
     ];
   }
-  if (shell.id === 'bash') {
-    return ['.bash_profile', '.bash_login', '.profile'].map((name) => path.join(home, name));
-  }
+  if (shell.id === 'bash') return bashLoginFiles();
   return [];
 }
 
@@ -1087,9 +1087,7 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
 
   const backedUpTo = backupIfExists(rcPath);
   writeFileAtomic(rcPath, lines.join('\n'));
-  const logins = shellId === 'bash' ? removeBashLoginBlocks() : [];
   const notes = [
-    ...logins.map((file) => `took the line that loads .bashrc out of ${path.basename(file)}`),
     ...(ownInit ? ['your own Starship init line stays'] : []),
     ...(otherInit
       ? [

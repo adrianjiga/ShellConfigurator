@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { getShell, SHELLS } from '../config/shells.ts';
 import { statusLine } from '../config/status.ts';
 import {
@@ -6,6 +7,7 @@ import {
   getShellConfigPath,
   hasManagedRcBlock,
   type RemovalResult,
+  removeBashLoginBlock,
   removeManagedRcBlocks,
   removeShellConfigFile,
   startsStarship,
@@ -81,6 +83,9 @@ export interface UninstallDeps {
   startsStarship: (shellId: ShellId, withoutManagedBlocks: boolean) => boolean;
   removeManagedRcBlocks: (shellId: ShellId) => RemovalResult;
   removeShellConfigFile: (shellId: ShellId) => RemovalResult;
+  /** The Bash login files holding the line that loads ~/.bashrc. */
+  bashLoginBlockFiles: () => string[];
+  removeBashLoginBlock: (file: string) => RemovalResult;
   detectPackageManager: () => Promise<PackageManager>;
   plannedStarshipRemoval: (pm: PackageManager) => Promise<StarshipRemoval>;
   removeStarship: (plan: StarshipRemoval) => Promise<void>;
@@ -96,6 +101,8 @@ export const DEFAULT_UNINSTALL_DEPS: UninstallDeps = {
   startsStarship: (shellId, withoutManagedBlocks) => startsStarship(shellId, withoutManagedBlocks),
   removeManagedRcBlocks,
   removeShellConfigFile,
+  bashLoginBlockFiles: () => bashLoginBlockFiles(),
+  removeBashLoginBlock,
   detectPackageManager: () => detectPackageManagerAsync(),
   plannedStarshipRemoval,
   removeStarship: (plan) => removeStarship(plan),
@@ -133,13 +140,7 @@ function shellSteps(facts: ShellFacts, explicit: boolean, deps: UninstallDeps): 
       steps.push({
         id: `rc_${shellId}`,
         title: `${shell.label} rc`,
-        detail: `remove the ShellConfigurator lines from ${rc}${
-          shellId === 'bash'
-            ? bashLoginBlockFiles()
-                .map((file) => ` and the line in ${file} that loads it`)
-                .join('')
-            : ''
-        }`,
+        detail: `remove the ShellConfigurator lines from ${rc}`,
         run: async () =>
           describeRemoval(deps.removeManagedRcBlocks(shellId), `the lines from ${rc}`, rc),
       });
@@ -259,6 +260,17 @@ export async function planUninstall(
   }));
   const cleaned = facts.filter((f) => explicit || f.managedRc || f.config);
   const steps = cleaned.flatMap((f) => shellSteps(f, explicit, deps));
+  if (!explicit || options.shells?.includes('bash')) {
+    for (const file of deps.bashLoginBlockFiles()) {
+      steps.push({
+        id: `login_${path.basename(file)}`,
+        title: 'Bash login file',
+        detail: `remove the line that loads ~/.bashrc from ${file}`,
+        run: async () =>
+          describeRemoval(deps.removeBashLoginBlock(file), `that line from ${file}`, file),
+      });
+    }
+  }
   if (options.fontId) steps.push(await fontStep(options.fontId, deps));
   if (options.starship) {
     const cleanedIds = new Set(cleaned.map((f) => f.shellId));
