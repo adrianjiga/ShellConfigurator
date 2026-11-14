@@ -74,8 +74,9 @@ adopt mode) from its rc file.
 
 `uninstall` removes every `# Added by ShellConfigurator` block from the bash,
 zsh and fish rc files and moves the per-shell configs aside to `.bak-*`
-backups, backing up each rc first; `rollback` undoes it (when the run could not
-be recorded, it prints the `cp` commands that put every file back instead). Your own `starship init` line (or fish's `conf.d` init) stays,
+backups, backing up each rc first; `rollback` puts those files back (when the
+run could not be recorded, it prints the `cp` commands that do so instead), but
+not a Starship or font it removed: reinstall those with `apply` or `repair`. Your own `starship init` line (or fish's `conf.d` init) stays,
 with the PATH line it needs. Nushell and PowerShell were set up by hand, so it
 names the file to clean instead. Starship is removed only with `--starship`,
 and only once no shell would still start it: the script install's binary, or
@@ -166,7 +167,7 @@ real `uninstall` or `rollback` appends one too, without a card;
 `generate`, `doctor`, `repair` and dry runs record nothing. Each of those runs
 also copies the rc files, per-shell configs, shared config and terminal configs
 it is about to change into `runs/<id>/` under the state dir, keeping only the
-ones it changed. `rollback` puts a run's files back to that copy (or deletes the
+ones it changed; the newest 50 runs are kept. `rollback` puts a run's files back to that copy (or deletes the
 ones the run created) and leaves alone any file that changed again since, so a
 later edit is never overwritten; files come back byte for byte with their
 permissions. Run it again to undo the run before (a run whose changes were only
