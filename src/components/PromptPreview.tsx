@@ -4,12 +4,7 @@ import { colorsEnabled, uiColor } from '../config/colors.ts';
 import { getModule, isConfigurableModule, type ModuleId } from '../config/modules.ts';
 import { getPalette, inkColor, type PaletteColorName } from '../config/palettes.ts';
 import { bracketsSegments, drawsPowerline, rendersGlyphs } from '../config/presets.ts';
-import {
-  CHARACTER_SYMBOLS,
-  NERD_FONT_SYMBOLS,
-  SEPARATOR_LEFT,
-  SEPARATOR_RIGHT,
-} from '../config/promptSymbols.ts';
+import { CHARACTER_SYMBOLS, SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../config/promptSymbols.ts';
 import {
   PREVIEW_DEBOUNCE_MS,
   PREVIEW_TERMINAL_WIDTH,
@@ -148,21 +143,6 @@ function RealPromptFrame({ text, addNewline }: { text: string; addNewline: boole
   );
 }
 
-/**
- * A small local approximation of the sample path used by the static preview.
- * Like starship, substitutions replace matching text anywhere in the path, and
- * truncation keeps the last folders with no marker (the default symbol is empty).
- */
-function previewDirectory(state: WizardState): string {
-  let full = '~/projects/myapp';
-  for (const { from, to } of state.directorySubstitutions) full = full.split(from).join(to);
-  const parts = full.split('/').filter(Boolean);
-  const length = state.directoryTruncationLength;
-  const renderedPath =
-    length === 0 || parts.length <= length ? parts.join('/') : parts.slice(-length).join('/');
-  return `${state.hasNerdFont ? NERD_FONT_SYMBOLS.directory : ''}${renderedPath}`;
-}
-
 function StaticPromptFrame({ state: chosen }: { state: WizardState }) {
   const state = { ...chosen, hasNerdFont: rendersGlyphs(chosen) };
   const { leftModules, hasNerdFont, characterSymbol } = state;
@@ -197,13 +177,12 @@ function StaticPromptFrame({ state: chosen }: { state: WizardState }) {
       const def = getModule(id);
       if (!def) return [];
 
-      const text = def.previewSegment(hasNerdFont);
+      const text = def.previewSegment(hasNerdFont, state);
       if (!powerline) {
         const plain = bracketed ? text : (def.plainPreview?.(hasNerdFont) ?? text);
-        const shown = id === 'directory' ? previewDirectory(state) : plain;
         return [
           <Text key={id} color={uiColor(color(def.id))}>
-            {bracketed ? `[${shown}]` : shown}{' '}
+            {bracketed ? `[${plain}]` : plain}{' '}
           </Text>,
         ];
       }
@@ -218,7 +197,7 @@ function StaticPromptFrame({ state: chosen }: { state: WizardState }) {
           bold
         >
           {' '}
-          {id === 'directory' ? previewDirectory(state) : text}{' '}
+          {text}{' '}
         </Text>
       );
       const separator = (

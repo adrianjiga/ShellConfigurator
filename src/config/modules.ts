@@ -10,6 +10,12 @@ import { NERD_FONT_SYMBOLS } from './promptSymbols.ts';
  * from the palette entry matching the module id. Only modules that carry their
  * colour in differently-named keys need `styleFor`.
  */
+/** The settings a static preview segment depends on beyond the font. */
+export type PreviewSample = Pick<
+  ModuleTomlContext,
+  'directoryTruncationLength' | 'directorySubstitutions'
+>;
+
 export interface ModuleTomlContext {
   hasNerdFont: boolean;
   powerline: boolean;
@@ -36,7 +42,7 @@ export interface ModuleDef {
   // Returns a short colored preview string for the prompt preview.
   // Only modules whose symbol is a genuine Nerd Font glyph branch on hasNerdFont;
   // emoji and plain Unicode render without one, so those symbols are unconditional.
-  previewSegment: (hasNerdFont: boolean) => string;
+  previewSegment: (hasNerdFont: boolean, sample: PreviewSample) => string;
   /** The plain-prompt preview, where starship's default format adds words
    *  or brackets the powerline content leaves out. */
   plainPreview?: (hasNerdFont: boolean) => string;
@@ -147,8 +153,19 @@ style_root  = "${tomlBasic(styleFor('err'))}"
     defaultLeft: true,
     defaultRight: false,
 
-    previewSegment: (hasNerdFont) =>
-      `${hasNerdFont ? NERD_FONT_SYMBOLS.directory : ''}~/projects/myapp`,
+    // Like starship, substitutions replace matching text anywhere in the path, and
+    // truncation keeps the last folders with no marker (the default symbol is empty).
+    previewSegment: (
+      hasNerdFont,
+      { directoryTruncationLength: length, directorySubstitutions }
+    ) => {
+      let full = '~/projects/myapp';
+      for (const { from, to } of directorySubstitutions) full = full.split(from).join(to);
+      const parts = full.split('/').filter(Boolean);
+      const shown =
+        length === 0 || parts.length <= length ? parts.join('/') : parts.slice(-length).join('/');
+      return `${hasNerdFont ? NERD_FONT_SYMBOLS.directory : ''}${shown}`;
+    },
     content: '$path$read_only',
     settings: ({
       hasNerdFont,
