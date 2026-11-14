@@ -255,10 +255,13 @@ const INIT_COMMAND: Record<ShellId, string> = {
  * path, or fish's conf.d file (checked by callers via `fishInitFile`).
  */
 export function hasStarshipInit(content: string, shellId: ShellId): boolean {
+  return initLineIndex(content.split('\n'), shellId) !== -1;
+}
+
+/** Index of the first non-comment line that runs the shell's init, or -1. */
+function initLineIndex(lines: string[], shellId: ShellId): number {
   const command = INIT_COMMAND[shellId];
-  return content
-    .split('\n')
-    .some((line) => !line.trimStart().startsWith('#') && line.includes(command));
+  return lines.findIndex((line) => !line.trimStart().startsWith('#') && line.includes(command));
 }
 
 /** Fish's drop-in init file, which `hasStarshipInit` cannot see from config.fish. */
@@ -530,8 +533,7 @@ function insertBeforeInit(
   lines: string[]
 ): string | null {
   const all = content.split('\n');
-  const command = INIT_COMMAND[shell.id];
-  const index = all.findIndex((l) => !l.trimStart().startsWith('#') && l.includes(command));
+  const index = initLineIndex(all, shell.id);
   if (index === -1) return null;
 
   let above = index - 1;
@@ -733,11 +735,7 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
   const ownInit = hasStarshipInit(stripped, shellId);
   const kept = ownInit ? [...new Set(carried)].filter((line) => !hasLine(stripped, line)) : [];
   const lines = stripped.split('\n');
-  if (kept.length > 0) {
-    const command = INIT_COMMAND[shellId];
-    const index = lines.findIndex((l) => !l.trimStart().startsWith('#') && l.includes(command));
-    lines.splice(index, 0, ...kept);
-  }
+  if (kept.length > 0) lines.splice(initLineIndex(lines, shellId), 0, ...kept);
 
   const backedUpTo = backupIfExists(rcPath);
   writeFileAtomic(rcPath, lines.join('\n'));
