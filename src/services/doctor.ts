@@ -142,7 +142,7 @@ export function shellPointsAtShared(
 ): boolean {
   const rcFile = getShell(shellId)?.rcFile;
   if (!rcFile) return false;
-  const content = deps.exists(rcFile) ? deps.readFile(rcFile) : '';
+  const content = readRc(rcFile, deps);
   return exportedConfigPath(content, shellId) === null;
 }
 
@@ -275,7 +275,7 @@ async function checkRunningShell(shellIds: ShellId[], deps: DoctorDeps): Promise
           detail: `${shell.label} is configured, but its manual setup has not been applied yet`,
         };
   }
-  const content = deps.exists(rcFile) ? deps.readFile(rcFile) : '';
+  const content = readRc(rcFile, deps);
   if (!shellHasInit(current, rcFile, content, deps)) {
     return {
       id: 'current-shell',
@@ -290,6 +290,11 @@ async function checkRunningShell(shellIds: ShellId[], deps: DoctorDeps): Promise
     status: 'pass',
     detail: `${shell.label} loads Starship — restart it to see the new prompt`,
   };
+}
+
+/** An rc file's text, or empty when it does not exist yet. */
+function readRc(rcFile: string, deps: Pick<DoctorDeps, 'exists' | 'readFile'>): string {
+  return deps.exists(rcFile) ? deps.readFile(rcFile) : '';
 }
 
 function shellHasInit(
@@ -360,7 +365,7 @@ function checkShellWiring(
         };
   }
 
-  const content = deps.exists(shell.rcFile) ? deps.readFile(shell.rcFile) : '';
+  const content = readRc(shell.rcFile, deps);
   const expectedPath = getShellConfigPath(shellId);
   const exportedPath = pointAtShared ? null : exportedConfigPath(content, shellId);
   const configPath = pointAtShared ? getSharedConfigPath() : (exportedPath ?? expectedPath);
@@ -460,7 +465,7 @@ async function checkConfigs(
       ...wiring.map((w) => {
         if (w.pointAtShared) return getSharedConfigPath();
         const rcFile = getShell(w.id)?.rcFile;
-        const content = rcFile && deps.exists(rcFile) ? deps.readFile(rcFile) : '';
+        const content = rcFile ? readRc(rcFile, deps) : '';
         return exportedConfigPath(content, w.id) ?? getShellConfigPath(w.id);
       }),
       ...(includeShared ? [getSharedConfigPath()] : []),
