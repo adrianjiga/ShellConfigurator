@@ -91,6 +91,32 @@ describe('ShellScreen', () => {
     });
   });
 
+  it('ignores D on a shell that is not selected', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh']);
+    const { instance } = setup();
+    await flush();
+    await flush();
+
+    instance.stdin.write('d');
+    await flush();
+
+    expect(instance.lastFrame()).not.toContain('[will set as login shell]');
+  });
+
+  it('takes the login shell back with a second D', async () => {
+    vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh']);
+    const { instance, onNext } = setup();
+    await flush();
+    await flush();
+
+    for (const key of [' ', 'd', 'd', '\r']) {
+      instance.stdin.write(key);
+      await flush();
+    }
+
+    expect(onNext).toHaveBeenCalledWith(expect.objectContaining({ setDefaultShell: null }));
+  });
+
   it('clears the default shell when the selected shell is deselected', async () => {
     vi.mocked(detectInstalledShellsAsync).mockResolvedValue(['zsh']);
     const { instance, onNext } = setup();
