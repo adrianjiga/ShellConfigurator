@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 import { getShellBinary, posixShellQuote } from '../config/shells.ts';
 import type { PackageManager, ShellId } from '../types.ts';
 import {
@@ -228,7 +229,8 @@ export async function readStarshipVersion(pathDir: string | null): Promise<strin
 
 /**
  * Rejects when starship cannot load the config at `configPath`. `print-config`
- * exits 0 even on a broken config, so its warnings on stderr are the failure.
+ * exits 0 even on a broken config, so its config errors on stderr are the
+ * failure; other output there (an unrelated warning) is not.
  */
 export async function verifyStarshipConfig(
   configPath: string,
@@ -236,7 +238,10 @@ export async function verifyStarshipConfig(
 ): Promise<void> {
   const env = { ...process.env, STARSHIP_CONFIG: configPath, PATH: withPathDir(pathDir) };
   const { stderr } = await runCaptureBoth('starship', ['print-config'], { env });
-  if (stderr) throw new Error(stderr);
+  const configError = stripVTControlCharacters(stderr)
+    .split('\n')
+    .some((line) => /\bERROR\b|\(starship::config\)/.test(line));
+  if (configError) throw new Error(stderr);
 }
 
 /**
