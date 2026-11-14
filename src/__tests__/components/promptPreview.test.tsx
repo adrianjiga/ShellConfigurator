@@ -309,6 +309,34 @@ describe('PromptPreview duplicates', () => {
 });
 
 describe('PromptPreview without colour', () => {
+  it('draws powerline separators when colours and a Nerd Font are on', () => {
+    vi.stubEnv('NO_COLOR', '');
+    try {
+      expect(frame({ hasNerdFont: true, powerline: true, preset: 'custom' })).toContain('\ue0b0');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('draws no blank line before the static prompt when add_newline is off', () => {
+    const lines = frame({ addNewline: false }).split('\n');
+    const output = lines.findIndex((line) => line.includes('output line...'));
+    expect(lines[output + 1]).toContain('~/projects/myapp');
+  });
+
+  it('says the prompt was rendered live once the real render is current', async () => {
+    vi.useFakeTimers();
+    const ui = render(
+      <PromptPreview
+        state={DEFAULT_STATE}
+        renderPreview={async () => ({ mode: 'real', text: '~/myapp\n❯' })}
+      />
+    );
+    await settleRenderer();
+    expect(ui.lastFrame()).toContain('rendered live by the starship binary');
+    ui.unmount();
+  });
+
   it('draws the plain layout instead of bare powerline arrows', () => {
     vi.stubEnv('NO_COLOR', '1');
     try {
