@@ -244,7 +244,7 @@ describe('ReviewScreen against the files on disk', () => {
     await flush();
     const frame = instance.lastFrame() ?? '';
     const flat = frame.replace(/\s+/g, ' ');
-    expect(flat).toContain('Files on disk');
+    expect(flat).toContain('Config and rc files');
     expect(flat).toContain('create ~/.config/starship/zsh.toml (+');
     expect(flat).toContain('edit ~/.zshrc (+4 -0)');
     expect(frame).toContain(' alias ll="ls -l"');

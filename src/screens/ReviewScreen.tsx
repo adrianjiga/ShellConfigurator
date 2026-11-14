@@ -120,7 +120,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
         )}
 
         <Box flexDirection="column" marginTop={1}>
-          <Text bold>Files on disk</Text>
+          <Text bold>Config and rc files</Text>
           {changes.length === 0 ? (
             <Box marginLeft={1}>
               <Text color={uiColor('gray')}>No config or rc file changes.</Text>
