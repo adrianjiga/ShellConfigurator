@@ -35,16 +35,8 @@ export function applyInstallOutcomeExitCode(): void {
   if (installFailed) process.exitCode = 1;
 }
 
-/**
- * Ink puts the terminal in raw mode and hides the cursor; if the process dies
- * without unwinding that, the user's shell is left unusable.
- */
-export function restoreTerminal(): void {
-  restoreTty();
-}
-
 export function reportFatal(prefix: string, err: unknown): void {
-  restoreTerminal();
+  restoreTty();
   if (err instanceof CliUsageError || err instanceof CliRunError) {
     process.stderr.write(`\nshell-configurator: ${err.message}\n`);
     process.exitCode = err instanceof CliUsageError ? 2 : 1;
@@ -323,7 +315,7 @@ async function main(): Promise<void> {
 
   await app.waitUntilExit();
   applyInstallOutcomeExitCode();
-  restoreTerminal();
+  restoreTty();
 }
 
 main().catch((err) => reportFatal('ShellConfigurator exited abnormally', err));

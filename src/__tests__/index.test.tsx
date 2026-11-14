@@ -80,7 +80,6 @@ import {
   crash,
   recordInstallOutcome,
   reportFatal,
-  restoreTerminal,
   routeCli,
   runGlobalFlags,
   runHeadlessCommand,
@@ -243,54 +242,6 @@ describe('index restore flag', () => {
       runGlobalFlags(parseCliArgs(['generate', '--preset', 'pure-prompt', '--restore']))
     ).toThrow(/cannot be combined with the generate subcommand/);
     expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
-  });
-});
-
-describe('index restoreTerminal', () => {
-  let setRawMode: ReturnType<typeof vi.fn>;
-  let stdoutWrite: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    setRawMode = vi.fn();
-    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
-    Object.defineProperty(process.stdin, 'setRawMode', {
-      value: setRawMode,
-      configurable: true,
-    });
-    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('disables raw mode on a TTY stdin', () => {
-    restoreTerminal();
-    expect(setRawMode).toHaveBeenCalledWith(false);
-  });
-
-  it('shows the cursor again on a TTY stdout', () => {
-    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
-    restoreTerminal();
-    expect(stdoutWrite).toHaveBeenCalledWith('\u001B[?25h');
-  });
-
-  it('writes no escape codes when stdout is a pipe', () => {
-    Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true });
-    restoreTerminal();
-    expect(stdoutWrite).not.toHaveBeenCalled();
-  });
-
-  it('does not throw when stdin has no setRawMode', () => {
-    Object.defineProperty(process.stdin, 'setRawMode', { value: undefined, configurable: true });
-    expect(() => restoreTerminal()).not.toThrow();
-  });
-
-  it('swallows write errors', () => {
-    process.stdout.write = (() => {
-      throw new Error('EPIPE');
-    }) as typeof process.stdout.write;
-    expect(() => restoreTerminal()).not.toThrow();
   });
 });
 
