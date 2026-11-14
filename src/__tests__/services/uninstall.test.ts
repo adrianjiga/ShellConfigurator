@@ -31,6 +31,7 @@ function makeDeps(
     forgetStarshipVersion: vi.fn(),
     installedFontFiles: vi.fn().mockResolvedValue(['/f/A.ttf', '/f/B.ttf']),
     removeFontFiles: vi.fn().mockResolvedValue(undefined),
+    terminalFontFamily: vi.fn(() => null),
     ...overrides,
   };
 }
@@ -100,6 +101,20 @@ describe('planUninstall', () => {
     await planUninstall({}, deps);
     expect(deps.plannedStarshipRemoval).not.toHaveBeenCalled();
     expect(deps.installedFontFiles).not.toHaveBeenCalled();
+  });
+
+  it('names the terminals whose config still selects the font', async () => {
+    const deps = makeDeps([], [], {
+      terminalFontFamily: vi.fn((id) =>
+        id === 'kitty' || id === 'foot' ? 'FiraCode Nerd Font' : 'Hack Nerd Font'
+      ),
+    });
+
+    const report = await runUninstall(await planUninstall({ fontId: 'FiraCode' }, deps));
+
+    expect(report.actions[0]!.detail).toBe(
+      'deleted 2 font files; kitty, foot still select "FiraCode Nerd Font", so pick another font there'
+    );
   });
 
   it('cannot remove a font whose files it cannot tell apart', async () => {

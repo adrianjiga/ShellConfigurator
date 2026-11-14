@@ -9,12 +9,13 @@ import {
   removeShellConfigFile,
   startsStarship,
 } from '../generators/shellRc.ts';
-import type { PackageManager, ShellId } from '../types.ts';
+import type { PackageManager, ShellId, TerminalId } from '../types.ts';
 import { forgetStarshipVersion } from './cache.ts';
 import { detectPackageManagerAsync } from './detector.ts';
 import { errorMessage } from './errors.ts';
 import {
   fontLabel,
+  getFontFamily,
   getNerdFontsDir,
   installedFontFiles,
   plannedStarshipRemoval,
@@ -22,6 +23,7 @@ import {
   removeStarship,
   type StarshipRemoval,
 } from './installer.ts';
+import { readTerminalFontFamily, TERMINAL_LABELS } from './terminalFont.ts';
 
 export type UninstallStatus = 'removed' | 'skipped' | 'failed' | 'planned';
 
@@ -81,6 +83,7 @@ export interface UninstallDeps {
   removeStarship: (plan: StarshipRemoval) => Promise<void>;
   forgetStarshipVersion: () => void;
   installedFontFiles: (fontId: string) => Promise<string[] | null>;
+  terminalFontFamily: (terminalId: TerminalId) => string | null;
   removeFontFiles: (files: string[]) => Promise<void>;
 }
 
@@ -96,6 +99,7 @@ export const DEFAULT_UNINSTALL_DEPS: UninstallDeps = {
   forgetStarshipVersion,
   installedFontFiles,
   removeFontFiles,
+  terminalFontFamily: readTerminalFontFamily,
 };
 
 function describeRemoval(result: RemovalResult, what: string, file: string): StepOutcome {
@@ -168,13 +172,23 @@ async function fontStep(fontId: string, deps: UninstallDeps): Promise<UninstallS
     };
   }
   if (files.length === 0) return { id: 'font', title: label, detail: `${label} is not installed` };
+  const family = getFontFamily(fontId);
+  const terminals = (Object.keys(TERMINAL_LABELS) as TerminalId[])
+    .filter((id) => family !== null && deps.terminalFontFamily(id) === family)
+    .map((id) => TERMINAL_LABELS[id]);
+  const stillSelected =
+    terminals.length > 0
+      ? `; ${terminals.join(', ')} still select${terminals.length === 1 ? 's' : ''} "${family}", so pick another font there`
+      : '';
   return {
     id: 'font',
     title: label,
-    detail: `delete ${files.length} font file${files.length === 1 ? '' : 's'} from ${getNerdFontsDir()}`,
+    detail: `delete ${files.length} font file${files.length === 1 ? '' : 's'} from ${getNerdFontsDir()}${stillSelected}`,
     run: async () => {
       await deps.removeFontFiles(files);
-      return { detail: `deleted ${files.length} font file${files.length === 1 ? '' : 's'}` };
+      return {
+        detail: `deleted ${files.length} font file${files.length === 1 ? '' : 's'}${stillSelected}`,
+      };
     },
   };
 }

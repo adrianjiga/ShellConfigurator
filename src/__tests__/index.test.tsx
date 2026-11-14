@@ -719,6 +719,7 @@ describe('index uninstall command', () => {
         forgetStarshipVersion: vi.fn(),
         installedFontFiles: vi.fn().mockResolvedValue([]),
         removeFontFiles: vi.fn(),
+        terminalFontFamily: () => null,
         ...deps,
       },
       ...overrides,
