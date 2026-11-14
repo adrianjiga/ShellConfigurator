@@ -60,12 +60,15 @@ symbol = " "
 
 The same module under a powerline prompt, after `directory`. Each module opens
 with its own leading separator styled with starship's `prev_bg`, so a module that
-collapses takes its separator with it:
+collapses takes its separator with it. The module's own colour comes first as
+the fallback, so when nothing was drawn before it (a hidden `username`) the
+separator is a plain cell of its colour rather than an arrow in the terminal's
+default colour:
 
 ```toml
 [git_branch]
 style  = "bold fg:fg bg:git_branch"
-format = "([](fg:prev_bg bg:git_branch)[ $symbol$branch ]($style))"
+format = "([](fg:git_branch fg:prev_bg bg:git_branch)[ $symbol$branch ]($style))"
 symbol = " "
 ```
 

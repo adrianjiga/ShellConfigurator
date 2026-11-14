@@ -130,7 +130,7 @@ Three Style-screen choices are emitted as prompt-wide keys:
   `arrow` (`[❯](bright-black) `), and `none` (`""`, no marker).
 - `add_newline` inserts the blank line between the previous output and the
   prompt. It is on by default and can be turned off for a compact prompt.
-- The vim-mode toggle adds `vimcmd_symbol` to the `[character]` block (see
+- The vim-mode toggle sets `vimcmd_symbol` in the `[character]` block (see
   below).
 
 ## Module blocks
@@ -152,7 +152,7 @@ tints the text with `fg` and the segment background with the module's own colour
 ```toml
 [directory]
 style  = "bold fg:fg bg:directory"
-format = "([](fg:prev_bg bg:directory)[  $path$read_only ]($style))"
+format = "([](fg:directory fg:prev_bg bg:directory)[  $path$read_only ]($style))"
 ```
 
 The `format` key is emitted for every module when the generated prompt is
@@ -208,7 +208,9 @@ offers 0–5 and defaults to starship's own 3.
 
 When the user adds substitutions, the generator appends a
 `[directory.substitutions]` table. Keys and values are TOML-escaped, so a folder
-name containing a quote or backslash still parses:
+name containing a quote or backslash still parses. A truncation length of `0`
+shows the full path and writes `truncate_to_repo = false`, so the path is not
+cut at the repository root either:
 
 ```toml
 [directory]
@@ -232,7 +234,7 @@ never gets a `<section>` block or a `style` key. It is emitted on its own block:
 [character]
 success_symbol = '[❯](bold ok)'
 error_symbol   = '[❯](bold err)'
-vimcmd_symbol  = '[❮](bold ok)'   # only when vim mode is enabled
+vimcmd_symbol  = '[❮](bold ok)'   # the success symbol when vim mode is off
 ```
 
 The symbol (arrow, lambda, or dollar) is chosen on the style screen and carried
@@ -243,7 +245,9 @@ never powerline. Characters that starship's format syntax treats specially
 single-quoted TOML literals (via `tomlLiteral`, not `tomlBasic`), so an escape
 like `\$` for the dollar symbol survives TOML parsing unmangled.
 
-When vim mode is enabled, `vimcmd_symbol` marks normal mode: the arrow turns
+`vimcmd_symbol` is always written: with vim mode off it is the success symbol,
+so normal mode looks like insert mode instead of falling back to Starship's own
+`❮`. When vim mode is enabled, it marks normal mode: the arrow turns
 around to `❮`, while lambda and dollar keep their glyph, drawn `bold inverted ok`. It is only honoured by cmd, fish, and zsh; other shells keep the normal
 character.
 

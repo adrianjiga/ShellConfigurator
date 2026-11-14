@@ -187,7 +187,7 @@ style_root  = "${tomlBasic(styleFor('err'))}"
     }) => {
       const lines = [
         `truncation_length = ${directoryTruncationLength}`,
-        `truncate_to_repo  = true`,
+        `truncate_to_repo  = ${directoryTruncationLength !== 0}`,
       ];
       if (hasNerdFont && !customFormat) {
         lines.push(
