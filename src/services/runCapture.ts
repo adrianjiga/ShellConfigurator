@@ -100,8 +100,17 @@ function createRunFolder(): string {
 export function beginRunCapture(files: string[]): RunCapture {
   const runId = createRunFolder();
   const dir = runDir(runId);
-  fs.mkdirSync(path.join(dir, 'files'), { mode: 0o700 });
-  const captured = [...new Set(files)].flatMap((file, index): CapturedFile[] => {
+  try {
+    fs.mkdirSync(path.join(dir, 'files'), { mode: 0o700 });
+    return { runId, dir, files: copyFiles(files, dir) };
+  } catch (err) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    throw err;
+  }
+}
+
+function copyFiles(files: string[], dir: string): CapturedFile[] {
+  return [...new Set(files)].flatMap((file, index): CapturedFile[] => {
     let content: Buffer | null;
     try {
       content = readOrNull(file);
@@ -114,7 +123,6 @@ export function beginRunCapture(files: string[]): RunCapture {
     const mode = fs.statSync(file).mode & 0o7777;
     return [{ path: file, before: copy, beforeHash: sha256Digest(content), mode }];
   });
-  return { runId, dir, files: captured };
 }
 
 /**

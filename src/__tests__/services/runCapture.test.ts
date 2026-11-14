@@ -5,6 +5,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.unmock('../../services/runCapture.ts');
 
+const failWrites = vi.hoisted(() => ({ after: Number.POSITIVE_INFINITY }));
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    writeFileSync: (...args: Parameters<typeof actual.writeFileSync>) => {
+      if (failWrites.after-- <= 0) throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' });
+      return actual.writeFileSync(...args);
+    },
+  };
+});
+
 import { getShell } from '../../config/shells.ts';
 import { getSharedConfigPath, getShellConfigPath } from '../../generators/shellRc.ts';
 import { sha256Digest } from '../../services/cache.ts';
@@ -95,6 +108,18 @@ describe('beginRunCapture / finishRunCapture', () => {
 
     expect(finishRunCapture(capture)).toBeNull();
     expect(fs.existsSync(capture.dir)).toBe(false);
+  });
+
+  it('removes its half-written folder when copying fails partway', () => {
+    fs.writeFileSync(file('a'), 'a');
+    fs.writeFileSync(file('b'), 'b');
+    failWrites.after = 1;
+    try {
+      expect(() => beginRunCapture([file('a'), file('b')])).toThrow('ENOSPC');
+    } finally {
+      failWrites.after = Number.POSITIVE_INFINITY;
+    }
+    expect(fs.readdirSync(runsDir())).toEqual([]);
   });
 
   it('leaves out a path it cannot read as a file', () => {
