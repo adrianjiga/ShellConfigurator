@@ -999,11 +999,15 @@ shell-configurator timings [--config <file> | generate flags] [--json]
 Times each module of a config in the current folder with `starship timings`
 and prints them slowest first, how long the prompt waits for its slowest module,
 and suggestions with the TOML to add (`timePrompt` in
-`src/services/starshipProbe.ts`). `--config` times an existing file; without it
-the config is built from the generate flags (`--preset`, `--palette`,
-`--state`, ...), and the two cannot be combined. `--json` prints `{ config,
+`src/services/starshipProbe.ts`). Without flags it times the config the current
+shell loads (`activeConfigPath`: `$STARSHIP_CONFIG`, else the shell's per-shell
+config, else the shared `starship.toml`; the default prompt, labelled as such,
+when none exists). `--config` times an existing file, and the generate flags
+(`--preset`, `--palette`, `--state`, ...) time a config built from them; the two
+cannot be combined. `--json` prints `{ config,
 path, slowestMs, slow, modules: [{ module, ms, output }], suggestions: [{ module?,
-text, toml? }] }`. It reads only. Without Starship, or when Starship takes longer
+text, toml? }] }`. It changes no config (Starship still writes its own cache and
+logs as it does for every prompt). Without Starship, or when Starship takes longer
 than 30s (a very slow module, usually git_status), it is a run error. An
 adopt-mode card is a usage error that points at `--config` with the shared
 config; `--shells`, `--yes` and other flags are usage errors too. The flags each
