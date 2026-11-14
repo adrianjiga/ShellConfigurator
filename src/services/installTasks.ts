@@ -234,7 +234,7 @@ interface TaskOutcome {
 export async function runInstallTasks(
   state: WizardState,
   deps: InstallTaskDeps,
-  onUpdate: (id: string, patch: Partial<InstallTask>) => void,
+  onUpdate: (id: InstallTaskId, patch: Partial<InstallTask>) => void,
   signal?: AbortSignal
 ): Promise<InstallTask[]> {
   let resetShells: ShellId[] = [];
@@ -252,7 +252,7 @@ export async function runInstallTasks(
     onUpdate(resetTaskId(shellId), { label: resetLabel(shellId), status: 'pending' });
   }
 
-  function update(id: string, patch: Partial<InstallTask>) {
+  function update(id: InstallTaskId, patch: Partial<InstallTask>) {
     tasks = tasks.map((t) => (t.id === id ? { ...t, ...patch } : t));
     onUpdate(id, patch);
   }

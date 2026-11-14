@@ -13,14 +13,19 @@ import {
 import { errorMessage } from '../services/errors.ts';
 import { fontLabel, getFontFamily, MANUAL_STARSHIP_INSTALL } from '../services/installer.ts';
 import { buildTaskList, plannedResetShells, rcTaskId, TASK_IDS } from '../services/installTasks.ts';
-import { fontIdToInstall, type InstallTask, type WizardState } from '../types.ts';
+import {
+  fontIdToInstall,
+  type InstallTask,
+  type InstallTaskId,
+  type WizardState,
+} from '../types.ts';
 
 interface DoneScreenProps {
   state: WizardState;
 }
 
 /** One scan per task; callers read .status/.error/.note from the same result. */
-function findTask(state: WizardState, id: string): InstallTask | undefined {
+function findTask(state: WizardState, id: InstallTaskId): InstallTask | undefined {
   return state.installResults.find((t) => t.id === id);
 }
 
