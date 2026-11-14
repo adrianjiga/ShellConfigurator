@@ -1,3 +1,6 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('ink', async () => {
@@ -86,6 +89,7 @@ import {
 } from '../index.tsx';
 import { parseCliArgs } from '../services/args.ts';
 import { CliRunError, CliUsageError } from '../services/errors.ts';
+import { serializeState } from '../services/state.ts';
 import { DEFAULT_STATE, type InstallTask } from '../types.ts';
 
 describe('index CLI handling', () => {
@@ -484,6 +488,36 @@ describe('index headless routing', () => {
 
     expect(stdoutWrite).toHaveBeenCalledWith(`${JSON.stringify(report, null, 2)}\n`);
     expect(mockFormatDoctorReport).not.toHaveBeenCalled();
+  });
+
+  it('checks doctor and repair against a --state card', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-index-'));
+    try {
+      const card = path.join(dir, 'card.json');
+      fs.writeFileSync(card, serializeState({ ...DEFAULT_STATE, selectedShells: ['fish'] }));
+      mockRunDoctor.mockResolvedValue({ ok: true, findings: [] });
+      mockFormatDoctorReport.mockReturnValue('HEALTHY\n');
+      mockRunRepair.mockResolvedValue({ ok: true, actions: [] });
+      mockFormatRepairReport.mockReturnValue('REPAIRED\n');
+
+      await route(['doctor', '--state', card]);
+      await route(['repair', '--state', card]);
+
+      expect(mockRunDoctor.mock.calls[0]![0]).toMatchObject({ selectedShells: ['fish'] });
+      expect(mockRunRepair.mock.calls[0]![0]).toMatchObject({ selectedShells: ['fish'] });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('prints the repair report as JSON with --json', async () => {
+    const report = { ok: true, actions: [], dryRun: false };
+    mockRunRepair.mockResolvedValue(report);
+
+    await route(['repair', '--json']);
+
+    expect(stdoutWrite).toHaveBeenCalledWith(`${JSON.stringify(report, null, 2)}\n`);
+    expect(mockFormatRepairReport).not.toHaveBeenCalled();
   });
 
   it('sets a non-zero exit code when a doctor check fails', async () => {
