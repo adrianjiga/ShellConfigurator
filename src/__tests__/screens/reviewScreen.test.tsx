@@ -245,7 +245,9 @@ describe('ReviewScreen with an existing shared config', () => {
     fs.writeFileSync(path.join(home, '.config', 'starship.toml'), 'format = "$all"\n');
     const { instance } = setup();
     await flush();
-    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain('apply --adopt');
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
+      'apply --adopt --shells zsh.'
+    );
   });
 });
 
