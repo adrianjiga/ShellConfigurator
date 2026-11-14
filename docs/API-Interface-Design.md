@@ -368,6 +368,19 @@ function resetSharedShellConfig(shellId: ShellId): { applied: boolean; note?: st
 // Removes a per-shell block an earlier run wrote (keeping its PATH line and the
 // Starship init) and adds an unset guard above the init line, so the shell uses
 // the shared config. A user's own STARSHIP_CONFIG export is left in place.
+
+function hasManagedRcBlock(shellId: ShellId, io?: RcIo): boolean;
+// Whether the shell's rc file carries a ShellConfigurator block (either marker).
+
+function removeManagedRcBlocks(shellId: ShellId): RemovalResult;
+// uninstall: backs up the rc, then drops every ShellConfigurator block. When the
+// user's own starship init line remains, the PATH line a block carried is kept
+// above it. { removed: false, note } when there was nothing to remove.
+
+function removeShellConfigFile(shellId: ShellId): RemovalResult;
+// uninstall: renames ~/.config/starship/<shell>.toml to a .bak-* backup, which
+// --restore copies back.
+// RemovalResult = { removed: boolean; backedUpTo?: string; note?: string }
 ```
 
 Config and rc file writes (per-shell, shared, and rc appends) go through a
@@ -439,6 +452,42 @@ function getMissingStarshipPathDir(): string | null;
 // The directory (~/.local/bin) that must be on PATH when the install script put
 // the binary there and the shell can't reach it, or null when starship is already
 // reachable.
+
+function plannedStarshipRemoval(pm: PackageManager): StarshipRemoval;
+// How uninstall --starship would remove Starship: { kind: 'script', path } for the
+// install script's ~/.local/bin binary, { kind: 'package', pm, command } for a
+// pacman/apk/brew package, { kind: 'manual', path } for a binary no package
+// manager here ships, { kind: 'absent' } when it is not installed.
+
+function removeStarship(plan: StarshipRemoval, signal?: AbortSignal): Promise<void>;
+// Deletes the script binary or runs the package manager's remove command.
+
+function installedFontFiles(fontId: string): Promise<string[] | null>;
+// The installed files of a Nerd Font, listed from its verified cached archive;
+// null when nothing is cached, so its files cannot be told apart.
+
+function removeFontFiles(files: string[]): Promise<void>;
+// Deletes the files, then refreshes fc-cache off macOS.
+```
+
+### uninstall.ts
+
+```typescript
+function planUninstall(options: UninstallOptions, deps?: UninstallDeps): Promise<UninstallStep[]>;
+// Read-only plan in reverse install order: each shell's rc lines and per-shell
+// config, then the font (options.fontId), then Starship (options.starship).
+// options.shells defaults to every shell with an rc block or a config. A step
+// without run() has nothing to do and its detail says why.
+
+function runUninstall(
+  steps: UninstallStep[],
+  opts?: { dryRun?: boolean }
+): Promise<UninstallReport>;
+// Runs each step; a failure does not stop the rest. Statuses: removed | skipped
+// | failed | planned. ok is false when any step failed.
+
+function formatUninstallReport(report: UninstallReport): string;
+// The text report; --json prints the report object.
 ```
 
 ### fontExtractor.ts
@@ -554,7 +603,7 @@ function runInstallTasks(
 
 ## Headless CLI & Run Data
 
-The public flag surface in `src/index.tsx`/`src/services/args.ts`, in five groups.
+The public flag surface in `src/index.tsx`/`src/services/args.ts`, in six groups.
 
 ### Interactive
 
@@ -567,7 +616,8 @@ shell-configurator --dry-run    preview changes without installing (alias --no-i
 
 ```
 --restore / --undo    Copy the newest .bak-* backup over the shared and per-shell
-                      configs created by earlier runs (see restoreConfigBackups)
+                      configs created by earlier runs (see restoreConfigBackups);
+                      after an uninstall it brings the configs back
 --version / -v        Print the version
 --help / -h           Print usage
 ```
@@ -643,13 +693,33 @@ value on a boolean flag, a missing value, a stray positional) throw a
 `CliUsageError`, so a typo can never start the real installer. Config flags
 passed to `doctor`/`repair` without `--state` are ignored with a stderr warning.
 
+### uninstall
+
+```
+shell-configurator uninstall [--shells <id,...>] [--starship] [--font <id>] [--yes] [--dry-run] [--json]
+```
+
+Removes what the wizard set up, in reverse install order (`src/services/uninstall.ts`).
+For each shell (by default every shell with a ShellConfigurator rc block or a
+per-shell config) it backs up and strips every `# Added by ShellConfigurator`
+block from the rc, and moves `~/.config/starship/<shell>.toml` to a `.bak-*`
+backup. Nushell and PowerShell were set up by hand, so their step only names
+the file to clean. `--font <id>` deletes that Nerd Font's files, listed from its
+cached archive; `--starship` deletes the script install's binary or removes the
+pacman/apk/Homebrew package, and forgets the recorded version. Without
+`--yes` it prints the plan and asks on a terminal; off a terminal, or with
+`--json`, a run that would change something is a `CliUsageError`. `--dry-run`
+only prints the plan. A failed step does not stop the rest and sets exit code
+`1`. Config flags other than `--shells` and `--font`, and `--state`, are usage
+errors, as are `--yes` and `--starship` outside `uninstall`.
+
 ### Exit Codes
 
-| Code | Meaning                                                                                                                                                                                                                                                    |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`  | Success.                                                                                                                                                                                                                                                   |
-| `1`  | A wizard install finished with at least one failed task, a headless run failed (`CliRunError`, e.g. a failed `--import-url` fetch or an unwritable `-o`/`--export`), a `doctor`/`repair` check still fails, a `--restore` copy failed, or any fatal crash. |
-| `2`  | `CliUsageError` — an unknown or malformed flag, an invalid flag value, `--adopt`/`--import-url` with `generate` or no subcommand, config flags without a subcommand, or an unreadable state card; reads clean with no stack trace.                         |
+| Code | Meaning                                                                                                                                                                                                                                                                                         |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`  | Success.                                                                                                                                                                                                                                                                                        |
+| `1`  | A wizard install finished with at least one failed task, a headless run failed (`CliRunError`, e.g. a failed `--import-url` fetch or an unwritable `-o`/`--export`), a `doctor`/`repair` check still fails, an `uninstall` step failed, a `--restore` copy failed, or any fatal crash.          |
+| `2`  | `CliUsageError` — an unknown or malformed flag, an invalid flag value, `--adopt`/`--import-url` with `generate` or no subcommand, config flags without a subcommand, `uninstall` without `--yes` off a terminal or with `--json`, or an unreadable state card; reads clean with no stack trace. |
 
 ### Persisted Run Data
 
@@ -658,7 +728,7 @@ tarball stays self-contained and nothing is written next to the binary:
 
 | Path                                                                                | Contents                                                                                                                                                                                                                                                 |
 | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `$XDG_STATE_HOME` or `~/.local/state`/`shell-configurator/history.jsonl`            | Append-only ledger; one JSON `HistoryRecord` per run (`install`/`apply`/…), in file order = chronological order.                                                                                                                                         |
+| `$XDG_STATE_HOME` or `~/.local/state`/`shell-configurator/history.jsonl`            | Append-only ledger; one JSON `HistoryRecord` per run (`install`/`apply`/`uninstall`), in file order = chronological order.                                                                                                                               |
 | `…/snapshots/<iso-timestamp>.json`                                                  | The versioned state card each wizard install or headless `apply` applied; the id is the ISO timestamp with `:` replaced by `-`. The ledger's `snapshotId` points at it, and `--restore` reads the newest one to learn which shells the last run touched. |
 | `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/fonts/<id>.zip` + `<id>.sha256` | Font cache: the verified archive plus its pinned SHA-256 pin file. A cached archive is reused offline only while its bytes still match the pin.                                                                                                          |
 | `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/starship.version`               | The starship version recorded by the last run that freshly installed Starship (`recordStarshipVersion`). Feeds the doctor's `version-drift` check.                                                                                                       |
@@ -705,7 +775,10 @@ detection-based fields cleared) and re-detects per run.
 the Config task: before per-shell configs shadow it, or before adopt mode points
 shells at it (an `--import-url` overwrite is backed up by `writeSharedConfig`
 itself). `restoreConfigBackups()` copies the newest `.bak-*` files back over the
-shared and per-shell configs (`--restore`).
+shared and per-shell configs (`--restore`). `uninstall` backs up each rc file
+before editing it and moves per-shell configs to `.bak-*` backups, so
+`--restore` undoes the config half of an uninstall; the rc backups are copied
+back by hand.
 
 ---
 
