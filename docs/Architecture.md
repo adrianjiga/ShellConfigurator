@@ -62,9 +62,10 @@ applications — it translates a React component tree into terminal output.
 
 | Component       | File                               | Purpose                                                                                                                                                         |
 | --------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `WizardLayout`  | `src/components/WizardLayout.tsx`  | Wraps every screen. Renders header, progress bar, two-column layout (content + preview), and NavHints.                                                          |
+| `WizardLayout`  | `src/components/WizardLayout.tsx`  | Wraps every screen. Renders header, progress bar, and two-column layout (content + preview).                                                                    |
 | `PromptPreview` | `src/components/PromptPreview.tsx` | Live prompt panel in the right column. Renders the real prompt via the starship binary when installed (`src/services/preview.ts`), else a static approximation. |
-| `NavHints`      | `src/components/NavHints.tsx`      | Renders keyboard shortcut hints at the bottom of each screen.                                                                                                   |
+| `NavHints`      | `src/components/NavHints.tsx`      | Keyboard shortcut hints; each interactive screen renders its own at the bottom.                                                                                 |
+| `PlanSections`  | `src/components/PlanSections.tsx`  | `TaskPlan` and `ConfigPlan`, the install plan and config sections shared by ReviewScreen and DoneScreen.                                                        |
 
 ---
 
@@ -82,10 +83,10 @@ The navigation logic itself lives in `src/stepMachine.ts` as two pure functions,
 
 | Function                      | Behavior                                                                                       |
 | ----------------------------- | ---------------------------------------------------------------------------------------------- |
-| `getNextStep(state, update?)` | Pure — merges `update`, advances to the next step, honoring the conditional `font_select` skip |
-| `getPrevStep(state)`          | Pure — moves to the previous step, honoring the conditional `font_select` skip                 |
+| `getNextStep(state, update?)` | Pure — merges `update`, advances to the next step, skipping `font_select` when no font is being picked and `installing` in dry-run |
+| `getPrevStep(state)`          | Pure — moves to the previous step, honoring the conditional `font_select` skip; never leaves `installing` or `done` |
 
-`src/app.tsx` wraps these in state setters: `goNext(update?)` calls `getNextStep` via a functional `setState` updater, `goBack()` calls `getPrevStep`. `advanceTo(step, update?)` jumps straight to a step (used by InstallingScreen to reach `done` with task results).
+`src/app.tsx` wraps these in state setters: `goNext(update?)` calls `getNextStep` via a functional `setState` updater, `goBack()` calls `getPrevStep`. `advanceTo(step, update?)` jumps straight to a step. InstallingScreen's `onNext` is `finishInstall(update?)`, which records the install outcome and then calls `advanceTo('done', update)` with the task results.
 
 Both directions use the single `shouldVisitFontSelect(nerdFontToInstall)` predicate from `src/types.ts` — there is no duplicated skip logic.
 
@@ -107,10 +108,12 @@ The same predicate runs in reverse for `getPrevStep()` — if the user never int
 
 ### Progress Bar
 
-`WizardLayout` renders an 11-step progress indicator:
+`WizardLayout` renders one dot per step this run visits: all 11 steps, less
+`font_select` when no font is being picked and `installing` in dry-run. With
+`font_select` skipped:
 
 ```
-● ● ◉ ○ ○ ○ ○ ○ ○ ○ ○  4. Preset
+● ● ● ◉ ○ ○ ○ ○ ○ ○  4. Preset
 ```
 
 - `●` green = completed
@@ -175,23 +178,24 @@ App (owns state)
 
 | Screen                 | Fields Updated                                                                                                                                  |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| WelcomeScreen          | `packageManager`, `skipStarshipInstall`                                                                                                         |
+| WelcomeScreen          | `packageManager`, `terminal`, `container`, `skipStarshipInstall`                                                                                |
 | FontCheckScreen        | `hasNerdFont`, `nerdFontToInstall`                                                                                                              |
 | FontSelectScreen       | `nerdFontToInstall`, `hasNerdFont`                                                                                                              |
 | PresetScreen           | `preset`, `leftModules`, `rightModules`, `palette`, `powerline`                                                                                 |
-| SegmentsScreen (left)  | `leftModules` (live via `onUpdate`)                                                                                                             |
+| SegmentsScreen (left)  | `leftModules`, `rightModules` (drops modules now on the left; live via `onUpdate`)                                                              |
 | SegmentsScreen (right) | `rightModules` (live via `onUpdate`)                                                                                                            |
-| StyleScreen            | `characterSymbol`, `palette`, `powerline`, `continuationPrompt`, `addNewline`, `vimMode`, `directoryTruncationLength`, `directorySubstitutions` |
+| StyleScreen            | `characterSymbol`, `palette`, `powerline`, `continuationPrompt`, `addNewline`, `vimMode`, `directoryTruncationLength`, `directorySubstitutions` (live via `onUpdate`) |
 | ShellScreen            | `selectedShells`, `installedShells`, `setDefaultShell`                                                                                          |
-| InstallingScreen       | `installResults` (final task list passed via `advanceTo('done', update)`)                                                                       |
+| InstallingScreen       | `installResults` (final task list passed via `finishInstall(update)`)                                                                           |
 | DoneScreen             | (reads `installResults` for status display)                                                                                                     |
 
 ### Live Preview Sync
 
 Some screens push state changes in real time (without advancing) so `PromptPreview` updates as the user toggles options:
 
-- **SegmentsScreen**: `useEffect` calls `onUpdate({ leftModules: [...] })` on every toggle
-- **ShellScreen**: pushes `installedShells` after async detection completes
+- **SegmentsScreen**: `useUpdateEffect` (`src/hooks/useUpdateEffect.ts`, a `useEffect` that skips the first render) calls `onUpdate` with the side's modules on every toggle
+- **StyleScreen**: `useUpdateEffect` pushes the current style selection on every change
+- **ShellScreen**: pushes `installedShells` after async detection completes, and the shell selection when going back with Esc
 - **PresetScreen**: only the highlighted preset's _description_ updates live (`onHighlight`); modules, palette, and powerline are committed on Enter, so the preview does not swap while scrolling presets
 
 ---
@@ -207,7 +211,8 @@ interface ModuleDef {
   description: string;
   defaultLeft: boolean;
   defaultRight: boolean;
-  previewSegment: (hasNerdFont: boolean) => string;
+  previewSegment: (hasNerdFont: boolean, sample: PreviewSample) => string;
+  plainPreview?: (hasNerdFont: boolean) => string; // Plain-prompt preview, where starship adds words or brackets
   content: string; // Inner format — what a powerline prompt wraps in separator glyphs
   settings?: (ctx: ModuleTomlContext) => string; // TOML keys beyond style/format
   stylesItself?: boolean; // Carries its colour in its own keys (username → style_user, battery → [[battery.display]])
@@ -220,6 +225,8 @@ it needs (`symbol`, `disabled`, thresholds...), so powerline is a one-place chan
 rather than a per-module one. Palettes key their colour table on
 `ConfigurableModuleId`, so adding a module is a compile error until every palette
 picks it a colour.
+
+Symbol-only modules (the language runtimes, Docker, Kubernetes) build their preview and `settings` from one `symbolModule(symbol, sample)` helper. `placedModules(left, right)` decides where each module lands — each once, and a module picked on both sides only on the left — and is shared by the generator, the preview, and the state card.
 
 The `character` module is special — it is never shown as a toggle in SegmentsScreen. Instead, it is always appended to the end of `leftModules` automatically.
 
@@ -235,11 +242,12 @@ src/
 ├── types.ts                   WizardState, discriminated unions, STEP_ORDER, DEFAULT_STATE
 ├── config/
 │   ├── modules.ts             Module definitions (31 modules) — palette keying
-│   ├── presets.ts             Preset definitions (12 presets)
+│   ├── presets.ts             Preset definitions (12 presets) + glyph/powerline rules (drawsPowerline, powerlineDroppedReason)
 │   ├── shells.ts              Shell definitions (5 shells: binary, rc file, init line)
 │   ├── palettes.ts            Palette definitions (14 palettes; each preset seeds one)
 │   ├── colors.ts              NO_COLOR policy: `colorsEnabled` / `uiColor`
-│   ├── status.ts              Task status → icon/colour mapping
+│   ├── directory.ts           Directory depth range + substitution editor syntax
+│   ├── status.ts              Task status → icon/colour mapping + statusLine for plain-text reports
 │   └── promptSymbols.ts       Prompt character symbol definitions
 ├── components/
 │   ├── WizardLayout.tsx       Screen wrapper + progress bar
@@ -247,9 +255,13 @@ src/
 │   ├── PickerRow.tsx          Shared single/multi-choice row
 │   ├── AppSelectInput.tsx     ink-select-input wrapper with NO_COLOR-aware rows
 │   ├── NavHints.tsx           Keyboard hint bar
-│   └── ErrorBoundary.tsx      Border guards render errors without leaving raw mode on
+│   ├── PlanSections.tsx       Install plan + config sections (Review and Done screens)
+│   ├── textInput.ts           editedText: one keypress of filter/draft typing
+│   └── ErrorBoundary.tsx      Shows a readable message instead of a stack trace when a screen throws
+├── hooks/
+│   └── useUpdateEffect.ts     useEffect that skips the first render (live updates)
 ├── screens/
-│   ├── WelcomeScreen.tsx      System detection (PM, Starship)
+│   ├── WelcomeScreen.tsx      System detection (PM, Starship, terminal, container)
 │   ├── FontCheckScreen.tsx    Nerd Font question
 │   ├── FontSelectScreen.tsx   Font picker
 │   ├── PresetScreen.tsx       Preset picker
@@ -261,11 +273,11 @@ src/
 │   └── DoneScreen.tsx         Summary, exit, one-key undo (`r` restores backups)
 ├── generators/
 │   ├── starship.ts            TOML config generation
-│   ├── shellRc.ts             RC file writing + per-shell/shared config output
+│   ├── shellRc.ts             RC file writing (plannedRcBlock) + per-shell/shared config output, backups and restore
 │   └── toml.ts                TOML escaping helpers
 └── services/
     ├── args.ts                Hand-rolled, dependency-free CLI flag parser
-    ├── headless.ts            generate/apply/doctor/repair subcommand routing + bounded --import-url fetch
+    ├── headless.ts            generate/apply implementation + bounded --import-url fetch (routing is runHeadlessCommand in index.tsx)
     ├── preview.ts             Live preview: scratch-dir `starship prompt` + static fallback
     ├── detector.ts            Async system detection (PM, shells, Starship, terminal, container)
     ├── installer.ts           Install commands (Starship, fonts, shells, chsh)
