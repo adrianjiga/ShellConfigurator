@@ -40,6 +40,17 @@ const state = (overrides: Partial<WizardState> = {}): WizardState => ({
 });
 
 describe('runRepair', () => {
+  it('applies the fixes of a report it is given, checking only once afterwards', async () => {
+    const before = report([finding({ kind: 'configure-shell', shellId: 'bash' })]);
+    const deps = makeDeps(report([]));
+
+    const result = await runRepair(null, deps, { before });
+
+    expect(deps.applyShellConfig).toHaveBeenCalledOnce();
+    expect(deps.runDoctor).toHaveBeenCalledOnce();
+    expect(result.before).toBe(before);
+  });
+
   it('does nothing when there are no actionable findings', async () => {
     const deps = makeDeps(report([{ id: 'a', title: 'A', status: 'pass', detail: 'fine' }]));
     const result = await runRepair(null, deps);

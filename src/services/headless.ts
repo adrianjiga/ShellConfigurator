@@ -562,7 +562,7 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
   };
   let captured: { result: InstallTask[]; runId: string | null };
   const controller = new AbortController();
-  const stopListening = cancelOnSignals(controller, () =>
+  const { stop: stopListening } = cancelOnSignals(controller, () =>
     process.stderr.write(
       '\nCancelling: the step that is running finishes first (press Ctrl+C again to quit now).\n'
     )

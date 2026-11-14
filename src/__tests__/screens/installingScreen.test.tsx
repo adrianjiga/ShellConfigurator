@@ -271,7 +271,7 @@ describe('InstallingScreen SIGINT', () => {
     captureSignal();
     const counts = () =>
       ['SIGINT', 'SIGTERM', 'SIGHUP'].map(
-        (s) => process.listeners(s).filter((l) => l.toString().includes('signalExitCode')).length
+        (s) => process.listeners(s).filter((l) => l.toString().includes('receive(signal)')).length
       );
     const before = counts();
     const { instance } = setup();
@@ -280,6 +280,23 @@ describe('InstallingScreen SIGINT', () => {
     instance.unmount();
     await flush();
     expect(counts()).toEqual(before);
+  });
+
+  it('counts a Ctrl+C key as the first cancel, so a following SIGINT exits', async () => {
+    mocks.buildTaskList.mockReturnValue(statusFixture());
+    const signal = captureSignal();
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const { instance } = setup();
+    await flush();
+
+    instance.stdin.write('\u0003');
+    await flush();
+    expect(signal.current?.aborted).toBe(true);
+    process.emit('SIGINT');
+
+    expect(exit).toHaveBeenCalledWith(130);
+    instance.unmount();
+    exit.mockRestore();
   });
 
   it('exits on a second signal instead of swallowing it', async () => {

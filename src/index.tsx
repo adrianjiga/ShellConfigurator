@@ -435,9 +435,13 @@ export async function runRepairCommand(
   }
 
   const { result: report, runId } = changes
-    ? await captureRun(trackedFiles(), () => runRepair(state, deps, options), {
-        record: { kind: 'repair', command },
-      })
+    ? await captureRun(
+        trackedFiles(),
+        () => runRepair(state, deps, { ...options, before: plan.before }),
+        {
+          record: { kind: 'repair', command },
+        }
+      )
     : { result: plan, runId: null };
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

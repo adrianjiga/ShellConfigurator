@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { statusMark } from '../config/status.ts';
-import { cancelOnSignals, signalExitCode } from '../services/cancel.ts';
+import { cancelOnSignals, type SignalCancel, signalExitCode } from '../services/cancel.ts';
 import { errorMessage } from '../services/errors.ts';
 import {
   buildTaskList,
@@ -33,7 +33,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const [tasks, setTasks] = useState<InstallTask[]>(() => buildTaskList(state));
   const [uiSuspended, setUiSuspended] = useState(() => isUiSuspended());
   const [cancelling, setCancelling] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
+  const cancelRef = useRef<SignalCancel | null>(null);
 
   // While an interactive child (sudo, chsh) owns the terminal this screen renders
   // nothing, so Ink's next frame cannot paint over its password prompt.
@@ -45,10 +45,11 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   useEffect(() => {
     let unmounted = false;
     const controller = new AbortController();
-    abortRef.current = controller;
     // While a child owns the terminal it is in cooked mode, so Ctrl+C arrives as
     // SIGINT instead of a key. Cancel the run then instead of dying mid-install.
-    const stopListening = cancelOnSignals(controller, () => setCancelling(true));
+    const signals = cancelOnSignals(controller, () => setCancelling(true));
+    cancelRef.current = signals;
+    const stopListening = signals.stop;
 
     function updateTask(id: string, patch: Partial<InstallTask>) {
       if (unmounted) return;
@@ -133,9 +134,10 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
     (char, key) => {
       // Nothing is left to cancel once every step has finished.
       if (allDoneRef.current) return;
-      if (char === 'c' || char === 'C' || (key.ctrl && char === 'c')) {
-        setCancelling(true);
-        abortRef.current?.abort();
+      if (key.ctrl && char === 'c') {
+        cancelRef.current?.cancel();
+      } else if ((char === 'c' || char === 'C') && !cancelRef.current?.cancelled()) {
+        cancelRef.current?.cancel();
       }
     },
     { isActive: !uiSuspended }

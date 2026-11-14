@@ -9,29 +9,41 @@ export function signalExitCode(signal: CancelSignal): number {
   return 128 + constants.signals[signal];
 }
 
+export interface SignalCancel {
+  /** Removes the handlers; the signal that cancelled the run, if any. */
+  stop: () => CancelSignal | null;
+  /** Cancels as SIGINT would, for a Ctrl+C read as a key: a second one exits. */
+  cancel: () => void;
+  cancelled: () => boolean;
+}
+
 /**
  * Cancels `controller` on Ctrl+C, a closed terminal or a kill, so the run stops
  * after the step that is running and still records what it changed. A second
- * signal exits at once; the next run then finishes recording it. Returns the
- * signal that cancelled the run (if any) and removes the handlers when called.
+ * signal exits at once; the next run then finishes recording it.
  */
 export function cancelOnSignals(
   controller: AbortController,
   onCancel: (signal: CancelSignal) => void = () => {}
-): () => CancelSignal | null {
+): SignalCancel {
   let received: CancelSignal | null = null;
+  const receive = (signal: CancelSignal) => {
+    if (received) process.exit(signalExitCode(signal));
+    received = signal;
+    onCancel(signal);
+    controller.abort();
+  };
   const handlers = CANCEL_SIGNALS.map((signal) => {
-    const handler = () => {
-      if (received) process.exit(signalExitCode(signal));
-      received = signal;
-      onCancel(signal);
-      controller.abort();
-    };
+    const handler = () => receive(signal);
     process.on(signal, handler);
     return [signal, handler] as const;
   });
-  return () => {
-    for (const [signal, handler] of handlers) process.off(signal, handler);
-    return received;
+  return {
+    stop: () => {
+      for (const [signal, handler] of handlers) process.off(signal, handler);
+      return received;
+    },
+    cancel: () => receive('SIGINT'),
+    cancelled: () => received !== null,
   };
 }

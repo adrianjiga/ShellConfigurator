@@ -646,6 +646,7 @@ describe('index headless routing', () => {
     const planned = {
       ok: false,
       dryRun: true,
+      before: { ok: false, findings: [] },
       actions: [{ findingId: 'shell:bash', title: 'Bash', status: 'planned', detail: 'add lines' }],
     };
     const done = { ok: true, dryRun: false, actions: [{ ...planned.actions[0], status: 'fixed' }] };
@@ -692,7 +693,14 @@ describe('index headless routing', () => {
 
       expect(ask.confirm).not.toHaveBeenCalled();
       expect(captureRun).toHaveBeenCalled();
-      expect(mockRunRepair).toHaveBeenLastCalledWith(null, {}, { includeWarnings: undefined });
+      expect(mockRunRepair).toHaveBeenLastCalledWith(
+        null,
+        {},
+        {
+          includeWarnings: undefined,
+          before: planned.before,
+        }
+      );
       expect(output()).toContain('REPORT false');
       expect(output()).toContain('Undo it with: shell-configurator rollback');
       expect(mockRecordRun).toHaveBeenCalledWith({

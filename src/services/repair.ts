@@ -43,6 +43,8 @@ export interface RepairOptions {
   dryRun?: boolean;
   /** Also apply the fixes warnings carry; they may describe a deliberate choice. */
   includeWarnings?: boolean;
+  /** The doctor report a dry run of this repair already made, so it is not checked twice. */
+  before?: DoctorReport;
 }
 
 export interface RepairDeps {
@@ -167,7 +169,7 @@ export async function runRepair(
   deps: RepairDeps = DEFAULT_REPAIR_DEPS,
   options: RepairOptions = {}
 ): Promise<RepairReport> {
-  const before = await deps.runDoctor(state);
+  const before = options.before ?? (await deps.runDoctor(state));
   const pointAtShared = state?.keepExistingConfig ?? null;
   const actions: RepairAction[] = [];
   let starshipInstallFailed = false;

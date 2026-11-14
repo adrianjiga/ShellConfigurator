@@ -9,7 +9,7 @@ describe('cancelOnSignals', () => {
   it.each(CANCEL_SIGNALS)('cancels the run on %s and says which signal did it', (signal) => {
     const controller = new AbortController();
     const onCancel = vi.fn();
-    const stop = cancelOnSignals(controller, onCancel);
+    const { stop } = cancelOnSignals(controller, onCancel);
 
     process.emit(signal);
 
@@ -20,7 +20,7 @@ describe('cancelOnSignals', () => {
 
   it('removes its handlers when stopped', () => {
     const before = process.listenerCount('SIGTERM');
-    const stop = cancelOnSignals(new AbortController());
+    const { stop } = cancelOnSignals(new AbortController());
     expect(process.listenerCount('SIGTERM')).toBe(before + 1);
 
     expect(stop()).toBeNull();
@@ -29,13 +29,30 @@ describe('cancelOnSignals', () => {
 
   it('exits at once on a second signal', () => {
     const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    const stop = cancelOnSignals(new AbortController());
+    const { stop } = cancelOnSignals(new AbortController());
 
     process.emit('SIGINT');
     expect(exit).not.toHaveBeenCalled();
     process.emit('SIGINT');
     stop();
 
+    expect(exit).toHaveBeenCalledWith(130);
+  });
+});
+
+describe('cancelOnSignals().cancel', () => {
+  it('counts a Ctrl+C key as the first signal, so the next one exits', () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const controller = new AbortController();
+    const signals = cancelOnSignals(controller);
+
+    signals.cancel();
+    expect(controller.signal.aborted).toBe(true);
+    expect(signals.cancelled()).toBe(true);
+    expect(exit).not.toHaveBeenCalled();
+
+    process.emit('SIGINT');
+    signals.stop();
     expect(exit).toHaveBeenCalledWith(130);
   });
 });
