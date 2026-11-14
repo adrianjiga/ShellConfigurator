@@ -117,6 +117,22 @@ export function shellTaskId(shellId: ShellId): `shell_${ShellId}` {
   return `shell_${shellId}`;
 }
 
+/** The font this run installs: a chosen one, never inside a container. */
+function plannedFont(state: WizardState): string | null {
+  const fontId = fontIdToInstall(state.nerdFontToInstall);
+  return fontId && !state.container ? fontId : null;
+}
+
+/** The terminal this run points at the installed font, if any. */
+function plannedTerminal(state: WizardState): TerminalId | null {
+  return plannedFont(state) ? state.terminal : null;
+}
+
+/** The login shell this run sets; a container's login shell belongs to the image. */
+function plannedDefaultShell(state: WizardState): ShellId | null {
+  return state.container ? null : state.setDefaultShell;
+}
+
 function resetLabel(shellId: ShellId): string {
   return `Clear old STARSHIP_CONFIG in ${shellId}`;
 }
@@ -146,16 +162,17 @@ export function buildTaskList(
 
   // Nerd Font (only when a concrete font was chosen; skipped in containers,
   // where fonts belong to the host terminal, not the sandbox)
-  const fontId = fontIdToInstall(state.nerdFontToInstall);
-  if (fontId && !state.container) {
+  const fontId = plannedFont(state);
+  if (fontId) {
     tasks.push({ id: TASK_IDS.font, label: `Nerd Font (${fontLabel(fontId)})`, status: 'pending' });
   }
 
   // Terminal font wiring: only meaningful once a concrete font is being installed.
-  if (fontId && state.terminal && !state.container) {
+  const terminal = plannedTerminal(state);
+  if (terminal) {
     tasks.push({
       id: TASK_IDS.terminal,
-      label: `Set ${terminalLabel(state.terminal)} font`,
+      label: `Set ${terminalLabel(terminal)} font`,
       status: 'pending',
     });
   }
@@ -174,10 +191,11 @@ export function buildTaskList(
   }
 
   // Set default shell (meaningless inside a container)
-  if (state.setDefaultShell && !state.container) {
+  const loginShell = plannedDefaultShell(state);
+  if (loginShell) {
     tasks.push({
       id: TASK_IDS.chsh,
-      label: `Set ${state.setDefaultShell} as default shell`,
+      label: `Set ${loginShell} as default shell`,
       status: 'pending',
     });
   }
@@ -319,9 +337,9 @@ export async function runInstallTasks(
   }
 
   // --- Nerd Font (only when a concrete font was chosen; skipped in containers) ---
-  const fontId = fontIdToInstall(state.nerdFontToInstall);
+  const fontId = plannedFont(state);
   let fontInstallFailed = false;
-  if (fontId && !state.container) {
+  if (fontId) {
     fontInstallFailed =
       (await runTask(TASK_IDS.font, async () => {
         // A cache note (e.g. "installed from cache") is shown as task detail.
@@ -331,8 +349,8 @@ export async function runInstallTasks(
   }
 
   // --- Terminal font wiring (only when a concrete font was chosen) ---
-  const terminalId = state.terminal;
-  if (fontId && terminalId && !state.container) {
+  const terminalId = plannedTerminal(state);
+  if (fontId && terminalId) {
     await runTask(TASK_IDS.terminal, async () => {
       // The config was generated glyph-free when the font install failed, so
       // wiring the terminal at a font that is not there would be a lie.
@@ -362,8 +380,8 @@ export async function runInstallTasks(
   }
 
   // --- chsh (skipped in containers, where the login shell is the image's) ---
-  const defaultShell = state.setDefaultShell;
-  if (defaultShell && !state.container) {
+  const defaultShell = plannedDefaultShell(state);
+  if (defaultShell) {
     await runTask(TASK_IDS.chsh, async () => {
       if (shellInstallFailures.has(defaultShell)) {
         throw new Error(`Cannot set ${defaultShell} as the default shell — its install failed`);
