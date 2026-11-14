@@ -10,9 +10,15 @@
 import { posixShellQuote } from '../config/shells.ts';
 import { CliUsageError } from './errors.ts';
 
-export type Subcommand = 'generate' | 'apply' | 'doctor' | 'repair';
+export type Subcommand = 'generate' | 'apply' | 'doctor' | 'repair' | 'uninstall';
 
-export const SUBCOMMANDS: readonly Subcommand[] = ['generate', 'apply', 'doctor', 'repair'];
+export const SUBCOMMANDS: readonly Subcommand[] = [
+  'generate',
+  'apply',
+  'doctor',
+  'repair',
+  'uninstall',
+];
 
 export interface CliFlags {
   /** The subcommand, or null when the run is interactive or a plain flag. */
@@ -48,6 +54,10 @@ export interface CliFlags {
   fix?: boolean;
   /** Let repair also apply the fixes warnings carry (--include-warnings). */
   includeWarnings?: boolean;
+  /** Let uninstall go ahead without asking (--yes). */
+  yes?: boolean;
+  /** Let uninstall remove Starship itself (--starship). */
+  starship?: boolean;
   help: boolean;
   version: boolean;
   restore: boolean;
@@ -58,6 +68,7 @@ const SHORT_FLAGS: Record<string, string> = {
   '-d': '--dry-run',
   '-v': '--version',
   '-h': '--help',
+  '-y': '--yes',
 };
 
 /** Boolean flags; the handler applies the value (the bare form means true). */
@@ -106,6 +117,12 @@ const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> 
   },
   '--include-warnings': (r, v) => {
     r.includeWarnings = v;
+  },
+  '--yes': (r, v) => {
+    r.yes = v;
+  },
+  '--starship': (r, v) => {
+    r.starship = v;
   },
 };
 

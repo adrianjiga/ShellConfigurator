@@ -29,6 +29,10 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['repair']).subcommand).toBe('repair');
     });
 
+    it('recognises uninstall', () => {
+      expect(parseCliArgs(['uninstall']).subcommand).toBe('uninstall');
+    });
+
     it('rejects an unknown word in the subcommand position', () => {
       expect(() => parseCliArgs(['deploy'])).toThrow(/Unknown command 'deploy'/);
       expect(() => parseCliArgs(['docter'])).toThrow(/Unknown command 'docter'/);
@@ -36,7 +40,7 @@ describe('parseCliArgs', () => {
     });
 
     it('lists the available commands in the error', () => {
-      expect(() => parseCliArgs(['deploy'])).toThrow(/generate, apply, doctor, repair/);
+      expect(() => parseCliArgs(['deploy'])).toThrow(/generate, apply, doctor, repair, uninstall/);
     });
 
     it('rejects a second positional argument', () => {
@@ -67,6 +71,9 @@ describe('parseCliArgs', () => {
       ['--adopt', 'adopt', true],
       ['--json', 'json', true],
       ['--fix', 'fix', true],
+      ['--yes', 'yes', true],
+      ['-y', 'yes', true],
+      ['--starship', 'starship', true],
     ];
 
     it.each(cases)('%s sets %s to %s', (arg, key, expected) => {
