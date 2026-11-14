@@ -1062,6 +1062,8 @@ describe('resetSharedShellConfig', () => {
     ['bash', 'export STARSHIP_CONFIG=~/my-starship.toml\n'],
     ['bash', 'STARSHIP_CONFIG="$HOME/s.toml"\n'],
     ['fish', 'set -Ux STARSHIP_CONFIG ~/my-starship.toml\n'],
+    ['fish', 'set -g -x STARSHIP_CONFIG ~/my-starship.toml\n'],
+    ['fish', 'set --global --export STARSHIP_CONFIG ~/my-starship.toml\n'],
   ] as const)("does not override a user's own %s export", (shell, rc) => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() => rc);
@@ -1070,6 +1072,16 @@ describe('resetSharedShellConfig', () => {
 
     expect(result.applied).toBe(false);
     expect(fs.writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it('treats an unexported fish set as no export of its own', () => {
+    vi.mocked(fs.existsSync).mockImplementation((p) => !String(p).endsWith('starship.fish'));
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () => 'set -g STARSHIP_CONFIG ~/mine.toml\nstarship init fish | source\n'
+    );
+
+    expect(resetSharedShellConfig('fish')).toEqual({ applied: true });
+    expect(lastWrittenContent()).toContain('set -e STARSHIP_CONFIG');
   });
 
   it("drops a stale unset guard that would cancel the shell's own export", () => {

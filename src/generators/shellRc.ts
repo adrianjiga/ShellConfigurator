@@ -626,8 +626,19 @@ function setsStarshipConfig(shell: ShellDef, line: string): boolean {
   const t = line.trim();
   if (t.startsWith('#')) return false;
   return shell.id === 'fish'
-    ? /^set\s+(-[a-zA-Z]*x[a-zA-Z]*\s+)+STARSHIP_CONFIG\s/.test(`${t} `)
+    ? fishExportsStarshipConfig(t)
     : /^(export\s+)?STARSHIP_CONFIG=/.test(t);
+}
+
+function fishExportsStarshipConfig(line: string): boolean {
+  const [command, ...rest] = line.split(/\s+/);
+  if (command !== 'set') return false;
+  const nameAt = rest.findIndex((word) => !word.startsWith('-'));
+  const flags = rest.slice(0, nameAt === -1 ? rest.length : nameAt);
+  const exported = flags.some((flag) =>
+    flag.startsWith('--') ? flag === '--export' : flag.includes('x')
+  );
+  return exported && rest[nameAt] === 'STARSHIP_CONFIG';
 }
 
 /**
