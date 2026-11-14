@@ -107,10 +107,26 @@ t shell-configurator rollback --l`,
 compadd() { print -r -- "$*"; }
 _values() { print -r -- "$*"; }
 source ./c.zsh
-words=(shell-configurator generate --character ""); CURRENT=4; _shell_configurator
-words=(shell-configurator apply --shells ""); CURRENT=4; _shell_configurator`,
+words=(shell-configurator generate --character ""); CURRENT=4; _shell-configurator
+words=(shell-configurator apply --shells ""); CURRENT=4; _shell-configurator`,
     ]);
     expect(out).toBe('-- arrow lambda dollar\n-s , shell zsh bash fish nushell powershell\n');
+  });
+
+  it.skipIf(!has('zsh'))('completes on the first Tab when zsh autoloads it from $fpath', () => {
+    const fpathDir = path.join(dir, 'fpath');
+    fs.mkdirSync(fpathDir, { recursive: true });
+    fs.writeFileSync(path.join(fpathDir, '_shell-configurator'), completionScript('zsh'));
+    const out = run('zsh', [
+      '-f',
+      '-c',
+      `compdef() { :; }
+compadd() { print -r -- "$*"; }
+fpath=(${fpathDir} $fpath)
+autoload -Uz _shell-configurator
+words=(shell-configurator generate --character ""); CURRENT=4; _shell-configurator`,
+    ]);
+    expect(out).toBe('-- arrow lambda dollar\n');
   });
 
   it.skipIf(!has('fish'))('parses and completes in fish', () => {

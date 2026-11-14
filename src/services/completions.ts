@@ -9,6 +9,8 @@ import {
 
 const COMMAND = 'shell-configurator';
 const FN = '_shell_configurator';
+/** zsh names an autoloaded completion function after its file, `_shell-configurator`. */
+const ZSH_FN = '_shell-configurator';
 
 const SUBCOMMANDS = Object.keys(SUBCOMMAND_INFO) as Subcommand[];
 
@@ -100,7 +102,7 @@ function zsh(): string {
     ...flagsOf(null).flatMap((flag) => spellings(flag).map((s) => zshItem(s, flag.description))),
   ];
   return `#compdef ${COMMAND}
-${FN}() {
+${ZSH_FN}() {
   local cur=\${words[CURRENT]} prev=\${words[CURRENT-1]} sub="" i
   local -a items
   for (( i = 2; i < CURRENT; i++ )); do
@@ -117,10 +119,10 @@ ${itemCases.join('\n')}
   esac
   _describe -t values '${COMMAND}' items
 }
-if [ "$funcstack[1]" = "${FN}" ]; then
-  ${FN} "$@"
+if [ "$funcstack[1]" = "${ZSH_FN}" ]; then
+  ${ZSH_FN} "$@"
 else
-  compdef ${FN} ${COMMAND}
+  compdef ${ZSH_FN} ${COMMAND}
 fi
 `;
 }
