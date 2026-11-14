@@ -68,6 +68,15 @@ body:
         - nushell
         - PowerShell
   - type: textarea
+    id: debug-info
+    attributes:
+      label: Debug info
+      description: >-
+        Output of `shell-configurator debug-info`, if your version has it. It lists your
+        OS, package manager, shells, PATH and the doctor's findings, with your home
+        directory shown as ~. Check it before posting.
+      render: markdown
+  - type: textarea
     id: logs
     attributes:
       label: Relevant output
