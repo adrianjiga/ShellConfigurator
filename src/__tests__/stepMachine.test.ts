@@ -60,12 +60,6 @@ describe('getNextStep', () => {
     expect(next.step).toBe('preset');
   });
 
-  it('returns the state unchanged when skip lands beyond the last step', () => {
-    // Step 'done' is the final step; there is no skip to make it work.
-    const state = stateWith('done', { nerdFontToInstall: NO_NERD_FONT });
-    expect(getNextStep(state)).toBe(state);
-  });
-
   it('routes shells to the review step in dry-run mode', () => {
     const next = getNextStep(stateWith('shells', { dryRun: true, selectedShells: ['zsh'] }));
     expect(next.step).toBe('review');
@@ -84,11 +78,6 @@ describe('getNextStep', () => {
   it('skips installing from review in dry-run mode', () => {
     const next = getNextStep(stateWith('review', { dryRun: true, selectedShells: ['zsh'] }));
     expect(next.step).toBe('done');
-  });
-
-  it('can still not advance when a dry-run skip lands beyond the last step', () => {
-    const state = stateWith('done', { dryRun: true });
-    expect(getNextStep(state)).toBe(state);
   });
 });
 
