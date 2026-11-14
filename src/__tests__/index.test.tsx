@@ -1363,6 +1363,22 @@ describe('index timings command', () => {
     expect(output()).toContain('--config <file>');
   });
 
+  it('refuses an adopt-mode card and points at the shared config instead', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-adopt-'));
+    const card = path.join(dir, 'card.json');
+    fs.writeFileSync(card, serializeState({ ...DEFAULT_STATE, keepExistingConfig: true }));
+    try {
+      await expect(
+        runTimingsCommand(parseCliArgs(['timings', '--state', card]), deps())
+      ).rejects.toThrow(/adopt-mode card keeps your own config.*--config .*starship\.toml/);
+      expect(() => runShareCommand(parseCliArgs(['share', '--state', card]))).toThrow(
+        /adopt-mode card keeps your own config, so there is no generated prompt to share/
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('rejects --config outside timings', async () => {
     await expect(
       runHeadlessCommand(parseCliArgs(['generate', '--config', 'x']), '')

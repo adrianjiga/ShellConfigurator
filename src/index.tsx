@@ -5,7 +5,11 @@ import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { posixShellQuote } from './config/shells.ts';
-import { restoreConfigBackups, writeFileAtomic } from './generators/shellRc.ts';
+import {
+  getSharedConfigPath,
+  restoreConfigBackups,
+  writeFileAtomic,
+} from './generators/shellRc.ts';
 import { generateToml } from './generators/starship.ts';
 import type { CliFlags, Subcommand } from './services/args.ts';
 import { parseCliArgs, quoteArgv, SUBCOMMANDS } from './services/args.ts';
@@ -606,7 +610,13 @@ export async function runTimingsCommand(
     }
     config = flags.configFile;
   } else {
-    toml = generateToml(stateFromFlags(flags));
+    const state = stateFromFlags(flags);
+    if (state.keepExistingConfig) {
+      throw new CliUsageError(
+        `An adopt-mode card keeps your own config, so there is nothing to build; time it with --config ${getSharedConfigPath()}.`
+      );
+    }
+    toml = generateToml(state);
     config = 'built from the flags';
   }
   let report: TimingsReport;
@@ -631,7 +641,13 @@ export function runShareCommand(flags: CliFlags): void {
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with share.`);
   }
-  const text = renderShare(stateFromFlags(flags));
+  const state = stateFromFlags(flags);
+  if (state.keepExistingConfig) {
+    throw new CliUsageError(
+      `An adopt-mode card keeps your own config, so there is no generated prompt to share; share ${getSharedConfigPath()} itself.`
+    );
+  }
+  const text = renderShare(state);
   if (!flags.outputFile) {
     process.stdout.write(text);
     return;
