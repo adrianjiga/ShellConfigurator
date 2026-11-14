@@ -34,6 +34,17 @@ describe('stateDir', () => {
     expect(stateDir()).toBe(path.join('/home/someone', '.local', 'state', 'shell-configurator'));
   });
 
+  it('treats a whitespace-only XDG_STATE_HOME as unset', () => {
+    process.env.XDG_STATE_HOME = '  \t ';
+    vi.mocked(os.homedir).mockReturnValue('/home/someone');
+    expect(stateDir()).toBe(path.join('/home/someone', '.local', 'state', 'shell-configurator'));
+  });
+
+  it('trims spaces around an absolute XDG_STATE_HOME', () => {
+    process.env.XDG_STATE_HOME = ' /srv/state ';
+    expect(stateDir()).toBe(path.join('/srv/state', 'shell-configurator'));
+  });
+
   it('reads the env live, not once at import', () => {
     process.env.XDG_STATE_HOME = '/first/value';
     const first = stateDir();
