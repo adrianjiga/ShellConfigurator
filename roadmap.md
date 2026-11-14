@@ -30,13 +30,13 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 ## At a glance
 
-| Status           | Items                                                                                                             |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
-| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · P4.1 · #1 #2 #4 #5 #7 #8 #10 #11 #12 #17 #19 #20 #22 #24 #26 #27 |
-| TODO             | P4.2–P4.10 · P5.1–P5.3 · #6 #9 #13 #15 #18 #21 #23 #25                                                            |
-| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy) · #14 (snapshots written, no rollback)                   |
-| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                           |
-| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title   |
+| Status           | Items                                                                                                                      |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · P4.1–P4.2 · #1 #2 #4 #5 #7 #8 #10 #11 #12 #14 #17 #19 #20 #22 #24 #26 #27 |
+| TODO             | P4.3–P4.10 · P5.1–P5.3 · #6 #9 #13 #15 #18 #21 #23 #25                                                                     |
+| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy)                                                                   |
+| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                                    |
+| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title            |
 
 ---
 
@@ -225,11 +225,18 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
   run in history. The headless apply smoke now runs a real uninstall, a no-op second uninstall and the
   printed undo commands on every distro cell. Not reverted: the terminal font setting and `chsh`.
 
-**P4.2 — Rollback snapshots (#14)** — **TODO (partial foundation)**
+**P4.2 — Rollback snapshots (#14)** — **DONE**
 
 - Before any apply (wizard finish or headless `apply`), write a snapshot: `state.json` plus a manifest of the files touched (rcs, per-shell configs, shared config, backups). `--rollback <id>` restores an entire prior state, not just the newest per-file backup that `restoreConfigBackups` is limited to.
 - **Why.** Pairs with state export (#3): snapshots are state export + file manifest. "Try it, and if you hate it, one command reverts everything" removes the last barrier to experimentation.
 - **How.** `writeSnapshot` + `history.jsonl` already record the state card and snapshot id; add the file manifest, `--list-runs`, and the restore path. **Effort.** M. **D:** P1.1, P1.2, P4.1.
+- **Shipped:** `shell-configurator rollback [--run <id>] [--yes] [--dry-run] [--json]` and `rollback --list`
+  as a subcommand rather than flags, like `uninstall`. Wizard installs, `apply`, `uninstall` and `rollback`
+  itself copy every file they may change into `runs/<runId>/` (`services/runCapture.ts`) and keep a
+  manifest of the ones they changed (copy before, hash after); history records the `runId`. Rollback puts
+  each file back or deletes one the run created, and skips a file changed since, so later edits survive.
+  Rolling back again undoes the run before; rolling back a rollback redoes it. The distro smoke rolls back
+  its uninstall and then its apply. Not covered: fonts, the Starship binary and `chsh`.
 
 **P4.3 — `debug-info` (#13)** — **TODO**
 
@@ -331,7 +338,7 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 - `P0.1 → P1.3 → P2.1` (preview truth) — **done**
 - `P0.3 → P2.2 → P2.3 → P2.4` (doctor + repair) — **done**
-- `P1.1 → P1.2 → P4.2` (headless + history + rollback) — headless/history done; rollback open
+- `P1.1 → P1.2 → P4.2` (headless + history + rollback) — **done**
 
 Everything else hangs off `runTask`, the symbol single-source, or headless — which is why the
 foundation refactors land first. The P0.8–P0.13 sweeps are cleanup debt that has no feature seam;
@@ -339,9 +346,8 @@ they can be picked up in parallel with any phase but each stays its own PR.
 
 ## Suggested next order (remaining work)
 
-1. **P4.2 (#14) rollback** — builds on the history/snapshot foundation.
-2. Then the small wins: **P4.3 `debug-info`**, **P4.4 `completions`**, **P4.6 `WHAT-CHANGED.md`**, **P4.8 list flags**.
-3. Then **P5.1 (#6) transient prompt**, **P5.2 (#15) prompt-manager detection**, **P5.3 (#25) bootstrap**.
+1. The small wins: **P4.3 `debug-info`**, **P4.4 `completions`**, **P4.6 `WHAT-CHANGED.md`**, **P4.8 list flags**.
+2. Then **P5.1 (#6) transient prompt**, **P5.2 (#15) prompt-manager detection**, **P5.3 (#25) bootstrap**.
 
 ## Merge & verification strategy
 
