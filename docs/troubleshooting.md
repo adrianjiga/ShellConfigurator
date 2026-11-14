@@ -131,8 +131,9 @@ unconfigured shell. This happens because the configured parent shell exports
 `STARSHIP_CONFIG` to child processes.
 
 ShellConfigurator normally adds an `unset STARSHIP_CONFIG` guard to detected
-Starship-running shells you chose **not** to configure, so the parent's per-shell
-config doesn't leak in. It preserves the shell's Starship init line so it can
+Starship-running shells you chose **not** to configure and that have no setup of
+their own, so the parent's per-shell config doesn't leak in. A shell with its own
+setup already sets its own `STARSHIP_CONFIG`, so it is left alone. It preserves the shell's Starship init line so it can
 continue using the shared config. Re-run the wizard to apply or repair this wiring.
 
 If the problem persists after a clean run, open the shell's RC file and check
@@ -144,15 +145,15 @@ add `unset STARSHIP_CONFIG` (or `set -e STARSHIP_CONFIG` for fish) manually.
 
 ## A shell lost its own prompt and looks like another shell
 
-A shell you set up in an earlier run but did **not** select in a later run is
-pointed back at the shared `~/.config/starship.toml` (its rc gets
-`unset STARSHIP_CONFIG`, or `set -e STARSHIP_CONFIG` for fish). It then shows
-the same prompt as every shell without its own config, which can look as if it
-never started; `echo $FISH_VERSION` prints a version only inside fish, and
-`exit` takes you back to the shell you started it from. Its own config, `~/.config/starship/<shell>.toml`, stays on disk. The Review
-and Done screens say which shells this affects. To get its prompt back, run the
-wizard again with that shell selected, or `shell-configurator rollback` to undo
-the later run.
+A shell set up in an earlier run keeps its own prompt when a later run sets up
+other shells, as long as its config, `~/.config/starship/<shell>.toml`, still
+exists. Earlier versions instead pointed every unselected shell back at the
+shared `~/.config/starship.toml` (its rc then has only `unset STARSHIP_CONFIG`,
+or `set -e STARSHIP_CONFIG` for fish), so it shows the same prompt as every
+shell without its own config and can look as if it never started;
+`echo $FISH_VERSION` prints a version only inside fish. To get its prompt back,
+run the wizard again with that shell selected, or `shell-configurator rollback`
+to undo the later run.
 
 ---
 
