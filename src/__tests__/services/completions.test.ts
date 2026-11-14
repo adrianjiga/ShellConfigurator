@@ -11,7 +11,7 @@ import {
   SUBCOMMAND_INFO,
   WIZARD_FLAGS,
 } from '../../services/cliSurface.ts';
-import { completionScript } from '../../services/completions.ts';
+import { completionScript, zshItem } from '../../services/completions.ts';
 
 const has = (binary: string) =>
   spawnSync('sh', ['-c', 'command -v "$1"', 'sh', binary]).status === 0;
@@ -155,5 +155,11 @@ words=(shell-configurator generate --character ""); CURRENT=4; _shell-configurat
     ]);
     expect(out).toContain('debug-info\tPrint a report of the setup for a bug report');
     expect(out).toContain('lambda\tThe prompt character symbol');
+  });
+});
+
+describe('zshItem', () => {
+  it('escapes a colon and a backslash in the name, and a quote in the description', () => {
+    expect(zshItem('a:b\\c', "it's")).toBe("'a\\:b\\\\c:it'\\''s'");
   });
 });

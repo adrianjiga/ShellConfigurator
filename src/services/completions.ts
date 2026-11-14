@@ -74,8 +74,8 @@ complete -F ${FN} ${COMMAND}
 `;
 }
 
-const zshItem = (name: string, description: string) =>
-  `'${name.replace(/:/g, '\\:')}:${description.replace(/'/g, "'\\''")}'`;
+export const zshItem = (name: string, description: string) =>
+  `'${name.replace(/[\\:]/g, '\\$&')}:${description.replace(/'/g, "'\\''")}'`;
 
 function zsh(): string {
   const valueCases = [null, ...SUBCOMMANDS].flatMap((sub) =>
