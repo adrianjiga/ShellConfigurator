@@ -156,9 +156,16 @@ describe('beginRunCapture / finishRunCapture', () => {
   });
 
   it('gives two captures in the same millisecond different ids', () => {
-    const a = beginRunCapture([]);
-    const b = beginRunCapture([]);
-    expect(a.runId).not.toBe(b.runId);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-11-14T10:00:00.000Z'));
+      const a = beginRunCapture([]);
+      const b = beginRunCapture([]);
+      expect(a.runId).toBe('2026-11-14T10-00-00.000Z');
+      expect(b.runId).toBe('2026-11-14T10-00-00.000Z-2');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -249,7 +256,8 @@ describe('finishRunCapture with onChanged', () => {
   const summary = () => path.join(tmpDir, 'summary.md');
 
   it('runs once the run changed files, and keeps what it writes as part of the run', () => {
-    fs.writeFileSync(summary(), 'earlier', { mode: 0o640 });
+    fs.writeFileSync(summary(), 'earlier');
+    fs.chmodSync(summary(), 0o640);
     const capture = beginRunCapture([rc(), summary()]);
     fs.writeFileSync(rc(), 'new');
     const onChanged = vi.fn((_runId: string, files: { path: string }[]) => {

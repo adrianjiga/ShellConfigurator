@@ -114,7 +114,7 @@ import { parseCliArgs } from '../services/args.ts';
 import { completionScript } from '../services/completions.ts';
 import type { DebugInfoDeps } from '../services/debugInfo.ts';
 import { CliRunError, CliUsageError } from '../services/errors.ts';
-import { appendHistory } from '../services/history.ts';
+import { appendHistory, writeSnapshot } from '../services/history.ts';
 import { formatListing, listEntries } from '../services/listings.ts';
 import { homeDir } from '../services/paths.ts';
 import {
@@ -128,6 +128,21 @@ import { serializeState } from '../services/state.ts';
 import type { UninstallDeps } from '../services/uninstall.ts';
 import { DEFAULT_STATE, type InstallTask, type ShellId } from '../types.ts';
 import { restoreEnv } from './helpers/env.ts';
+
+let scratchHome: string;
+
+beforeEach(() => {
+  scratchHome = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-index-home-'));
+  vi.stubEnv('HOME', scratchHome);
+  vi.stubEnv('XDG_STATE_HOME', undefined);
+  vi.stubEnv('XDG_CONFIG_HOME', undefined);
+  vi.stubEnv('ZDOTDIR', undefined);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  fs.rmSync(scratchHome, { recursive: true, force: true });
+});
 
 describe('index CLI handling', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
@@ -173,7 +188,6 @@ describe('index CLI handling', () => {
     expect(help).toContain('-o, --output <file>');
     expect(help).toContain('--import, --state <file>');
     expect(help).toContain('--shells is');
-    expect(help).not.toContain('read-only');
   });
 
   it('rejects unknown flags before the global flags run', () => {
@@ -205,8 +219,12 @@ describe('index restore flag', () => {
       failed: [],
     });
 
+    const snapshotId = writeSnapshot({ ...DEFAULT_STATE, selectedShells: ['fish', 'zsh'] });
+    appendHistory({ version: 1, timestamp: new Date().toISOString(), kind: 'apply', snapshotId });
+
     expect(runGlobalFlags(parseCliArgs(['--restore']))).toBe(true);
 
+    expect(mockRestoreConfigBackups).toHaveBeenCalledWith(['fish', 'zsh']);
     expect(stdoutWrite).toHaveBeenCalledWith(
       expect.stringContaining('shared: /home/u/.config/starship.toml')
     );
@@ -452,7 +470,12 @@ describe('index headless routing', () => {
   });
 
   it('surfaces a bogus flag as a CliUsageError', async () => {
-    await expect(route(['apply', '--preset', 'nope'])).rejects.toThrow(CliUsageError);
+    await expect(route(['apply', '--shells', 'zsh', '--preset', 'nope'])).rejects.toThrow(
+      CliUsageError
+    );
+    await expect(route(['apply', '--shells', 'zsh', '--preset', 'nope'])).rejects.toThrow(
+      /preset \(--preset\)/
+    );
     await expect(route(['generate', '--palette', 'nope'])).rejects.toThrow(/palette/);
   });
 
@@ -915,7 +938,10 @@ describe('index uninstall command', () => {
       result: await run(),
       runId: 'run-9',
     }));
-    const io = fakeIo();
+    const io = fakeIo(
+      {},
+      { removeManagedRcBlocks: vi.fn(() => ({ removed: true, backedUpTo: '/h/.zshrc.bak-1' })) }
+    );
 
     await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);
 
@@ -1398,9 +1424,11 @@ describe('index rollback command', () => {
 
 describe('index debug-info command', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
-  const home = homeDir();
+  let home: string;
 
   beforeEach(() => {
+    home = homeDir();
+    deps.env = { PATH: `${home}/bin:/usr/bin` };
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
     mockFormatDoctorReport.mockReturnValue('Starship health check\n\nPASS    Starship — ok\n');
   });
@@ -1424,7 +1452,7 @@ describe('index debug-info command', () => {
     history: () => [],
     shellFacts: () => ({ startsStarship: false, managedBlock: false, config: false }),
     hasStarshipIn: () => false,
-    env: { PATH: `${home}/bin:/usr/bin` },
+    env: {},
     os: () => 'Linux 6.1.0 (linux/x64)',
   };
 

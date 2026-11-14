@@ -27,9 +27,10 @@ describe('the CLI description', () => {
   it('describes every flag the parser accepts, and only those', () => {
     const parsed = [...KNOWN_FLAGS.boolean, ...KNOWN_FLAGS.value].sort();
     expect([...new Set(Object.values(FLAGS).map((f) => f.name))].sort()).toEqual(parsed);
-    for (const flag of described) {
-      if (flag.short) expect(KNOWN_FLAGS.short[flag.short]).toBe(flag.name);
-    }
+    const describedShorts = Object.fromEntries(
+      described.flatMap((flag) => (flag.short ? [[flag.short, flag.name]] : []))
+    );
+    expect(describedShorts).toEqual(KNOWN_FLAGS.short);
   });
 
   it('gives values to exactly the parser value flags', () => {
@@ -69,13 +70,22 @@ describe('the generated scripts in real shells', () => {
   afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
   const run = (binary: string, args: string[]) =>
-    execFileSync(binary, args, { cwd: dir, encoding: 'utf8' });
+    execFileSync(binary, args, {
+      cwd: dir,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        HOME: dir,
+        XDG_CONFIG_HOME: path.join(dir, 'config'),
+        XDG_DATA_HOME: path.join(dir, 'data'),
+      },
+    });
 
-  it('parses in bash', () => {
+  it.skipIf(!has('bash'))('parses in bash', () => {
     expect(() => run('bash', ['-n', 'c.bash'])).not.toThrow();
   });
 
-  it('completes words, flags and values in bash', () => {
+  it.skipIf(!has('bash'))('completes words, flags and values in bash', () => {
     const out = run('bash', [
       '-c',
       `source ./c.bash
@@ -100,17 +110,20 @@ t shell-configurator --list-presets --js`,
     ]);
   });
 
-  it('offers the shell only once after completions, and keeps file names with spaces whole, in bash', () => {
-    fs.mkdirSync(path.join(dir, 'my dir'), { recursive: true });
-    const out = run('bash', [
-      '-c',
-      `source ./c.bash
+  it.skipIf(!has('bash'))(
+    'offers the shell only once after completions, and keeps file names with spaces whole, in bash',
+    () => {
+      fs.mkdirSync(path.join(dir, 'my dir'), { recursive: true });
+      const out = run('bash', [
+        '-c',
+        `source ./c.bash
 t() { COMP_WORDS=("$@"); COMP_CWORD=$(( $# - 1 )); COMPREPLY=(); _shell_configurator; printf '%s|' "\${COMPREPLY[@]}"; echo; }
 t shell-configurator completions bash ""
 t shell-configurator generate -o my`,
-    ]);
-    expect(out.split('\n')).toEqual(['|', 'my dir|', '']);
-  });
+      ]);
+      expect(out.split('\n')).toEqual(['|', 'my dir|', '']);
+    }
+  );
 
   it.skipIf(!has('zsh'))('parses and completes in zsh', () => {
     expect(() => run('zsh', ['-n', 'c.zsh'])).not.toThrow();
@@ -148,8 +161,9 @@ words=(shell-configurator generate --character ""); CURRENT=4; _shell-configurat
   });
 
   it.skipIf(!has('fish'))('parses and completes in fish', () => {
-    expect(() => run('fish', ['--no-execute', 'c.fish'])).not.toThrow();
+    expect(() => run('fish', ['--no-config', '--no-execute', 'c.fish'])).not.toThrow();
     const out = run('fish', [
+      '--no-config',
       '-c',
       "source ./c.fish; complete -C 'shell-configurator debug-' ; complete -C 'shell-configurator generate --character l'",
     ]);

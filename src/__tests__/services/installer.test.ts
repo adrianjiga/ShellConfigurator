@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { zipSync } from 'fflate';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 
 const {
   mockSpawn,
@@ -73,6 +73,7 @@ import {
   setDefaultShell,
   shellInstallSupported,
 } from '../../services/installer.ts';
+import { stubPlatform } from '../helpers/platform.ts';
 
 interface SpawnOutcome {
   status?: number | null;
@@ -186,8 +187,11 @@ function respondWithZip(files: Record<string, string>): ReturnType<typeof vi.fn>
   return stubFontFetch(() => okResponse({ arrayBuffer: async () => zip }), hexDigest(zip));
 }
 
+let getuid: MockInstance<() => number>;
+
 beforeEach(() => {
   vi.clearAllMocks();
+  getuid = vi.spyOn(process, 'getuid').mockReturnValue(1000);
   // Defaults: commands succeed, all binaries exist on PATH, fetch succeeds
   spawnOutcome({ status: 0 });
   // `command -v` prints the path on success, and exec.ts treats empty output as "missing".
@@ -212,6 +216,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  getuid.mockRestore();
 });
 
 describe('NERD_FONTS', () => {
@@ -411,12 +416,8 @@ describe('installShell', () => {
   });
 
   it('drops sudo when already running as root', async () => {
-    const getuid = vi.spyOn(process, 'getuid').mockReturnValue(0);
-    try {
-      await installShell('zsh', 'apt');
-    } finally {
-      getuid.mockRestore();
-    }
+    getuid.mockReturnValue(0);
+    await installShell('zsh', 'apt');
     expect(mockSpawn).toHaveBeenCalledWith('apt-get', ['install', '-y', 'zsh'], {
       stdio: 'inherit',
     });
@@ -675,15 +676,18 @@ describe('installNerdFont', () => {
   });
 
   it('re-downloads when the cached archive fails its pinned digest', async () => {
-    // A pin exists but the archive bytes do not match it — treated as absent.
+    const fresh = zipWith({ 'FiraCodeNerdFont-Regular.ttf': 'fresh' });
+    const tampered = zipWith({ 'FiraCodeNerdFont-Regular.ttf': 'tampered' });
     mockReadFileSync.mockImplementation((file: string) =>
-      String(file).endsWith('FiraCode.sha256') ? 'tampered\n' : 'tampered'
+      String(file).endsWith('FiraCode.sha256') ? `${hexDigest(fresh)}\n` : Buffer.from(tampered)
     );
-    const fetchMock = respondWithZip({ 'FiraCodeNerdFont-Regular.ttf': 'fresh' });
+    const download = vi.fn(() => okResponse({ arrayBuffer: async () => fresh }));
+    stubFontFetch(download, hexDigest(fresh));
 
-    await installNerdFont('FiraCode');
+    const note = await installNerdFont('FiraCode');
 
-    expect(fetchMock).toHaveBeenCalled();
+    expect(download).toHaveBeenCalled();
+    expect(note).toBeUndefined();
   });
 });
 
@@ -909,24 +913,30 @@ describe('setDefaultShell', () => {
 });
 
 describe('getNerdFontsDir', () => {
+  let restorePlatform: () => void;
+  beforeEach(() => {
+    restorePlatform = stubPlatform('linux');
+  });
+  afterEach(() => {
+    restorePlatform();
+    vi.unstubAllEnvs();
+  });
+
   it('honours XDG_DATA_HOME on linux', () => {
-    if (process.platform === 'darwin') return;
     vi.stubEnv('XDG_DATA_HOME', '/custom/share');
-    try {
-      expect(getNerdFontsDir()).toBe(path.join('/custom/share', 'fonts'));
-    } finally {
-      vi.unstubAllEnvs();
-    }
+    expect(getNerdFontsDir()).toBe(path.join('/custom/share', 'fonts'));
   });
 
   it('falls back to ~/.local/share/fonts when XDG_DATA_HOME is empty', () => {
-    if (process.platform === 'darwin') return;
     vi.stubEnv('XDG_DATA_HOME', '');
-    try {
-      expect(getNerdFontsDir()).toBe(path.join(os.homedir(), '.local', 'share', 'fonts'));
-    } finally {
-      vi.unstubAllEnvs();
-    }
+    expect(getNerdFontsDir()).toBe(path.join(os.homedir(), '.local', 'share', 'fonts'));
+  });
+
+  it('uses ~/Library/Fonts on macOS, whatever XDG_DATA_HOME says', () => {
+    restorePlatform();
+    restorePlatform = stubPlatform('darwin');
+    vi.stubEnv('XDG_DATA_HOME', '/custom/share');
+    expect(getNerdFontsDir()).toBe(path.join(os.homedir(), 'Library', 'Fonts'));
   });
 });
 
@@ -1055,27 +1065,22 @@ describe('plannedStarshipRemoval', () => {
       '/opt/homebrew/opt/starship': '/opt/homebrew/Cellar/starship/1.27.0',
     };
     mockRealpathSync.mockImplementation((p: string) => real[p] ?? p);
-    const getuid = vi.spyOn(process, 'getuid').mockReturnValue(1000);
-    try {
-      expect(await plannedStarshipRemoval('pacman')).toEqual({
-        kind: 'package',
-        pm: 'pacman',
-        command: ['sudo', 'pacman', '-R', '--noconfirm', 'starship'],
-      });
-      expect(mockRunCapture).toHaveBeenCalledWith(
-        'pacman',
-        ['-Qqo', '/usr/bin/starship'],
-        expect.anything()
-      );
-      expect(await plannedStarshipRemoval('apk')).toMatchObject({
-        command: ['sudo', 'apk', 'del', 'starship'],
-      });
-      expect(await plannedStarshipRemoval('brew')).toMatchObject({
-        command: ['brew', 'uninstall', 'starship'],
-      });
-    } finally {
-      getuid.mockRestore();
-    }
+    expect(await plannedStarshipRemoval('pacman')).toEqual({
+      kind: 'package',
+      pm: 'pacman',
+      command: ['sudo', 'pacman', '-R', '--noconfirm', 'starship'],
+    });
+    expect(mockRunCapture).toHaveBeenCalledWith(
+      'pacman',
+      ['-Qqo', '/usr/bin/starship'],
+      expect.anything()
+    );
+    expect(await plannedStarshipRemoval('apk')).toMatchObject({
+      command: ['sudo', 'apk', 'del', 'starship'],
+    });
+    expect(await plannedStarshipRemoval('brew')).toMatchObject({
+      command: ['brew', 'uninstall', 'starship'],
+    });
   });
 
   it.each([

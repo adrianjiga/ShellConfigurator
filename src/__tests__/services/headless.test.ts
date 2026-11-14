@@ -90,6 +90,17 @@ function writeFixtureCard(dir: string, state: Partial<WizardState> = {}): string
   return file;
 }
 
+function expectUsageError(run: () => unknown, message: RegExp): void {
+  let caught: unknown;
+  try {
+    run();
+  } catch (err) {
+    caught = err;
+  }
+  expect(caught).toBeInstanceOf(CliUsageError);
+  expect((caught as Error).message).toMatch(message);
+}
+
 describe('stateFromFlags', () => {
   it('returns the wizard defaults for an empty set of flags', () => {
     const state = stateFromFlags(flags({}));
@@ -205,27 +216,27 @@ describe('stateFromFlags', () => {
   });
 
   it('throws CliUsageError for an unknown shell id', () => {
-    expect(() => stateFromFlags(flags({ shells: ['zsh', 'csh'] }))).toThrow(/csh/);
+    expectUsageError(() => stateFromFlags(flags({ shells: ['zsh', 'csh'] })), /csh/);
   });
 
   it('throws CliUsageError for an unknown preset', () => {
-    expect(() => stateFromFlags(flags({ preset: 'nonexistent' }))).toThrow(/preset/);
+    expectUsageError(() => stateFromFlags(flags({ preset: 'nonexistent' })), /preset/);
   });
 
   it('throws CliUsageError for an unknown palette', () => {
-    expect(() => stateFromFlags(flags({ palette: 'rainbow-brite' }))).toThrow(/palette/);
+    expectUsageError(() => stateFromFlags(flags({ palette: 'rainbow-brite' })), /palette/);
   });
 
   it('throws CliUsageError for an unknown character symbol', () => {
-    expect(() => stateFromFlags(flags({ characterSymbol: 'spiral' }))).toThrow(/character/);
+    expectUsageError(() => stateFromFlags(flags({ characterSymbol: 'spiral' })), /character/);
   });
 
   it('throws CliUsageError for an unknown shell id in --set-default', () => {
-    expect(() => stateFromFlags(flags({ setDefaultShell: 'elvish' }))).toThrow(/set-default/);
+    expectUsageError(() => stateFromFlags(flags({ setDefaultShell: 'elvish' })), /set-default/);
   });
 
   it('throws CliUsageError for an unknown Nerd Font', () => {
-    expect(() => stateFromFlags(flags({ font: 'ComicMono' }))).toThrow(/Nerd Font/);
+    expectUsageError(() => stateFromFlags(flags({ font: 'ComicMono' })), /Nerd Font/);
   });
 
   it('maps --font to an install and infers hasNerdFont', () => {
@@ -357,7 +368,7 @@ describe('stateFromFlags', () => {
       const card = writeFixtureCard(dir, {
         leftModules: ['directory', 'sentinel'] as ModuleId[],
       });
-      expect(() => stateFromFlags(flags({ stateFile: card }))).toThrow(/sentinel/);
+      expectUsageError(() => stateFromFlags(flags({ stateFile: card })), /sentinel/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -369,7 +380,7 @@ describe('stateFromFlags', () => {
       const card = writeFixtureCard(dir, {
         rightModules: ['time', 'bogus_module'] as ModuleId[],
       });
-      expect(() => stateFromFlags(flags({ stateFile: card }))).toThrow(/bogus_module/);
+      expectUsageError(() => stateFromFlags(flags({ stateFile: card })), /bogus_module/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -388,7 +399,8 @@ describe('stateFromFlags', () => {
   it('reports a missing state card file as a usage error', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
     try {
-      expect(() => stateFromFlags(flags({ stateFile: path.join(dir, 'missing.json') }))).toThrow(
+      expectUsageError(
+        () => stateFromFlags(flags({ stateFile: path.join(dir, 'missing.json') })),
         /Could not read state card/
       );
     } finally {
@@ -568,8 +580,14 @@ describe('runApply', () => {
   ];
 
   let restorePlatform: () => void;
+  let scratchHome: string;
   beforeEach(() => {
     restorePlatform = stubPlatform('linux');
+    scratchHome = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-home-'));
+    vi.stubEnv('HOME', scratchHome);
+    vi.stubEnv('XDG_CONFIG_HOME', undefined);
+    vi.stubEnv('XDG_STATE_HOME', undefined);
+    vi.stubEnv('ZDOTDIR', undefined);
     vi.clearAllMocks();
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
     stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
@@ -584,6 +602,8 @@ describe('runApply', () => {
   afterEach(() => {
     restorePlatform();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    fs.rmSync(scratchHome, { recursive: true, force: true });
   });
 
   it('prints a plan and runs nothing for --dry-run', async () => {

@@ -31,6 +31,9 @@ afterEach(() => {
   fs.rmSync(home, { recursive: true, force: true });
 });
 
+const flat = (frame: string | undefined) => (frame ?? '').replace(/\s+/g, ' ');
+const squashed = (frame: string | undefined) => (frame ?? '').replace(/\s+/g, '');
+
 function setup(overrides: Partial<typeof DEFAULT_STATE> = {}) {
   const state = {
     ...DEFAULT_STATE,
@@ -51,15 +54,16 @@ describe('ReviewScreen', () => {
 
     const frame = instance.lastFrame();
     expect(frame).toContain('Review your configuration');
+    expect(flat(frame)).toContain('Everything below will be installed');
     expect(frame).toContain('This run will');
-    expect(frame).toContain('Starship');
+    expect(frame).toContain('• Starship');
     expect(frame).toContain('Write config files');
     expect(frame).toContain('Configure zsh');
 
     expect(frame).toContain('Configuration to write');
     // The per-shell config path, the rc export, and the generated TOML. Assert on
     // space-free tokens because ink wraps long lines at the narrow test terminal.
-    expect(frame).toContain('starship/zsh.toml (Zsh)');
+    expect(squashed(frame)).toContain('starship/zsh.toml(Zsh)');
     expect(frame).toContain("STARSHIP_CONFIG='");
     expect(frame).toContain('eval "$(starship init zsh)"');
     expect(frame).toContain('$directory$git_branch$git_status');
@@ -85,7 +89,7 @@ describe('ReviewScreen', () => {
     await flush();
 
     const frame = instance.lastFrame();
-    expect(frame).toContain('starship/nushell.toml (Nushell)');
+    expect(squashed(frame)).toContain('starship/nushell.toml(Nushell)');
     // Space-free tokens: the nushell init command is long and gets wrapped.
     expect(frame).toContain('vendor/autoload');
     expect(frame).toContain('$env.STARSHIP_CONFIG');
@@ -101,7 +105,7 @@ describe('ReviewScreen', () => {
     const frame = instance.lastFrame();
     expect(frame).toContain('Config to keep');
     expect(frame).toContain('Keep existing Starship config');
-    expect((frame ?? '').replace(/\s+/g, ' ')).toContain('starship.toml (shared by every shell)');
+    expect(squashed(frame)).toContain('starship.toml(sharedbyeveryshell)');
     expect(frame).toContain('success_symbol = "…"');
     expect(frame).toContain('starship init zsh');
     // Adopt mode wires the shell to the shared config: no per-shell export, and
