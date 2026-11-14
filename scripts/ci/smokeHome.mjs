@@ -213,3 +213,21 @@ t shell-configurator generate --character la`,
   );
   assert.equal(out, 'debug-info\nlambda\n', `bash completions offered:\n${out}`);
 }
+
+/** Asserts a real apply wrote WHAT-CHANGED.md naming the rc it changed and the rollback that undoes it. */
+export function assertWhatChanged(out, rcPath) {
+  const summary = nodePath.join(process.env.XDG_CONFIG_HOME, 'starship', 'WHAT-CHANGED.md');
+  assert.ok(
+    out.includes(`What changed, and how to undo it: ${summary}`),
+    `apply did not point at the summary:\n${out}`
+  );
+  const text = readFileSync(summary, 'utf8');
+  assert.ok(
+    text.includes(`\`${rcPath}\``) || text.includes('`~/.bashrc`'),
+    `the summary does not list the rc:\n${text}`
+  );
+  assert.ok(
+    text.includes('`shell-configurator rollback`'),
+    `the summary does not offer rollback:\n${text}`
+  );
+}

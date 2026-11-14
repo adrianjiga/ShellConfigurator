@@ -4,6 +4,7 @@ import {
   assertApplyVerified,
   assertRcWired,
   assertUninstalled,
+  assertWhatChanged,
   readOrNull,
   requireScratchHome,
   runCli,
@@ -27,5 +28,6 @@ await runSmoke('Headless apply smoke', () => {
 
   assertApplyVerified(out);
   assertRcWired(bashrc, 'bash');
+  assertWhatChanged(out, bashrc);
   assertUninstalled(homeDir, bashrc, 'bash', before);
 });
