@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { MODULES } from '../config/modules.ts';
 import { PALETTES } from '../config/palettes.ts';
-import { PRESETS } from '../config/presets.ts';
+import { PRESETS, powerlineDroppedReason } from '../config/presets.ts';
 import { SHELLS } from '../config/shells.ts';
 import { statusMark } from '../config/status.ts';
 import { getSharedConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
@@ -204,9 +204,10 @@ export function stateFromFlags(flags: CliFlags): WizardState {
   }
 
   assertValidState(state);
-  if (state.powerline && !state.hasNerdFont) {
+  const droppedPowerline = powerlineDroppedReason(state);
+  if (droppedPowerline) {
     process.stderr.write(
-      'shell-configurator: warning: powerline separators need a Nerd Font; a plain prompt will be generated.\n'
+      `shell-configurator: warning: ${droppedPowerline}; a plain prompt will be generated.\n`
     );
   }
   return state;

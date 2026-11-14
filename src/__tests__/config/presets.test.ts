@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isConfigurableModule, MODULES } from '../../config/modules.ts';
 import { getPalette } from '../../config/palettes.ts';
-import { PRESETS } from '../../config/presets.ts';
+import { drawsPowerline, PRESETS, powerlineDroppedReason } from '../../config/presets.ts';
 
 describe('PRESETS', () => {
   it('all presets have required fields', () => {
@@ -71,4 +71,31 @@ describe('powerline presets', () => {
       }
     }
   );
+});
+
+describe('drawsPowerline', () => {
+  const base = { hasNerdFont: true, preset: 'pastel-powerline', powerline: true };
+
+  it('draws separators with a Nerd Font and a glyph preset', () => {
+    expect(drawsPowerline(base)).toBe(true);
+    expect(powerlineDroppedReason(base)).toBeNull();
+  });
+
+  it('says nothing when powerline was not asked for', () => {
+    expect(powerlineDroppedReason({ ...base, hasNerdFont: false, powerline: false })).toBeNull();
+  });
+
+  it('drops separators without a Nerd Font', () => {
+    const state = { ...base, hasNerdFont: false };
+    expect(drawsPowerline(state)).toBe(false);
+    expect(powerlineDroppedReason(state)).toBe('Powerline separators need a Nerd Font');
+  });
+
+  it('drops separators on a text-only preset even with a Nerd Font', () => {
+    const state = { ...base, preset: 'plain-text' };
+    expect(drawsPowerline(state)).toBe(false);
+    expect(powerlineDroppedReason(state)).toBe(
+      'The Plain Text preset uses text symbols only, so it has no powerline separators'
+    );
+  });
 });

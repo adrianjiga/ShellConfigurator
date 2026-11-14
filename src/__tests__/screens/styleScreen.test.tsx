@@ -134,6 +134,12 @@ describe('StyleScreen', () => {
     expect(instance.lastFrame()).toContain('need a Nerd Font');
   });
 
+  it('warns that a text-only preset leaves powerline out', async () => {
+    const { instance } = setup({ hasNerdFont: true, preset: 'plain-text', powerline: true });
+    await flush();
+    expect(instance.lastFrame()).toContain('uses text symbols only');
+  });
+
   it('confirms the live selections with Enter', async () => {
     const { instance, onNext } = setup();
     await flush();

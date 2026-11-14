@@ -155,6 +155,21 @@ export function rendersGlyphs(state: { hasNerdFont: boolean; preset: string | nu
   return state.hasNerdFont && !PRESETS.find((p) => p.id === state.preset)?.textOnly;
 }
 
+type GlyphState = { hasNerdFont: boolean; preset: string | null; powerline: boolean };
+
+/** Whether powerline separators are drawn: they are Nerd Font glyphs too. */
+export function drawsPowerline(state: GlyphState): boolean {
+  return state.powerline && rendersGlyphs(state);
+}
+
+/** Why powerline was asked for but will not be drawn, or null when it will be (or was not asked for). */
+export function powerlineDroppedReason(state: GlyphState): string | null {
+  if (!state.powerline || drawsPowerline(state)) return null;
+  if (!state.hasNerdFont) return 'Powerline separators need a Nerd Font';
+  const label = PRESETS.find((p) => p.id === state.preset)?.label ?? state.preset;
+  return `The ${label} preset uses text symbols only, so it has no powerline separators`;
+}
+
 /** Whether segments are drawn as `[content]`: the bracketed preset, without powerline. */
 export function bracketsSegments(state: { preset: string | null; powerline: boolean }): boolean {
   return !state.powerline && Boolean(PRESETS.find((p) => p.id === state.preset)?.bracketed);

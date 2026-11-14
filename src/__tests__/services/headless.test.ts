@@ -144,8 +144,15 @@ describe('stateFromFlags', () => {
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
     stateFromFlags(flags({ preset: 'pastel-powerline', font: 'none' }));
     expect(stderr).toHaveBeenCalledWith(
-      expect.stringContaining('powerline separators need a Nerd Font')
+      expect.stringContaining('Powerline separators need a Nerd Font')
     );
+    stderr.mockRestore();
+  });
+
+  it('warns when powerline is on with a text-only preset', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+    stateFromFlags(flags({ preset: 'plain-text', powerline: true, hasNerdFont: true }));
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining('uses text symbols only'));
     stderr.mockRestore();
   });
 

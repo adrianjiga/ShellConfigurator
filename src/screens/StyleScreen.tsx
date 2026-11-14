@@ -10,6 +10,7 @@ import {
   parseSubstitutions,
 } from '../config/directory.ts';
 import { inkColor, PALETTES, type PaletteColorName, type PaletteId } from '../config/palettes.ts';
+import { powerlineDroppedReason } from '../config/presets.ts';
 import { errorMessage } from '../services/errors.ts';
 import type {
   CharacterSymbol,
@@ -129,6 +130,7 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
   );
   const [palette, setPalette, paletteRef] = useLive<PaletteId>(state.palette);
   const [powerline, setPowerline, powerlineRef] = useLive<boolean>(state.powerline);
+  const droppedPowerline = powerlineDroppedReason({ ...state, powerline });
   const [continuationPrompt, setContinuationPrompt, continuationPromptRef] =
     useLive<ContinuationPrompt>(state.continuationPrompt);
   const [addNewline, setAddNewline, addNewlineRef] = useLive<boolean>(state.addNewline);
@@ -350,9 +352,10 @@ export function StyleScreen({ state, onNext, onUpdate, onBack }: StyleScreenProp
             />
           ))}
         </Section>
-        {powerline && !state.hasNerdFont && (
+        {droppedPowerline && (
           <Text color={uiColor('yellow')}>
-            {'  '}Powerline separators need a Nerd Font — a plain prompt will be generated instead.
+            {'  '}
+            {droppedPowerline} — a plain prompt will be generated instead.
           </Text>
         )}
 
