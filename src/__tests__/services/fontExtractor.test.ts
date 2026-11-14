@@ -123,6 +123,28 @@ describe('extractFontFiles', () => {
     ).rejects.toThrow('the font files expand past');
   });
 
+  it('measures a stored entry whose header claims it is empty by what it really holds', async () => {
+    const zip = zipSync({ 'Liar.ttf': [new Uint8Array(5000), { level: 0 }] });
+    const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+    for (let at = 0; at + 4 <= zip.length; at++) {
+      const signature = view.getUint32(at, true);
+      if (signature === 0x04034b50) view.setUint32(at + 22, 0, true);
+      if (signature === 0x02014b50) view.setUint32(at + 24, 0, true);
+    }
+
+    await expect(
+      extractFontFiles(zipBytes(zip), { maxEntryBytes: 1024, maxTotalBytes: 2048 })
+    ).rejects.toThrow('Liar.ttf expands past');
+  });
+
+  it('refuses an archive with more font files than the cap', async () => {
+    const zip = zipSync({ 'A.ttf': encode('a'), 'B.ttf': encode('b'), 'C.ttf': encode('c') });
+
+    await expect(
+      extractFontFiles(zipBytes(zip), { maxEntryBytes: 1024, maxTotalBytes: 4096, maxEntries: 2 })
+    ).rejects.toThrow('more than 2 font files');
+  });
+
   it('keeps the first of two same-named fonts and drops unsafe names', async () => {
     const zip = zipSync({
       'a/Font-Regular.ttf': encode('first'),
