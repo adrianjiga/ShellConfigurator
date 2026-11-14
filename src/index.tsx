@@ -127,7 +127,8 @@ uninstall options (removes the Starship setup; asks before changing anything):
   -y, --yes            Go ahead without asking (required off a terminal)
   --dry-run            Print what it would remove; change nothing
   --json               Print the report as JSON instead of the text summary
-  rc files and configs are backed up first; --restore brings the configs back.
+  rc files and configs are backed up first, and it prints the commands that copy
+  them back. Starship stays while any shell would still start it.
 `);
 }
 
