@@ -50,6 +50,8 @@ describe('beginRunCapture / finishRunCapture', () => {
     fs.writeFileSync(file('edited'), 'old');
     fs.writeFileSync(file('untouched'), 'same');
     fs.writeFileSync(file('removed'), 'gone soon');
+    fs.chmodSync(file('edited'), 0o640);
+    fs.chmodSync(file('removed'), 0o600);
 
     const capture = beginRunCapture([
       file('edited'),
@@ -65,9 +67,9 @@ describe('beginRunCapture / finishRunCapture', () => {
 
     expect(manifest.runId).toBe(capture.runId);
     expect(manifest.files).toEqual([
-      { path: file('edited'), before: '0', after: hash('new') },
+      { path: file('edited'), before: '0', after: hash('new'), mode: 0o640 },
       { path: file('created'), before: null, after: hash('fresh') },
-      { path: file('removed'), before: '3', after: null },
+      { path: file('removed'), before: '3', after: null, mode: 0o600 },
     ]);
     const copies = path.join(runDir(capture.runId), 'files');
     expect(fs.readFileSync(path.join(copies, '0'), 'utf8')).toBe('old');

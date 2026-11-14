@@ -123,6 +123,7 @@ export function planRollback(manifest: RunManifest): RollbackStep[] {
         const content = fs.readFileSync(copy);
         fs.mkdirSync(path.dirname(file.path), { recursive: true });
         writeFileAtomic(file.path, content);
+        if (file.mode !== undefined) fs.chmodSync(file.path, file.mode);
         return { status: 'restored', detail: 'put back its content from before that run' };
       },
     };

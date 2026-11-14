@@ -84,6 +84,16 @@ describe('planRollback / runRollback', () => {
     expect(read('rc')).toBe('three');
   });
 
+  it('brings a removed file back with its own permissions', async () => {
+    fs.writeFileSync(file('private.toml'), 'secret');
+    fs.chmodSync(file('private.toml'), 0o600);
+    const manifest = await capturedRun(['private.toml'], () => fs.rmSync(file('private.toml')));
+
+    runRollback(manifest.runId, planRollback(manifest));
+
+    expect(fs.statSync(file('private.toml')).mode & 0o777).toBe(0o600);
+  });
+
   it('puts back the exact bytes, even ones that are not UTF-8', async () => {
     const latin1 = Buffer.from([0x61, 0x6c, 0x69, 0x61, 0x73, 0x20, 0xe9, 0x0a]);
     fs.writeFileSync(file('rc'), latin1);

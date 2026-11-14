@@ -16,6 +16,8 @@ export interface RunFile {
   before: string | null;
   /** SHA-256 of the file after the run, or null when the run removed it. */
   after: string | null;
+  /** The file's permission bits before the run; absent when it did not exist. */
+  mode?: number;
 }
 
 export interface RunManifest {
@@ -28,6 +30,7 @@ interface CapturedFile {
   path: string;
   before: string | null;
   beforeHash: string | null;
+  mode?: number;
 }
 
 export interface RunCapture {
@@ -97,7 +100,8 @@ export function beginRunCapture(files: string[]): RunCapture {
     if (content === null) return [{ path: file, before: null, beforeHash: null }];
     const copy = String(index);
     fs.writeFileSync(path.join(dir, 'files', copy), content, { mode: 0o600 });
-    return [{ path: file, before: copy, beforeHash: sha256Digest(content) }];
+    const mode = fs.statSync(file).mode & 0o7777;
+    return [{ path: file, before: copy, beforeHash: sha256Digest(content), mode }];
   });
   return { runId, dir, files: captured };
 }
@@ -118,7 +122,14 @@ export function finishRunCapture(capture: RunCapture): RunManifest | null {
       if (file.before) fs.rmSync(path.join(capture.dir, 'files', file.before), { force: true });
       return [];
     }
-    return [{ path: file.path, before: file.before, after }];
+    return [
+      {
+        path: file.path,
+        before: file.before,
+        after,
+        ...(file.mode !== undefined ? { mode: file.mode } : {}),
+      },
+    ];
   });
   if (changed.length === 0) {
     fs.rmSync(capture.dir, { recursive: true, force: true });
