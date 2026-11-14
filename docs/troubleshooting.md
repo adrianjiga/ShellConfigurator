@@ -189,8 +189,18 @@ to remove Starship too, and `--font <id>` to remove a Nerd Font it installed.
 - **"no cached … archive"**: the font was installed before the font cache
   existed, so its files cannot be told apart from your other fonts. Delete them
   from `~/.local/share/fonts` (`~/Library/Fonts` on macOS) yourself.
-- **Starship "was not installed by a package manager here"**: it came from
-  somewhere uninstall cannot undo safely (e.g. `/usr/local/bin` from a root
-  script install). Remove it with whatever installed it.
-- **Changed your mind**: `shell-configurator --restore` brings the per-shell
-  configs back; copy the `.bak-*` rc backup over the rc to restore the lines.
+- **Starship "is not from a package manager here"**: the detected package
+  manager does not own the binary on your PATH (e.g. a `cargo install`, or
+  `/usr/local/bin` from a root script install). Remove it with whatever
+  installed it.
+- **Starship "kept: … would still start it"**: a shell still has a
+  `starship init` line uninstall leaves alone (your own line, a shell outside
+  `--shells`, fish's `conf.d/starship.fish`, or a Nushell/PowerShell setup).
+  Remove those lines, or add the shells to `--shells`, and run it again.
+- **A terminal "still selects" the font**: its config still names the Nerd
+  Font uninstall removed. Pick another font in that terminal's settings.
+- **A config was "left in place"**: its rc could not be cleaned (read-only, or
+  a broken symlink), so the config it points at was kept. Fix the rc and run
+  uninstall again.
+- **Changed your mind**: the report ends with the `cp` commands that copy each
+  backup back; run them to undo the uninstall.
