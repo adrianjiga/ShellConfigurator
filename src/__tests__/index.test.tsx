@@ -67,6 +67,14 @@ const { mockRunDoctor, mockFormatDoctorReport, mockRunRepair, mockFormatRepairRe
   })
 );
 
+const { mockRunInstallTasks } = vi.hoisted(() => ({
+  mockRunInstallTasks: vi.fn().mockResolvedValue([]),
+}));
+vi.mock('../services/installTasks.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../services/installTasks.ts')>()),
+  runInstallTasks: mockRunInstallTasks,
+}));
+
 vi.mock('../services/doctor.ts', () => ({
   runDoctor: mockRunDoctor,
   formatDoctorReport: mockFormatDoctorReport,
@@ -423,6 +431,7 @@ describe('index headless routing', () => {
 
   it('refuses a bare apply before it ever installs', async () => {
     await expect(route(['apply'])).rejects.toThrow(/at least one shell/);
+    expect(mockRunInstallTasks).not.toHaveBeenCalled();
     expect(mockRecordRun).not.toHaveBeenCalled();
   });
 
