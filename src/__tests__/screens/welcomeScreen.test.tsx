@@ -98,6 +98,21 @@ describe('WelcomeScreen', () => {
     expect(instance.lastFrame()).toContain('Re-check (I installed it)');
   });
 
+  it('drops an earlier skip once Starship is found on coming back', async () => {
+    vi.mocked(findStarshipAsync).mockResolvedValue({ installed: true, version: 'starship 1.27.0' });
+    const onNext = vi.fn();
+    const instance = render(
+      <WelcomeScreen state={{ ...DEFAULT_STATE, skipStarshipInstall: true }} onNext={onNext} />
+    );
+    await flush();
+    await flush();
+
+    instance.stdin.write(ENTER);
+    await flush();
+
+    expect(onNext).toHaveBeenCalledWith(expect.objectContaining({ skipStarshipInstall: false }));
+  });
+
   it('installs automatically when Starship is missing', async () => {
     const { instance, onNext } = setup();
     await flush();
