@@ -806,6 +806,15 @@ describe('runDoctor reading the setup the way the shell does', () => {
   });
 });
 
+describe('runDoctor reading files', () => {
+  it('reads each rc once, however many checks look at it', async () => {
+    const deps = makeDeps(wired(new Map()));
+    await runDoctor(null, deps);
+    const zshReads = vi.mocked(deps.readFile).mock.calls.filter(([file]) => file === ZSH_RC);
+    expect(zshReads).toHaveLength(1);
+  });
+});
+
 describe('DEFAULT_DOCTOR_DEPS', () => {
   it('reads an unreadable Starship version record as none instead of throwing', () => {
     const cache = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-cache-'));

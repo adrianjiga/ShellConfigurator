@@ -7,7 +7,10 @@ import { homeDir } from './paths.ts';
 export function redactHome(text: string, home: string = homeDir()): string {
   const trimmed = home.replace(/\/+$/, '');
   if (trimmed.length <= 1) return text;
-  return text.replace(new RegExp(`(?<![\\w.~-])${escapeRegExp(trimmed)}(?![\\w.~-])`, 'g'), '~');
+  return text.replace(
+    new RegExp(`(?<![\\w.~-])(?<![^/]/)${escapeRegExp(trimmed)}(?![\\w.~-])`, 'g'),
+    '~'
+  );
 }
 
 function currentUser(): string {

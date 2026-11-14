@@ -727,7 +727,7 @@ const LOGIN_LINE = '[ -n "$BASH_VERSION" ] && [ -f ~/.bashrc ] && . ~/.bashrc';
 
 /** The file a Bash login shell reads: the first of these that exists, else ~/.bash_profile. */
 export function bashLoginFile(io: RcIo = FS_RC_IO): string {
-  const files = BASH_LOGIN_FILES.map((name) => path.join(homeDir(), name));
+  const files = bashLoginFiles();
   return files.find((file) => io.exists(file)) ?? files[0];
 }
 

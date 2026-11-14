@@ -710,14 +710,38 @@ const NO_SHELL_SET_UP: DoctorFinding = {
   detail: 'no installed shell starts Starship — run shell-configurator to set one up',
 };
 
+/** `deps` that read each file once. */
+function withCachedReads(deps: DoctorDeps): DoctorDeps {
+  const reads = new Map<string, string>();
+  const exists = new Map<string, boolean>();
+  return {
+    ...deps,
+    readFile: (file) => {
+      const cached = reads.get(file);
+      if (cached !== undefined) return cached;
+      const content = deps.readFile(file);
+      reads.set(file, content);
+      return content;
+    },
+    exists: (file) => {
+      const cached = exists.get(file);
+      if (cached !== undefined) return cached;
+      const found = deps.exists(file);
+      exists.set(file, found);
+      return found;
+    },
+  };
+}
+
 /**
  * Runs every health check against the machine. Without a state card it checks
  * the shells that were set up, reading each one's wiring mode from its rc.
  */
 export async function runDoctor(
   state: WizardState | null,
-  deps: DoctorDeps = DEFAULT_DOCTOR_DEPS
+  uncached: DoctorDeps = DEFAULT_DOCTOR_DEPS
 ): Promise<DoctorReport> {
+  const deps = withCachedReads(uncached);
   const shellIds = state ? state.selectedShells : await shellsSetUp(deps);
   const wiring: ShellWiring[] = shellIds.map((id) => ({
     id,

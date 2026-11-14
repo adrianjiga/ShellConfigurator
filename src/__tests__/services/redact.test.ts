@@ -50,6 +50,9 @@ describe('redactHome', () => {
 
   it('does not take a longer path that ends with the home path for it', () => {
     expect(redactHome('/data/home/ana/x', '/home/ana')).toBe('/data/home/ana/x');
+    expect(redactHome('/Volumes/Backup/Users/ana/.bashrc', '/Users/ana')).toBe(
+      '/Volumes/Backup/Users/ana/.bashrc'
+    );
   });
 
   it('replaces the home directory when HOME ends in a slash', () => {

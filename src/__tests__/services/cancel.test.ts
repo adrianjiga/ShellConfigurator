@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const { restoreTty } = vi.hoisted(() => ({ restoreTty: vi.fn() }));
+vi.mock('../../services/tty.ts', () => ({ restoreTty }));
+
 import { CANCEL_SIGNALS, cancelOnSignals, signalExitCode } from '../../services/cancel.ts';
 
 afterEach(() => {
@@ -37,6 +41,7 @@ describe('cancelOnSignals', () => {
     stop();
 
     expect(exit).toHaveBeenCalledWith(130);
+    expect(restoreTty).toHaveBeenCalledBefore(exit);
   });
 });
 

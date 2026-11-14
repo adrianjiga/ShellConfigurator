@@ -1,4 +1,5 @@
 import { constants } from 'node:os';
+import { restoreTty } from './tty.ts';
 
 export const CANCEL_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
 
@@ -28,7 +29,10 @@ export function cancelOnSignals(
 ): SignalCancel {
   let received: CancelSignal | null = null;
   const receive = (signal: CancelSignal) => {
-    if (received) process.exit(signalExitCode(signal));
+    if (received) {
+      restoreTty();
+      process.exit(signalExitCode(signal));
+    }
     received = signal;
     onCancel(signal);
     controller.abort();
