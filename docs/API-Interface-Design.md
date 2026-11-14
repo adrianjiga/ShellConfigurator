@@ -797,9 +797,11 @@ shell-configurator --dry-run    preview changes without installing (alias --no-i
 ### lifecycle
 
 ```
---restore / --undo    Copy the newest .bak-* backup over the shared and per-shell
+--restore             Copy the newest .bak-* backup over the shared and per-shell
                       configs created by earlier runs (see restoreConfigBackups);
-                      after an uninstall it brings the configs back
+                      after an uninstall it brings the configs back. rc files
+                      stay as they are; `rollback` undoes a whole run. The old
+                      `--undo` alias is a usage error that says so
 --version / -v        Print the version
 --help / -h           Print usage
 ```

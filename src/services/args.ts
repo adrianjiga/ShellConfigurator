@@ -106,9 +106,6 @@ const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> 
   '--restore': (r, v) => {
     r.restore = v;
   },
-  '--undo': (r, v) => {
-    r.restore = v;
-  },
   '--dry-run': (r, v) => {
     r.dryRun = v;
   },
@@ -206,6 +203,13 @@ const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
   '--config': (r, v) => {
     r.configFile = v;
   },
+};
+
+/** Flags that no longer exist, with what to use instead. */
+const RETIRED_FLAGS: Record<string, string> = {
+  '--undo':
+    '--undo is gone: shell-configurator rollback undoes the last run, rc lines included. ' +
+    '--restore still copies the newest config backups back.',
 };
 
 export const KNOWN_FLAGS = {
@@ -328,7 +332,7 @@ export function parseCliArgs(argv: string[]): CliFlags {
     // Value flags — the inline `=` value, else the next token.
     const valueFlag = VALUE_FLAGS[flag];
     if (valueFlag === undefined) {
-      throw new CliUsageError(`Unknown flag '${flag}'`);
+      throw new CliUsageError(RETIRED_FLAGS[flag] ?? `Unknown flag '${flag}'`);
     }
     const value = token.inlineValue ?? argv[i + 1];
 

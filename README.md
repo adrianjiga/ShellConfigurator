@@ -77,7 +77,7 @@ shell-configurator share --preset tokyo-night  print the prompt as Markdown to s
 shell-configurator --help                     show usage and exit
 shell-configurator --version                  print the version and exit
 shell-configurator --dry-run                  preview the config without installing (also -d, --no-install)
-shell-configurator --restore                  restore the shared and per-shell configs from their newest backup (also --undo)
+shell-configurator --restore                  restore the shared and per-shell configs from their newest backup (rc files stay; use rollback to undo a run)
 ```
 
 `--state` also accepts the alias `--import`. Without `--state`, `doctor` and

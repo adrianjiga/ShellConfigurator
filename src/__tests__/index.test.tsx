@@ -160,7 +160,7 @@ describe('index CLI handling', () => {
   it('lists every accepted flag in the help text', () => {
     runGlobalFlags(parseCliArgs(['--help']));
     const help = String(stdoutWrite.mock.calls[0]?.[0]);
-    expect(help).toContain('--restore, --undo');
+    expect(help).toContain('--restore           Copy');
     expect(help).toContain('-o, --output <file>');
     expect(help).toContain('--import, --state <file>');
     expect(help).toContain('--shells is');
@@ -234,11 +234,13 @@ describe('index restore flag', () => {
     }
   });
 
-  it('accepts --undo as an alias for --restore', () => {
-    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
-
-    expect(runGlobalFlags(parseCliArgs(['--undo']))).toBe(true);
-    expect(mockRestoreConfigBackups).toHaveBeenCalled();
+  it('points --undo at rollback instead of restoring only the configs', () => {
+    expect(() => parseCliArgs(['--undo'])).toThrow(
+      new CliUsageError(
+        '--undo is gone: shell-configurator rollback undoes the last run, rc lines included. --restore still copies the newest config backups back.'
+      )
+    );
+    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
   });
 
   it('reports when there is nothing to restore', () => {

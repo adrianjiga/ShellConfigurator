@@ -130,8 +130,9 @@ Options:
   -d, --dry-run       Install nothing; print what would happen (generate still
                      writes -o/--export files)
   --no-install        Alias for --dry-run
-  --restore, --undo   Copy the newest .bak-* snapshot back over the shared and
-                     per-shell configs created by earlier wizard runs
+  --restore           Copy the newest .bak-* snapshot back over the shared and
+                     per-shell configs created by earlier wizard runs; rc files
+                     stay as they are (shell-configurator rollback undoes a run)
 
   Flags may appear before or after the subcommand (e.g. "--dry-run generate"
   works like "generate --dry-run"); when a flag is repeated the last one wins.
@@ -236,6 +237,9 @@ export function runRestore(): void {
       const saved = r.previousSavedTo ? `; previous saved to ${r.previousSavedTo}` : '';
       process.stdout.write(`  ${r.what}: ${r.restoredTo} (from ${r.restoredFrom}${saved})\n`);
     }
+    process.stdout.write(
+      'Shell rc files are unchanged, so each shell still reads its own config. To undo a whole run, use shell-configurator rollback.\n'
+    );
   }
   if (failed.length > 0) {
     process.stderr.write('Could not restore some configs:\n');

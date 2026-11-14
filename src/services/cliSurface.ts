@@ -38,7 +38,6 @@ export const FLAGS = {
   listModules: flag('--list-modules', 'List the prompt modules (--json for data)'),
   listFonts: flag('--list-fonts', 'List the Nerd Fonts (--json for data)'),
   listJson: flag('--json', 'With a --list-* flag, print the data as JSON'),
-  undo: flag('--undo', 'Alias for --restore'),
   preset: flag(
     '--preset',
     'Seed modules, palette and powerline from a preset',
@@ -81,7 +80,6 @@ export const WIZARD_FLAGS: readonly FlagInfo[] = [
   FLAGS.dryRun,
   FLAGS.noInstall,
   FLAGS.restore,
-  FLAGS.undo,
   FLAGS.listPresets,
   FLAGS.listModules,
   FLAGS.listFonts,
