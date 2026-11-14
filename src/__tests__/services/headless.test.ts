@@ -229,6 +229,17 @@ describe('stateFromFlags', () => {
     expect(state.hasNerdFont).toBe(false);
   });
 
+  it('--font none on a Nerd Font preset plans no font and drops the glyphs', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+    const state = stateFromFlags(flags({ preset: 'pastel-powerline', font: 'none' }));
+    expect(state.nerdFontToInstall).toEqual({ kind: 'none' });
+    expect(state.hasNerdFont).toBe(false);
+    expect(stderr).toHaveBeenCalledWith(
+      expect.stringContaining('Powerline separators need a Nerd Font')
+    );
+    stderr.mockRestore();
+  });
+
   it('--no-nerd-font beats the --font inference', () => {
     const state = stateFromFlags(flags({ font: 'Meslo', hasNerdFont: false }));
     expect(state.nerdFontToInstall).toEqual({ kind: 'install', id: 'Meslo' });
@@ -262,6 +273,30 @@ describe('stateFromFlags', () => {
       expect(state.palette).toBe('vivid');
       expect(state.powerline).toBe(true);
       expect(state.selectedShells).toEqual(['bash']);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a card whose font id is not a known Nerd Font', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = writeFixtureCard(dir, { nerdFontToInstall: { kind: 'install', id: 'Bogus' } });
+      expect(() => stateFromFlags(flags({ stateFile: card }))).toThrow(
+        /Unknown Nerd Font: 'Bogus'/
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a card whose default shell is not one it configures', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = writeFixtureCard(dir, { selectedShells: ['bash'], setDefaultShell: 'zsh' });
+      expect(() => stateFromFlags(flags({ stateFile: card }))).toThrow(
+        /Cannot set 'zsh' as the default shell/
+      );
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -429,6 +464,31 @@ describe('runGenerate', () => {
       expect(JSON.parse(fs.readFileSync(card, 'utf8'))).toMatchObject({ version: 1 });
       expect(fs.readFileSync(out, 'utf8')).toContain('format');
       expect(stdoutWrite).not.toHaveBeenCalled();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('still writes -o under --dry-run, since generate installs nothing', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const out = path.join(dir, 'out.toml');
+      runGenerate(flags({ preset: 'pure-prompt', outputFile: out, dryRun: true }));
+      expect(fs.readFileSync(out, 'utf8')).toContain('$character');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the card it wrote when the TOML write then fails', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    try {
+      const card = path.join(dir, 'card.json');
+      const out = path.join(dir, 'missing-dir', 'out.toml');
+      expect(() =>
+        runGenerate(flags({ preset: 'pure-prompt', exportFile: card, outputFile: out }))
+      ).toThrow(/Could not write TOML/);
+      expect(JSON.parse(fs.readFileSync(card, 'utf8')).version).toBe(STATE_VERSION);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -817,6 +877,22 @@ describe('runApply', () => {
         flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'https://example.com/empty' })
       )
     ).rejects.toThrow(/no config content/);
+  });
+
+  it('rejects a whitespace-only body from a URL fetch', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(' \n\t\n', { status: 200 }));
+    await expect(fetchImportedConfig('https://example.com/blank')).rejects.toThrow(
+      /no config content/
+    );
+  });
+
+  it('ignores a content-length that is not a number and checks the real bytes', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('format = "$all"\n', { status: 200, headers: { 'content-length': 'lots' } })
+    );
+    await expect(fetchImportedConfig('https://example.com/odd-length')).resolves.toContain(
+      'format = "$all"'
+    );
   });
 
   it('rejects an HTML page instead of adopting it as a config', async () => {
