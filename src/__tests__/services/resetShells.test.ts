@@ -39,18 +39,18 @@ function setUp(shellId: 'fish' | 'zsh'): void {
 describe('a later run that selects other shells', () => {
   it('leaves a shell set up in an earlier run alone, so it keeps its own prompt', () => {
     setUp('fish');
-    const configFish = getShell('fish')!.rcFile!;
-    const before = fs.readFileSync(configFish, 'utf8');
+    const laterRun = () =>
+      plannedResetShells({
+        ...DEFAULT_STATE,
+        installedShells: ['zsh', 'fish'],
+        selectedShells: ['zsh'],
+      });
 
-    const resets = plannedResetShells({
-      ...DEFAULT_STATE,
-      installedShells: ['zsh', 'fish'],
-      selectedShells: ['zsh'],
-    });
-
-    expect(resets).toEqual([]);
+    expect(laterRun()).toEqual([]);
     expect(keepsOwnConfig('fish')).toBe(true);
-    expect(fs.readFileSync(configFish, 'utf8')).toBe(before);
+
+    fs.rmSync(getShellConfigPath('fish'));
+    expect(laterRun()).toEqual(['fish']);
   });
 
   it('leaves alone a shell set up by a version that double-quoted the export', () => {

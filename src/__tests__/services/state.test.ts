@@ -120,13 +120,33 @@ describe('parseState', () => {
   });
 
   it('starts runtime fields at their defaults', () => {
-    const restored = parseState(serializeState(sampleState));
-    expect(restored.step).toBe('welcome');
-    expect(restored.hasNerdFont).toBe(false);
-    expect(restored.packageManager).toBe('script');
-    expect(restored.installedShells).toEqual([]);
-    expect(restored.dryRun).toBe(false);
-    expect(restored.installResults).toEqual([]);
+    const restored = parseState(
+      serializeState({
+        ...sampleState,
+        step: 'review',
+        packageManager: 'brew',
+        installedShells: ['zsh', 'fish'],
+        terminal: 'kitty',
+        container: true,
+        remoteSession: 'ssh',
+        dryRun: true,
+        installResults: [{ id: 'config', label: 'Write config files', status: 'done' }],
+        runId: 'run-1',
+        summaryPath: '/h/WHAT-CHANGED.md',
+      })
+    );
+    expect(restored).toMatchObject({
+      step: 'welcome',
+      packageManager: 'script',
+      installedShells: [],
+      terminal: null,
+      container: false,
+      remoteSession: null,
+      dryRun: false,
+      installResults: [],
+      runId: null,
+      summaryPath: null,
+    });
   });
 
   it.each([

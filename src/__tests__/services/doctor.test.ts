@@ -148,6 +148,11 @@ describe('runDoctor', () => {
     );
     expect(find(latin, 'locale').status).toBe('warn');
     expect(find(latin, 'locale').detail).toMatch(/not UTF-8/);
+    const utf8 = await runDoctor(
+      baseState(),
+      makeDeps(wired(new Map()), { env: { LANG: 'en_US.utf8' } })
+    );
+    expect(find(utf8, 'locale')).toMatchObject({ status: 'pass', detail: 'en_US.utf8' });
   });
 
   it('accepts an init line spelled differently', async () => {

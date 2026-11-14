@@ -861,6 +861,7 @@ describe('runInstallTasks', () => {
     expect(deps.getShellsUsingStarship).not.toHaveBeenCalled();
     expect(deps.installStarship).not.toHaveBeenCalled();
     expect(deps.writeShellConfig).not.toHaveBeenCalled();
+    expect(results.length).toBeGreaterThan(0);
     expect(results.every((t) => t.status === 'failed' && t.error === 'Cancelled')).toBe(true);
   });
 
@@ -1036,6 +1037,7 @@ describe('runInstallTasks', () => {
     );
 
     expect(deps.getShellsUsingStarship).not.toHaveBeenCalled();
+    expect(results.length).toBeGreaterThan(0);
     expect(results.every((t) => t.status !== 'pending')).toBe(true);
   });
 
