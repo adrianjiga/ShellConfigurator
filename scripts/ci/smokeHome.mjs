@@ -117,7 +117,7 @@ export function assertRcWired(rcPath, shell) {
 /**
  * Runs a real `uninstall --yes` for one shell after an apply, then asserts the
  * rc lost every managed line, the per-shell config moved to a backup, a second
- * run finds nothing, and `--restore` brings the config back.
+ * run finds nothing, and the printed undo commands bring both back.
  */
 export function assertUninstalled(homeDir, rcPath, shell) {
   const configPath = nodePath.join(process.env.XDG_CONFIG_HOME, 'starship', `${shell}.toml`);
@@ -141,6 +141,9 @@ export function assertUninstalled(homeDir, rcPath, shell) {
   const again = runCli(['uninstall', '--yes', '--shells', shell]);
   assert.ok(!again.includes('REMOVED'), `a second uninstall removed something:\n${again}`);
 
-  runCli(['--restore']);
-  assertStarshipConfig(configPath, '--restore after uninstall');
+  const undo = out.split('\n').filter((line) => line.startsWith('  cp '));
+  assert.equal(undo.length, 2, `uninstall did not print the rc and config undo commands:\n${out}`);
+  for (const line of undo) execFileSync('sh', ['-c', line]);
+  assertRcWired(rcPath, shell);
+  assertStarshipConfig(configPath, 'config after undoing the uninstall');
 }
