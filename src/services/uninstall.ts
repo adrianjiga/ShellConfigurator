@@ -44,8 +44,8 @@ export interface UninstallStep {
   title: string;
   detail: string;
   run?: () => Promise<StepOutcome>;
-  /** A step that must not fail first; when it does, this one is skipped. */
-  after?: string;
+  /** Steps that must not fail first; when one does, this one is skipped. */
+  after?: string[];
 }
 
 export interface UninstallAction {
@@ -155,7 +155,7 @@ function shellSteps(facts: ShellFacts, explicit: boolean, deps: UninstallDeps): 
       title: `${shell.label} config`,
       detail: `move ${config} aside to a backup`,
       run: async () => describeRemoval(deps.removeShellConfigFile(shellId), config, config),
-      ...(shell.rcFile && facts.managedRc ? { after: `rc_${shellId}` } : {}),
+      ...(shell.rcFile && facts.managedRc ? { after: [`rc_${shellId}`] } : {}),
     });
   }
   return steps;
@@ -255,7 +255,9 @@ export async function planUninstall(
     const stillStarting = SHELLS.filter((s) => deps.startsStarship(s.id, cleanedIds.has(s.id))).map(
       (s) => s.label
     );
-    steps.push(await starshipStep(stillStarting, deps));
+    const rcSteps = steps.filter((step) => step.id.startsWith('rc_') && step.run).map((s) => s.id);
+    const step = await starshipStep(stillStarting, deps);
+    steps.push(step.run && rcSteps.length > 0 ? { ...step, after: rcSteps } : step);
   }
   return steps;
 }
@@ -267,7 +269,7 @@ export async function runUninstall(
 ): Promise<UninstallReport> {
   const actions: UninstallAction[] = [];
   for (const { id, title, detail, run, after } of steps) {
-    const blocker = actions.find((a) => a.id === after && a.status === 'failed');
+    const blocker = actions.find((a) => after?.includes(a.id) && a.status === 'failed');
     if (blocker) {
       actions.push({
         id,
