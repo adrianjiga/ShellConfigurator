@@ -36,7 +36,7 @@ export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps
       !(step === 'installing' && state.dryRun)
   );
   const currentIndex = Math.max(0, steps.indexOf(state.step));
-  const columns = stdout?.columns ?? PREVIEW_MIN_COLUMNS;
+  const columns = (stdout as { columns?: number } | undefined)?.columns ?? PREVIEW_MIN_COLUMNS;
   const showPreview = !hidePreview && columns >= PREVIEW_MIN_COLUMNS;
   // The preview gets about two fifths of the row (less padding and gap).
   const previewWidth = Math.max(36, Math.floor((columns - 4) * 0.4));
