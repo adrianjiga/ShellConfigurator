@@ -243,11 +243,6 @@ function resolveTerminalConfigPath(id: TerminalId): string {
   return configLookupPaths(id).find((p) => fs.existsSync(p)) ?? terminalConfigPath(id);
 }
 
-/**
- * Points a detected terminal at the installed Nerd Font, editing its config
- * idempotently and backing up any existing file first. WezTerm's Lua config is
- * never edited — the exact line to add is returned as a note instead.
- */
 /** `alacritty --version` as [major, minor], or null when it cannot be run. */
 export function installedAlacrittyVersion(): [number, number] | null {
   try {
@@ -267,6 +262,11 @@ export interface WireTerminalFontOptions {
   alacrittyVersion?: () => [number, number] | null;
 }
 
+/**
+ * Points a detected terminal at the installed Nerd Font, editing its config
+ * idempotently and backing up any existing file first. WezTerm's Lua config is
+ * never edited — the exact line to add is returned as a note instead.
+ */
 export function wireTerminalFont(
   id: TerminalId,
   family: string,

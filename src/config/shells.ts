@@ -122,7 +122,6 @@ function perShellConfigPath(id: ShellId): string {
   return path.join(configHome(), 'starship', `${id}.toml`);
 }
 
-/** Nushell's `$nu.data-dir`. */
 /** A Nushell double-quoted string literal holding `value` exactly. */
 function nuString(value: string): string {
   return `"${value.replace(/[\\"]/g, '\\$&')}"`;
@@ -136,6 +135,7 @@ function nushellAutoloadCommand(configStep: string): string {
   )}`;
 }
 
+/** Nushell's `$nu.data-dir`. */
 function nushellDataDir(): string {
   if (process.platform === 'darwin') {
     return path.join(homeDir(), 'Library', 'Application Support', 'nushell');
