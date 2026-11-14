@@ -35,6 +35,28 @@ describe('suspendUi / resumeUi', () => {
     }
   });
 
+  it('leaves raw mode alone when stdin is not a TTY, but still notifies', () => {
+    const setRawMode = vi.fn();
+    const realStdin = process.stdin;
+    Object.defineProperty(process, 'stdin', {
+      configurable: true,
+      value: { isTTY: false, setRawMode },
+    });
+
+    try {
+      const notified: boolean[] = [];
+      subscribeToUiSuspension((suspended) => notified.push(suspended));
+
+      suspendUi();
+      resumeUi();
+
+      expect(notified).toEqual([true, false]);
+      expect(setRawMode).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(process, 'stdin', { configurable: true, value: realStdin });
+    }
+  });
+
   it('does not re-notify while already suspended (nested suspends)', () => {
     const notified: boolean[] = [];
     subscribeToUiSuspension((suspended) => notified.push(suspended));
