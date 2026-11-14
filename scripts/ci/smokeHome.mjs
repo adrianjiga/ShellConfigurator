@@ -1,6 +1,8 @@
+import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
+import { parse } from '@iarna/toml';
 
 export function die(message) {
   console.error(message);
@@ -66,4 +68,48 @@ export async function runSmoke(name, body) {
     console.error(`FAIL ${name}: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   }
+}
+
+/** Asserts the file exists and parses as a Starship config with a format string. */
+export function assertStarshipConfig(filePath, label) {
+  assert.ok(existsSync(filePath), `${label} was not written`);
+  const parsed = /** @type {any} */ (parse(readFileSync(filePath, 'utf8')));
+  assert.equal(typeof parsed.format, 'string', `${label} unparseable`);
+}
+
+/** Runs `generate` to stdout and with -o/--export, asserting every artifact. */
+export function assertGenerate(homeDir, shell) {
+  const generated = runCli([
+    'generate',
+    '--preset',
+    'pastel-powerline',
+    '--shells',
+    shell,
+    '--no-nerd-font',
+  ]);
+  assert.ok(generated.includes('format = "'), 'generate printed no TOML');
+  assert.ok(generated.includes('$character'), 'generate missing $character');
+
+  const tomlPath = nodePath.join(homeDir, 'generated.toml');
+  const cardPath = nodePath.join(homeDir, 'card.json');
+  runCli(['generate', '--preset', 'pastel-powerline', '-o', tomlPath, '--export', cardPath]);
+  assert.ok(existsSync(cardPath), 'generate --export did not write the card');
+  assertStarshipConfig(tomlPath, 'generate -o TOML');
+}
+
+/** Asserts a real `apply` ran the Verify config task and nothing failed. */
+export function assertApplyVerified(out) {
+  assert.ok(out.includes('Verify config'), `apply plan missing the verify task:\n${out}`);
+  assert.match(out, /verified \d+ config\(s\)/, `apply did not verify the config:\n${out}`);
+  assert.ok(!out.includes('FAIL'), `apply reported a failed task:\n${out}`);
+}
+
+/** Asserts a bash/zsh rc carries the managed block: banner, per-shell export and init line. */
+export function assertRcWired(rcPath, shell) {
+  const content = readFileSync(rcPath, 'utf8');
+  const name = nodePath.basename(rcPath);
+  assert.ok(content.includes('# Added by ShellConfigurator'), `${name} missing the banner`);
+  assert.ok(content.includes('export STARSHIP_CONFIG='), `${name} missing STARSHIP_CONFIG`);
+  assert.ok(content.includes(`eval "$(starship init ${shell})"`), `${name} missing the init line`);
+  return content;
 }

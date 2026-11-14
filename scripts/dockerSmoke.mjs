@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 import { parse } from '@iarna/toml';
-import { die, requireScratchHome } from './ci/smokeHome.mjs';
+import { assertRcWired, die, requireScratchHome } from './ci/smokeHome.mjs';
 
 const expectedPm = process.env.EXPECTED_PM;
 let failures = 0;
@@ -187,9 +187,7 @@ await check('applyShellConfig writes banner + init line and is idempotent', () =
   const first = applyShellConfig('bash');
   assert.equal(first.applied, true);
 
-  const content = readFileSync(rcPath, 'utf8');
-  assert.ok(content.includes('# Added by ShellConfigurator'), 'missing banner');
-  assert.ok(content.includes('eval "$(starship init bash)"'), 'missing init line');
+  assertRcWired(rcPath, 'bash');
 
   const second = applyShellConfig('bash');
   assert.equal(second.applied, false);
