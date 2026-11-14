@@ -181,20 +181,12 @@ export function readHistory(): HistoryRecord[] {
  * or null when no readable run is recorded.
  */
 export function lastRunShells(): ShellId[] | null {
-  let lines: string[];
-  try {
-    lines = fs.readFileSync(historyFilePath(), 'utf8').split('\n').filter(Boolean);
-  } catch {
-    return null;
-  }
-  for (const line of lines.reverse()) {
+  for (const record of readHistory().reverse()) {
+    if (typeof record.snapshotId !== 'string') continue;
     try {
-      const record = JSON.parse(line) as Partial<HistoryRecord>;
-      if (typeof record.snapshotId !== 'string') continue;
-      const card = fs.readFileSync(snapshotPath(record.snapshotId), 'utf8');
-      return parseState(card).selectedShells;
+      return parseState(fs.readFileSync(snapshotPath(record.snapshotId), 'utf8')).selectedShells;
     } catch {
-      // A torn line or missing snapshot: try the run before it.
+      // A missing or unreadable snapshot: try the run before it.
     }
   }
   return null;
