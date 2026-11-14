@@ -216,6 +216,47 @@ describe('renderPromptAsync', () => {
     expect(result).toEqual({ mode: 'real', text: '~/projects/myapp on  main \n❯' });
   });
 
+  it('falls back and still cleans up when the config cannot be written', async () => {
+    const deps = fakeDeps({ writeConfig: vi.fn(async () => Promise.reject(new Error('EROFS'))) });
+
+    const result = await renderPromptAsync(state, deps);
+
+    expect(result).toEqual({ mode: 'static', reason: 'render-failed' });
+    expect(deps.runStarshipPrompt).not.toHaveBeenCalled();
+    expect(deps.cleanup).toHaveBeenCalledWith(SCRATCH);
+  });
+
+  it('keeps a finished render when removing the scratch dir fails', async () => {
+    mockMkdtemp.mockResolvedValue(SCRATCH);
+    mockWriteFile.mockResolvedValue(undefined);
+    mockMkdir.mockResolvedValue(undefined);
+    mockRm.mockRejectedValue(new Error('EBUSY'));
+
+    const result = await renderPromptAsync(state, DEFAULT_PREVIEW_DEPS);
+
+    expect(result).toEqual({ mode: 'real', text: '~/projects/myapp on  main \n❯' });
+    expect(mockRm).toHaveBeenCalled();
+  });
+
+  it('still renders when git init works but the sample commit fails', async () => {
+    mockMkdtemp.mockResolvedValue(SCRATCH);
+    mockWriteFile.mockResolvedValue(undefined);
+    mockMkdir.mockResolvedValue(undefined);
+    mockRm.mockResolvedValue(undefined);
+    mockExecFile.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as (...cbArgs: unknown[]) => void;
+      const cmd = args[0] as string;
+      const cmdArgs = args[1] as string[];
+      if (cmd === 'git' && cmdArgs.includes('commit')) cb(new Error('no identity'), '', '');
+      else cb(null, '~/projects/myapp on  main \n❯', '');
+    });
+
+    const result = await renderPromptAsync(state, DEFAULT_PREVIEW_DEPS);
+
+    expect(result).toEqual({ mode: 'real', text: '~/projects/myapp on  main \n❯' });
+    expect(execCalls().some((c) => c.cmd === 'git' && c.args.includes('init'))).toBe(true);
+  });
+
   it('pins both static fallbacks as snapshots (P2 gate)', async () => {
     const missing = await renderPromptAsync(
       state,
