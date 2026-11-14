@@ -452,6 +452,7 @@ describe('index headless routing', () => {
   });
 
   it('runs doctor and prints the human report', async () => {
+    process.exitCode = undefined;
     mockRunDoctor.mockResolvedValue({ ok: true, findings: [] });
     mockFormatDoctorReport.mockReturnValue('HEALTHY\n');
 
@@ -460,7 +461,7 @@ describe('index headless routing', () => {
     expect(routed).toBe(true);
     expect(mockRunDoctor).toHaveBeenCalledWith(null);
     expect(stdoutWrite).toHaveBeenCalledWith('HEALTHY\n');
-    expect(process.exitCode).not.toBe(1);
+    expect(process.exitCode).toBeUndefined();
   });
 
   it('warns when doctor gets config flags without --state', async () => {
