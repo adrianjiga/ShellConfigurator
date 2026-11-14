@@ -102,7 +102,9 @@ export function PromptPreview({
     };
   }, [signature, state, renderPreview, renderedSignature, width]);
 
-  const leftSegmentCount = state.leftModules.filter(isConfigurableModule).length;
+  const placed = placedModules(state.leftModules, state.rightModules);
+  const leftSegmentCount = placed.left.filter(isConfigurableModule).length;
+  const rightSegmentCount = placed.right.filter(isConfigurableModule).length;
 
   return (
     <Box flexDirection="column">
@@ -117,7 +119,7 @@ export function PromptPreview({
       <Box marginTop={1} flexDirection="column">
         <Text color={uiColor('gray')} italic>
           {leftSegmentCount} left segment{leftSegmentCount !== 1 ? 's' : ''}
-          {state.rightModules.length > 0 ? `, ${state.rightModules.length} right` : ''}
+          {rightSegmentCount > 0 ? `, ${rightSegmentCount} right` : ''}
         </Text>
         {realPrompt !== null && (
           <Text color={uiColor('gray')} italic>

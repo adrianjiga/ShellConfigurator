@@ -97,6 +97,14 @@ describe('PromptPreview', () => {
     );
   });
 
+  it('counts each module once, where the prompt places it', () => {
+    const out = frame({
+      leftModules: ['directory', 'directory', 'character'],
+      rightModules: ['directory', 'nodejs', 'nodejs'],
+    });
+    expect(out).toContain('1 left segment, 1 right');
+  });
+
   it('ignores an unknown module id', () => {
     // Cast: the type forbids this, but state could still be malformed at runtime.
     const bogus = ['not_a_module', 'character'] as unknown as WizardState['leftModules'];
