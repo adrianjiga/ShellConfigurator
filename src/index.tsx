@@ -151,8 +151,8 @@ uninstall options (removes the Starship setup; asks before changing anything):
   -y, --yes            Go ahead without asking (required off a terminal)
   --dry-run            Print what it would remove; change nothing
   --json               Print the report as JSON instead of the text summary
-  rc files and configs are backed up first, and rollback undoes it. Starship
-  stays while any shell would still start it.
+  rc files and configs are backed up first, and rollback puts them back (not a
+  removed Starship or font). Starship stays while any shell would still start it.
 
 rollback options (undoes the newest run that changed files; asks first):
   --list               Show the runs that changed files, newest first
@@ -383,8 +383,16 @@ export async function runUninstallCommand(
   } else {
     process.stdout.write(formatUninstallReport(report));
     const backups = report.actions.flatMap((a) => (a.backup ? [a.backup] : []));
+    const deleted = report.actions
+      .filter((a) => (a.id === 'starship' || a.id === 'font') && a.status === 'removed')
+      .map((a) => a.title);
     if (runId) {
       process.stdout.write('\nUndo it with: shell-configurator rollback\n');
+      if (deleted.length > 0) {
+        process.stdout.write(
+          `Rollback only puts files back: reinstall ${deleted.join(' and ')} with shell-configurator apply or repair.\n`
+        );
+      }
     } else if (backups.length > 0) {
       process.stdout.write('\nTo undo, copy the backups back:\n');
       for (const { file, backup } of backups) {

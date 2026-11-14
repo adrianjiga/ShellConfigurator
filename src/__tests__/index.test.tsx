@@ -771,6 +771,33 @@ describe('index uninstall command', () => {
     });
   });
 
+  it('says rollback cannot bring back a removed Starship or font', async () => {
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
+      result: await run(),
+      runId: 'run-9',
+    }));
+    const io = fakeIo(
+      {},
+      {
+        plannedStarshipRemoval: vi.fn(async () => ({
+          kind: 'script' as const,
+          path: '/h/.local/bin/starship',
+        })),
+        installedFontFiles: vi.fn().mockResolvedValue(['/f/A.ttf']),
+      }
+    );
+
+    await runUninstallCommand(
+      parseCliArgs(['uninstall', '--starship', '--font', 'Hack', '--yes']),
+      'uninstall',
+      io
+    );
+
+    expect(output()).toContain(
+      'Rollback only puts files back: reinstall Hack and Starship with shell-configurator apply or repair.'
+    );
+  });
+
   it('prints the copy-back commands when the run could not be captured', async () => {
     const io = fakeIo(
       {},
