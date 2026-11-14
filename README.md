@@ -22,6 +22,7 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/),
 - **Terminal font wiring**: detect your terminal (Alacritty, kitty, WezTerm, Ghostty, foot) and select the installed Nerd Font in its config automatically
 - **Post-install verification**: after everything is applied, the written configs are loaded through the real `starship print-config` to catch a broken prompt before you restart
 - **Doctor / repair**: a read-only day-2 health check (Starship, locale, shell wiring, config validity, font installed + selected, version drift, the shell you are running) and a mode that applies fixes and re-checks
+- **Uninstall**: remove the rc lines and per-shell configs the wizard wrote (backed up first), and optionally the Nerd Font and Starship itself
 
 ## Requirements
 
@@ -54,6 +55,8 @@ shell-configurator apply --import-url <url>   fetch a shared config (https gist/
 shell-configurator doctor [--state <file>]    run the read-only day-2 health check (--json for machine-readable)
 shell-configurator doctor --fix / repair      apply the fixes for failing checks, then re-run the checks (--dry-run to only list them)
 shell-configurator repair --include-warnings  also apply the fixes warnings suggest (e.g. the terminal font)
+shell-configurator uninstall                  remove the rc lines and per-shell configs it set up, after asking (--yes to skip the prompt)
+shell-configurator uninstall --starship --font <id>  also remove Starship and that Nerd Font (--shells to limit, --dry-run to only list)
 shell-configurator --help                     show usage and exit
 shell-configurator --version                  print the version and exit
 shell-configurator --dry-run                  preview the config without installing (also -d, --no-install)
@@ -63,6 +66,16 @@ shell-configurator --restore                  restore the shared and per-shell c
 `--state` also accepts the alias `--import`. Without `--state`, `doctor` and
 `repair` check every installed shell and read each one's wiring (per-shell or
 adopt mode) from its rc file.
+
+`uninstall` removes every `# Added by ShellConfigurator` block from the bash,
+zsh and fish rc files and moves the per-shell configs aside to `.bak-*`
+backups; `--restore` brings the configs back, and each rc file is backed up
+before it is edited. Your own `starship init` line stays, with the PATH line it
+needs. Nushell and PowerShell were set up by hand, so it names the file to
+clean instead. Starship is removed only with `--starship` (the script install's
+binary, or the pacman, apk or Homebrew package), and a font only with
+`--font <id>`, listed from its cached archive. On a terminal it shows the plan
+and asks first; elsewhere it needs `--yes`.
 
 Flags may appear before or after the subcommand (e.g. `--dry-run apply --state card.json`);
 when a flag is repeated, the last one wins.
@@ -118,10 +131,10 @@ npm run dev
 The wizard exits non-zero if any install step fails, so it can be used in a script.
 
 Exit codes: `0` on success; `1` when an install step failed, `doctor` found a
-failing check, `repair` left one failing, `-o`/`--export` could not be written,
+failing check, `repair` left one failing, an `uninstall` step failed, `-o`/`--export` could not be written,
 an `--import-url` fetch failed, or a fatal error occurred; `2` for a usage error
 (an unknown command or flag, a missing or invalid flag value, `--adopt`/`--import-url`
-outside `apply`, `apply` with no shells selected, or a state card that cannot be
+outside `apply`, `apply` with no shells selected, `uninstall` off a terminal without `--yes`, or a state card that cannot be
 read, is not valid JSON, or has an unsupported version or invalid field). A typo
 never starts the installer: anything the parser does not recognise aborts the
 run.
@@ -141,7 +154,8 @@ shell-configurator apply --state my-card.json
 ```
 
 Every wizard install and real (non-dry-run) `apply` appends one record to
-`history.jsonl` (under the XDG state dir) and snapshots the card it applied;
+`history.jsonl` (under the XDG state dir) and snapshots the card it applied; a
+real `uninstall` appends one too, without a card;
 `generate`, `doctor`, `repair` and dry runs record nothing. `--restore` copies
 the newest `.bak-*` backups back over the shared config and the per-shell
 configs, limited to the shells the last recorded run configured; it does not
