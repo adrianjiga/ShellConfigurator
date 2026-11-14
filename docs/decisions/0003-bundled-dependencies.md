@@ -16,7 +16,7 @@ step. Without self-containment, a bare `dist/` tarball crashes with
 ## Decision
 
 The four runtime dependencies — `fflate`, `ink`, `ink-select-input`, `react` —
-are listed in `bundledDependencies` so `npm pack` copies their `node_modules`
+are listed in `bundleDependencies` so `npm pack` copies their `node_modules`
 into the tarball. The release pipeline verifies the tarball boots
 (`dist/index.js` runs after extraction) before publishing.
 
@@ -25,7 +25,7 @@ into the tarball. The release pipeline verifies the tarball boots
 - The tarball is larger, but remains a single download with zero post-install
   steps — acceptable for a CLI installer.
 - Adding a new runtime dependency requires listing it in both `dependencies` and
-  `bundledDependencies` in `package.json`; forgetting the second
+  `bundleDependencies` in `package.json`; forgetting the second
   only shows up at release time, which is exactly why the pack-and-run check is
   part of the release workflow.
 - Dev dependencies stay out of the bundle, which is why `dependabot-automerge`
