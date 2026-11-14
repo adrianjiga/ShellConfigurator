@@ -155,9 +155,10 @@ export function suggestFixes(
     nodePath.basename(m[1])
   );
   if (timedOut.length > 0) {
+    const commands = [...new Set(timedOut)];
     suggestions.push({
-      text: `${[...new Set(timedOut)].join(', ')} did not answer within command_timeout (${commandTimeout}ms), so its module showed nothing. Raise the timeout at the top of the config.`,
-      toml: `command_timeout = ${commandTimeout * 2}`,
+      text: `${commands.join(', ')} did not answer within command_timeout (${commandTimeout}ms), so ${commands.length === 1 ? 'its module' : 'their modules'} showed nothing. Raise the timeout at the top of the config.`,
+      toml: `command_timeout = ${Math.max(commandTimeout * 2, 1000)}`,
     });
   }
   if (/scan\w*[^\n]*timed out/i.test(plain)) {
@@ -270,4 +271,33 @@ export async function explainPromptAsync(
   } finally {
     if (scratch) await DEFAULT_PREVIEW_DEPS.cleanup(scratch);
   }
+}
+
+/** The timings report as text: each module and its time, then what to change. */
+export function formatTimings(report: TimingsReport, config: string): string {
+  const width = Math.max(0, ...report.modules.map((timing) => timing.module.length));
+  const ms = (value: number) => (value < 1 ? '<1ms' : `${Math.round(value)}ms`);
+  const lines = [
+    `Starship module timings in ${report.path} (config: ${config})`,
+    '',
+    ...(report.modules.length > 0
+      ? report.modules.map(
+          (timing) =>
+            `  ${timing.module.padEnd(width)}  ${ms(timing.ms).padStart(6)}${timing.ms >= SLOW_MODULE_MS ? '  slow' : ''}`
+        )
+      : ['  Starship reported no modules for this folder.']),
+    '',
+    report.slow
+      ? `The prompt waits about ${ms(report.slowestMs)} for its slowest module, which you will notice.`
+      : `The slowest module takes ${ms(report.slowestMs)}, which is fast enough.`,
+  ];
+  if (report.suggestions.length > 0) {
+    lines.push('', 'Suggestions:');
+    for (const suggestion of report.suggestions) {
+      lines.push(`  - ${suggestion.text}`);
+      if (suggestion.toml)
+        lines.push(...suggestion.toml.split('\n').map((line) => `      ${line}`));
+    }
+  }
+  return `${lines.join('\n')}\n`;
 }

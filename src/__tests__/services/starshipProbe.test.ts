@@ -76,9 +76,15 @@ describe('suggestFixes', () => {
     expect(
       suggestFixes([], warnings, 'command_timeout = 800\n[nodejs]\ncommand_timeout = 1\n')
     ).toEqual([expect.objectContaining({ toml: 'command_timeout = 1600' })]);
-    expect(suggestFixes([], warnings, '')[0].text).toContain(
-      'node did not answer within command_timeout (500ms)'
-    );
+    expect(suggestFixes([], warnings, '')[0]).toMatchObject({
+      text: expect.stringContaining(
+        'node did not answer within command_timeout (500ms), so its module'
+      ),
+      toml: 'command_timeout = 1000',
+    });
+    const two = `${warnings}\n${warnings.replace('/usr/bin/node', '/usr/bin/git')}`;
+    expect(suggestFixes([], two, '')[0].text).toContain('node, git did not answer');
+    expect(suggestFixes([], two, '')[0].text).toContain('their modules');
   });
 
   it('raises scan_timeout when the folder scan timed out', () => {
