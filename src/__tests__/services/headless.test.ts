@@ -390,6 +390,7 @@ describe('runGenerate', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
   });
 
@@ -556,6 +557,7 @@ describe('runApply', () => {
   ];
 
   beforeEach(() => {
+    vi.clearAllMocks();
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
     stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
     mockDetectInstalledShells.mockResolvedValue(['zsh']);
