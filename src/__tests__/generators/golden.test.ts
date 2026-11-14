@@ -30,22 +30,32 @@ function stateForPreset(preset: PresetDef): WizardState {
   };
 }
 
+/**
+ * Every fixture: each preset as its label promises, plus — for a preset that
+ * also draws glyphs when the font is there — the output a Nerd Font user gets.
+ */
+const FIXTURES = PRESETS.flatMap((preset) => {
+  const base = { name: preset.id, state: stateForPreset(preset) };
+  if (preset.requiresNerdFont || preset.textOnly) return [base];
+  return [base, { name: `${preset.id}.nerd-font`, state: { ...base.state, hasNerdFont: true } }];
+});
+
 describe('golden config fixtures', () => {
-  it.each(PRESETS.map((p) => [p.id, p] as const))(
+  it.each(FIXTURES.map((f) => [f.name, f.state] as const))(
     'matches the committed fixture for %s',
-    async (_presetId, preset) => {
+    async (name, state) => {
       // A trailing newline keeps the committed TOML a normal text file; the
       // snapshot asserts it, so a regenerated fixture is byte-identical.
-      const generated = `${generateToml(stateForPreset(preset))}\n`;
-      await expect(generated).toMatchFileSnapshot(fixturePath(preset.id));
+      const generated = `${generateToml(state)}\n`;
+      await expect(generated).toMatchFileSnapshot(fixturePath(name));
     }
   );
 
-  it('covers every preset with a fixture and leaves no stale fixtures', () => {
+  it('covers every fixture and leaves no stale ones', () => {
     const onDisk = readdirSync(GOLDEN_DIR)
       .filter((name) => name.endsWith('.toml'))
       .map((name) => name.replace(/\.toml$/, ''))
       .sort();
-    expect(onDisk).toEqual(PRESETS.map((p) => p.id).sort());
+    expect(onDisk).toEqual(FIXTURES.map((f) => f.name).sort());
   });
 });
