@@ -27,7 +27,9 @@ import { recordRunSafely } from './history.ts';
 import { NERD_FONTS, plannedPathDir } from './installer.ts';
 import {
   buildTaskList,
+  configIfFontFails,
   DEFAULT_INSTALL_TASK_DEPS,
+  FONT_FALLBACK_NOTE,
   plannedResetShells,
   runInstallTasks,
 } from './installTasks.ts';
@@ -403,7 +405,7 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
 }
 
 export type DryRunConfig =
-  | { kind: 'per-shell'; toml: string }
+  | { kind: 'per-shell'; toml: string; tomlIfFontFails?: string }
   | { kind: 'imported'; path: string; toml: string }
   | { kind: 'kept'; path: string; exists: boolean };
 
@@ -432,9 +434,17 @@ export function dryRunPlan(
       ? state.sharedConfigToml
         ? { kind: 'imported', path: shared, toml: state.sharedConfigToml }
         : { kind: 'kept', path: shared, exists: fs.existsSync(shared) }
-      : { kind: 'per-shell', toml: generateToml(state) },
+      : perShellConfig(state),
     changes: plannedFileChanges(state, resetShells, pathDir),
   };
+}
+
+function perShellConfig(state: WizardState): DryRunConfig {
+  const toml = generateToml(state);
+  const tomlIfFontFails = configIfFontFails(state);
+  return tomlIfFontFails
+    ? { kind: 'per-shell', toml, tomlIfFontFails }
+    : { kind: 'per-shell', toml };
 }
 
 function printChanges(plan: DryRunPlan): void {
@@ -496,6 +506,7 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
     const config = plan.config;
     if (config.kind === 'per-shell') {
       process.stdout.write(`\nGenerated starship.toml:\n\n${config.toml}`);
+      if (config.tomlIfFontFails) process.stdout.write(`\n\n${FONT_FALLBACK_NOTE}\n`);
     } else if (config.kind === 'imported') {
       process.stdout.write('\nConfig to keep (no per-shell TOML is generated):\n\n');
       process.stdout.write(config.toml.endsWith('\n') ? config.toml : `${config.toml}\n`);

@@ -128,6 +128,17 @@ describe('ReviewScreen', () => {
     expect(instance.lastFrame()).toContain('Nerd Font (JetBrains Mono)');
   });
 
+  it('says what a failed font install would write instead', async () => {
+    const { instance } = setup({
+      hasNerdFont: true,
+      nerdFontToInstall: { kind: 'install', id: 'JetBrainsMono' },
+    });
+    await flush();
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
+      'If the Nerd Font install fails, the config is written without Nerd Font glyphs instead.'
+    );
+  });
+
   it('does not promise a font download inside a container', async () => {
     const { instance } = setup({
       container: true,

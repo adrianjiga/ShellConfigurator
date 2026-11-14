@@ -9,7 +9,13 @@ import { getShell, setupCommand } from '../config/shells.ts';
 import { getSharedConfigPath } from '../generators/shellRc.ts';
 import { diffHunkLines, type FileChange, plannedFileChanges } from '../services/fileDiff.ts';
 import { fontLabel, plannedPathDir } from '../services/installer.ts';
-import { buildTaskList, plannedFont, plannedResetShells } from '../services/installTasks.ts';
+import {
+  buildTaskList,
+  configIfFontFails,
+  FONT_FALLBACK_NOTE,
+  plannedFont,
+  plannedResetShells,
+} from '../services/installTasks.ts';
 import { redactHome } from '../services/paths.ts';
 import type { ShellId, WizardState } from '../types.ts';
 
@@ -72,6 +78,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
   const fontId = plannedFont(state);
   const fontName = fontId ? fontLabel(fontId) : null;
   const [resetShells] = useState(() => plannedResetShells(state));
+  const [fontFallback] = useState(() => configIfFontFails(state) !== null);
   const [tasks] = useState(() => buildTaskList(state, resetShells));
   const [sharedConfigShadowed] = useState(
     () => !state.keepExistingConfig && fs.existsSync(getSharedConfigPath())
@@ -110,6 +117,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
 
         <TaskPlan title="This run will" tasks={tasks} />
         <ConfigPlan state={state} />
+        {fontFallback && <Text color={uiColor('gray')}>{FONT_FALLBACK_NOTE}</Text>}
 
         {sharedConfigShadowed && (
           <Text color={uiColor('yellow')}>

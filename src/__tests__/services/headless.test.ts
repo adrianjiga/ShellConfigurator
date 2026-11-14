@@ -695,6 +695,22 @@ describe('runApply', () => {
     }
   });
 
+  it('shows the config a failed font install would write instead', async () => {
+    const output = async (json: boolean) => {
+      stdoutWrite.mockClear();
+      await runApply(
+        flags({ subcommand: 'apply', shells: ['bash'], font: 'JetBrainsMono', dryRun: true, json })
+      );
+      return stdoutWrite.mock.calls.map((call: [string, ...unknown[]]) => String(call[0])).join('');
+    };
+    expect(await output(false)).toContain(
+      'If the Nerd Font install fails, the config is written without Nerd Font glyphs instead.'
+    );
+    const config = JSON.parse(await output(true)).config;
+    expect(config.tomlIfFontFails).toEqual(expect.any(String));
+    expect(config.tomlIfFontFails).not.toBe(config.toml);
+  });
+
   it('says no file would change when the setup is already in place', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
     vi.stubEnv('HOME', dir);
