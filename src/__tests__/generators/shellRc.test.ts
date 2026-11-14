@@ -20,9 +20,9 @@ vi.mock('fs', () => ({
   rmSync: vi.fn(),
 }));
 
-/** The content of the module's single atomic write (the temp-file write). */
+/** The content of the module's last atomic write (the temp-file write). */
 function lastWrittenContent(): string {
-  return vi.mocked(fs.writeFileSync).mock.calls[0]?.[1] as string;
+  return vi.mocked(fs.writeFileSync).mock.calls.at(-1)?.[1] as string;
 }
 
 import * as fs from 'node:fs';
