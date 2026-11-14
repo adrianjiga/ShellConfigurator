@@ -425,9 +425,19 @@ export async function runInstallTasks(
 
   // --- Missing shells ---
   const shellInstallFailures = new Set<ShellId>();
+  const shellsLeftToUser = new Set<ShellId>();
   for (const shellId of state.selectedShells) {
     if (state.installedShells.includes(shellId)) continue;
     const status = await runTask(shellTaskId(shellId), async () => {
+      if (!shellInstallSupported(shellId, state.packageManager)) {
+        shellsLeftToUser.add(shellId);
+        return {
+          status: 'skipped',
+          patch: {
+            note: `${state.packageManager === 'script' ? 'no package manager here' : `no ${state.packageManager} package`}: install ${shellId} yourself; its Starship setup below is ready for it`,
+          },
+        };
+      }
       await deps.installShell(shellId, state.packageManager, signal);
     });
     if (status === 'failed') shellInstallFailures.add(shellId);
@@ -439,6 +449,9 @@ export async function runInstallTasks(
     await runTask(TASK_IDS.chsh, async () => {
       if (shellInstallFailures.has(defaultShell)) {
         throw new Error(`Cannot set ${defaultShell} as the default shell — its install failed`);
+      }
+      if (shellsLeftToUser.has(defaultShell)) {
+        throw new Error(`Cannot set ${defaultShell} as the default shell — install it first`);
       }
       await deps.setDefaultShell(defaultShell, signal);
     });

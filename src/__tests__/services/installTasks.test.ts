@@ -47,6 +47,31 @@ describe('runInstallTasks', () => {
     });
   });
 
+  it('leaves a shell the package manager has no package for to the user, and still sets it up', async () => {
+    const deps = fakeDeps();
+    const results = await runInstallTasks(
+      state({
+        selectedShells: ['powershell'],
+        installedShells: [],
+        packageManager: 'apt',
+        setDefaultShell: 'powershell',
+      }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.installShell).not.toHaveBeenCalled();
+    expect(results.find((t) => t.id === 'shell_powershell')).toMatchObject({
+      status: 'skipped',
+      note: 'no apt package: install powershell yourself; its Starship setup below is ready for it',
+    });
+    expect(results.find((t) => t.id === 'chsh')).toMatchObject({
+      status: 'failed',
+      error: 'Cannot set powershell as the default shell — install it first',
+    });
+    expect(deps.writeShellConfig).toHaveBeenCalledWith(expect.any(String), 'powershell');
+  });
+
   it('says when the installed Starship is too old for the config', async () => {
     const deps = fakeDeps({
       isStarshipInstalled: vi
