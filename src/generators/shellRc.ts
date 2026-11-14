@@ -620,14 +620,30 @@ function buildAdditionLines(
  * own init line they form a block of their own, closed by a blank line so the
  * user's line never becomes part of it. Null when no init line is in the file.
  */
+function sourcedInitIndex(lines: string[], shell: ShellDef, io: RcIo): number {
+  return lines.findIndex(
+    (line) =>
+      !line.trimStart().startsWith('#') &&
+      sourcedFiles(line).some((file) => {
+        try {
+          return io.exists(file) && initReachable(io.readFile(file), shell.id, io);
+        } catch {
+          return false;
+        }
+      })
+  );
+}
+
 function insertBeforeInit(
   content: string,
   shell: ShellDef,
   marker: string,
-  lines: string[]
+  lines: string[],
+  io: RcIo = FS_RC_IO
 ): string | null {
   const all = content.split('\n');
-  const index = initLineIndex(all, shell.id);
+  const own = initLineIndex(all, shell.id);
+  const index = own === -1 ? sourcedInitIndex(all, shell, io) : own;
   if (index === -1) return null;
 
   let above = index - 1;
@@ -693,7 +709,7 @@ export function appliedRcContent(
   }
 
   const marker = options.pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
-  const inserted = initPresent ? insertBeforeInit(cleaned, shell, marker, lines) : null;
+  const inserted = initPresent ? insertBeforeInit(cleaned, shell, marker, lines, io) : null;
   return {
     content: inserted ?? appendManagedBlock(cleaned, marker, lines),
     applied: true,
@@ -962,7 +978,7 @@ export function resetRcContent(
       : { content, applied: true, note: note ?? 'removed a stale ShellConfigurator block' };
   }
 
-  const inserted = initPresent ? insertBeforeInit(content, shell, BLOCK_MARKER, lines) : null;
+  const inserted = initPresent ? insertBeforeInit(content, shell, BLOCK_MARKER, lines, io) : null;
   return {
     content:
       inserted ??
@@ -1048,9 +1064,12 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
     ownInit || otherInit ? [...new Set(carried)].filter((line) => !hasLine(stripped, line)) : [];
   const lines = stripped.split('\n');
   if (kept.length > 0) {
+    const sourced = ownInit ? -1 : sourcedInitIndex(lines, shell, FS_RC_IO);
     const at = ownInit
       ? initLineIndex(lines, shellId)
-      : lines.length - (lines.at(-1) === '' ? 1 : 0);
+      : sourced !== -1
+        ? sourced
+        : lines.length - (lines.at(-1) === '' ? 1 : 0);
     lines.splice(at, 0, ...kept);
   }
 

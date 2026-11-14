@@ -168,3 +168,42 @@ describe('the blocks of many runs in a row', () => {
     expect(fs.readFileSync(zshrc, 'utf8')).toBe('export EDITOR=vim\n');
   });
 });
+
+describe('a shell whose rc starts Starship from a file it sources', () => {
+  let bashrc: string;
+  const source = 'source ~/.config/shell/prompt.sh';
+
+  beforeEach(() => {
+    bashrc = path.join(home, '.bashrc');
+    fs.mkdirSync(path.join(home, '.config', 'shell'), { recursive: true });
+    fs.writeFileSync(
+      path.join(home, '.config', 'shell', 'prompt.sh'),
+      'eval "$(starship init bash)"\n'
+    );
+    fs.writeFileSync(bashrc, `export EDITOR=vim\n${source}\nalias ll='ls -l'\n`);
+  });
+
+  it('gets its PATH and STARSHIP_CONFIG lines above that source line, so the init sees them', () => {
+    const bin = path.join(home, '.local', 'bin');
+    applyShellConfig('bash', { ensurePathDir: bin });
+
+    const lines = fs.readFileSync(bashrc, 'utf8').split('\n');
+    const at = (start: string) => lines.findIndex((line) => line.startsWith(start));
+    expect(at('export PATH=')).toBeGreaterThan(-1);
+    expect(at('export PATH=')).toBeLessThan(at(source));
+    expect(at('export STARSHIP_CONFIG=')).toBeLessThan(at(source));
+    expect(lines.filter((line) => line.includes('starship init'))).toEqual([]);
+
+    removeManagedRcBlocks('bash');
+    expect(fs.readFileSync(bashrc, 'utf8')).toBe(
+      `export EDITOR=vim\nexport PATH='${bin}':"$PATH"\n${source}\nalias ll='ls -l'\n`
+    );
+  });
+
+  it('gets its unset guard above that source line', () => {
+    resetSharedShellConfig('bash');
+
+    const content = fs.readFileSync(bashrc, 'utf8');
+    expect(content.indexOf('unset STARSHIP_CONFIG')).toBeLessThan(content.indexOf(source));
+  });
+});
