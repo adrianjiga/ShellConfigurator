@@ -189,9 +189,9 @@ export async function detectContainerAsync(): Promise<boolean> {
 const byName = (name: string) => SHELLS.find((s) => s.binary === name || s.id === name);
 
 /**
- * Best-effort detection of the shell the wizard is running in, so it can be
- * pre-selected. Reads $SHELL first, falling back to the process command name.
- * Returns null when it can't be mapped to a known shell.
+ * Best-effort detection of the user's shell, so it can be pre-selected: $SHELL
+ * (the login shell) first, else the command name of the process that launched
+ * the tool. Returns null when it can't be mapped to a known shell.
  */
 export async function detectCurrentShellAsync(): Promise<ShellId | null> {
   const envPath = process.env.SHELL?.trim();

@@ -32,7 +32,7 @@ import { readTerminalFontFamily, TERMINAL_LABELS } from './terminalFont.ts';
 
 export type DoctorStatus = 'pass' | 'warn' | 'fail';
 
-/** A repair the P2.4 `--fix` pass knows how to apply. */
+/** A repair that `repair` (and `doctor --fix`) knows how to apply. */
 export type DoctorFix =
   | { kind: 'reinstall-starship' }
   | { kind: 'configure-shell'; shellId: ShellId }
@@ -201,8 +201,8 @@ function checkStarship(probe: StarshipProbe, state: WizardState | null): DoctorF
 
 /**
  * The version-drift check: does the installed starship match the version the
- * last install/apply recorded? A mismatch means a package-manager upgrade or
- * downgrade happened outside the tool — something the rc stamp cannot see.
+ * last fresh install recorded? A mismatch means a package-manager upgrade or
+ * downgrade happened outside the tool.
  */
 function checkVersionDrift(probe: StarshipProbe, deps: DoctorDeps): DoctorFinding {
   const cached = deps.readCachedStarshipVersion();
@@ -234,9 +234,9 @@ function checkVersionDrift(probe: StarshipProbe, deps: DoctorDeps): DoctorFindin
 }
 
 /**
- * The "chair in the wheel" check: does the shell this terminal is *running*
- * actually load the modified rc? Configuring bash while running zsh is a healthy
- * install that still shows the user nothing.
+ * The "chair in the wheel" check: does the user's own shell (`$SHELL`, their
+ * login shell, else the shell that launched the tool) actually load the modified
+ * rc? Configuring bash while using zsh is a healthy install that shows nothing.
  */
 async function checkRunningShell(shellIds: ShellId[], deps: DoctorDeps): Promise<DoctorFinding> {
   const current = await deps.detectCurrentShell();
