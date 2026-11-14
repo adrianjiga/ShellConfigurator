@@ -161,8 +161,22 @@ describe('PresetScreen', () => {
 
     expect(onNext).not.toHaveBeenCalled();
     const frame = instance.lastFrame();
-    expect(frame).toContain('This replaces your segment and');
-    expect(frame).toContain('style choices.');
+    expect((frame ?? '').replace(/\s+/g, ' ')).toContain(
+      'This replaces your segment and style choices; k keeps them and goes on.'
+    );
+  });
+
+  it('keeps the choices made so far and goes on with k', async () => {
+    const { instance, onNext } = setup(true, 'nerd-font-symbols');
+    await flush();
+
+    instance.stdin.write('\r');
+    await flush();
+    instance.stdin.write('k');
+    await flush();
+
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(onNext).toHaveBeenCalledWith({});
   });
 
   it('applies the preset once the revisit confirmation is accepted', async () => {

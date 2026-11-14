@@ -48,12 +48,13 @@ export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
     });
   };
 
-  useInput((_, key) => {
+  useInput((char, key) => {
     if (!confirmingPreset) {
       if (key.escape) onBack();
       return;
     }
     if (key.return) apply(confirmingPreset.id);
+    else if (char.toLowerCase() === 'k') onNext({});
     else if (key.escape) setConfirmingId(null);
   });
 
@@ -93,7 +94,8 @@ export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
         <Box marginTop={1}>
           {confirmingPreset ? (
             <Text color={uiColor('yellow')}>
-              Apply "{confirmingPreset.label}"? This replaces your segment and style choices.
+              Apply "{confirmingPreset.label}"? This replaces your segment and style choices; k
+              keeps them and goes on.
             </Text>
           ) : (
             <Text color={uiColor('gray')} italic>
@@ -108,6 +110,7 @@ export function PresetScreen({ state, onNext, onBack }: PresetScreenProps) {
           confirmingPreset
             ? [
                 { key: 'Enter', label: 'apply' },
+                { key: 'k', label: 'keep mine' },
                 { key: 'Esc', label: 'cancel' },
               ]
             : LIST_HINTS

@@ -90,7 +90,7 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 
 **Purpose**: Choose a starting configuration to customize.
 
-**Layout**: Filtered list of presets. Presets requiring Nerd Fonts are marked `★` and are hidden (with a note saying so) if the user selected "no Nerd Font". The list shows a limited number of rows and scrolls; each preset shows a description below the list when highlighted. Choosing a preset on a revisit asks for confirmation first, since it replaces the segment and style choices.
+**Layout**: Filtered list of presets. Presets requiring Nerd Fonts are marked `★` and are hidden (with a note saying so) if the user selected "no Nerd Font". The list shows a limited number of rows and scrolls; each preset shows a description below the list when highlighted. Choosing a preset on a revisit asks for confirmation first, since it replaces the segment and style choices: `Enter` applies it, `k` keeps the choices made so far and goes on, `Esc` cancels.
 
 **Preview**: The highlighted preset's description updates live below the list; the preview pane itself swaps only once a preset is confirmed with Enter (modules, palette, and powerline are committed together then).
 
