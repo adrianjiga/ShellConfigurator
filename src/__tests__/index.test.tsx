@@ -95,6 +95,7 @@ import {
   recordInstallOutcome,
   reportFatal,
   routeCli,
+  runCompletionsCommand,
   runDebugInfoCommand,
   runGlobalFlags,
   runHeadlessCommand,
@@ -103,6 +104,7 @@ import {
   type UninstallIo,
 } from '../index.tsx';
 import { parseCliArgs } from '../services/args.ts';
+import { completionScript } from '../services/completions.ts';
 import type { DebugInfoDeps } from '../services/debugInfo.ts';
 import { CliRunError, CliUsageError } from '../services/errors.ts';
 import { appendHistory } from '../services/history.ts';
@@ -1177,5 +1179,44 @@ describe('index debug-info command', () => {
   it('documents debug-info in the help text', () => {
     runGlobalFlags(parseCliArgs(['--help']));
     expect(output()).toContain('shell-configurator debug-info');
+  });
+});
+
+describe('index completions command', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+  });
+
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+  });
+
+  const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
+
+  it.each(['bash', 'zsh', 'fish'] as const)('prints the %s script', (shell) => {
+    runCompletionsCommand(parseCliArgs(['completions', shell]));
+    expect(output()).toBe(completionScript(shell));
+  });
+
+  it('routes the subcommand', async () => {
+    expect(await runHeadlessCommand(parseCliArgs(['completions', 'fish']), '')).toBe(true);
+    expect(output()).toContain('complete -c shell-configurator');
+  });
+
+  it.each([
+    [['completions'], /completions needs a shell: bash, zsh, fish/],
+    [['completions', 'tcsh'], /No completions for 'tcsh'/],
+    [['completions', 'zsh', '--json'], /--json cannot be used with completions/],
+    [['completions', 'zsh', '--preset', 'pure-prompt'], /--preset cannot be used with completions/],
+  ])('rejects %o', (args, message) => {
+    expect(() => runCompletionsCommand(parseCliArgs(args))).toThrow(message);
+  });
+
+  it('documents completions and where to install them in the help text', () => {
+    runGlobalFlags(parseCliArgs(['--help']));
+    expect(output()).toContain('shell-configurator completions <bash|zsh|fish>');
+    expect(output()).toContain('~/.config/fish/completions/shell-configurator.fish');
   });
 });

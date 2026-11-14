@@ -8,6 +8,8 @@ import { posixShellQuote } from './config/shells.ts';
 import { restoreConfigBackups } from './generators/shellRc.ts';
 import type { CliFlags } from './services/args.ts';
 import { parseCliArgs, quoteArgv } from './services/args.ts';
+import { COMPLETION_SHELLS, type CompletionShell } from './services/cliSurface.ts';
+import { completionScript } from './services/completions.ts';
 import {
   collectDebugInfo,
   DEFAULT_DEBUG_INFO_DEPS,
@@ -91,6 +93,7 @@ Usage:
   shell-configurator uninstall    remove what the wizard set up
   shell-configurator rollback     put back the files the last run changed
   shell-configurator debug-info   print a report of the setup to attach to a bug report
+  shell-configurator completions <bash|zsh|fish>   print a shell completion script
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
@@ -166,6 +169,11 @@ rollback options (undoes the newest run that changed files; asks first):
 debug-info options (reads only; e.g. shell-configurator debug-info > issue.md):
   --json               Print the report data as JSON instead of Markdown
   Your home directory is shown as ~ so the report does not name you.
+
+completions (install the script where your shell loads completions from):
+  bash   shell-configurator completions bash > ~/.local/share/bash-completion/completions/shell-configurator
+  zsh    shell-configurator completions zsh > "\${fpath[1]}/_shell-configurator"
+  fish   shell-configurator completions fish > ~/.config/fish/completions/shell-configurator.fish
 `);
 }
 
@@ -490,6 +498,27 @@ export async function runRollbackCommand(
   }
 }
 
+/** Prints the completion script for the shell named after `completions`. */
+export function runCompletionsCommand(flags: CliFlags): void {
+  const unused = presentConfigFlags(flags);
+  if (flags.stateFile) unused.push('--state');
+  if (flags.json) unused.push('--json');
+  if (flags.dryRun) unused.push('--dry-run');
+  if (flags.fix) unused.push('--fix');
+  if (unused.length > 0) {
+    throw new CliUsageError(`${unused.join(', ')} cannot be used with completions.`);
+  }
+  const shell = flags.completionShell;
+  if (!COMPLETION_SHELLS.includes(shell as CompletionShell)) {
+    throw new CliUsageError(
+      shell
+        ? `No completions for '${shell}' (available: ${COMPLETION_SHELLS.join(', ')}).`
+        : `completions needs a shell: ${COMPLETION_SHELLS.join(', ')}.`
+    );
+  }
+  process.stdout.write(completionScript(shell as CompletionShell));
+}
+
 /** Prints the debug report (Markdown, or JSON with --json) with the home directory shown as `~`. */
 export async function runDebugInfoCommand(
   flags: CliFlags,
@@ -537,6 +566,10 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
     await runDebugInfoCommand(flags);
     return true;
   }
+  if (flags.subcommand === 'completions') {
+    runCompletionsCommand(flags);
+    return true;
+  }
   if (flags.subcommand === 'uninstall') {
     await runUninstallCommand(flags, command);
     return true;
@@ -571,7 +604,7 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.fix) dropped.push('--fix');
   if (dropped.length > 0) {
     throw new CliUsageError(
-      `${dropped.join(', ')} require a subcommand (generate, apply, doctor, repair, uninstall, rollback or debug-info).`
+      `${dropped.join(', ')} require a subcommand (generate, apply, doctor, repair, uninstall, rollback, debug-info or completions).`
     );
   }
   return false;
