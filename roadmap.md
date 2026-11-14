@@ -8,8 +8,9 @@ Goal: every feature idea is built on a clean seam, so refactors land exactly whe
 feature needs them, never as a separate "reformat the world" churn. Every task is its own
 feature-branch PR, per AGENTS.md conventions.
 
-Does **not** run the wizard itself in CI; verification is via unit, screen, golden, and
-headless smoke tests. Coverage thresholds in `vitest.config.ts` ratchet up with each phase,
+CI never runs `npm run dev`; verification is via unit, screen, golden, and smoke tests
+(the `script` distro-smoke cell drives the real wizard `App` from `dist/` through
+`scripts/ci/wizardSmoke.mjs`). Coverage thresholds in `vitest.config.ts` ratchet up with each phase,
 never down.
 
 **Status legend:** **DONE** implemented · **PARTIAL** foundation shipped, feature
@@ -31,9 +32,9 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 | Status           | Items                                                                                                           |
 | ---------------- | --------------------------------------------------------------------------------------------------------------- |
-| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · #1 #2 #3 #4 #5 #7 #8 #10 #11 #17 #19 #20 #22 #24 #26 #27       |
-| TODO             | P4.1–P4.10 · P5.1–P5.3 · #6 #9 #12–#16 #18 #21 #23 #25                                                          |
-| PARTIAL          | #14 (snapshots written, no rollback)                                                                            |
+| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · #1 #2 #4 #5 #7 #8 #10 #11 #17 #19 #20 #22 #24 #26 #27          |
+| TODO             | P4.1–P4.10 · P5.1–P5.3 · #6 #9 #12 #13 #15 #18 #21 #23 #25                                                      |
+| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy) · #14 (snapshots written, no rollback)                 |
 | PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                         |
 | PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title |
 
@@ -63,7 +64,7 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 **P0.5 — Step-machine + router robustness** — **DONE**
 
-- `getNextStep` no longer discards a pending `update` at boundaries; dedupes the two conditional-skip blocks into one walk over `STEP_ORDER` with `shouldVisit` predicates; `app.tsx` switch gets `assertNever` exhaustiveness.
+- `getNextStep` no longer discards a pending `update` at boundaries; dedupes the two conditional-skip blocks into one walk over `STEP_ORDER` (the `shouldVisitFontSelect` predicate plus an inline dry-run check that skips `installing`); `app.tsx` switch gets `assertNever` exhaustiveness.
 - _Unblocks:_ safely adding new steps/screens later. **D:** none.
 
 **P0.6 — Test helper single-sourcing** — **DONE**
@@ -76,13 +77,13 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 - Collapse 4 copy-paste jobs → matrix/composite action; extract `dockerSmoke` orchestration into a script; dedupe `distroSetup.sh` download branches.
 - _Unblocks:_ adding new CI legs (headless smoke, golden gate, lifecycle e2e). **D:** none.
 
-**P0.8 — `installer.ts` cleanup sweep** — **DONE**. no sentinel "no method" (type `script`'s entry so lookup throws); split `installNerdFont` into `downloadFont` / `verifyChecksum` / `writeFontFiles`; drop the useless double optional-chain on `headers.get`; attach `{ cause: err }` in the checksum throw; make `SHELL_PACKAGES`' intentional missing combos self-documenting. **D:** none.
+**P0.8 — `installer.ts` cleanup sweep** — **DONE**. no sentinel "no method" (type `script`'s entry so lookup throws); split `installNerdFont` into `downloadFont` / `verifyChecksum` / `installFontFiles`; drop the useless double optional-chain on `headers.get`; attach `{ cause: err }` in the checksum throw; make `SHELL_PACKAGES`' intentional missing combos self-documenting. **D:** none.
 
-**P0.9 — `exec`/`detector` probe sweep** — **DONE**. one `probe(cmd): string | null` behind `commandExists`/`commandPath`; shared `byName()` for shell lookup; named `DNF_DISTROS`/etc. constants; extract `FONT_EXT_RE` const for the enclaved worker source [optional]. **D:** none.
+**P0.9 — `exec`/`detector` probe sweep** — **DONE**. one `probe(cmd): string | null` behind `commandExists`/`commandPath`; shared `byName()` for shell lookup; named `DNF_DISTROS`/etc. constants; extract a `FONT_FILE` regex const inside the enclaved worker source [optional]. **D:** none.
 
-**P0.10 — Screens refactor sweep** — **DONE**. `DoneScreen`: one `task(state, id)` lookup instead of three `find` walks; `StyleScreen`: value-state instead of index-state, drop the `PALETTES[colorIdx]!` cast; `SegmentsScreen`: `setModules(id, modules)` collapses the `side` ternaries; `WelcomeScreen`: shared `runDetection()` for both detection paths; typed `SelectInput` value unions; `PresetScreen` invariant instead of `?? ''`; one indent convention across `ShellScreen`/`SegmentsScreen`. **D:** none.
+**P0.10 — Screens refactor sweep** — **DONE**. `DoneScreen`: one `findTask(state, id)` lookup instead of three `find` walks; `StyleScreen`: value-state instead of index-state, drop the `PALETTES[colorIdx]!` cast; `SegmentsScreen`: `applyModules(commit, modules)` collapses the `side` ternaries; `WelcomeScreen`: shared `runDetection()` for both detection paths; typed `SelectInput` value unions; `PresetScreen` invariant instead of `?? ''`; one indent convention across `ShellScreen`/`SegmentsScreen`. **D:** none.
 
-**P0.11 — `shellRc`/`config` sweep** — **DONE**. reuse `stamp()` in `writeShellConfig`; `isShellId` type guard in `restoreConfigBackups`; extract `buildAdditionLines` from `applyShellConfig`; `isConfigurableModule` predicate shared with `PromptPreview`; `CORE` module array in `presets.ts`; `getShellBinary` throws on unknown shell; comment block above the nushell `initLine`. **D:** none.
+**P0.11 — `shellRc`/`config` sweep** — **DONE**. reuse `backupStamp()` in `writeShellConfig`; `isShellId` type guard in `restoreConfigBackups`; extract `buildAdditionLines` from `applyShellConfig`; `isConfigurableModule` predicate shared with `PromptPreview`; `CORE_MODULES` array in `config/modules.ts`; `getShellBinary` throws on unknown shell; comment block above the nushell `initLine`. **D:** none.
 
 **P0.12 — Core robustness extras** — **DONE**. move `process.exitCode` decision into `index.tsx` teardown; derive `WizardLayout` step numbers from `STEP_ORDER`; document or drop the `--no-install` alias in `--help`; move cursor restore into `tty.ts` as `restoreTty()` + `SHOW_CURSOR` constant. **D:** none.
 
@@ -140,11 +141,11 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 **P2.4 — `repair` / `doctor --fix` (#20)** — **DONE**
 
-- Fix branches per doctor check: re-add init line, repoint config, reinstall font from cache, invoke P2.2 wiring, reinstall starship. **D:** P2.3, P2.2, P0.3.
+- Fix branches per doctor check: re-add missing rc lines (`configure-shell`), rewrite a missing per-shell config from a `--state` card (`write-config`), reinstall the font (from cache, downloading when nothing is cached), invoke P2.2 wiring (`wire-font`), reinstall starship. Only failing checks are fixed unless `--include-warnings` is passed; `--dry-run` only lists the planned fixes. **D:** P2.3, P2.2, P0.3.
 
 **P2.5 — Post-install verification task (#8)** — **DONE**
 
-- `verify-config` phase via `runTask`: `starship print-config` against each written TOML. **D:** P0.3.
+- `verify` task ("Verify config") via `runTask`: `starship print-config` against each written TOML. **D:** P0.3.
 
 **P2.6 — Container / CI detection** — **DONE**
 
@@ -196,7 +197,7 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 **P3.5 — Directory tuning** — **DONE**
 
-- Expose `directory.substitutions` and a `truncation_length` option (currently hardcoded to `3` in `MODULE_DEFS.directory`).
+- Expose `directory.substitutions` and a `truncation_length` option (it was hardcoded to `3` in `MODULE_DEFS.directory`).
 - **Why.** p10k users live by these; longest-path truncation is a common complaint and the generated config already carries the key.
 - **How.** `WizardState` field(s) + a Style/Segments control + generator emission; golden fixtures pin the output. **Effort.** S-M. **D:** P3.3.
 - **Shipped:** directory depth picker (0–5; 0 shows the full path) and inline comma-separated `from=to` substitution editor on StyleScreen; generator emits escaped `[directory.substitutions]`, state cards persist and validate both fields; added parser, generator, state, and screen tests.
@@ -338,4 +339,4 @@ they can be picked up in parallel with any phase but each stays its own PR.
 - One PR per task; conventional commits (`refactor:` for P0, `feat:`/`ci:`/`test:` as appropriate); PR body has Summary/Why/What Changed.
 - Each PR runs the existing suite; P1.3 onward adds the golden gate + headless smoke to CI (extending the P0.7 matrix).
 - `vitest.config.ts` thresholds only move up.
-- The live `npm run dev` wizard is never invoked in CI — everything is exercised via unit/screen/golden/headless-smoke paths (per AGENTS.md).
+- The live `npm run dev` wizard is never invoked in CI — everything is exercised via unit/screen/golden paths and the smoke scripts (`wizardSmoke.mjs` drives the built `App` in a scratch `$HOME`), per AGENTS.md.
