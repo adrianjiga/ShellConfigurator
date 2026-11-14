@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstallingScreen, setAdvanceDelayForTests } from '../../screens/InstallingScreen.tsx';
 import type { InstallTaskDeps } from '../../services/installTasks.ts';
 import { CapturedRunError, captureRun } from '../../services/runCapture.ts';
+import { writeWhatChangedSafely } from '../../services/whatChanged.ts';
 import type { InstallTask, WizardState } from '../../types.ts';
 import { DEFAULT_STATE } from '../../types.ts';
 import { flush, waitFor } from '../helpers/wait.ts';
@@ -210,6 +211,7 @@ describe('InstallingScreen', () => {
       result: await run(),
       runId: 'run-1',
     }));
+    vi.mocked(writeWhatChangedSafely).mockReturnValueOnce('/h/.config/starship/WHAT-CHANGED.md');
     const { instance, onNext } = setup();
     await flush();
 
@@ -219,7 +221,14 @@ describe('InstallingScreen', () => {
     expect(instance.lastFrame()).toContain('Unknown shell');
 
     await waitFor(() => onNext.mock.calls.length > 0);
-    expect(onNext).toHaveBeenCalledWith({ installResults: results, runId: 'run-1' });
+    expect(onNext).toHaveBeenCalledWith({
+      installResults: results,
+      runId: 'run-1',
+      summaryPath: '/h/.config/starship/WHAT-CHANGED.md',
+    });
+    expect(writeWhatChangedSafely).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'install', results })
+    );
   });
 
   it('renders nothing while an interactive child owns the terminal', async () => {
@@ -301,6 +310,7 @@ describe('InstallingScreen under StrictMode', () => {
     expect(onNext).toHaveBeenCalledWith({
       installResults: [{ id: 'starship', label: 'Starship', status: 'done' }],
       runId: null,
+      summaryPath: null,
     });
   });
 });

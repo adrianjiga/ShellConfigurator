@@ -9,8 +9,14 @@ import {
   DEFAULT_INSTALL_TASK_DEPS,
   runInstallTasks,
 } from '../services/installTasks.ts';
-import { CapturedRunError, captureRun, trackedFiles } from '../services/runCapture.ts';
+import {
+  CapturedRunError,
+  captureRun,
+  readRunManifest,
+  trackedFiles,
+} from '../services/runCapture.ts';
 import { isUiSuspended, subscribeToUiSuspension } from '../services/tty.ts';
+import { writeWhatChangedSafely } from '../services/whatChanged.ts';
 import type { InstallTask, InstallTaskId, WizardState } from '../types.ts';
 
 export const ADVANCE_AFTER_DONE_MS = 1200;
@@ -90,7 +96,14 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
       // Advance after a brief pause so the user can see the final state
       await new Promise((r) => setTimeout(r, advanceDelayMs));
-      if (!unmounted) onNext({ installResults: results, runId });
+      const summaryPath = writeWhatChangedSafely({
+        kind: 'install',
+        timestamp: new Date().toISOString(),
+        state,
+        results,
+        manifest: runId ? readRunManifest(runId) : null,
+      });
+      if (!unmounted) onNext({ installResults: results, runId, summaryPath });
     })();
 
     return () => {

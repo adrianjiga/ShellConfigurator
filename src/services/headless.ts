@@ -30,8 +30,9 @@ import {
   plannedResetShells,
   runInstallTasks,
 } from './installTasks.ts';
-import { CapturedRunError, captureRun, trackedFiles } from './runCapture.ts';
+import { CapturedRunError, captureRun, readRunManifest, trackedFiles } from './runCapture.ts';
 import { parseState, serializeState } from './state.ts';
+import { writeWhatChangedSafely } from './whatChanged.ts';
 
 const SHELL_IDS = new Set<string>(SHELLS.map((s) => s.id));
 const MODULE_IDS = new Set<string>([...MODULES.map((m) => m.id), 'character']);
@@ -462,4 +463,14 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
     exitCode: failed ? 1 : 0,
     runId,
   });
+
+  const summary = writeWhatChangedSafely({
+    kind: 'apply',
+    timestamp: new Date().toISOString(),
+    state,
+    results,
+    manifest: runId ? readRunManifest(runId) : null,
+    ...(command ? { command } : {}),
+  });
+  if (summary) process.stdout.write(`\nWhat changed, and how to undo it: ${summary}\n`);
 }

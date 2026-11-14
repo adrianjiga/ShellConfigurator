@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CapturedRunError, captureRun, trackedFiles } from '../../services/runCapture.ts';
+import { writeWhatChangedSafely } from '../../services/whatChanged.ts';
 
 const {
   mockDetectInstalledShells,
@@ -48,6 +49,7 @@ vi.mock('../../services/history.ts', async () => {
     '../../services/history.ts'
   );
   return {
+    ...actual,
     recordRun: mockRecordRun,
     recordRunSafely: (options: Parameters<typeof actual.recordRun>[0]) =>
       actual.recordRunSafely(options, mockRecordRun),
@@ -663,6 +665,20 @@ describe('runApply', () => {
       .map((call: [string, ...unknown[]]) => String(call[0]))
       .join('');
     expect(output).toContain('Install Starship');
+    expect(writeWhatChangedSafely).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'apply', command: 'apply --shells zsh', results: doneTasks })
+    );
+  });
+
+  it('prints where the summary of what changed was written', async () => {
+    mockRunInstallTasks.mockResolvedValue(doneTasks as never);
+    vi.mocked(writeWhatChangedSafely).mockReturnValueOnce('/h/.config/starship/WHAT-CHANGED.md');
+
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }));
+
+    expect(stdoutWrite).toHaveBeenCalledWith(
+      '\nWhat changed, and how to undo it: /h/.config/starship/WHAT-CHANGED.md\n'
+    );
   });
 
   it('records the files a crashing run changed, then rethrows its error', async () => {

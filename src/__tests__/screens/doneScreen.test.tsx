@@ -165,6 +165,21 @@ describe('DoneScreen over real install results', () => {
     expect(rowFor(frame, 'Zsh')).toContain('init line added');
   });
 
+  it('points at the summary of what changed when one was written', () => {
+    const state: WizardState = {
+      ...DEFAULT_STATE,
+      selectedShells: ['zsh'],
+      installResults: [{ id: 'config', label: 'Write config', status: 'done' }],
+      summaryPath: '/h/.config/starship/WHAT-CHANGED.md',
+    };
+    const frame = render(<DoneScreen state={state} />).lastFrame() ?? '';
+    expect(frame.replace(/\s+/g, ' ')).toContain(
+      'What changed, and how to undo it: /h/.config/starship/WHAT-CHANGED.md'
+    );
+    const without = render(<DoneScreen state={{ ...state, summaryPath: null }} />).lastFrame();
+    expect(without).not.toContain('What changed');
+  });
+
   it('exits on Enter', async () => {
     const instance = render(<DoneScreen state={DEFAULT_STATE} />);
     await flush();
