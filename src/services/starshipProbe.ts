@@ -1,5 +1,3 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import * as os from 'node:os';
 import * as nodePath from 'node:path';
 import type { WizardState } from '../types.ts';
 import { findStarshipAsync } from './detector.ts';
@@ -275,13 +273,14 @@ export class StarshipMissingError extends Error {
 export async function timePrompt(
   toml: string,
   path: string,
-  deps: ProbeDeps = DEFAULT_PROBE_DEPS
+  deps: ProbeDeps = DEFAULT_PROBE_DEPS,
+  scratchDeps: Pick<ScratchDeps, 'createScratch' | 'writeConfig' | 'cleanup'> = DEFAULT_PREVIEW_DEPS
 ): Promise<TimingsReport> {
   if (!(await deps.isStarshipInstalled())) throw new StarshipMissingError();
-  const scratch = await mkdtemp(nodePath.join(os.tmpdir(), 'shellconf-timings-'));
+  const scratch = await scratchDeps.createScratch();
   try {
     const configPath = nodePath.join(scratch, STARSHIP_CONFIG_FILE);
-    await writeFile(configPath, toml, 'utf8');
+    await scratchDeps.writeConfig(scratch, toml);
     let output: { stdout: string; stderr: string };
     try {
       output = await deps.run('timings', path, configPath);
@@ -300,7 +299,7 @@ export async function timePrompt(
       suggestions: suggestFixes(modules, stderr, toml),
     };
   } finally {
-    await rm(scratch, { recursive: true, force: true });
+    await scratchDeps.cleanup(scratch);
   }
 }
 

@@ -1,4 +1,3 @@
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -159,19 +158,27 @@ function fakeDeps(
     calls,
     isStarshipInstalled: async () => installed,
     run: async (command, path, configPath) => {
-      calls.push([command, path]);
-      expect(fs.readFileSync(configPath, 'utf8')).toBe('format = "$all"\n');
+      calls.push([command, path, configPath]);
       return { stdout, stderr };
     },
   };
 }
 
+const fakeScratch = () => ({
+  createScratch: vi.fn(async () => '/scratch'),
+  writeConfig: vi.fn(async () => {}),
+  cleanup: vi.fn(async () => {}),
+});
+
 describe('timePrompt', () => {
   it('times the config in the folder and reports the slowest module and the fixes', async () => {
     const deps = fakeDeps(TIMINGS);
-    const report = await timePrompt('format = "$all"\n', '/work/repo', deps);
+    const scratch = fakeScratch();
+    const report = await timePrompt('format = "$all"\n', '/work/repo', deps, scratch);
 
-    expect(deps.calls).toEqual([['timings', '/work/repo']]);
+    expect(scratch.writeConfig).toHaveBeenCalledWith('/scratch', 'format = "$all"\n');
+    expect(deps.calls).toEqual([['timings', '/work/repo', path.join('/scratch', 'starship.toml')]]);
+    expect(scratch.cleanup).toHaveBeenCalledWith('/scratch');
     expect(report).toMatchObject({ path: '/work/repo', slowestMs: 1200, slow: true });
     expect(report.modules).toHaveLength(4);
     expect(report.suggestions.map((s) => s.module)).toEqual(['git_status', 'directory']);
@@ -184,14 +191,16 @@ describe('timePrompt', () => {
         throw Object.assign(new Error('Command failed: starship timings'), { killed: true });
       },
     };
-    const failure = timePrompt('format = "$all"\n', '/big/repo', deps);
+    const scratch = fakeScratch();
+    const failure = timePrompt('format = "$all"\n', '/big/repo', deps, scratch);
     await expect(failure).rejects.toBeInstanceOf(StarshipTimedOutError);
     await expect(failure).rejects.toThrow(/in \/big\/repo within 30s.*git_status/);
+    expect(scratch.cleanup).toHaveBeenCalledWith('/scratch');
   });
 
   it('refuses to run without Starship', async () => {
     await expect(
-      timePrompt('format = "$all"\n', '/', fakeDeps('', '', false))
+      timePrompt('format = "$all"\n', '/', fakeDeps('', '', false), fakeScratch())
     ).rejects.toBeInstanceOf(StarshipMissingError);
   });
 });
