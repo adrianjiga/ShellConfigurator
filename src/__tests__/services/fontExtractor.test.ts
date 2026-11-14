@@ -136,6 +136,21 @@ describe('extractFontFiles', () => {
     expect(new TextDecoder().decode(files[0]!.bytes)).toBe('first');
   });
 
+  it('matches font extensions in any case', async () => {
+    const zip = zipSync({ 'HackNerdFont-Regular.TTF': encode('ttf') });
+    const files = await extractFontFiles(zipBytes(zip));
+    expect(files.map((file) => file.name)).toEqual(['HackNerdFont-Regular.TTF']);
+  });
+
+  it('treats backslashes as part of one file name, dropping a dot-led one', async () => {
+    const zip = zipSync({
+      '..\\..\\evil.ttf': encode('ttf'),
+      'fonts\\Hack.ttf': encode('ttf'),
+    });
+    const files = await extractFontFiles(zipBytes(zip));
+    expect(files.map((file) => file.name)).toEqual(['fonts\\Hack.ttf']);
+  });
+
   it('returns stored (uncompressed) entries intact', async () => {
     const zip = zipSync({ 'A.ttf': encode('aaa'), 'B.otf': encode('bbb') }, { level: 0 });
 
