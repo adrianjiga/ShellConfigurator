@@ -704,6 +704,59 @@ export function appliedRcContent(
   };
 }
 
+const BASH_LOGIN_FILES = ['.bash_profile', '.bash_login', '.profile'];
+
+export const LOGIN_MARKER = '# Added by ShellConfigurator (login shells read this, not ~/.bashrc)';
+
+/** The file a Bash login shell reads: the first of these that exists, else ~/.bash_profile. */
+export function bashLoginFile(io: RcIo = FS_RC_IO): string {
+  const files = BASH_LOGIN_FILES.map((name) => path.join(homeDir(), name));
+  return files.find((file) => io.exists(file)) ?? files[0];
+}
+
+/** Every file a Bash login shell may read first, for capturing a run. */
+export function bashLoginFiles(): string[] {
+  return BASH_LOGIN_FILES.map((name) => path.join(homeDir(), name));
+}
+
+/**
+ * macOS terminals start Bash as a login shell, which never reads ~/.bashrc on
+ * its own, so the prompt set up there would not show.
+ */
+export function bashNeedsLoginFile(platform: NodeJS.Platform = process.platform): boolean {
+  return platform === 'darwin';
+}
+
+/** Whether the login file text `content`, or a file it sources, loads ~/.bashrc. */
+export function loginLoadsBashrc(
+  content: string,
+  io: RcIo = FS_RC_IO,
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  const bashrc = getShell('bash')?.rcFile;
+  return Boolean(
+    bashrc && reachableSome(content, (text) => sourcedFiles(text, env).includes(bashrc), io, env)
+  );
+}
+
+/** The Bash login file text `existing`, with a block that loads ~/.bashrc when nothing does yet. */
+export function bashLoginContent(existing: string, io: RcIo = FS_RC_IO): string {
+  return loginLoadsBashrc(existing, io)
+    ? existing
+    : appendManagedBlock(existing, LOGIN_MARKER, ['[ -f ~/.bashrc ] && . ~/.bashrc']);
+}
+
+/** Makes the Bash login file load ~/.bashrc where it must. The file it changed, or null. */
+function ensureBashLogin(): string | null {
+  if (!bashNeedsLoginFile()) return null;
+  const file = bashLoginFile();
+  const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  const content = bashLoginContent(existing);
+  if (content === existing) return null;
+  writeFileAtomic(file, content);
+  return file;
+}
+
 export function applyShellConfig(
   shellId: ShellId,
   options: ApplyShellConfigOptions = {}
@@ -726,7 +779,13 @@ export function applyShellConfig(
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
   const { content, ...result } = appliedRcContent(shellId, existing, options)!;
   if (content !== existing) writeFileAtomic(rcPath, content);
-  return result;
+  const login = shellId === 'bash' ? ensureBashLogin() : null;
+  if (!login) return result;
+  const loginNote = `${path.basename(login)} now loads .bashrc`;
+  return {
+    applied: true,
+    note: result.applied && result.note ? `${result.note}; ${loginNote}` : loginNote,
+  };
 }
 
 /** Appends a managed block at the end, after a blank line unless the file is empty. */

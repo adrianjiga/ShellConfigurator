@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { SHELLS } from '../config/shells.ts';
-import { getSharedConfigPath, getShellConfigPath } from '../generators/shellRc.ts';
+import { bashLoginFiles, getSharedConfigPath, getShellConfigPath } from '../generators/shellRc.ts';
 import { sha256Digest } from './cache.ts';
 import { errorMessage, isMissingFile } from './errors.ts';
 import { type HistoryKind, recordRun } from './history.ts';
@@ -58,6 +58,7 @@ export function runDir(runId: string): string {
 export function trackedFiles(): string[] {
   return [
     ...SHELLS.flatMap((shell) => (shell.rcFile ? [shell.rcFile] : [])),
+    ...bashLoginFiles(),
     ...SHELLS.map((shell) => getShellConfigPath(shell.id)),
     getSharedConfigPath(),
     ...terminalFontConfigFiles(),

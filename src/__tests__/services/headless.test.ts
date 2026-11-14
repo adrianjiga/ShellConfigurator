@@ -70,6 +70,7 @@ import { NERD_FONTS } from '../../services/installer.ts';
 import { DEFAULT_INSTALL_TASK_DEPS } from '../../services/installTasks.ts';
 import { STATE_VERSION, serializeState } from '../../services/state.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
+import { stubPlatform } from '../helpers/platform.ts';
 
 const flags = (partial: Partial<CliFlags>): CliFlags => ({
   subcommand: 'generate',
@@ -562,7 +563,9 @@ describe('runApply', () => {
     { id: 'config', label: 'Write config files', status: 'done' },
   ];
 
+  let restorePlatform: () => void;
   beforeEach(() => {
+    restorePlatform = stubPlatform('linux');
     vi.clearAllMocks();
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
     stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
@@ -575,6 +578,7 @@ describe('runApply', () => {
   });
 
   afterEach(() => {
+    restorePlatform();
     vi.restoreAllMocks();
   });
 

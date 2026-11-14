@@ -52,6 +52,7 @@ import {
   writeShellConfig,
 } from '../../generators/shellRc.ts';
 import { restoreEnv } from '../helpers/env.ts';
+import { stubPlatform } from '../helpers/platform.ts';
 
 const expectedConfigPath = path.join(os.homedir(), '.config', 'starship', 'zsh.toml');
 const expectedConfigDir = path.join(os.homedir(), '.config', 'starship');
@@ -326,7 +327,12 @@ describe('hasStarshipInit', () => {
 });
 
 describe('applyShellConfig', () => {
-  beforeEach(() => vi.clearAllMocks());
+  let restorePlatform: () => void;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    restorePlatform = stubPlatform('linux');
+  });
+  afterEach(() => restorePlatform());
 
   it('appends init line to shell rc file', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);

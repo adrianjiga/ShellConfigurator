@@ -47,6 +47,7 @@ vi.mock('../generators/shellRc.ts', () => ({
   backupSharedConfig: vi.fn(() => null),
   shellsWithStarshipInit: () => [],
   getShellConfigPath: () => '/tmp/starship.toml',
+  bashLoginFiles: () => [],
   getSharedConfigPath: () => '/nonexistent/starship.toml',
 }));
 
