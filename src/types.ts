@@ -1,3 +1,4 @@
+import { DEFAULT_TRUNCATION_LENGTH } from './config/directory.ts';
 import { CORE_MODULES, type ModuleId } from './config/modules.ts';
 import type { PaletteId } from './config/palettes.ts';
 
@@ -157,7 +158,7 @@ export const DEFAULT_STATE: WizardState = {
   continuationPrompt: 'dot',
   addNewline: true,
   vimMode: false,
-  directoryTruncationLength: 3,
+  directoryTruncationLength: DEFAULT_TRUNCATION_LENGTH,
   directorySubstitutions: [],
   keepExistingConfig: false,
   sharedConfigToml: null,
