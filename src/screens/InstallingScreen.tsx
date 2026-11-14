@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { statusMark } from '../config/status.ts';
-import { CANCEL_SIGNALS } from '../services/cancel.ts';
+import { cancelOnSignals, signalExitCode } from '../services/cancel.ts';
 import { errorMessage } from '../services/errors.ts';
 import {
   buildTaskList,
@@ -11,7 +11,7 @@ import {
   runInstallTasks,
 } from '../services/installTasks.ts';
 import { CapturedRunError, captureRun, trackedFiles } from '../services/runCapture.ts';
-import { isUiSuspended, subscribeToUiSuspension } from '../services/tty.ts';
+import { isUiSuspended, restoreTty, subscribeToUiSuspension } from '../services/tty.ts';
 import { whatChangedPath, writeWhatChangedSafely } from '../services/whatChanged.ts';
 import type { InstallTask, InstallTaskId, WizardState } from '../types.ts';
 
@@ -35,19 +35,6 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
   const [cancelling, setCancelling] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  // While a child owns the terminal it is in cooked mode, so Ctrl+C arrives as
-  // SIGINT instead of a key. Cancel the run then instead of dying mid-install.
-  useEffect(() => {
-    const onSigint = () => {
-      setCancelling(true);
-      abortRef.current?.abort();
-    };
-    for (const signal of CANCEL_SIGNALS) process.on(signal, onSigint);
-    return () => {
-      for (const signal of CANCEL_SIGNALS) process.off(signal, onSigint);
-    };
-  }, []);
-
   // While an interactive child (sudo, chsh) owns the terminal this screen renders
   // nothing, so Ink's next frame cannot paint over its password prompt.
   useEffect(() => subscribeToUiSuspension(setUiSuspended), []);
@@ -59,6 +46,9 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
     let unmounted = false;
     const controller = new AbortController();
     abortRef.current = controller;
+    // While a child owns the terminal it is in cooked mode, so Ctrl+C arrives as
+    // SIGINT instead of a key. Cancel the run then instead of dying mid-install.
+    const stopListening = cancelOnSignals(controller, () => setCancelling(true));
 
     function updateTask(id: string, patch: Partial<InstallTask>) {
       if (unmounted) return;
@@ -118,14 +108,21 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
         results = failedPlan(err);
       }
 
+      const signal = stopListening();
       // Advance after a brief pause so the user can see the final state
       await new Promise((r) => setTimeout(r, advanceDelayMs));
       if (unmounted) return;
       onNext({ installResults: results, runId, summaryPath });
+      // A closed terminal or a kill leaves nobody to read the Done screen.
+      if (signal === 'SIGHUP' || signal === 'SIGTERM') {
+        restoreTty();
+        process.exit(signalExitCode(signal));
+      }
     })();
 
     return () => {
       unmounted = true;
+      stopListening();
       controller.abort();
     };
   }, []);

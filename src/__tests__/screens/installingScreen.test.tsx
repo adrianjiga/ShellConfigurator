@@ -39,6 +39,7 @@ vi.mock('../../services/tty.ts', () => ({
   subscribeToUiSuspension: (listener: (suspended: boolean) => void) =>
     mocks.subscribeToUiSuspension(listener),
   isUiSuspended: () => mocks.isUiSuspended(),
+  restoreTty: () => {},
 }));
 
 afterEach(() => {
@@ -265,17 +266,60 @@ describe('InstallingScreen SIGINT', () => {
     expect(signal.current?.aborted).toBe(true);
   });
 
-  it('stops listening for SIGINT once the screen is gone', async () => {
+  it('stops listening for SIGINT, SIGTERM and SIGHUP once the screen is gone', async () => {
     mocks.buildTaskList.mockReturnValue(statusFixture());
     captureSignal();
-    const ours = () =>
-      process.listeners('SIGINT').filter((l) => l.toString().includes('setCancelling'));
+    const counts = () =>
+      ['SIGINT', 'SIGTERM', 'SIGHUP'].map(
+        (s) => process.listeners(s).filter((l) => l.toString().includes('signalExitCode')).length
+      );
+    const before = counts();
     const { instance } = setup();
     await flush();
-    expect(ours()).toHaveLength(1);
+    expect(counts()).toEqual(before.map((n) => n + 1));
     instance.unmount();
     await flush();
-    expect(ours()).toHaveLength(0);
+    expect(counts()).toEqual(before);
+  });
+
+  it('exits on a second signal instead of swallowing it', async () => {
+    mocks.buildTaskList.mockReturnValue(statusFixture());
+    captureSignal();
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const { instance } = setup();
+    await flush();
+
+    process.emit('SIGINT');
+    process.emit('SIGINT');
+
+    expect(exit).toHaveBeenCalledWith(130);
+    instance.unmount();
+    exit.mockRestore();
+  });
+
+  it('records the run and exits after SIGTERM, with no Done screen to wait on', async () => {
+    mocks.buildTaskList.mockReturnValue(statusFixture());
+    const signal: { current?: AbortSignal } = {};
+    mocks.runInstallTasks.mockImplementation(
+      (_state, _deps, _onUpdate, abortSignal) =>
+        new Promise<InstallTask[]>((resolve) => {
+          signal.current = abortSignal;
+          abortSignal?.addEventListener('abort', () =>
+            resolve([{ id: 'starship', label: 'Starship', status: 'failed', error: 'Cancelled' }])
+          );
+        })
+    );
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const { onNext } = setup();
+    await flush();
+
+    process.emit('SIGTERM');
+    await waitFor(() => exit.mock.calls.length > 0);
+
+    expect(signal.current?.aborted).toBe(true);
+    expect(onNext).toHaveBeenCalled();
+    expect(exit).toHaveBeenCalledWith(143);
+    exit.mockRestore();
   });
 });
 
