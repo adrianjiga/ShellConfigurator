@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 import { parse } from '@iarna/toml';
 
@@ -192,4 +192,24 @@ export function assertDebugInfo(homeDir) {
     Array.isArray(info.shells) && info.shells.length > 0,
     'debug-info --json has no shells'
   );
+}
+
+/** Loads the real `completions bash` script into bash and asserts it completes a subcommand and a value. */
+export function assertBashCompletions(homeDir) {
+  const script = nodePath.join(homeDir, 'shell-configurator.bash');
+  writeFileSync(script, runCli(['completions', 'bash']));
+  const out = execFileSync(
+    'bash',
+    [
+      '-c',
+      `source "$1"
+t() { COMP_WORDS=("$@"); COMP_CWORD=$(( $# - 1 )); COMPREPLY=(); _shell_configurator; echo "\${COMPREPLY[*]}"; }
+t shell-configurator debug
+t shell-configurator generate --character la`,
+      'bash',
+      script,
+    ],
+    { encoding: 'utf8' }
+  );
+  assert.equal(out, 'debug-info\nlambda\n', `bash completions offered:\n${out}`);
 }
