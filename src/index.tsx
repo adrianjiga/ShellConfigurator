@@ -41,7 +41,7 @@ import {
   rollbackRunsWithManifests,
   runRollback,
 } from './services/rollback.ts';
-import { captureRun, trackedFiles } from './services/runCapture.ts';
+import { captureRun, recoverInterruptedRuns, trackedFiles } from './services/runCapture.ts';
 import { renderShare } from './services/share.ts';
 import {
   type ActiveConfig,
@@ -405,7 +405,9 @@ export async function runRepairCommand(
   }
 
   const { result: report, runId } = changes
-    ? await captureRun(trackedFiles(), () => runRepair(state, deps, options))
+    ? await captureRun(trackedFiles(), () => runRepair(state, deps, options), {
+        record: { kind: 'repair', command },
+      })
     : { result: plan, runId: null };
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
@@ -513,7 +515,9 @@ export async function runUninstallCommand(
   }
 
   const { result: report, runId } = changes
-    ? await captureRun(trackedFiles(), () => runUninstall(steps))
+    ? await captureRun(trackedFiles(), () => runUninstall(steps), {
+        record: { kind: 'uninstall', command },
+      })
     : { result: await runUninstall(steps, { dryRun }), runId: null };
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
@@ -559,6 +563,7 @@ export async function runRollbackCommand(
     throw new CliUsageError(`${unused.join(', ')} cannot be used with rollback.`);
   }
 
+  recoverInterruptedRuns();
   const entries = rollbackRunsWithManifests();
   const runs = entries.map((entry) => entry.run);
   if (flags.list) {
@@ -608,7 +613,10 @@ export async function runRollbackCommand(
     ? await captureRun(
         manifest.files.map((file) => file.path),
         async () => runRollback(target.runId, steps),
-        { rewritable: manifest.files.filter((file) => file.rewritable).map((file) => file.path) }
+        {
+          rewritable: manifest.files.filter((file) => file.rewritable).map((file) => file.path),
+          record: { kind: 'rollback', command, rollbackOf: target.runId },
+        }
       )
     : { result: runRollback(target.runId, steps, { dryRun }), runId: null };
   process.stdout.write(

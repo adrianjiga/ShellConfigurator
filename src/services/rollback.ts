@@ -21,6 +21,8 @@ export interface RollbackRun {
   files: number;
   /** A later rollback undid this run, and was not undone itself. */
   rolledBack: boolean;
+  /** The run's process died before it finished. */
+  interrupted?: boolean;
 }
 
 /**
@@ -67,6 +69,7 @@ export function rollbackRunsWithManifests(
         ...(r.command ? { command: r.command } : {}),
         files: manifest.files.length,
         rolledBack: isRolledBack(r.runId),
+        ...(r.interrupted ? { interrupted: true } : {}),
       };
       return [{ run, manifest }];
     })
@@ -222,6 +225,7 @@ export function formatRollbackRuns(runs: RollbackRun[]): string {
   const target = defaultRollbackRun(runs);
   const lines = runs.map((run) => {
     const marks = [
+      ...(run.interrupted ? ['interrupted'] : []),
       ...(run === target ? ['next to roll back'] : []),
       ...(run.rolledBack ? ['rolled back'] : []),
     ];

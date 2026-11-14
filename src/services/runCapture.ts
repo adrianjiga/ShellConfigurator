@@ -4,6 +4,7 @@ import { SHELLS } from '../config/shells.ts';
 import { getSharedConfigPath, getShellConfigPath } from '../generators/shellRc.ts';
 import { sha256Digest } from './cache.ts';
 import { errorMessage, isMissingFile } from './errors.ts';
+import { type HistoryKind, recordRun } from './history.ts';
 import { stateDir } from './paths.ts';
 import { terminalFontConfigFiles } from './terminalFont.ts';
 
@@ -94,17 +95,47 @@ function createRunFolder(): string {
   }
 }
 
+/** What history records for a run that died before it could record itself. */
+export interface InterruptedRecord {
+  kind: HistoryKind;
+  command?: string;
+  rollbackOf?: string;
+}
+
+/** Written when a capture starts and removed once its manifest is, so a run that dies can be finished later. */
+interface PendingCapture {
+  version: typeof RUN_MANIFEST_VERSION;
+  pid: number;
+  files: CapturedFile[];
+  record?: InterruptedRecord;
+}
+
+const PENDING = 'pending.json';
+
+function writeJsonAtomic(file: string, value: unknown): void {
+  fs.writeFileSync(`${file}.tmp`, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(`${file}.tmp`, file);
+}
+
 /**
  * Copies each file into a new run folder before a run changes anything. A
  * file that cannot be read (a folder, no permission) is left out, since it
  * could not be put back.
  */
-export function beginRunCapture(files: string[]): RunCapture {
+export function beginRunCapture(files: string[], record?: InterruptedRecord): RunCapture {
   const runId = createRunFolder();
   const dir = runDir(runId);
   try {
     fs.mkdirSync(path.join(dir, 'files'), { mode: 0o700 });
-    return { runId, dir, files: copyFiles(files, dir) };
+    const capture = { runId, dir, files: copyFiles(files, dir) };
+    const pending: PendingCapture = {
+      version: RUN_MANIFEST_VERSION,
+      pid: process.pid,
+      files: capture.files,
+      ...(record ? { record } : {}),
+    };
+    writeJsonAtomic(path.join(dir, PENDING), pending);
+    return capture;
   } catch (err) {
     fs.rmSync(dir, { recursive: true, force: true });
     throw err;
@@ -136,6 +167,8 @@ export interface CaptureOptions {
   onChanged?: (runId: string, files: RunFile[], error?: unknown) => void;
   /** Captured files that later runs rewrite (see RunFile.rewritable). */
   rewritable?: readonly string[];
+  /** How to record the run in history if it dies before it can. */
+  record?: InterruptedRecord;
 }
 
 function changedFiles(capture: RunCapture, rewritable: readonly string[]): RunFile[] {
@@ -191,10 +224,56 @@ export function finishRunCapture(
     runId: capture.runId,
     files: changed,
   };
-  const file = path.join(capture.dir, 'manifest.json');
-  fs.writeFileSync(`${file}.tmp`, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
-  fs.renameSync(`${file}.tmp`, file);
+  writeJsonAtomic(path.join(capture.dir, 'manifest.json'), manifest);
+  fs.rmSync(path.join(capture.dir, PENDING), { force: true });
   return manifest;
+}
+
+function processAlive(pid: number): boolean {
+  if (pid === process.pid) return true;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * Finishes the capture of every run whose process died before writing its
+ * manifest (Ctrl+C, a closed terminal, a kill), and records it in history as
+ * interrupted, so rollback can put its files back. A run whose process is
+ * still alive is left alone. Never throws.
+ */
+export function recoverInterruptedRuns(isAlive: (pid: number) => boolean = processAlive): string[] {
+  let runs: string[];
+  try {
+    runs = fs.readdirSync(runsDir()).sort();
+  } catch {
+    return [];
+  }
+  return runs.flatMap((runId) => {
+    const dir = runDir(runId);
+    try {
+      const pending = JSON.parse(
+        fs.readFileSync(path.join(dir, PENDING), 'utf8')
+      ) as PendingCapture;
+      if (pending.version !== RUN_MANIFEST_VERSION || !Array.isArray(pending.files)) return [];
+      if (isAlive(pending.pid)) return [];
+      const manifest = finishRunCapture({ runId, dir, files: pending.files });
+      if (!manifest) return [];
+      const record = pending.record ?? { kind: 'apply' as const };
+      recordRun({
+        ...record,
+        runId,
+        interrupted: true,
+        ...(record.kind === 'rollback' ? { partial: true } : {}),
+      });
+      return [runId];
+    } catch {
+      return [];
+    }
+  });
 }
 
 /**
@@ -208,9 +287,10 @@ export async function captureRun<T>(
   run: () => Promise<T>,
   options: CaptureOptions = {}
 ): Promise<{ result: T; runId: string | null }> {
+  recoverInterruptedRuns();
   let capture: RunCapture | null;
   try {
-    capture = beginRunCapture(files);
+    capture = beginRunCapture(files, options.record);
   } catch {
     capture = null;
   }

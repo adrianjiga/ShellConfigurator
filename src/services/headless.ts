@@ -547,6 +547,7 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
       },
       {
         rewritable: [whatChangedPath()],
+        record: { kind: 'apply', ...(command ? { command } : {}) },
         onChanged: (runId, files, error) => {
           summary = writeWhatChangedSafely({
             kind: 'apply',

@@ -95,6 +95,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
           },
           {
             rewritable: [whatChangedPath()],
+            record: { kind: 'install' },
             onChanged: (changedRunId, files, error) => {
               if (unmounted) return;
               summaryPath = writeWhatChangedSafely({

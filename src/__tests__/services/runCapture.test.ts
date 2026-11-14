@@ -21,6 +21,8 @@ vi.mock('node:fs', async (importOriginal) => {
 import { getShell } from '../../config/shells.ts';
 import { getSharedConfigPath, getShellConfigPath } from '../../generators/shellRc.ts';
 import { sha256Digest } from '../../services/cache.ts';
+import { readHistory } from '../../services/history.ts';
+import { listRollbackRuns } from '../../services/rollback.ts';
 import {
   beginRunCapture,
   CapturedRunError,
@@ -30,6 +32,7 @@ import {
   laterRunWrites,
   pruneRuns,
   readRunManifest,
+  recoverInterruptedRuns,
   runDir,
   runsDir,
   trackedFiles,
@@ -318,5 +321,90 @@ describe('laterRunWrites', () => {
 
     expect(laterRunWrites(first, file)).toEqual(new Set([sha256Digest(Buffer.from('two')), null]));
     expect(laterRunWrites('9999', file)).toEqual(new Set());
+  });
+});
+
+describe('recoverInterruptedRuns', () => {
+  const dead = () => false;
+
+  it('finishes the capture of a run whose process died, and records it', () => {
+    const rc = file('zshrc');
+    fs.writeFileSync(rc, 'before\n');
+    const capture = beginRunCapture([rc], { kind: 'apply', command: 'apply --shells zsh' });
+    expect(fs.existsSync(path.join(capture.dir, 'pending.json'))).toBe(true);
+    fs.writeFileSync(rc, 'after\n');
+
+    expect(recoverInterruptedRuns(dead)).toEqual([capture.runId]);
+
+    expect(readRunManifest(capture.runId)?.files).toEqual([
+      expect.objectContaining({ path: rc, after: hash('after\n') }),
+    ]);
+    expect(fs.existsSync(path.join(capture.dir, 'pending.json'))).toBe(false);
+    expect(readHistory()).toEqual([
+      expect.objectContaining({
+        kind: 'apply',
+        command: 'apply --shells zsh',
+        runId: capture.runId,
+        interrupted: true,
+      }),
+    ]);
+    expect(listRollbackRuns()).toEqual([
+      expect.objectContaining({ runId: capture.runId, interrupted: true, rolledBack: false }),
+    ]);
+    expect(recoverInterruptedRuns(dead)).toEqual([]);
+  });
+
+  it('leaves a run alone while its process is alive', () => {
+    const rc = file('zshrc');
+    fs.writeFileSync(rc, 'before\n');
+    const capture = beginRunCapture([rc]);
+    fs.writeFileSync(rc, 'after\n');
+
+    expect(recoverInterruptedRuns()).toEqual([]);
+    expect(readRunManifest(capture.runId)).toBeNull();
+  });
+
+  it('removes the folder of a run that died before changing anything', () => {
+    const rc = file('zshrc');
+    fs.writeFileSync(rc, 'same\n');
+    const capture = beginRunCapture([rc]);
+
+    expect(recoverInterruptedRuns(dead)).toEqual([]);
+    expect(fs.existsSync(capture.dir)).toBe(false);
+    expect(readHistory()).toEqual([]);
+  });
+
+  it('records an interrupted rollback as partial, so it does not count as undoing its run', () => {
+    const rc = file('zshrc');
+    fs.writeFileSync(rc, 'before\n');
+    beginRunCapture([rc], { kind: 'rollback', rollbackOf: 'earlier' });
+    fs.writeFileSync(rc, 'after\n');
+
+    recoverInterruptedRuns(dead);
+
+    expect(readHistory()).toEqual([
+      expect.objectContaining({ kind: 'rollback', rollbackOf: 'earlier', partial: true }),
+    ]);
+  });
+
+  it('is run before every captured run, so the interrupted run is recorded first', async () => {
+    const rc = file('zshrc');
+    fs.writeFileSync(rc, 'one\n');
+    const first = beginRunCapture([rc], { kind: 'apply' });
+    fs.writeFileSync(rc, 'two\n');
+    fs.writeFileSync(
+      path.join(first.dir, 'pending.json'),
+      fs
+        .readFileSync(path.join(first.dir, 'pending.json'), 'utf8')
+        .replace(/"pid": \d+/, '"pid": 2147483646')
+    );
+
+    const { runId } = await captureRun([rc], async () => {
+      fs.writeFileSync(rc, 'three\n');
+    });
+
+    expect(readRunManifest(first.runId)?.files[0]?.after).toBe(hash('two\n'));
+    expect(readHistory().map((record) => record.runId)).toEqual([first.runId]);
+    expect(readRunManifest(runId!)?.files[0]?.after).toBe(hash('three\n'));
   });
 });
