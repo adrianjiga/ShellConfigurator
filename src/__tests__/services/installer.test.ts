@@ -315,7 +315,12 @@ describe('installStarship', () => {
 
     await expect(installStarship('script')).rejects.toThrow('exit code 22');
     // The script must never be executed after a failed download.
-    expect(mockSpawn).not.toHaveBeenCalledWith('sh', expect.anything(), expect.anything());
+    expect(mockSpawn).not.toHaveBeenCalledWith(
+      'env',
+      expect.arrayContaining(['sh']),
+      expect.anything()
+    );
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
   });
 
   it('fails when the downloaded script is empty', async () => {
