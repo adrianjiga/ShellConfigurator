@@ -788,6 +788,73 @@ describe('runInstallTasks', () => {
     expect(results.every((t) => t.status !== 'pending')).toBe(true);
   });
 
+  it('runs nothing and leaves nothing pending when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const deps = fakeDeps();
+
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh'], installedShells: ['zsh'] }),
+      deps,
+      vi.fn(),
+      controller.signal
+    );
+
+    expect(deps.getShellsUsingStarship).not.toHaveBeenCalled();
+    expect(deps.installStarship).not.toHaveBeenCalled();
+    expect(deps.writeShellConfig).not.toHaveBeenCalled();
+    expect(results.every((t) => t.status === 'failed' && t.error === 'Cancelled')).toBe(true);
+  });
+
+  it('fails the config step when no shell was selected', async () => {
+    const results = await runInstallTasks(state({ selectedShells: [] }), fakeDeps(), vi.fn());
+    expect(results.find((t) => t.id === 'config')).toMatchObject({
+      status: 'failed',
+      error: 'No shells selected — nothing to configure',
+    });
+  });
+
+  it('keeps a fresh install done when its version cannot be recorded', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi
+        .fn()
+        .mockResolvedValueOnce({ installed: false })
+        .mockResolvedValue({ installed: true, version: 'starship 1.27.0' }),
+      recordStarshipVersion: vi.fn(() => {
+        throw new Error('EROFS');
+      }),
+    });
+
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    expect(deps.recordStarshipVersion).toHaveBeenCalledWith('starship 1.27.0');
+    expect(results.find((t) => t.id === 'starship')?.status).toBe('done');
+  });
+
+  it('plans no reset rows when probing for Starship shells fails', async () => {
+    const deps = fakeDeps({ getShellsUsingStarship: vi.fn().mockRejectedValue(new Error('ps')) });
+
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    expect(results.some((t) => t.id.startsWith('reset_'))).toBe(false);
+    expect(results.find((t) => t.id === 'config')?.status).toBe('done');
+  });
+
+  it('verifies through the script install dir and says so', async () => {
+    const deps = fakeDeps({ getMissingStarshipPathDir: vi.fn(() => '/home/u/.local/bin') });
+
+    const results = await runInstallTasks(
+      state({ selectedShells: ['zsh'], installedShells: ['zsh'] }),
+      deps,
+      vi.fn()
+    );
+
+    expect(deps.verifyConfig).toHaveBeenCalledWith(expect.any(String), '/home/u/.local/bin');
+    expect(results.find((t) => t.id === 'verify')?.note).toBe(
+      'verified 1 config(s) (via /home/u/.local/bin)'
+    );
+  });
+
   it('runs to completion when the signal never aborts', async () => {
     const controller = new AbortController();
     const deps = fakeDeps();
