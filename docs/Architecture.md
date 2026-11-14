@@ -215,8 +215,6 @@ interface ModuleDef {
   id: ConfigurableModuleId;
   label: string;
   description: string;
-  defaultLeft: boolean;
-  defaultRight: boolean;
   previewSegment: (hasNerdFont: boolean, sample: PreviewSample) => string;
   plainPreview?: (hasNerdFont: boolean) => string; // Plain-prompt preview, where starship adds words or brackets
   content: string; // Inner format — what a powerline prompt wraps in separator glyphs

@@ -184,8 +184,6 @@ interface ModuleDef {
   id: ConfigurableModuleId;
   label: string; // Display name in UI
   description: string; // Shown when module is focused
-  defaultLeft: boolean; // Only printed by --list-modules --json; the real defaults are CORE_MODULES / DEFAULT_STATE
-  defaultRight: boolean; // Only printed by --list-modules --json
   previewSegment: (hasNerdFont: boolean, sample: PreviewSample) => string; // Text for PromptPreview
   plainPreview?: (hasNerdFont: boolean) => string; // Plain-prompt preview, when starship's default format adds words or brackets
   content: string; // Inner format, e.g. '$symbol$version' — what powerline wraps in separators
@@ -232,8 +230,6 @@ The `MODULES` array is the single registry. All module-aware code reads from it,
 git_branch: {
   label: 'Git Branch',
   description: 'Active git branch name',
-  defaultLeft: true,
-  defaultRight: false,
   previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.gitBranch : ''}main`,
   plainPreview: (nf) => `on ${nf ? NERD_FONT_SYMBOLS.gitBranch : ''}main`,
   content: '$symbol$branch',
@@ -601,7 +597,8 @@ function writeWhatChangedSafely(run: WhatChangedRun): string | null;
 function listEntries(kind: 'presets' | 'modules' | 'fonts'): ListEntry[];
 // The ids --list-presets/--list-modules/--list-fonts print, with label,
 // description and, for --json, the data a script needs (a preset's palette,
-// powerline and modules; a module's default side; a font's family).
+// powerline and modules; whether a module is on the default left or right
+// side, read from DEFAULT_STATE; a font's family).
 ```
 
 ### cliSurface.ts / completions.ts
@@ -1136,15 +1133,13 @@ back, so it is not the uninstall undo.
 
 1. **`src/config/modules.ts`** — add the id to `ConfigurableModuleId` and an
    entry to `MODULE_DEFS`. Every module needs `label`, `description`,
-   `defaultLeft`/`defaultRight`, `previewSegment`, and `content` (the format the
+   `previewSegment`, and `content` (the format the
    powerline generator wraps in separators); most also provide `settings`:
 
    ```typescript
    perl: {
      label: 'Perl',
      description: 'Perl version (shown in Perl projects)',
-     defaultLeft: false,
-     defaultRight: false,
      ...symbolModule(() => '🐪 ', '5.38'), // previewSegment + settings
      content: '$symbol$version',
    },
