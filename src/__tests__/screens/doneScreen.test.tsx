@@ -12,7 +12,10 @@ import { flush } from '../helpers/wait.ts';
 const mocks = vi.hoisted(() => ({
   exit: vi.fn(),
   restoreConfigBackups: vi.fn().mockReturnValue([]),
+  writeShareFile: vi.fn(() => '/work/starship-prompt.md'),
 }));
+
+vi.mock('../../services/share.ts', () => ({ writeShareFile: mocks.writeShareFile }));
 
 vi.mock('ink', async (importOriginal) => {
   const ink = await importOriginal<typeof import('ink')>();
@@ -483,5 +486,49 @@ describe('DoneScreen after a failed config write', () => {
       />
     );
     expect(lastFrame()).not.toContain('Restart your terminal');
+  });
+});
+
+describe('DoneScreen share', () => {
+  const done = (overrides: Partial<WizardState> = {}) =>
+    render(<DoneScreen state={{ ...DEFAULT_STATE, dryRun: true, ...overrides }} />);
+
+  it('saves the prompt to share once on s and says where', async () => {
+    const instance = done();
+    await flush();
+    expect(instance.lastFrame()).toContain('to save this prompt as Markdown');
+
+    instance.stdin.write('s');
+    await flush();
+    instance.stdin.write('s');
+    await flush();
+
+    expect(mocks.writeShareFile).toHaveBeenCalledOnce();
+    expect(mocks.writeShareFile).toHaveBeenCalledWith(expect.objectContaining({ dryRun: true }));
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
+      'Saved the prompt to share: /work/starship-prompt.md'
+    );
+  });
+
+  it('says why it could not save', async () => {
+    mocks.writeShareFile.mockImplementationOnce(() => {
+      throw new Error('EACCES: permission denied');
+    });
+    const instance = done();
+    await flush();
+    instance.stdin.write('s');
+    await flush();
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
+      'Could not save the prompt: EACCES: permission denied'
+    );
+  });
+
+  it('offers nothing to share in adopt mode, where the prompt is not generated', async () => {
+    const instance = done({ keepExistingConfig: true });
+    await flush();
+    instance.stdin.write('s');
+    await flush();
+    expect(instance.lastFrame()).not.toContain('save this prompt');
+    expect(mocks.writeShareFile).not.toHaveBeenCalled();
   });
 });

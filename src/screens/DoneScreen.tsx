@@ -13,6 +13,7 @@ import {
 import { errorMessage } from '../services/errors.ts';
 import { fontLabel, getFontFamily, MANUAL_STARSHIP_INSTALL } from '../services/installer.ts';
 import { buildTaskList, plannedResetShells, rcTaskId, TASK_IDS } from '../services/installTasks.ts';
+import { writeShareFile } from '../services/share.ts';
 import {
   fontIdToInstall,
   type InstallTask,
@@ -59,6 +60,8 @@ export function DoneScreen({ state }: DoneScreenProps) {
   const fontName = fontId ? fontLabel(fontId) : null;
   // Null until the user presses r, so a single keypress runs the restore once.
   const [outcome, setOutcome] = useState<RestoreOutcome | null>(null);
+  const [shared, setShared] = useState<{ file: string } | { error: string } | null>(null);
+  const canShare = !state.keepExistingConfig;
 
   const failures = state.installResults.filter((t) => t.status === 'failed');
   const hasFailures = failures.length > 0;
@@ -68,6 +71,14 @@ export function DoneScreen({ state }: DoneScreenProps) {
   useInput((char, key) => {
     if (key.return || key.escape || char.toLowerCase() === 'q') {
       exit();
+      return;
+    }
+    if (char.toLowerCase() === 's' && canShare && shared === null) {
+      try {
+        setShared({ file: writeShareFile(state) });
+      } catch (err) {
+        setShared({ error: errorMessage(err) });
+      }
       return;
     }
     // No backups were made in a dry run, so restoring would clobber real files.
@@ -352,6 +363,25 @@ export function DoneScreen({ state }: DoneScreenProps) {
             Press <Text color={uiColor('cyan')}>r</Text> to put the Starship configs back from their
             newest backups (the <Text color={uiColor('cyan')}>--restore</Text> CLI action). Shell rc
             edits stay as they are.
+          </Text>
+        </Box>
+      )}
+
+      {canShare && (
+        <Box marginTop={1}>
+          <Text color={uiColor('gray')}>
+            {shared === null ? (
+              <>
+                Press <Text color={uiColor('cyan')}>s</Text> to save this prompt as Markdown to
+                share, with the card that rebuilds it (starship-prompt.md in this folder).
+              </>
+            ) : 'file' in shared ? (
+              <>
+                Saved the prompt to share: <Text color={uiColor('cyan')}>{shared.file}</Text>
+              </>
+            ) : (
+              <Text color={uiColor('red')}>Could not save the prompt: {shared.error}</Text>
+            )}
           </Text>
         </Box>
       )}
