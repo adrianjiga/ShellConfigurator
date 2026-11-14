@@ -36,9 +36,9 @@ The project is pure ESM. Relative imports name the real source file
 
 ### Never run `npm run dev` to "test" changes
 
-The wizard performs real system mutations: it runs `sudo apt/dnf/pacman`,
-installs Nerd Fonts, writes `~/.config/starship.toml`, and modifies shell RC
-files (`~/.zshrc`, `~/.bashrc`, `~/.config/fish/config.fish`). Verify logic with
+The wizard performs real system mutations: it runs `sudo apt/dnf/pacman/apk`,
+installs Nerd Fonts, writes per-shell configs under `~/.config/starship/`, and
+modifies shell RC files (`~/.zshrc`, `~/.bashrc`, `~/.config/fish/config.fish`). Verify logic with
 unit tests against fake deps instead of running it on a machine you care about.
 
 ## Development workflow
@@ -71,8 +71,10 @@ Nothing is ever committed or pushed directly to `master` — it is protected.
 4. Push and open a pull request. The PR description must contain the sections
    **Summary**, **Why**, and **What Changed**.
 
-5. CI runs on the PR: lint, format, typecheck, build, the distro-smoke Docker
-   matrix, coverage on the supported Node versions, and code scanning. The
+5. CI runs on the PR: lint, format, typecheck (including the CI scripts),
+   build, a packed-tarball boot check, shell and workflow lint, the
+   distro-smoke Docker matrix plus a native macOS smoke, coverage on the
+   supported Node versions (Ubuntu and macOS), and code scanning. The
    branch must be up to date with `master` and all checks green before merge.
 
 ## Testing and area conventions
