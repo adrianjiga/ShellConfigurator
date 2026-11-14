@@ -9,6 +9,8 @@ import {
   parseExplain,
   parseTimings,
   StarshipMissingError,
+  StarshipTimedOutError,
+  stripAnsi,
   suggestFixes,
   timePrompt,
 } from '../../services/starshipProbe.ts';
@@ -56,6 +58,17 @@ describe('parseExplain', () => {
   });
 });
 
+describe('stripAnsi', () => {
+  it('drops colour, cursor and hyperlink escapes', () => {
+    const BEL = String.fromCharCode(7);
+    expect(
+      stripAnsi(
+        `${ESC}[1;32m❯${ESC}[0m ${ESC}]8;;file:///tmp/p${ESC}\\p${ESC}]8;;${ESC}\\ ${ESC}]8;;https://x${BEL}x${ESC}]8;;${BEL}${ESC}[2K`
+      )
+    ).toBe('❯ p x');
+  });
+});
+
 describe('suggestFixes', () => {
   const timing = (module: string, ms: number) => ({ module, ms, output: '' });
 
@@ -85,6 +98,17 @@ describe('suggestFixes', () => {
     const two = `${warnings}\n${warnings.replace('/usr/bin/node', '/usr/bin/git')}`;
     expect(suggestFixes([], two, '')[0].text).toContain('node, git did not answer');
     expect(suggestFixes([], two, '')[0].text).toContain('their modules');
+  });
+
+  it('reads command_timeout after a multi-line format string, with underscores', () => {
+    const warnings = 'Executing command "/usr/bin/node" timed out.';
+    const toml =
+      'format = """\n[](fg:red)\n$directory\n"""\ncommand_timeout = 2_000 # ms\n[nodejs]\n';
+    expect(suggestFixes([], warnings, toml)[0]).toMatchObject({ toml: 'command_timeout = 4000' });
+  });
+
+  it('never suggests turning off the modules every prompt needs', () => {
+    expect(suggestFixes([timing('character', 90), timing('line_break', 70)], '', '')).toEqual([]);
   });
 
   it('raises scan_timeout when the folder scan timed out', () => {
@@ -124,6 +148,18 @@ describe('timePrompt', () => {
     expect(report).toMatchObject({ path: '/work/repo', slowestMs: 1200, slow: true });
     expect(report.modules).toHaveLength(4);
     expect(report.suggestions.map((s) => s.module)).toEqual(['git_status', 'directory']);
+  });
+
+  it('explains a Starship that was killed for taking too long', async () => {
+    const deps: ProbeDeps = {
+      isStarshipInstalled: async () => true,
+      run: async () => {
+        throw Object.assign(new Error('Command failed: starship timings'), { killed: true });
+      },
+    };
+    const failure = timePrompt('format = "$all"\n', '/big/repo', deps);
+    await expect(failure).rejects.toBeInstanceOf(StarshipTimedOutError);
+    await expect(failure).rejects.toThrow(/in \/big\/repo within 30s.*git_status/);
   });
 
   it('refuses to run without Starship', async () => {

@@ -4,13 +4,18 @@ import * as nodePath from 'node:path';
 import { generateToml } from '../generators/starship.ts';
 import type { WizardState } from '../types.ts';
 import { findStarshipAsync } from './detector.ts';
-import { runCaptureBoth } from './exec.ts';
+import { CAPTURE_TIMEOUT_MS, runCaptureBoth } from './exec.ts';
 import { DEFAULT_PREVIEW_DEPS, STARSHIP_CONFIG_FILE, starshipEnv } from './preview.ts';
 
-const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
+const ESC = String.fromCharCode(27);
+const BEL = String.fromCharCode(7);
+const ESCAPES = new RegExp(
+  `${ESC}\\][^${BEL}${ESC}]*(?:${BEL}|${ESC}\\\\)|${ESC}\\[[0-?]*[ -/]*[@-~]|${ESC}[@-Z\\\\-_]`,
+  'g'
+);
 
 export function stripAnsi(text: string): string {
-  return text.replace(ANSI, '');
+  return text.replace(ESCAPES, '');
 }
 
 export interface ModuleTiming {
@@ -103,13 +108,22 @@ export interface Suggestion {
 }
 
 function topLevelNumber(toml: string, key: string): number | null {
+  let openString: string | null = null;
   for (const line of toml.split('\n')) {
-    if (line.trim().startsWith('[')) return null;
-    const match = new RegExp(`^\\s*${key}\\s*=\\s*(\\d+)`).exec(line);
-    if (match) return Number(match[1]);
+    if (openString) {
+      if (line.includes(openString)) openString = null;
+      continue;
+    }
+    const trimmed = line.trim();
+    if (trimmed.startsWith('[')) return null;
+    const match = new RegExp(`^${key}\\s*=\\s*(\\d[\\d_]*)\\s*(?:#.*)?$`).exec(trimmed);
+    if (match) return Number(match[1].replaceAll('_', ''));
+    openString = ['"""', "'''"].find((quote) => line.split(quote).length % 2 === 0) ?? null;
   }
   return null;
 }
+
+const ALWAYS_ON = new Set(['character', 'line_break', 'fill']);
 
 function moduleSuggestion(timing: ModuleTiming): Suggestion {
   const took = `${timing.module} took ${Math.round(timing.ms)}ms`;
@@ -168,7 +182,9 @@ export function suggestFixes(
     });
   }
   for (const timing of timings) {
-    if (timing.ms >= SLOW_MODULE_MS) suggestions.push(moduleSuggestion(timing));
+    if (timing.ms >= SLOW_MODULE_MS && !ALWAYS_ON.has(timing.module)) {
+      suggestions.push(moduleSuggestion(timing));
+    }
   }
   return suggestions;
 }
@@ -200,6 +216,15 @@ export const DEFAULT_PROBE_DEPS: ProbeDeps = {
     }),
 };
 
+export class StarshipTimedOutError extends Error {
+  constructor(path: string) {
+    super(
+      `Starship did not finish timing the prompt in ${path} within ${CAPTURE_TIMEOUT_MS / 1000}s, so a module here is very slow; in a large git repo that is usually git_status. Try timings with a config that leaves git_status out, or turn on git's file system monitor (git config core.fsmonitor true).`
+    );
+    this.name = 'StarshipTimedOutError';
+  }
+}
+
 export class StarshipMissingError extends Error {
   constructor() {
     super('Starship is not installed, so there is nothing to time. Install it first.');
@@ -222,7 +247,14 @@ export async function timePrompt(
   try {
     const configPath = nodePath.join(scratch, STARSHIP_CONFIG_FILE);
     await writeFile(configPath, toml, 'utf8');
-    const { stdout, stderr } = await deps.run('timings', path, configPath);
+    let output: { stdout: string; stderr: string };
+    try {
+      output = await deps.run('timings', path, configPath);
+    } catch (err) {
+      if ((err as { killed?: boolean }).killed) throw new StarshipTimedOutError(path);
+      throw err;
+    }
+    const { stdout, stderr } = output;
     const modules = parseTimings(stdout);
     const slowestMs = modules[0]?.ms ?? 0;
     return {
