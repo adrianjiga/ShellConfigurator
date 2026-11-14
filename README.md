@@ -166,8 +166,9 @@ also copies the rc files, per-shell configs, shared config and terminal configs
 it is about to change into `runs/<id>/` under the state dir, keeping only the
 ones it changed. `rollback` puts a run's files back to that copy (or deletes the
 ones the run created) and leaves alone any file that changed again since, so a
-later edit is never overwritten; run it again to undo the run before, or roll
-back a rollback to redo it. Fonts, the Starship binary and the login shell are
+later edit is never overwritten; files come back byte for byte with their
+permissions. Run it again to undo the run before (a run whose changes were only
+partly undone stays next in line), or roll back a rollback to redo it. Fonts, the Starship binary and the login shell are
 not part of a rollback. `--restore` copies
 the newest `.bak-*` backups back over the shared config and the per-shell
 configs, limited to the shells the last recorded run configured; it does not
