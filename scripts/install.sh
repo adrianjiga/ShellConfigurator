@@ -10,10 +10,13 @@
 # Usage: curl -fsSL https://raw.githubusercontent.com/adrianjiga/ShellConfigurator/master/scripts/install.sh | sh
 set -eu
 
+fetch() {
+  curl --connect-timeout 15 --max-time 300 -fsSL "$@"
+}
+
 main() {
   REPO="adrianjiga/ShellConfigurator"
   API_LATEST="https://api.github.com/repos/${REPO}/releases/latest"
-  CURL_LIMITS="--connect-timeout 15 --max-time 300"
 
   for tool in curl tar; do
     if ! command -v "$tool" >/dev/null 2>&1; then
@@ -75,9 +78,9 @@ EOF
   # SHA-256 digest GitHub publishes for it. The release workflow uploads
   # shell-configurator-<version>.tgz via `npm pack`.
   echo "Resolving latest release..."
-  if ! { curl $CURL_LIMITS -fsSL ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
+  if ! { fetch ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
     "$API_LATEST" -o "$tmp_dir/release.json" ||
-    { [ -n "${GITHUB_TOKEN:-}" ] && curl $CURL_LIMITS -fsSL "$API_LATEST" -o "$tmp_dir/release.json"; }; }; then
+    { [ -n "${GITHUB_TOKEN:-}" ] && fetch "$API_LATEST" -o "$tmp_dir/release.json"; }; }; then
     echo "Could not read the latest release from GitHub (rate-limited? set a valid GITHUB_TOKEN)." >&2
     exit 1
   fi
@@ -105,7 +108,7 @@ EOF
   mkdir -p "$(dirname "$data_dir")" "$bin_dir"
 
   echo "Downloading $asset_url"
-  curl $CURL_LIMITS -fsSL "$asset_url" -o "$tmp_dir/package.tgz"
+  fetch "$asset_url" -o "$tmp_dir/package.tgz"
   actual="$(node -e '
     const hash = require("crypto").createHash("sha256");
     hash.update(require("fs").readFileSync(process.argv[1]));
