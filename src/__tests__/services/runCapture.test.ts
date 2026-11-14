@@ -17,6 +17,7 @@ import {
   runDir,
   runsDir,
   trackedFiles,
+  UNREADABLE_AFTER,
 } from '../../services/runCapture.ts';
 
 let tmpDir: string;
@@ -75,6 +76,17 @@ describe('beginRunCapture / finishRunCapture', () => {
     expect(fs.readFileSync(path.join(copies, '0'), 'utf8')).toBe('old');
     expect(fs.readdirSync(copies).sort()).toEqual(['0', '3']);
     expect(readRunManifest(capture.runId)).toEqual(manifest);
+  });
+
+  it('keeps a file the run left unreadable, marked so', () => {
+    fs.writeFileSync(file('rc'), 'old');
+    const capture = beginRunCapture([file('rc')]);
+    fs.rmSync(file('rc'));
+    fs.mkdirSync(file('rc'));
+
+    expect(finishRunCapture(capture)!.files).toEqual([
+      { path: file('rc'), before: '0', after: UNREADABLE_AFTER, mode: expect.any(Number) },
+    ]);
   });
 
   it('removes the run folder when the run changed nothing', () => {

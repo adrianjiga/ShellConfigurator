@@ -4,7 +4,13 @@ import { statusLine } from '../config/status.ts';
 import { writeFileAtomic } from '../generators/shellRc.ts';
 import { errorMessage } from './errors.ts';
 import { type HistoryKind, type HistoryRecord, readHistory } from './history.ts';
-import { hashOf, type RunManifest, readRunManifest, runDir } from './runCapture.ts';
+import {
+  hashOf,
+  type RunManifest,
+  readRunManifest,
+  runDir,
+  UNREADABLE_AFTER,
+} from './runCapture.ts';
 
 export interface RollbackRun {
   runId: string;
@@ -108,12 +114,19 @@ const CHANGED_SINCE = 'changed since that run, so it is left as it is';
  */
 export function planRollback(manifest: RunManifest): RollbackStep[] {
   return manifest.files.map((file) => {
+    if (file.after === UNREADABLE_AFTER) {
+      return {
+        path: file.path,
+        detail: 'could not be read after that run, so it is left as it is',
+        left: true,
+      };
+    }
     const unchanged = () => hashOf(file.path) === file.after;
     let current: string | null;
     try {
       current = hashOf(file.path);
     } catch (err) {
-      return { path: file.path, detail: `cannot be read: ${errorMessage(err)}` };
+      return { path: file.path, detail: `cannot be read: ${errorMessage(err)}`, left: true };
     }
     if (current !== file.after) {
       const copy = file.before ? path.join(runDir(manifest.runId), 'files', file.before) : null;

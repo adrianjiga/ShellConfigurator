@@ -172,6 +172,24 @@ describe('planRollback / runRollback', () => {
     expect(read('b')).toBe('b1');
   });
 
+  it('leaves a file the run left unreadable alone and says so', async () => {
+    fs.writeFileSync(file('rc'), 'old');
+    const manifest = await capturedRun(['rc'], () => {
+      fs.rmSync(file('rc'));
+      fs.mkdirSync(file('rc'));
+    });
+
+    const report = runRollback(manifest.runId, planRollback(manifest));
+
+    expect(report.actions[0]).toEqual({
+      path: file('rc'),
+      status: 'skipped',
+      detail: 'could not be read after that run, so it is left as it is',
+      left: true,
+    });
+    expect(report.complete).toBe(false);
+  });
+
   it('only plans in a dry run', async () => {
     fs.writeFileSync(file('rc'), 'one');
     const manifest = await capturedRun(['rc'], () => fs.writeFileSync(file('rc'), 'two'));

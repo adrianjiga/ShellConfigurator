@@ -9,12 +9,15 @@ import { terminalFontConfigFiles } from './terminalFont.ts';
 
 export const RUN_MANIFEST_VERSION = 1;
 
+/** The `after` of a file the run left unreadable, which no hash can match. */
+export const UNREADABLE_AFTER = 'unreadable';
+
 /** One file a run changed: where its earlier content is kept, and its hash after the run. */
 export interface RunFile {
   path: string;
   /** The copy's name inside the run folder, or null when the file did not exist before. */
   before: string | null;
-  /** SHA-256 of the file after the run, or null when the run removed it. */
+  /** SHA-256 of the file after the run, null when the run removed it, or UNREADABLE_AFTER. */
   after: string | null;
   /** The file's permission bits before the run; absent when it did not exist. */
   mode?: number;
@@ -124,7 +127,7 @@ export function finishRunCapture(capture: RunCapture): RunManifest | null {
     try {
       after = hashOf(file.path);
     } catch {
-      return [];
+      after = UNREADABLE_AFTER;
     }
     if (after === file.beforeHash) {
       if (file.before) fs.rmSync(path.join(capture.dir, 'files', file.before), { force: true });
