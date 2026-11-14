@@ -38,7 +38,10 @@ interface SpawnOutcome {
 function childFor(outcome: SpawnOutcome) {
   const child = new EventEmitter() as EventEmitter & { kill: ReturnType<typeof vi.fn> };
   // runCommand settles on 'exit' (not 'close' — see exec.ts), so the mock must emit it.
-  child.kill = vi.fn(() => child.emit('exit', null, 'SIGTERM'));
+  child.kill = vi.fn(() => {
+    setImmediate(() => child.emit('exit', null, 'SIGTERM'));
+    return true;
+  });
   if (!outcome.hang) {
     setImmediate(() => {
       if (outcome.error) child.emit('error', outcome.error);
@@ -292,21 +295,20 @@ describe('runCommand', () => {
   it('does not arm an escalation when the child reacts to SIGTERM', async () => {
     vi.useFakeTimers();
     try {
-      spawnOutcome({ hang: true });
+      const child = childFor({ hang: true });
+      mockSpawn.mockImplementation(() => child);
       const controller = new AbortController();
-      const promise = runCommand(['sleep', '100'], { signal: controller.signal });
-      const result = promise.then(
-        () => undefined,
-        () => undefined
+      const result = runCommand(['sleep', '100'], { signal: controller.signal }).catch(
+        (err) => err
       );
 
       controller.abort();
-      expect(await result).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await result).toBeInstanceOf(CommandCancelledError);
 
-      // The settle path cleared the escalation timer, so the SIGKILL fallback
-      // never fires even after the grace period elapses.
       await vi.advanceTimersByTimeAsync(KILL_ESCALATION_DELAY_MS * 2);
-      expect(isUiSuspended()).toBe(false);
+      expect(child.kill).toHaveBeenCalledTimes(1);
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
     } finally {
       vi.useRealTimers();
     }
