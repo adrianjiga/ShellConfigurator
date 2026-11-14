@@ -30,6 +30,10 @@ export interface HistoryRecord {
   exitCode?: number;
   /** The headless invocation (e.g. `apply --state saved.json`), for reproduction. */
   command?: string;
+  /** Id of the copies of the files this run changed, which rollback puts back. */
+  runId?: string;
+  /** For a rollback: the runId of the run it undid. */
+  rollbackOf?: string;
 }
 
 /** The append-only ledger path: <stateDir>/history.jsonl. */
@@ -44,6 +48,8 @@ export interface RecordRunOptions {
   results?: InstallTask[];
   command?: string;
   exitCode?: number;
+  runId?: string | null;
+  rollbackOf?: string;
 }
 
 /**
@@ -61,6 +67,8 @@ export function recordRun(options: RecordRunOptions): void {
     ...(options.results ? { results: options.results } : {}),
     ...(options.command ? { command: options.command } : {}),
     ...(options.exitCode !== undefined ? { exitCode: options.exitCode } : {}),
+    ...(options.runId ? { runId: options.runId } : {}),
+    ...(options.rollbackOf ? { rollbackOf: options.rollbackOf } : {}),
   });
 }
 
@@ -142,6 +150,26 @@ export function writeSnapshot(state: WizardState, timestamp?: string): string {
   for (let n = 2; fs.existsSync(snapshotPath(id)); n++) id = `${base}-${n}`;
   writeFileAtomic(snapshotPath(id), serializeState(state));
   return id;
+}
+
+/** Every readable record in file order; torn or non-object lines are skipped. */
+export function readHistory(): HistoryRecord[] {
+  let lines: string[];
+  try {
+    lines = fs.readFileSync(historyFilePath(), 'utf8').split('\n').filter(Boolean);
+  } catch {
+    return [];
+  }
+  return lines.flatMap((line) => {
+    try {
+      const record = JSON.parse(line) as unknown;
+      return record && typeof record === 'object' && 'kind' in record
+        ? [record as HistoryRecord]
+        : [];
+    } catch {
+      return [];
+    }
+  });
 }
 
 /**
