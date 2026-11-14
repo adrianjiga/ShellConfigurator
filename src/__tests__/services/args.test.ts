@@ -37,6 +37,10 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['rollback']).subcommand).toBe('rollback');
     });
 
+    it('recognises debug-info', () => {
+      expect(parseCliArgs(['debug-info']).subcommand).toBe('debug-info');
+    });
+
     it('rejects an unknown word in the subcommand position', () => {
       expect(() => parseCliArgs(['deploy'])).toThrow(/Unknown command 'deploy'/);
       expect(() => parseCliArgs(['docter'])).toThrow(/Unknown command 'docter'/);
@@ -45,7 +49,7 @@ describe('parseCliArgs', () => {
 
     it('lists the available commands in the error', () => {
       expect(() => parseCliArgs(['deploy'])).toThrow(
-        /generate, apply, doctor, repair, uninstall, rollback/
+        /generate, apply, doctor, repair, uninstall, rollback, debug-info/
       );
     });
 

@@ -10,7 +10,14 @@
 import { posixShellQuote } from '../config/shells.ts';
 import { CliUsageError } from './errors.ts';
 
-export type Subcommand = 'generate' | 'apply' | 'doctor' | 'repair' | 'uninstall' | 'rollback';
+export type Subcommand =
+  | 'generate'
+  | 'apply'
+  | 'doctor'
+  | 'repair'
+  | 'uninstall'
+  | 'rollback'
+  | 'debug-info';
 
 export const SUBCOMMANDS: readonly Subcommand[] = [
   'generate',
@@ -19,6 +26,7 @@ export const SUBCOMMANDS: readonly Subcommand[] = [
   'repair',
   'uninstall',
   'rollback',
+  'debug-info',
 ];
 
 export interface CliFlags {
