@@ -133,6 +133,8 @@ export interface WizardState {
   /** When true no install or config-write happens — the wizard only previews. */
   dryRun: boolean;
   installResults: InstallTask[];
+  /** The captured files of the install, which rollback can put back; null when none. Runtime field. */
+  runId: string | null;
 }
 
 export const DEFAULT_STATE: WizardState = {
@@ -161,4 +163,5 @@ export const DEFAULT_STATE: WizardState = {
   skipStarshipInstall: false,
   dryRun: false,
   installResults: [],
+  runId: null,
 };

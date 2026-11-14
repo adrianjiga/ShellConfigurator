@@ -10,9 +10,24 @@
 import { posixShellQuote } from '../config/shells.ts';
 import { CliUsageError } from './errors.ts';
 
-export type Subcommand = 'generate' | 'apply' | 'doctor' | 'repair';
+export type Subcommand =
+  | 'generate'
+  | 'apply'
+  | 'doctor'
+  | 'repair'
+  | 'uninstall'
+  | 'rollback'
+  | 'debug-info';
 
-export const SUBCOMMANDS: readonly Subcommand[] = ['generate', 'apply', 'doctor', 'repair'];
+export const SUBCOMMANDS: readonly Subcommand[] = [
+  'generate',
+  'apply',
+  'doctor',
+  'repair',
+  'uninstall',
+  'rollback',
+  'debug-info',
+];
 
 export interface CliFlags {
   /** The subcommand, or null when the run is interactive or a plain flag. */
@@ -48,6 +63,14 @@ export interface CliFlags {
   fix?: boolean;
   /** Let repair also apply the fixes warnings carry (--include-warnings). */
   includeWarnings?: boolean;
+  /** Let uninstall go ahead without asking (--yes). */
+  yes?: boolean;
+  /** Let uninstall remove Starship itself (--starship). */
+  starship?: boolean;
+  /** List the runs rollback can undo (--list). */
+  list?: boolean;
+  /** The run rollback undoes, instead of the newest (--run). */
+  runId?: string;
   help: boolean;
   version: boolean;
   restore: boolean;
@@ -58,6 +81,7 @@ const SHORT_FLAGS: Record<string, string> = {
   '-d': '--dry-run',
   '-v': '--version',
   '-h': '--help',
+  '-y': '--yes',
 };
 
 /** Boolean flags; the handler applies the value (the bare form means true). */
@@ -107,6 +131,15 @@ const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> 
   '--include-warnings': (r, v) => {
     r.includeWarnings = v;
   },
+  '--yes': (r, v) => {
+    r.yes = v;
+  },
+  '--starship': (r, v) => {
+    r.starship = v;
+  },
+  '--list': (r, v) => {
+    r.list = v;
+  },
 };
 
 /** Value flags; the handler stores the consumed value. */
@@ -147,6 +180,9 @@ const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
   '--export': (r, v) => {
     r.exportFile = v;
   },
+  '--run': (r, v) => {
+    r.runId = v;
+  },
 };
 
 const SHORT_BOOLEAN_FLAGS = new Set(
@@ -174,6 +210,36 @@ export function quoteArgv(argv: string[]): string {
   return argv
     .map((arg) => (arg === '' || /[^\w@%+=:,./-]/.test(arg) ? posixShellQuote(arg) : arg))
     .join(' ');
+}
+
+/** Splits a `quoteArgv` command back into its arguments; null when it is not one. */
+export function splitQuotedArgv(command: string): string[] | null {
+  const argv: string[] = [];
+  let current = '';
+  let inArg = false;
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i]!;
+    if (c === "'") {
+      const end = command.indexOf("'", i + 1);
+      if (end === -1) return null;
+      current += command.slice(i + 1, end);
+      inArg = true;
+      i = end;
+    } else if (c === '\\') {
+      if (i + 1 >= command.length) return null;
+      current += command[++i];
+      inArg = true;
+    } else if (c === ' ') {
+      if (inArg) argv.push(current);
+      current = '';
+      inArg = false;
+    } else {
+      current += c;
+      inArg = true;
+    }
+  }
+  if (inArg) argv.push(current);
+  return argv;
 }
 
 export function parseCliArgs(argv: string[]): CliFlags {

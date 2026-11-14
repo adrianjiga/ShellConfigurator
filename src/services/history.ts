@@ -30,6 +30,12 @@ export interface HistoryRecord {
   exitCode?: number;
   /** The headless invocation (e.g. `apply --state saved.json`), for reproduction. */
   command?: string;
+  /** Id of the copies of the files this run changed, which rollback puts back. */
+  runId?: string;
+  /** For a rollback: the runId of the run it undid. */
+  rollbackOf?: string;
+  /** For a rollback: some of the run's changes were left in place. */
+  partial?: boolean;
 }
 
 /** The append-only ledger path: <stateDir>/history.jsonl. */
@@ -44,6 +50,9 @@ export interface RecordRunOptions {
   results?: InstallTask[];
   command?: string;
   exitCode?: number;
+  runId?: string | null;
+  rollbackOf?: string;
+  partial?: boolean;
 }
 
 /**
@@ -61,6 +70,9 @@ export function recordRun(options: RecordRunOptions): void {
     ...(options.results ? { results: options.results } : {}),
     ...(options.command ? { command: options.command } : {}),
     ...(options.exitCode !== undefined ? { exitCode: options.exitCode } : {}),
+    ...(options.runId ? { runId: options.runId } : {}),
+    ...(options.rollbackOf ? { rollbackOf: options.rollbackOf } : {}),
+    ...(options.partial ? { partial: true } : {}),
   });
 }
 
@@ -144,25 +156,37 @@ export function writeSnapshot(state: WizardState, timestamp?: string): string {
   return id;
 }
 
+/** Every readable record in file order; torn or non-object lines are skipped. */
+export function readHistory(): HistoryRecord[] {
+  let lines: string[];
+  try {
+    lines = fs.readFileSync(historyFilePath(), 'utf8').split('\n').filter(Boolean);
+  } catch {
+    return [];
+  }
+  return lines.flatMap((line) => {
+    try {
+      const record = JSON.parse(line) as unknown;
+      return record && typeof record === 'object' && 'kind' in record
+        ? [record as HistoryRecord]
+        : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
 /**
  * The shells the most recent recorded run configured, from its snapshot card,
  * or null when no readable run is recorded.
  */
 export function lastRunShells(): ShellId[] | null {
-  let lines: string[];
-  try {
-    lines = fs.readFileSync(historyFilePath(), 'utf8').split('\n').filter(Boolean);
-  } catch {
-    return null;
-  }
-  for (const line of lines.reverse()) {
+  for (const record of readHistory().reverse()) {
+    if (typeof record.snapshotId !== 'string') continue;
     try {
-      const record = JSON.parse(line) as Partial<HistoryRecord>;
-      if (typeof record.snapshotId !== 'string') continue;
-      const card = fs.readFileSync(snapshotPath(record.snapshotId), 'utf8');
-      return parseState(card).selectedShells;
+      return parseState(fs.readFileSync(snapshotPath(record.snapshotId), 'utf8')).selectedShells;
     } catch {
-      // A torn line or missing snapshot: try the run before it.
+      // A missing or unreadable snapshot: try the run before it.
     }
   }
   return null;

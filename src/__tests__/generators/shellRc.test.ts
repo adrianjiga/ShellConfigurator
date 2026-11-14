@@ -20,6 +20,8 @@ vi.mock('fs', () => ({
   rmSync: vi.fn(),
 }));
 
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /** The content of the module's last atomic write (the temp-file write). */
 function lastWrittenContent(): string {
   return vi.mocked(fs.writeFileSync).mock.calls.at(-1)?.[1] as string;
@@ -33,11 +35,15 @@ import {
   backupSharedConfig,
   getSharedConfigPath,
   getShellConfigPath,
+  hasManagedRcBlock,
   hasStarshipInit,
   plannedRcBlock,
+  removeManagedRcBlocks,
+  removeShellConfigFile,
   resetSharedShellConfig,
   restoreConfigBackups,
   shellsWithStarshipInit,
+  startsStarship,
   writeSharedConfig,
   writeShellConfig,
 } from '../../generators/shellRc.ts';
@@ -93,7 +99,7 @@ describe('writeShellConfig', () => {
 
     // The content goes to a temp file that is renamed over the target.
     const tmpPath = expect.stringMatching(
-      new RegExp(`/\\.${path.basename(expectedConfigPath)}\\.\\d+\\.[0-9a-f]+\\.tmp$`)
+      new RegExp(`/\\.${escapeRegExp(path.basename(expectedConfigPath))}\\.\\d+\\.[0-9a-f]+\\.tmp$`)
     );
     expect(fs.writeFileSync).toHaveBeenCalledWith(tmpPath, toml, {
       encoding: 'utf8',
@@ -1184,9 +1190,7 @@ describe('backupSharedConfig', () => {
 
     const backup = backupSharedConfig();
 
-    expect(backup).toMatch(
-      new RegExp(`^${path.join(os.homedir(), '.config', 'starship.toml.bak-')}`)
-    );
+    expect(backup?.startsWith(path.join(os.homedir(), '.config', 'starship.toml.bak-'))).toBe(true);
   });
 
   it('is best-effort — returns null when the copy fails', () => {
@@ -1385,5 +1389,173 @@ describe('plannedRcBlock', () => {
 
   it('is empty for a shell without an rc file', () => {
     expect(plannedRcBlock('nushell', false, null)).toEqual([]);
+  });
+});
+
+describe('removing ShellConfigurator lines', () => {
+  const bashrc = getShell('bash')!.rcFile!;
+  const backups = /\.bak-/;
+
+  function rcHolds(content: string): void {
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === bashrc);
+    vi.mocked(fs.readFileSync).mockImplementation(() => content);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(fs.mkdirSync).mockReset();
+  });
+
+  it('finds a managed block', () => {
+    const io = {
+      exists: () => true,
+      readFile: () => 'alias ll=ls\n\n# Added by ShellConfigurator\neval "$(starship init bash)"\n',
+    };
+    expect(hasManagedRcBlock('bash', io)).toBe(true);
+  });
+
+  it('finds nothing in an rc without a managed block, a missing rc or a manual shell', () => {
+    expect(
+      hasManagedRcBlock('bash', {
+        exists: () => true,
+        readFile: () => 'eval "$(starship init bash)"\n',
+      })
+    ).toBe(false);
+    expect(hasManagedRcBlock('bash', { exists: () => false, readFile: () => '' })).toBe(false);
+    expect(
+      hasManagedRcBlock('nushell', {
+        exists: () => true,
+        readFile: () => '# Added by ShellConfigurator\n',
+      })
+    ).toBe(false);
+  });
+
+  it('restores the rc a fresh install appended to, after backing it up', () => {
+    rcHolds(
+      `alias ll=ls\n\n# Added by ShellConfigurator\nexport STARSHIP_CONFIG='/h/.config/starship/bash.toml'\neval "$(starship init bash)"\n`
+    );
+
+    const result = removeManagedRcBlocks('bash');
+
+    expect(result.removed).toBe(true);
+    expect(result.backedUpTo).toMatch(backups);
+    expect(fs.copyFileSync).toHaveBeenCalledWith(bashrc, result.backedUpTo);
+    expect(lastWrittenContent()).toBe('alias ll=ls\n');
+    expect(result.note).toBeUndefined();
+  });
+
+  it('removes adopt blocks and unset guards too', () => {
+    rcHolds(
+      '# Added by ShellConfigurator (shared config)\neval "$(starship init bash)"\n\n# Added by ShellConfigurator\nunset STARSHIP_CONFIG\n'
+    );
+
+    removeManagedRcBlocks('bash');
+
+    expect(lastWrittenContent()).not.toContain('ShellConfigurator');
+    expect(lastWrittenContent()).not.toContain('starship');
+  });
+
+  it("keeps the user's own init line and the PATH line it needs", () => {
+    rcHolds(
+      '# Added by ShellConfigurator\nexport PATH=\'/h/.local/bin\':"$PATH"\nexport STARSHIP_CONFIG=\'/h/s.toml\'\n\neval "$(starship init bash)"\n'
+    );
+
+    const result = removeManagedRcBlocks('bash');
+
+    expect(lastWrittenContent()).toBe(
+      'export PATH=\'/h/.local/bin\':"$PATH"\neval "$(starship init bash)"\n'
+    );
+    expect(result.note).toBe('your own Starship init line stays; kept the PATH line it needs');
+  });
+
+  it('keeps the PATH line a fish conf.d init still needs', () => {
+    const fishRc = getShell('fish')!.rcFile!;
+    const confD = path.join(path.dirname(fishRc), 'conf.d', 'starship.fish');
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === fishRc || p === confD);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      () =>
+        "set -g fish_greeting\n\n# Added by ShellConfigurator\nfish_add_path '/h/.local/bin'\nset -gx STARSHIP_CONFIG '/h/fish.toml'\n"
+    );
+
+    const result = removeManagedRcBlocks('fish');
+
+    expect(lastWrittenContent()).toBe("set -g fish_greeting\nfish_add_path '/h/.local/bin'\n");
+    expect(result.note).toBe('your conf.d/starship.fish init stays; kept the PATH line it needs');
+  });
+
+  it('writes nothing when the rc has no managed block', () => {
+    rcHolds('eval "$(starship init bash)"\n');
+
+    expect(removeManagedRcBlocks('bash')).toEqual({
+      removed: false,
+      note: `no ShellConfigurator lines in ${bashrc}`,
+    });
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it('reports a missing rc and a manual shell without touching anything', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    expect(removeManagedRcBlocks('bash')).toEqual({
+      removed: false,
+      note: `${bashrc} does not exist`,
+    });
+    expect(removeManagedRcBlocks('nushell')).toEqual({ removed: false, note: 'no rc file' });
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it('moves the per-shell config aside to a backup', () => {
+    const config = getShellConfigPath('zsh');
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === config);
+
+    const result = removeShellConfigFile('zsh');
+
+    expect(result.removed).toBe(true);
+    expect(result.backedUpTo?.startsWith(`${config}.bak-`)).toBe(true);
+    expect(fs.renameSync).toHaveBeenCalledWith(config, result.backedUpTo);
+  });
+
+  it('leaves a missing per-shell config alone', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    expect(removeShellConfigFile('zsh').removed).toBe(false);
+    expect(fs.renameSync).not.toHaveBeenCalled();
+  });
+});
+
+describe('startsStarship', () => {
+  const zshrc = getShell('zsh')!.rcFile!;
+  const managed = '# Added by ShellConfigurator\neval "$(starship init zsh)"\n';
+  const rcIo = (content: string, extra: string[] = []) => ({
+    exists: (p: string) => p === zshrc || extra.includes(p),
+    readFile: () => content,
+  });
+
+  it('counts a managed init until its blocks are removed', () => {
+    expect(startsStarship('zsh', false, rcIo(managed))).toBe(true);
+    expect(startsStarship('zsh', true, rcIo(managed))).toBe(false);
+  });
+
+  it("counts the user's own init line either way", () => {
+    const own = `eval "$(starship init zsh)"\n\n${managed}`;
+    expect(startsStarship('zsh', true, rcIo(own))).toBe(true);
+  });
+
+  it('counts a fish conf.d init, which uninstall never removes', () => {
+    const fishRc = getShell('fish')!.rcFile!;
+    const confD = path.join(path.dirname(fishRc), 'conf.d', 'starship.fish');
+    const io = { exists: (p: string) => p === confD, readFile: () => '' };
+    expect(startsStarship('fish', true, io)).toBe(true);
+  });
+
+  it('counts a hand-applied Nushell setup', () => {
+    const nu = getShell('nushell')!;
+    const io = { exists: (p: string) => p === nu.initPath, readFile: () => '' };
+    expect(startsStarship('nushell', true, io)).toBe(true);
+    expect(startsStarship('nushell', true, { exists: () => false, readFile: () => '' })).toBe(
+      false
+    );
+  });
+
+  it('is false for a shell with no rc', () => {
+    expect(startsStarship('zsh', false, { exists: () => false, readFile: () => '' })).toBe(false);
   });
 });

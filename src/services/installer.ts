@@ -13,7 +13,7 @@ import {
   runCaptureBoth,
   runCommand,
 } from './exec.ts';
-import { type ExtractedFontFile, extractFontFiles } from './fontExtractor.ts';
+import { type ExtractedFontFile, extractFontFiles, fontFileNames } from './fontExtractor.ts';
 import { homeDir, xdgBaseDir } from './paths.ts';
 
 // Package names per shell per package manager. Missing combos are intentional
@@ -398,6 +398,10 @@ async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> 
     fs.writeFileSync(path.join(fontsDir, file.name), file.bytes);
   }
 
+  await refreshFontCache(fontsDir);
+}
+
+async function refreshFontCache(fontsDir: string): Promise<void> {
   // Captured rather than inherited: fc-cache never reads stdin, and suspending
   // the UI for it would blank the install screen for no reason. Non-fatal:
   // fc-cache may be absent on minimal systems.
@@ -454,6 +458,75 @@ export async function installNerdFont(
     // Best-effort only.
   }
   return undefined;
+}
+
+/** Asks the package manager whether it owns the binary; a failing query means no. */
+const OWNS_STARSHIP: Partial<Record<PackageManager, (binary: string) => Promise<boolean>>> = {
+  pacman: async (binary) => /^starship$/m.test(await runCapture('pacman', ['-Qqo', binary])),
+  apk: async (binary) =>
+    /owned by starship-/.test(await runCapture('apk', ['info', '--who-owns', binary])),
+  brew: async (binary) => {
+    const prefix = fs.realpathSync(await runCapture('brew', ['--prefix', 'starship']));
+    return fs.realpathSync(binary).startsWith(`${prefix}${path.sep}`);
+  },
+};
+
+async function packageOwnsStarship(pm: PackageManager, binary: string): Promise<boolean> {
+  try {
+    return (await OWNS_STARSHIP[pm]?.(binary)) ?? false;
+  } catch {
+    return false;
+  }
+}
+
+const REMOVE_CMDS: Partial<Record<PackageManager, string[]>> = {
+  pacman: ['pacman', '-R', '--noconfirm', 'starship'],
+  brew: ['brew', 'uninstall', 'starship'],
+  apk: ['apk', 'del', 'starship'],
+};
+
+export type StarshipRemoval =
+  | { kind: 'script'; path: string }
+  | { kind: 'package'; pm: PackageManager; command: string[] }
+  | { kind: 'manual'; path: string }
+  | { kind: 'absent' };
+
+/**
+ * How Starship would be removed: the script install's binary is deleted, a
+ * package goes through the package manager that owns it, and a binary from
+ * anywhere else is left for whatever installed it.
+ */
+export async function plannedStarshipRemoval(pm: PackageManager): Promise<StarshipRemoval> {
+  const scriptBinary = path.join(scriptInstallBinDir(), 'starship');
+  if (fs.existsSync(scriptBinary)) return { kind: 'script', path: scriptBinary };
+  const onPath = commandPath('starship');
+  if (!onPath) return { kind: 'absent' };
+  const remove = REMOVE_CMDS[pm];
+  if (!remove || !(await packageOwnsStarship(pm, onPath))) return { kind: 'manual', path: onPath };
+  return { kind: 'package', pm, command: pm === 'brew' ? remove : [...sudo(), ...remove] };
+}
+
+export async function removeStarship(plan: StarshipRemoval, signal?: AbortSignal): Promise<void> {
+  if (plan.kind === 'script') fs.rmSync(plan.path, { force: true });
+  else if (plan.kind === 'package') await runCommand(plan.command, { signal });
+}
+
+/**
+ * The files of an installed Nerd Font, listed from its cached archive. Null when
+ * no verified archive is cached, so the files cannot be told apart from others.
+ */
+export async function installedFontFiles(fontId: string): Promise<string[] | null> {
+  const cached = cachedFont(fontId);
+  if (!cached) return null;
+  const fontsDir = getNerdFontsDir();
+  return fontFileNames(cached.buffer)
+    .map((name) => path.join(fontsDir, name))
+    .filter((f) => fs.existsSync(f));
+}
+
+export async function removeFontFiles(files: string[]): Promise<void> {
+  for (const file of files) fs.rmSync(file, { force: true });
+  await refreshFontCache(getNerdFontsDir());
 }
 
 function listedLoginShells(): string[] {

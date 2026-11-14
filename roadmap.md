@@ -30,13 +30,13 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 ## At a glance
 
-| Status           | Items                                                                                                           |
-| ---------------- | --------------------------------------------------------------------------------------------------------------- |
-| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · #1 #2 #4 #5 #7 #8 #10 #11 #17 #19 #20 #22 #24 #26 #27          |
-| TODO             | P4.1–P4.10 · P5.1–P5.3 · #6 #9 #12 #13 #15 #18 #21 #23 #25                                                      |
-| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy) · #14 (snapshots written, no rollback)                 |
-| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                         |
-| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title |
+| Status           | Items                                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · P4.1–P4.3 · #1 #2 #4 #5 #7 #8 #10 #11 #12 #13 #14 #17 #19 #20 #22 #24 #26 #27 |
+| TODO             | P4.4–P4.10 · P5.1–P5.3 · #6 #9 #15 #18 #21 #23 #25                                                                             |
+| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy)                                                                       |
+| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                                        |
+| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title                |
 
 ---
 
@@ -208,24 +208,48 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 ## Phase 4 — Lifecycle commands (the moat)
 
-**P4.1 — `uninstall` (#12)** — **TODO**
+**P4.1 — `uninstall` (#12)** — **DONE**
 
 - `shell-configurator uninstall --shells zsh,fish --font`: remove rc blocks, per-shell configs, starship via the detected PM, and optionally the font — reverse install order. `--restore` puts back backups; `--dry-run` previews the plan.
 - **Why.** Everything is installed in one command; nothing is uninstalled cleanly. `resetSharedShellConfig` already knows how to remove the tool's own rc blocks, so a full teardown is the natural sibling and builds trust with experimenters.
 - **How.** Build the plan from `buildTaskList`'s mirror image; reuse `resetSharedShellConfig`, `restoreConfigBackups`, and the PM uninstall channel from `installer.ts`; ask for confirmation.
 - **Effort.** S-M. **D:** P0.3, P0.4, P1.1.
+- **Shipped:** `shell-configurator uninstall [--shells …] [--starship] [--font <id>] [--yes] [--dry-run] [--json]`
+  (`services/uninstall.ts`). It strips every ShellConfigurator rc block (rc backed up first; a carried PATH
+  line stays when the user's own or fish's `conf.d` init does) and moves per-shell configs to `.bak-*`,
+  then prints the `cp` commands that copy each backup back. Starship and the font are opt-in rather than
+  default, since either may predate the wizard: Starship goes only when no shell would still start it, as
+  the script binary or a pacman/apk/Homebrew package that package manager owns; font files are listed from
+  the cached archive's headers, and terminals still set to the font are named. A shell's config stays when
+  its rc could not be cleaned. It asks on a terminal, needs `--yes` elsewhere, and records an `uninstall`
+  run in history. The headless apply smoke now runs a real uninstall, a no-op second uninstall and the
+  printed undo commands on every distro cell. Not reverted: the terminal font setting and `chsh`.
 
-**P4.2 — Rollback snapshots (#14)** — **TODO (partial foundation)**
+**P4.2 — Rollback snapshots (#14)** — **DONE**
 
 - Before any apply (wizard finish or headless `apply`), write a snapshot: `state.json` plus a manifest of the files touched (rcs, per-shell configs, shared config, backups). `--rollback <id>` restores an entire prior state, not just the newest per-file backup that `restoreConfigBackups` is limited to.
 - **Why.** Pairs with state export (#3): snapshots are state export + file manifest. "Try it, and if you hate it, one command reverts everything" removes the last barrier to experimentation.
 - **How.** `writeSnapshot` + `history.jsonl` already record the state card and snapshot id; add the file manifest, `--list-runs`, and the restore path. **Effort.** M. **D:** P1.1, P1.2, P4.1.
+- **Shipped:** `shell-configurator rollback [--run <id>] [--yes] [--dry-run] [--json]` and `rollback --list`
+  as a subcommand rather than flags, like `uninstall`. Wizard installs, `apply`, `uninstall` and `rollback`
+  itself copy every file they may change into `runs/<runId>/` (`services/runCapture.ts`) and keep a
+  manifest of the ones they changed (copy before, hash after); history records the `runId`. Rollback puts
+  each file back or deletes one the run created, and skips a file changed since, so later edits survive.
+  Rolling back again undoes the run before; rolling back a rollback redoes it. The distro smoke rolls back
+  its uninstall and then its apply. Not covered: fonts, the Starship binary and `chsh`.
 
-**P4.3 — `debug-info` (#13)** — **TODO**
+**P4.3 — `debug-info` (#13)** — **DONE**
 
 - `shell-configurator debug-info > issue.md`: detected PM, distro/OS id, shells + installed status, terminal + locale, relevant PATH entries, installed starship version vs the PM's latest.
 - **Why.** Mirrors starship's `bugreport`; bug reports become "run this, paste the file" instead of "it doesn't work". Almost free — it is a reporter over the detector's existing outputs.
 - **How.** New subcommand in `index.tsx`; compose detector results + doctor checks into Markdown. **Effort.** S. **D:** P2.3.
+- **Shipped:** `shell-configurator debug-info [--json]` (`services/debugInfo.ts`): versions, OS + distro, PM,
+  container, terminal, locale, current shell, Starship (path, version, off-PATH dir, recorded version,
+  `STARSHIP_CONFIG`), a per-shell table, PATH entries, the last recorded run and the doctor report. The home
+  directory shows as `~`, and URL credentials are dropped from the recorded command. The bug report template
+  asks for it, and the generate smoke runs it on every distro cell. Not included: the package manager's
+  latest Starship version, which needs a network or package-index query; the recorded install version and
+  the doctor's drift check cover the common case.
 
 **P4.4 — `completions` (#23)** — **TODO**
 
@@ -321,7 +345,7 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 - `P0.1 → P1.3 → P2.1` (preview truth) — **done**
 - `P0.3 → P2.2 → P2.3 → P2.4` (doctor + repair) — **done**
-- `P1.1 → P1.2 → P4.2` (headless + history + rollback) — headless/history done; rollback open
+- `P1.1 → P1.2 → P4.2` (headless + history + rollback) — **done**
 
 Everything else hangs off `runTask`, the symbol single-source, or headless — which is why the
 foundation refactors land first. The P0.8–P0.13 sweeps are cleanup debt that has no feature seam;
@@ -329,10 +353,8 @@ they can be picked up in parallel with any phase but each stays its own PR.
 
 ## Suggested next order (remaining work)
 
-1. **P4.1 (#12) uninstall** — completes the lifecycle story with doctor/repair.
-2. **P4.2 (#14) rollback** — builds on the history/snapshot foundation.
-3. Then the small wins: **P4.3 `debug-info`**, **P4.4 `completions`**, **P4.6 `WHAT-CHANGED.md`**, **P4.8 list flags**.
-4. Then **P5.1 (#6) transient prompt**, **P5.2 (#15) prompt-manager detection**, **P5.3 (#25) bootstrap**.
+1. The small wins: **P4.4 `completions`**, **P4.6 `WHAT-CHANGED.md`**, **P4.8 list flags**.
+2. Then **P5.1 (#6) transient prompt**, **P5.2 (#15) prompt-manager detection**, **P5.3 (#25) bootstrap**.
 
 ## Merge & verification strategy
 

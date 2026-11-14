@@ -22,6 +22,9 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/),
 - **Terminal font wiring**: detect your terminal (Alacritty, kitty, WezTerm, Ghostty, foot) and select the installed Nerd Font in its config automatically
 - **Post-install verification**: after everything is applied, the written configs are loaded through the real `starship print-config` to catch a broken prompt before you restart
 - **Doctor / repair**: a read-only day-2 health check (Starship, locale, shell wiring, config validity, font installed + selected, version drift, the shell you are running) and a mode that applies fixes and re-checks
+- **Uninstall**: remove the rc lines and per-shell configs the wizard wrote (backed up first), and optionally the Nerd Font and Starship itself
+- **Rollback**: every install, apply and uninstall keeps a copy of the files it changes, so `rollback` can put a whole run back, one run at a time
+- **Debug info**: `debug-info` prints a Markdown report of the setup (detection, Starship, shells, PATH, doctor) to paste into a bug report, with your home directory shown as `~`
 
 ## Requirements
 
@@ -54,6 +57,11 @@ shell-configurator apply --import-url <url>   fetch a shared config (https gist/
 shell-configurator doctor [--state <file>]    run the read-only day-2 health check (--json for machine-readable)
 shell-configurator doctor --fix / repair      apply the fixes for failing checks, then re-run the checks (--dry-run to only list them)
 shell-configurator repair --include-warnings  also apply the fixes warnings suggest (e.g. the terminal font)
+shell-configurator uninstall                  remove the rc lines and per-shell configs it set up, after asking (--yes to skip the prompt)
+shell-configurator uninstall --starship --font <id>  also remove Starship and that Nerd Font (--shells to limit, --dry-run to only list)
+shell-configurator rollback                   put back the files the newest run changed, after asking (--yes, --dry-run, --json)
+shell-configurator rollback --list            list the runs that changed files; --run <id> rolls back a specific one
+shell-configurator debug-info > issue.md      write a report of the setup for a bug report (--json for the raw data)
 shell-configurator --help                     show usage and exit
 shell-configurator --version                  print the version and exit
 shell-configurator --dry-run                  preview the config without installing (also -d, --no-install)
@@ -63,6 +71,19 @@ shell-configurator --restore                  restore the shared and per-shell c
 `--state` also accepts the alias `--import`. Without `--state`, `doctor` and
 `repair` check every installed shell and read each one's wiring (per-shell or
 adopt mode) from its rc file.
+
+`uninstall` removes every `# Added by ShellConfigurator` block from the bash,
+zsh and fish rc files and moves the per-shell configs aside to `.bak-*`
+backups, backing up each rc first; `rollback` puts those files back (when the
+run could not be recorded, it prints the `cp` commands that do so instead), but
+not a Starship or font it removed: reinstall those with `apply` or `repair`. Your own `starship init` line (or fish's `conf.d` init) stays,
+with the PATH line it needs. Nushell and PowerShell were set up by hand, so it
+names the file to clean instead. Starship is removed only with `--starship`,
+and only once no shell would still start it: the script install's binary, or
+the pacman, apk or Homebrew package when that package manager owns the binary.
+A font goes only with `--font <id>`, its files listed from its cached archive;
+the plan names any terminal still set to it. On a terminal it shows the plan
+and asks first; elsewhere it needs `--yes`.
 
 Flags may appear before or after the subcommand (e.g. `--dry-run apply --state card.json`);
 when a flag is repeated, the last one wins.
@@ -118,10 +139,10 @@ npm run dev
 The wizard exits non-zero if any install step fails, so it can be used in a script.
 
 Exit codes: `0` on success; `1` when an install step failed, `doctor` found a
-failing check, `repair` left one failing, `-o`/`--export` could not be written,
+failing check, `repair` left one failing, an `uninstall` step failed, a `rollback` could not put a file back, `-o`/`--export` could not be written,
 an `--import-url` fetch failed, or a fatal error occurred; `2` for a usage error
 (an unknown command or flag, a missing or invalid flag value, `--adopt`/`--import-url`
-outside `apply`, `apply` with no shells selected, or a state card that cannot be
+outside `apply`, `apply` with no shells selected, `uninstall` off a terminal without `--yes`, or a state card that cannot be
 read, is not valid JSON, or has an unsupported version or invalid field). A typo
 never starts the installer: anything the parser does not recognise aborts the
 run.
@@ -141,8 +162,17 @@ shell-configurator apply --state my-card.json
 ```
 
 Every wizard install and real (non-dry-run) `apply` appends one record to
-`history.jsonl` (under the XDG state dir) and snapshots the card it applied;
-`generate`, `doctor`, `repair` and dry runs record nothing. `--restore` copies
+`history.jsonl` (under the XDG state dir) and snapshots the card it applied; a
+real `uninstall` or `rollback` appends one too, without a card;
+`generate`, `doctor`, `repair` and dry runs record nothing. Each of those runs
+also copies the rc files, per-shell configs, shared config and terminal configs
+it is about to change into `runs/<id>/` under the state dir, keeping only the
+ones it changed; the newest 50 runs are kept. `rollback` puts a run's files back to that copy (or deletes the
+ones the run created) and leaves alone any file that changed again since, so a
+later edit is never overwritten; files come back byte for byte with their
+permissions. Run it again to undo the run before (a run whose changes were only
+partly undone stays next in line), or roll back a rollback to redo it. Fonts, the Starship binary and the login shell are
+not part of a rollback. `--restore` copies
 the newest `.bak-*` backups back over the shared config and the per-shell
 configs, limited to the shells the last recorded run configured; it does not
 touch rc files. Nerd Font archives are cached under the XDG cache dir, verified

@@ -368,6 +368,24 @@ function resetSharedShellConfig(shellId: ShellId): { applied: boolean; note?: st
 // Removes a per-shell block an earlier run wrote (keeping its PATH line and the
 // Starship init) and adds an unset guard above the init line, so the shell uses
 // the shared config. A user's own STARSHIP_CONFIG export is left in place.
+
+function hasManagedRcBlock(shellId: ShellId, io?: RcIo): boolean;
+// Whether the shell's rc file carries a ShellConfigurator block (either marker).
+
+function removeManagedRcBlocks(shellId: ShellId): RemovalResult;
+// uninstall: backs up the rc, then drops every ShellConfigurator block. When the
+// user's own starship init line remains, the PATH line a block carried is kept
+// above it (for fish's conf.d init, at the end). { removed: false, note } when
+// there was nothing to remove.
+
+function startsStarship(shellId: ShellId, withoutManagedBlocks: boolean, io?: RcIo): boolean;
+// Whether the shell starts Starship from its rc (ignoring ShellConfigurator's
+// blocks when withoutManagedBlocks), fish's conf.d file, or a hand-applied
+// Nushell/PowerShell setup. uninstall keeps Starship while any shell does.
+
+function removeShellConfigFile(shellId: ShellId): RemovalResult;
+// uninstall: renames ~/.config/starship/<shell>.toml to a .bak-* backup.
+// RemovalResult = { removed: boolean; backedUpTo?: string; note?: string }
 ```
 
 Config and rc file writes (per-shell, shared, and rc appends) go through a
@@ -439,6 +457,119 @@ function getMissingStarshipPathDir(): string | null;
 // The directory (~/.local/bin) that must be on PATH when the install script put
 // the binary there and the shell can't reach it, or null when starship is already
 // reachable.
+
+function plannedStarshipRemoval(pm: PackageManager): Promise<StarshipRemoval>;
+// How uninstall --starship would remove Starship: { kind: 'script', path } for the
+// install script's ~/.local/bin binary, { kind: 'package', pm, command } when
+// pacman (-Qqo) or apk (--who-owns) owns the binary on PATH, or its real path is
+// inside the real path of `brew --prefix starship`,
+// { kind: 'manual', path } for any other binary, { kind: 'absent' } when it is
+// not installed.
+
+function removeStarship(plan: StarshipRemoval, signal?: AbortSignal): Promise<void>;
+// Deletes the script binary or runs the package manager's remove command.
+
+function installedFontFiles(fontId: string): Promise<string[] | null>;
+// The installed files of a Nerd Font, listed from its verified cached archive's
+// entry headers (fontFileNames, nothing is decompressed); null when nothing is
+// cached, so its files cannot be told apart.
+
+function removeFontFiles(files: string[]): Promise<void>;
+// Deletes the files, then refreshes fc-cache off macOS.
+```
+
+### uninstall.ts
+
+```typescript
+function planUninstall(options: UninstallOptions, deps?: UninstallDeps): Promise<UninstallStep[]>;
+// Read-only plan in reverse install order: each shell's rc lines and per-shell
+// config, then the font (options.fontId), then Starship (options.starship).
+// options.shells defaults to every shell with an rc block or a config. A step
+// without run() has nothing to do and its detail says why. The Starship step
+// has no run() while a shell would still start Starship after the cleanup, and
+// the font step names any terminal still set to the font.
+
+function runUninstall(
+  steps: UninstallStep[],
+  opts?: { dryRun?: boolean }
+): Promise<UninstallReport>;
+// Runs each step; a failure does not stop the rest, but a step whose `after`
+// step failed (a shell's config, after its rc) is skipped. Statuses: removed |
+// skipped | failed | planned; a removal that made a backup carries
+// backup: { file, backup }. ok is false when any step failed.
+
+function formatUninstallReport(report: UninstallReport): string;
+// The text report; --json prints the report object.
+```
+
+### runCapture.ts
+
+```typescript
+function trackedFiles(): string[];
+// Every file a wizard run, apply or uninstall may change: each shell's rc and
+// per-shell config, the shared starship.toml, and every terminal config
+// wireTerminalFont may edit (terminalFontConfigFiles).
+
+function captureRun<T>(
+  files: string[],
+  run: () => Promise<T>
+): Promise<{ result: T; runId: string | null }>;
+// Copies the files into <stateDir>/runs/<runId>/files before run(), then keeps
+// only those the run changed in manifest.json ({ version, runId, files: [{ path,
+// before: copy name | null, after: sha256 | null }] }). Best-effort: a capture
+// that cannot be written never stops the run. runId is null then, and when the
+// run changed nothing. Each run gets its own folder (created exclusively), and
+// each file's mode is kept so a restore gets it back. A throwing run rejects
+// with a CapturedRunError carrying its runId, which apply and the wizard still
+// record. A capture that fails partway removes its folder; a file the run left
+// unreadable is kept with after: 'unreadable' (UNREADABLE_AFTER); only the
+// newest 50 run folders are kept (pruneRuns, KEPT_RUNS). Tests get a stub from
+// setup.ts.
+
+function readRunManifest(runId: string): RunManifest | null;
+```
+
+### rollback.ts
+
+```typescript
+function listRollbackRuns(records?: HistoryRecord[]): RollbackRun[];
+// The recorded runs with a manifest, newest first, each marked rolledBack while
+// a complete rollback of it stands (one that was not itself rolled back; a
+// rollback recorded `partial` left some changes and does not count; one whose
+// own capture failed, with no runId, counts and can never be undone).
+
+function defaultRollbackRun(runs: RollbackRun[]): RollbackRun | null;
+// The newest non-rollback run that still stands: what a plain `rollback` undoes.
+
+function planRollback(manifest: RunManifest): RollbackStep[];
+// Per file: put back the copy's exact bytes and mode, or delete a file the run
+// created. A file whose hash no longer matches the run's `after` changed since,
+// and is left alone (checked again right before each change); one already back
+// to its copy needs nothing. A file whose copy cannot be read, or that the run
+// left unreadable, is skipped and left in place; the other files still go.
+
+function runRollback(
+  runId: string,
+  steps: RollbackStep[],
+  opts?: { dryRun?: boolean }
+): RollbackReport;
+// Statuses: restored | removed | skipped | failed | planned. complete is false
+// while a change of the run stays in place (left: true on that action).
+```
+
+### debugInfo.ts
+
+```typescript
+function collectDebugInfo(version: string, deps?: DebugInfoDeps): Promise<DebugInfo>;
+// Read-only: versions, OS and distro (PRETTY_NAME), package manager, container,
+// terminal, locale, current shell, Starship (path, version, off-PATH dir,
+// recorded version, STARSHIP_CONFIG), each shell's install/rc/init/block/config
+// facts, the PATH entries (marking the one with starship), the last history
+// record (URL credentials, queries and fragments in its command hidden) and the
+// doctor report.
+
+function formatDebugInfo(info: DebugInfo): string;
+// The Markdown report; the home directory is shown as ~ (redactHome).
 ```
 
 ### fontExtractor.ts
@@ -554,7 +685,7 @@ function runInstallTasks(
 
 ## Headless CLI & Run Data
 
-The public flag surface in `src/index.tsx`/`src/services/args.ts`, in five groups.
+The public flag surface in `src/index.tsx`/`src/services/args.ts`, in eight groups.
 
 ### Interactive
 
@@ -567,7 +698,8 @@ shell-configurator --dry-run    preview changes without installing (alias --no-i
 
 ```
 --restore / --undo    Copy the newest .bak-* backup over the shared and per-shell
-                      configs created by earlier runs (see restoreConfigBackups)
+                      configs created by earlier runs (see restoreConfigBackups);
+                      after an uninstall it brings the configs back
 --version / -v        Print the version
 --help / -h           Print usage
 ```
@@ -643,13 +775,79 @@ value on a boolean flag, a missing value, a stray positional) throw a
 `CliUsageError`, so a typo can never start the real installer. Config flags
 passed to `doctor`/`repair` without `--state` are ignored with a stderr warning.
 
+### uninstall
+
+```
+shell-configurator uninstall [--shells <id,...>] [--starship] [--font <id>] [--yes] [--dry-run] [--json]
+```
+
+Removes what the wizard set up, in reverse install order (`src/services/uninstall.ts`).
+For each shell (by default every shell with a ShellConfigurator rc block or a
+per-shell config) it backs up and strips every `# Added by ShellConfigurator`
+block from the rc, and moves `~/.config/starship/<shell>.toml` to a `.bak-*`
+backup. Nushell and PowerShell were set up by hand, so their step only names
+the file to clean. `--font <id>` deletes that Nerd Font's files, listed from its
+cached archive, and names any terminal still set to it. `--starship` deletes
+the script install's binary, or removes the pacman/apk/Homebrew package when
+that package manager owns the binary, and forgets the recorded version; it is
+held back while any shell would still start Starship. A shell's config stays
+when its rc could not be cleaned. A real run is captured like any other, so
+the text report ends with `Undo it with: shell-configurator rollback` (or, when
+the capture could not be written, the `cp` commands that copy each backup
+back). Rollback only puts files back, so when Starship or a font was removed the
+report adds that they need reinstalling with `apply` or `repair`. The Starship
+step re-checks just before it deletes anything that no shell still starts it.
+Without
+`--yes` it prints the plan and asks on a terminal; off a terminal, or with
+`--json`, a run that would change something is a `CliUsageError`. `--dry-run`
+only prints the plan. A failed step does not stop the rest and sets exit code
+`1`. Config flags other than `--shells` and `--font`, and `--state`, are usage
+errors, as are `--yes` and `--starship` outside `uninstall`.
+
+### rollback
+
+```
+shell-configurator rollback [--run <id>] [--yes] [--dry-run] [--json]
+shell-configurator rollback --list [--json]
+```
+
+Puts back the files a captured run changed (`src/services/rollback.ts`): by
+default the newest install, apply or uninstall that still stands, otherwise the
+run `--run` names (an id from `--list`). Each file goes back to its copy from
+before that run, or is deleted when that run created it. A file that changed
+again since is skipped (checked again right before it is changed, so an edit
+made at the prompt survives), so a rollback never overwrites a later edit: roll
+back the later run first. Restores keep the exact bytes and the file's mode. A
+rollback that left some changes in place is recorded `partial: true`, and that
+run stays next to roll back; files already restored then report "already as it
+was before that run". The rollback is captured and recorded (`kind: 'rollback'`,
+`rollbackOf`), so a second `rollback` undoes the run before, and
+`rollback --run <rollback id>` redoes the run it undid. It asks like
+`uninstall` (`--yes` off a terminal or with `--json`). A file it could not put
+back sets exit code `1`. Config flags, `--state` and `--fix` are usage errors,
+as are `--list` and `--run` outside `rollback`.
+
+### debug-info
+
+```
+shell-configurator debug-info [--json]
+```
+
+Prints a Markdown report of the setup for a bug report
+(`src/services/debugInfo.ts`): versions, detection, Starship, a table of the
+shells, the PATH entries and the full doctor report, plus the last recorded run.
+`--json` prints the same data as JSON. The home directory is shown as `~` in
+both, and URL credentials, queries and fragments are dropped from the recorded
+command. It reads only, so a failing doctor check does not change its exit
+code. Config flags, `--state`, `--fix` and `--dry-run` are usage errors.
+
 ### Exit Codes
 
-| Code | Meaning                                                                                                                                                                                                                                                    |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`  | Success.                                                                                                                                                                                                                                                   |
-| `1`  | A wizard install finished with at least one failed task, a headless run failed (`CliRunError`, e.g. a failed `--import-url` fetch or an unwritable `-o`/`--export`), a `doctor`/`repair` check still fails, a `--restore` copy failed, or any fatal crash. |
-| `2`  | `CliUsageError` — an unknown or malformed flag, an invalid flag value, `--adopt`/`--import-url` with `generate` or no subcommand, config flags without a subcommand, or an unreadable state card; reads clean with no stack trace.                         |
+| Code | Meaning                                                                                                                                                                                                                                                                                                                                       |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`  | Success.                                                                                                                                                                                                                                                                                                                                      |
+| `1`  | A wizard install finished with at least one failed task, a headless run failed (`CliRunError`, e.g. a failed `--import-url` fetch or an unwritable `-o`/`--export`), a `doctor`/`repair` check still fails, an `uninstall` step failed, a `rollback` could not put a file back, a `--restore` copy failed, or any fatal crash.                |
+| `2`  | `CliUsageError` — an unknown or malformed flag, an invalid flag value, `--adopt`/`--import-url` with `generate` or no subcommand, config flags without a subcommand, `uninstall` or `rollback` without `--yes` off a terminal or with `--json`, an unknown `rollback --run` id, or an unreadable state card; reads clean with no stack trace. |
 
 ### Persisted Run Data
 
@@ -658,7 +856,8 @@ tarball stays self-contained and nothing is written next to the binary:
 
 | Path                                                                                | Contents                                                                                                                                                                                                                                                 |
 | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `$XDG_STATE_HOME` or `~/.local/state`/`shell-configurator/history.jsonl`            | Append-only ledger; one JSON `HistoryRecord` per run (`install`/`apply`/…), in file order = chronological order.                                                                                                                                         |
+| `$XDG_STATE_HOME` or `~/.local/state`/`shell-configurator/history.jsonl`            | Append-only ledger; one JSON `HistoryRecord` per run (`install`/`apply`/`uninstall`/`rollback`; `runId` names its captured files, `rollbackOf` the run a rollback undid), in file order = chronological order.                                           |
+| `…/runs/<runId>/manifest.json` + `files/<n>`                                        | The files a run changed: a copy of each from before the run (`0600`, in a `0700` folder) and its hash after. Only the newest 50 runs are kept. `rollback` reads it.                                                                                      |
 | `…/snapshots/<iso-timestamp>.json`                                                  | The versioned state card each wizard install or headless `apply` applied; the id is the ISO timestamp with `:` replaced by `-`. The ledger's `snapshotId` points at it, and `--restore` reads the newest one to learn which shells the last run touched. |
 | `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/fonts/<id>.zip` + `<id>.sha256` | Font cache: the verified archive plus its pinned SHA-256 pin file. A cached archive is reused offline only while its bytes still match the pin.                                                                                                          |
 | `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/starship.version`               | The starship version recorded by the last run that freshly installed Starship (`recordStarshipVersion`). Feeds the doctor's `version-drift` check.                                                                                                       |
@@ -705,7 +904,10 @@ detection-based fields cleared) and re-detects per run.
 the Config task: before per-shell configs shadow it, or before adopt mode points
 shells at it (an `--import-url` overwrite is backed up by `writeSharedConfig`
 itself). `restoreConfigBackups()` copies the newest `.bak-*` files back over the
-shared and per-shell configs (`--restore`).
+shared and per-shell configs (`--restore`). `uninstall` backs up each rc file
+before editing it and moves per-shell configs to `.bak-*` backups, and prints
+points at `rollback` to undo it; `--restore` would also roll the shared config
+back, so it is not the uninstall undo.
 
 ---
 

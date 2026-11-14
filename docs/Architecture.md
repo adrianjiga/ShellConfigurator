@@ -4,7 +4,7 @@
 
 `src/index.tsx` first parses the argv (`parseCliArgs` in `src/services/args.ts`).
 Global flags (`--help`/`--version`/`--restore`) and the headless subcommands
-(`generate`/`apply`/`doctor`/`repair`, routed via `runHeadlessCommand`) exit
+(`generate`/`apply`/`doctor`/`repair`/`uninstall`/`rollback`/`debug-info`, routed via `runHeadlessCommand`) exit
 before Ink ever renders; parser warnings (unknown/malformed flags) go to stderr.
 Only when no subcommand consumed the args does the app render the root `App`
 component using Ink's renderer. Ink is a React-based framework for building interactive CLI
@@ -273,19 +273,23 @@ src/
 │   └── DoneScreen.tsx         Summary, exit, one-key undo (`r` restores backups)
 ├── generators/
 │   ├── starship.ts            TOML config generation
-│   ├── shellRc.ts             RC file writing (plannedRcBlock) + per-shell/shared config output, backups and restore
+│   ├── shellRc.ts             RC file writing (plannedRcBlock) + per-shell/shared config output, backups, restore and removal
 │   └── toml.ts                TOML escaping helpers
 └── services/
     ├── args.ts                Hand-rolled, dependency-free CLI flag parser
     ├── headless.ts            generate/apply implementation + bounded --import-url fetch (routing is runHeadlessCommand in index.tsx)
     ├── preview.ts             Live preview: scratch-dir `starship prompt` + static fallback
     ├── detector.ts            Async system detection (PM, shells, Starship, terminal, container)
-    ├── installer.ts           Install commands (Starship, fonts, shells, chsh)
+    ├── installer.ts           Install commands (Starship, fonts, shells, chsh) and Starship/font removal
     ├── installTasks.ts        Install task orchestration (buildTaskList, runInstallTasks)
     ├── fontExtractor.ts       Sandboxed worker that decompresses font archives
     ├── terminalFont.ts        Wires a detected terminal's config to a Nerd Font family
     ├── doctor.ts              Day-2 health check (read-only) with pass/warn/fail findings
     ├── repair.ts              Applies doctor fixes, then re-runs the doctor
+    ├── uninstall.ts           Plans and runs the teardown (rc lines, configs, font, Starship)
+    ├── runCapture.ts          Copies the files a run may change and keeps a manifest of what it changed
+    ├── rollback.ts            Puts a captured run's files back (skipping files changed since)
+    ├── debugInfo.ts           Read-only Markdown/JSON report of the setup for bug reports
     ├── state.ts               State card serialization (serializeState / parseState)
     ├── history.ts             history.jsonl ledger + snapshot writes
     ├── cache.ts               Font archive cache (pin + sha256) + recorded starship version

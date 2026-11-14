@@ -9,6 +9,7 @@ import {
   DEFAULT_INSTALL_TASK_DEPS,
   runInstallTasks,
 } from '../services/installTasks.ts';
+import { CapturedRunError, captureRun, trackedFiles } from '../services/runCapture.ts';
 import { isUiSuspended, subscribeToUiSuspension } from '../services/tty.ts';
 import type { InstallTask, InstallTaskId, WizardState } from '../types.ts';
 
@@ -70,14 +71,15 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
     (async () => {
       let results: InstallTask[];
+      let runId: string | null = null;
       try {
-        results = await runInstallTasks(
-          state,
-          DEFAULT_INSTALL_TASK_DEPS,
-          updateTask,
-          controller.signal
+        const captured = await captureRun(trackedFiles(), () =>
+          runInstallTasks(state, DEFAULT_INSTALL_TASK_DEPS, updateTask, controller.signal)
         );
+        results = captured.result;
+        runId = captured.runId;
       } catch (err) {
+        if (err instanceof CapturedRunError) runId = err.runId;
         // The chain itself broke: report every step as failed rather than hang here.
         results = buildTaskList(state).map((task) => ({
           ...task,
@@ -88,7 +90,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
       // Advance after a brief pause so the user can see the final state
       await new Promise((r) => setTimeout(r, advanceDelayMs));
-      if (!unmounted) onNext({ installResults: results });
+      if (!unmounted) onNext({ installResults: results, runId });
     })();
 
     return () => {

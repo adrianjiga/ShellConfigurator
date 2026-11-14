@@ -7,6 +7,7 @@ import {
   cachedStarshipVersion,
   cacheFont,
   fontCachePath,
+  forgetStarshipVersion,
   pinnedDigest,
   recordStarshipVersion,
   sha256Digest,
@@ -126,6 +127,13 @@ describe('starship version record', () => {
     recordStarshipVersion('starship 1.27.0');
     expect(fs.existsSync(cacheDir())).toBe(true);
     expect(cachedStarshipVersion()).toBe('starship 1.27.0');
+  });
+
+  it('forgets a recorded version, and tolerates there being none', () => {
+    recordStarshipVersion('starship 1.27.0');
+    forgetStarshipVersion();
+    expect(cachedStarshipVersion()).toBeNull();
+    expect(() => forgetStarshipVersion()).not.toThrow();
   });
 
   it('treats an empty record as none', () => {

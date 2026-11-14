@@ -3,6 +3,7 @@ import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstallingScreen, setAdvanceDelayForTests } from '../../screens/InstallingScreen.tsx';
 import type { InstallTaskDeps } from '../../services/installTasks.ts';
+import { CapturedRunError, captureRun } from '../../services/runCapture.ts';
 import type { InstallTask, WizardState } from '../../types.ts';
 import { DEFAULT_STATE } from '../../types.ts';
 import { flush, waitFor } from '../helpers/wait.ts';
@@ -205,6 +206,10 @@ describe('InstallingScreen', () => {
     ];
     mocks.buildTaskList.mockReturnValue(results);
     mocks.runInstallTasks.mockResolvedValue(results);
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
+      result: await run(),
+      runId: 'run-1',
+    }));
     const { instance, onNext } = setup();
     await flush();
 
@@ -214,7 +219,7 @@ describe('InstallingScreen', () => {
     expect(instance.lastFrame()).toContain('Unknown shell');
 
     await waitFor(() => onNext.mock.calls.length > 0);
-    expect(onNext).toHaveBeenCalledWith({ installResults: results });
+    expect(onNext).toHaveBeenCalledWith({ installResults: results, runId: 'run-1' });
   });
 
   it('renders nothing while an interactive child owns the terminal', async () => {
@@ -255,6 +260,19 @@ describe('InstallingScreen SIGINT', () => {
 });
 
 describe('InstallingScreen when the chain throws', () => {
+  it('still hands on the runId of what it had changed', async () => {
+    mocks.buildTaskList.mockReturnValue(statusFixture());
+    vi.mocked(captureRun).mockRejectedValueOnce(
+      new CapturedRunError('run-7', new Error('chain broke'))
+    );
+    const { onNext } = setup();
+    await waitFor(() => onNext.mock.calls.length > 0);
+
+    const update = onNext.mock.calls[0]![0];
+    expect(update.runId).toBe('run-7');
+    expect((update.installResults as InstallTask[])[0]!.error).toBe('chain broke');
+  });
+
   it('reports every step as failed and moves on instead of hanging', async () => {
     mocks.buildTaskList.mockReturnValue(statusFixture());
     mocks.runInstallTasks.mockRejectedValue(new Error('chain broke'));
@@ -282,6 +300,7 @@ describe('InstallingScreen under StrictMode', () => {
     await waitFor(() => onNext.mock.calls.length > 0);
     expect(onNext).toHaveBeenCalledWith({
       installResults: [{ id: 'starship', label: 'Starship', status: 'done' }],
+      runId: null,
     });
   });
 });

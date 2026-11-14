@@ -2,7 +2,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readTerminalFontFamily, wireTerminalFont } from '../../services/terminalFont.ts';
+import {
+  readTerminalFontFamily,
+  terminalFontConfigFiles,
+  wireTerminalFont,
+} from '../../services/terminalFont.ts';
 
 let tmp: string;
 const originalXdg = process.env.XDG_CONFIG_HOME;
@@ -501,5 +505,15 @@ describe('readTerminalFontFamily', () => {
   it('returns null when nothing is configured', () => {
     expect(readTerminalFontFamily('kitty')).toBeNull();
     expect(readTerminalFontFamily('wezterm')).toBeNull();
+  });
+});
+
+describe('terminalFontConfigFiles', () => {
+  it('lists every lookup path of the terminals wireTerminalFont edits, and no WezTerm file', () => {
+    const files = terminalFontConfigFiles();
+    for (const name of ['alacritty.toml', 'alacritty.yml', 'kitty.conf', 'config', 'foot.ini']) {
+      expect(files.some((f) => f.endsWith(name))).toBe(true);
+    }
+    expect(files.some((f) => f.includes('wezterm'))).toBe(false);
   });
 });

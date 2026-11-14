@@ -229,6 +229,12 @@ function configLookupPaths(id: TerminalId): string[] {
   return [terminalConfigPath(id)];
 }
 
+/** Every config file wireTerminalFont may edit, for each terminal it edits. */
+export function terminalFontConfigFiles(): string[] {
+  const edited: TerminalId[] = ['alacritty', 'kitty', 'ghostty', 'foot'];
+  return edited.flatMap((id) => configLookupPaths(id));
+}
+
 /** The Lua file WezTerm loads, defaulting to its recommended ~/.wezterm.lua. */
 function weztermConfigPath(): string {
   const candidates = [

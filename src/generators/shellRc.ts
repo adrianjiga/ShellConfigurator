@@ -94,7 +94,7 @@ function resolveWriteTarget(filePath: string): { target: string; mode?: number }
  * its permissions. A reader never sees a truncated file. On failure the temp
  * file is removed and the original error re-thrown.
  */
-export function writeFileAtomic(filePath: string, content: string): void {
+export function writeFileAtomic(filePath: string, content: string | Buffer): void {
   const { target, mode } = resolveWriteTarget(filePath);
   const tmpPath = path.join(
     path.dirname(target),
@@ -255,10 +255,13 @@ const INIT_COMMAND: Record<ShellId, string> = {
  * path, or fish's conf.d file (checked by callers via `fishInitFile`).
  */
 export function hasStarshipInit(content: string, shellId: ShellId): boolean {
+  return initLineIndex(content.split('\n'), shellId) !== -1;
+}
+
+/** Index of the first non-comment line that runs the shell's init, or -1. */
+function initLineIndex(lines: string[], shellId: ShellId): number {
   const command = INIT_COMMAND[shellId];
-  return content
-    .split('\n')
-    .some((line) => !line.trimStart().startsWith('#') && line.includes(command));
+  return lines.findIndex((line) => !line.trimStart().startsWith('#') && line.includes(command));
 }
 
 /** Fish's drop-in init file, which `hasStarshipInit` cannot see from config.fish. */
@@ -530,8 +533,7 @@ function insertBeforeInit(
   lines: string[]
 ): string | null {
   const all = content.split('\n');
-  const command = INIT_COMMAND[shell.id];
-  const index = all.findIndex((l) => !l.trimStart().startsWith('#') && l.includes(command));
+  const index = initLineIndex(all, shell.id);
   if (index === -1) return null;
 
   let above = index - 1;
@@ -689,4 +691,106 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
       appendManagedBlock(content, BLOCK_MARKER, needsInit ? [...lines, shell.initLine] : lines)
   );
   return note ? { applied: true, note } : { applied: true };
+}
+
+const EVERY_BLOCK: LineNeedle = () => true;
+
+/** Whether the shell's rc file has a ShellConfigurator block. */
+export function hasManagedRcBlock(shellId: ShellId, io: RcIo = FS_RC_IO): boolean {
+  const shell = getShell(shellId);
+  if (!shell?.rcFile) return false;
+  try {
+    if (!io.exists(shell.rcFile)) return false;
+    const content = io.readFile(shell.rcFile);
+    return removeShellConfiguratorBlocks(content, shell, [EVERY_BLOCK]) !== content;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the shell starts Starship: from its rc (ignoring ShellConfigurator's
+ * blocks when `withoutManagedBlocks`, as after an uninstall), fish's conf.d
+ * file, or a hand-applied Nushell or PowerShell setup.
+ */
+export function startsStarship(
+  shellId: ShellId,
+  withoutManagedBlocks: boolean,
+  io: RcIo = FS_RC_IO
+): boolean {
+  const shell = getShell(shellId);
+  if (!shell) return false;
+  if (!shell.rcFile) {
+    return manualSetupAppliedWith(shell, io, false) || manualSetupAppliedWith(shell, io, true);
+  }
+  try {
+    if (shell.id === 'fish' && io.exists(fishInitFile(shell.rcFile))) return true;
+    if (!io.exists(shell.rcFile)) return false;
+    const content = io.readFile(shell.rcFile);
+    const kept = withoutManagedBlocks
+      ? removeShellConfiguratorBlocks(content, shell, [EVERY_BLOCK])
+      : content;
+    return hasStarshipInit(kept, shellId);
+  } catch {
+    return false;
+  }
+}
+
+export interface RemovalResult {
+  removed: boolean;
+  backedUpTo?: string;
+  note?: string;
+}
+
+/**
+ * Removes every ShellConfigurator block from the shell's rc file, after backing
+ * it up. A PATH line a block carried stays when the user's own init line (or
+ * fish's conf.d init) still needs it to find Starship.
+ */
+export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
+  const shell = getShell(shellId);
+  if (!shell?.rcFile) return { removed: false, note: 'no rc file' };
+  const rcPath = shell.rcFile;
+  if (!fs.existsSync(rcPath)) return { removed: false, note: `${rcPath} does not exist` };
+
+  const existing = fs.readFileSync(rcPath, 'utf8');
+  const carried: string[] = [];
+  const stripped = removeShellConfiguratorBlocks(existing, shell, [EVERY_BLOCK], carried);
+  if (stripped === existing) {
+    return { removed: false, note: `no ShellConfigurator lines in ${rcPath}` };
+  }
+
+  const ownInit = hasStarshipInit(stripped, shellId);
+  const confDInit = !ownInit && shellId === 'fish' && fs.existsSync(fishInitFile(rcPath));
+  const kept =
+    ownInit || confDInit ? [...new Set(carried)].filter((line) => !hasLine(stripped, line)) : [];
+  const lines = stripped.split('\n');
+  if (kept.length > 0) {
+    const at = ownInit
+      ? initLineIndex(lines, shellId)
+      : lines.length - (lines.at(-1) === '' ? 1 : 0);
+    lines.splice(at, 0, ...kept);
+  }
+
+  const backedUpTo = backupIfExists(rcPath);
+  writeFileAtomic(rcPath, lines.join('\n'));
+  const notes = [
+    ...(ownInit ? ['your own Starship init line stays'] : []),
+    ...(confDInit ? ['your conf.d/starship.fish init stays'] : []),
+    ...(kept.length > 0 ? ['kept the PATH line it needs'] : []),
+  ];
+  return {
+    removed: true,
+    ...(backedUpTo ? { backedUpTo } : {}),
+    ...(notes.length > 0 ? { note: notes.join('; ') } : {}),
+  };
+}
+
+/** Moves a shell's per-shell config aside to a backup, which `--restore` can bring back. */
+export function removeShellConfigFile(shellId: ShellId): RemovalResult {
+  const configPath = getShellConfigPath(shellId);
+  if (!fs.existsSync(configPath)) return { removed: false, note: `${configPath} does not exist` };
+  const backedUpTo = backupPath(configPath);
+  fs.renameSync(configPath, backedUpTo);
+  return { removed: true, backedUpTo };
 }

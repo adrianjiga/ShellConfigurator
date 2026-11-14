@@ -5,6 +5,7 @@ export default defineConfig({
     environment: 'node',
     include: ['src/__tests__/**/*.test.{ts,tsx}'],
     setupFiles: ['src/__tests__/helpers/setup.ts'],
+    env: { FORCE_COLOR: '0' },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],

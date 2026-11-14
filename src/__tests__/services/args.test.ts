@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type CliFlags, parseCliArgs, quoteArgv } from '../../services/args.ts';
+import { type CliFlags, parseCliArgs, quoteArgv, splitQuotedArgv } from '../../services/args.ts';
 
 describe('parseCliArgs', () => {
   it('returns defaults when argv is empty', () => {
@@ -29,6 +29,18 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['repair']).subcommand).toBe('repair');
     });
 
+    it('recognises uninstall', () => {
+      expect(parseCliArgs(['uninstall']).subcommand).toBe('uninstall');
+    });
+
+    it('recognises rollback', () => {
+      expect(parseCliArgs(['rollback']).subcommand).toBe('rollback');
+    });
+
+    it('recognises debug-info', () => {
+      expect(parseCliArgs(['debug-info']).subcommand).toBe('debug-info');
+    });
+
     it('rejects an unknown word in the subcommand position', () => {
       expect(() => parseCliArgs(['deploy'])).toThrow(/Unknown command 'deploy'/);
       expect(() => parseCliArgs(['docter'])).toThrow(/Unknown command 'docter'/);
@@ -36,7 +48,9 @@ describe('parseCliArgs', () => {
     });
 
     it('lists the available commands in the error', () => {
-      expect(() => parseCliArgs(['deploy'])).toThrow(/generate, apply, doctor, repair/);
+      expect(() => parseCliArgs(['deploy'])).toThrow(
+        /generate, apply, doctor, repair, uninstall, rollback, debug-info/
+      );
     });
 
     it('rejects a second positional argument', () => {
@@ -67,6 +81,10 @@ describe('parseCliArgs', () => {
       ['--adopt', 'adopt', true],
       ['--json', 'json', true],
       ['--fix', 'fix', true],
+      ['--yes', 'yes', true],
+      ['-y', 'yes', true],
+      ['--starship', 'starship', true],
+      ['--list', 'list', true],
     ];
 
     it.each(cases)('%s sets %s to %s', (arg, key, expected) => {
@@ -174,6 +192,12 @@ describe('parseCliArgs', () => {
       );
     });
 
+    it('--run takes the run id', () => {
+      expect(parseCliArgs(['rollback', '--run', '2026-11-14T10-00-00.000Z']).runId).toBe(
+        '2026-11-14T10-00-00.000Z'
+      );
+    });
+
     it('--output maps to outputFile', () => {
       expect(parseCliArgs(['--output', 'out.toml']).outputFile).toBe('out.toml');
     });
@@ -243,6 +267,21 @@ describe('parseCliArgs', () => {
     expect(() => parseCliArgs(['--preset', '--no-powerline'])).toThrow(
       /Flag '--preset' needs a value/
     );
+  });
+
+  describe('splitQuotedArgv', () => {
+    it.each([
+      [['generate', '--preset', 'pure-prompt']],
+      [['--state', 'my card.json']],
+      [["it's.toml", '', 'a\\b', "'"]],
+    ])('splits quoteArgv(%o) back into the same arguments', (argv) => {
+      expect(splitQuotedArgv(quoteArgv(argv))).toEqual(argv);
+    });
+
+    it('is null for text quoteArgv cannot have produced', () => {
+      expect(splitQuotedArgv("apply 'unclosed")).toBeNull();
+      expect(splitQuotedArgv('trailing\\')).toBeNull();
+    });
   });
 
   describe('quoteArgv', () => {

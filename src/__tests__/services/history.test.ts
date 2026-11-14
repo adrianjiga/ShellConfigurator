@@ -7,6 +7,7 @@ import {
   type HistoryRecord,
   historyFilePath,
   lastRunShells,
+  readHistory,
   recordRun,
   recordRunSafely,
   snapshotDir,
@@ -143,6 +144,33 @@ describe('recordRun', () => {
 
     expect(readLedger()[0]?.snapshotId).toBeUndefined();
     expect(fs.existsSync(snapshotDir())).toBe(false);
+  });
+});
+
+describe('recordRun file capture links', () => {
+  it('records the runId of the captured files and the run a rollback undid', () => {
+    recordRun({ kind: 'rollback', runId: 'r2', rollbackOf: 'r1', exitCode: 0 });
+    expect(readLedger()[0]).toMatchObject({ kind: 'rollback', runId: 'r2', rollbackOf: 'r1' });
+  });
+
+  it('leaves both out when nothing was captured', () => {
+    recordRun({ kind: 'uninstall', runId: null });
+    expect(readLedger()[0]).not.toHaveProperty('runId');
+    expect(readLedger()[0]).not.toHaveProperty('rollbackOf');
+  });
+});
+
+describe('readHistory', () => {
+  it('is empty without a ledger', () => {
+    expect(readHistory()).toEqual([]);
+  });
+
+  it('reads records in file order, skipping torn and non-record lines', () => {
+    appendHistory(record('install'));
+    fs.appendFileSync(historyFilePath(), '{"torn\n[1,2]\nnull\n');
+    appendHistory(record('rollback', { runId: 'r2' }));
+
+    expect(readHistory().map((r) => r.kind)).toEqual(['install', 'rollback']);
   });
 });
 

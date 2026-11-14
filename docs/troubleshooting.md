@@ -18,6 +18,11 @@ configured ones:
 shell-configurator doctor
 ```
 
+If you still need to file a bug, attach the setup report:
+`shell-configurator debug-info > issue.md` writes the versions, detection,
+shells, PATH and these doctor findings as Markdown, with your home directory
+shown as `~`. Read it before posting.
+
 `doctor --fix` (or `repair`) applies the fix each failing check carries and
 re-runs the checks: it re-adds the init line, rewrites a per-shell config,
 reinstalls Starship via the detected package manager, or reinstalls the font
@@ -167,3 +172,75 @@ For a failed package install, check that:
 If you're on a minimal image (Alpine, Arch, Fedora Docker), the shell package
 may not exist under that name. Run `apt-cache search <shell>` or equivalent
 to find the correct package.
+
+---
+
+## Removing ShellConfigurator's changes
+
+`shell-configurator uninstall --dry-run` lists what would go;
+`shell-configurator uninstall` shows the same plan and asks before removing it.
+It strips every `# Added by ShellConfigurator` block from the bash, zsh and fish
+rc files (each rc is backed up to `<rc>.bak-<timestamp>` first) and moves the
+per-shell configs in `~/.config/starship/` to `.bak-*` backups. Add `--starship`
+to remove Starship too, and `--font <id>` to remove a Nerd Font it installed.
+
+- **The prompt still shows after uninstall**: your rc has its own
+  `starship init` line, which uninstall leaves alone. Remove it yourself.
+- **Nushell or PowerShell still loads Starship**: they were set up by hand, so
+  uninstall only names the file to clean (the Nushell autoload folder, or
+  `$PROFILE`).
+- **"pass --yes to go ahead"**: uninstall runs without a terminal to ask on
+  (a script or CI). Add `--yes` once the `--dry-run` plan looks right.
+- **"no cached … archive"**: the font was installed before the font cache
+  existed, so its files cannot be told apart from your other fonts. Delete them
+  from `~/.local/share/fonts` (`~/Library/Fonts` on macOS) yourself.
+- **Starship "is not from a package manager here"**: the detected package
+  manager does not own the binary on your PATH (e.g. a `cargo install`, or
+  `/usr/local/bin` from a root script install). Remove it with whatever
+  installed it.
+- **Starship "kept: … would still start it"**: a shell still has a
+  `starship init` line uninstall leaves alone (your own line, a shell outside
+  `--shells`, fish's `conf.d/starship.fish`, or a Nushell/PowerShell setup).
+  Remove those lines, or add the shells to `--shells`, and run it again.
+- **A terminal "still selects" the font**: its config still names the Nerd
+  Font uninstall removed. Pick another font in that terminal's settings.
+- **A config was "left in place"**: its rc could not be cleaned (read-only, or
+  a broken symlink), so the config it points at was kept. Fix the rc and run
+  uninstall again.
+- **Changed your mind**: run `shell-configurator rollback`, as the report says.
+  If the run could not be recorded, the report lists `cp` commands that copy
+  each backup back instead.
+
+---
+
+## Undoing a run with rollback
+
+Every wizard install, `apply` and `uninstall` keeps a copy of the rc files,
+per-shell configs, shared config and terminal configs it changes.
+`shell-configurator rollback --list` shows those runs, newest first, and
+`shell-configurator rollback` puts the newest one back (asking first; `--yes`
+off a terminal). Run it again to undo the run before; `--run <id>` picks one.
+
+- **"changed since that run, so it is left as it is"**: you (or a later run)
+  edited that file after the run, and rollback never overwrites a later edit.
+  Roll back the later run first, or fix the file by hand.
+- **"so it stays next to roll back"**: some files were skipped (changed since)
+  or failed, so the run is only partly undone and the next `rollback` tries it
+  again. Fix or put back those files, then run it again; files already undone
+  report "already as it was before that run".
+- **"Nothing to roll back."**: no recorded run changed any file, or every run
+  has been rolled back already. Runs made before rollback existed kept no
+  copies, and only the newest 50 runs are kept.
+- **"its saved copy cannot be read"** or **"could not be read after that
+  run"**: that file's copy is gone, or the run left the file unreadable (e.g.
+  replaced by a folder). The other files are still put back; fix that one by
+  hand.
+- **Rolled back too far**: a rollback is a run too, so
+  `rollback --run <that rollback's id>` (see `--list`) redoes what it undid.
+- **The font or Starship is still there**: rollback only covers files, not the
+  font, the Starship binary or the login shell (`chsh`). Use `uninstall
+  --font <id> --starship` for those.
+- **"starship: command not found" after rolling back an uninstall**: the
+  uninstall removed Starship (`--starship`), and rollback put back the rc lines
+  that start it but cannot reinstall the binary. Run `shell-configurator repair`
+  (or `apply`) to install it again.

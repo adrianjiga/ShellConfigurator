@@ -1,5 +1,7 @@
 import { createRequire } from 'node:module';
+import * as path from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { unzipSync } from 'fflate';
 
 const require = createRequire(import.meta.url);
 const FFLATE_ENTRY = require.resolve('fflate');
@@ -22,13 +24,12 @@ export interface ExtractedFontFile {
  * ESM; fflate's absolute path and the zip travel through workerData, and results
  * come back on `parentPort`. Decompressing in a worker keeps parsing off the
  * main thread, and the size caps bound how far a hostile archive can expand.
- * Entries are flattened to basenames here, so none can name a path.
+ * Entry names come back as stored; `fontFiles` flattens them to basenames.
  */
 const WORKER_SOURCE = `
 const { parentPort, workerData } = require('node:worker_threads');
-const path = require('node:path');
 const { unzipSync } = require(workerData.fflatePath);
-const FONT_FILE = /\\.(ttf|otf|woff2?)$/i;
+const FONT_FILE = new RegExp(workerData.fontFilePattern, 'i');
 try {
   let total = 0;
   const entries = unzipSync(workerData.zipBytes, {
@@ -44,15 +45,7 @@ try {
       return true;
     },
   });
-  const files = [];
-  const seen = new Set();
-  for (const name of Object.keys(entries)) {
-    const base = path.basename(name);
-    // A hidden, NUL-bearing or repeated name cannot be written safely; the first wins.
-    if (base.startsWith('.') || base.includes('\\0') || seen.has(base)) continue;
-    seen.add(base);
-    files.push({ name: base, bytes: entries[name] });
-  }
+  const files = Object.keys(entries).map((name) => ({ name, bytes: entries[name] }));
   const buffers = [...new Set(files.map((file) => file.bytes.buffer))];
   parentPort.postMessage({ ok: true, files }, buffers);
 } catch (error) {
@@ -62,6 +55,39 @@ try {
   });
 }
 `;
+
+const FONT_FILE = /\.(ttf|otf|woff2?)$/i;
+
+/**
+ * The font files of an archive's entries, flattened to basenames so none can
+ * name a path. A hidden, NUL-bearing or repeated name cannot be written safely;
+ * the first of a repeated name wins.
+ */
+function fontFiles<T extends { name: string }>(entries: T[]): T[] {
+  const seen = new Set<string>();
+  return entries.flatMap((entry) => {
+    const base = path.basename(entry.name);
+    if (!FONT_FILE.test(entry.name) || base.startsWith('.') || base.includes('\0')) return [];
+    if (seen.has(base)) return [];
+    seen.add(base);
+    return [{ ...entry, name: base }];
+  });
+}
+
+/**
+ * The file names `extractFontFiles` would return, read from the zip's entry
+ * headers: the filter rejects every entry, so nothing is decompressed.
+ */
+export function fontFileNames(zipBytes: Uint8Array): string[] {
+  const entries: { name: string }[] = [];
+  unzipSync(zipBytes, {
+    filter: (file) => {
+      entries.push({ name: file.name });
+      return false;
+    },
+  });
+  return fontFiles(entries).map((entry) => entry.name);
+}
 
 export interface ExtractLimits {
   maxEntryBytes: number;
@@ -86,6 +112,7 @@ export async function extractFontFiles(
       eval: true,
       workerData: {
         fflatePath: FFLATE_ENTRY,
+        fontFilePattern: FONT_FILE.source,
         zipBytes: bytes,
         maxEntryBytes: limits.maxEntryBytes,
         maxTotalBytes: limits.maxTotalBytes,
@@ -103,7 +130,7 @@ export async function extractFontFiles(
       (message: { ok: boolean; files?: ExtractedFontFile[]; error?: string }) => {
         clearTimeout(timer);
         if (message.ok) {
-          resolve(message.files ?? []);
+          resolve(fontFiles(message.files ?? []));
         } else {
           reject(new Error(`Could not extract font archive: ${message.error ?? 'unknown error'}`));
         }
