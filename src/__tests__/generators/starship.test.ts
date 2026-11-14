@@ -584,3 +584,28 @@ describe('palette coverage', () => {
     }
   });
 });
+
+describe('modules that style themselves under powerline', () => {
+  const powerline = (leftModules: WizardState['leftModules']) =>
+    toml.parse(
+      generateToml({
+        ...DEFAULT_STATE,
+        preset: 'custom',
+        hasNerdFont: true,
+        powerline: true,
+        leftModules,
+      })
+    ) as Record<string, Record<string, unknown>>;
+
+  it('puts the username colours behind the segment as backgrounds', () => {
+    const { username } = powerline(['username', 'character']);
+    expect(username!.style_user).toBe('bold fg:fg bg:username');
+    expect(username!.style_root).toBe('bold fg:fg bg:err');
+  });
+
+  it('puts each battery level colour behind the segment as a background', () => {
+    const { battery } = powerline(['battery', 'character']);
+    const styles = (battery!.display as Array<{ style: string }>).map((d) => d.style);
+    expect(styles).toEqual(['bold fg:fg bg:err', 'bold fg:fg bg:battery']);
+  });
+});
