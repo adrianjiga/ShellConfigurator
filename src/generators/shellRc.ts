@@ -579,8 +579,8 @@ export function appliedRcContent(
   const lines = [...carried, ...added.lines];
   const { pathLine } = added;
   if (lines.length === 0) {
-    // An already-configured rc may still carry a stale opposite-mode block;
-    // the cleaned file is written so the modes stay mutually exclusive.
+    // An already-configured rc may still carry a stale opposite-mode block, so
+    // the cleaned content comes back even with nothing to add.
     return { content: cleaned, applied: false, note: 'already configured' };
   }
 
