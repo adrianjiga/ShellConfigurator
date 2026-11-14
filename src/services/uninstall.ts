@@ -88,13 +88,21 @@ function describeRemoval(result: RemovalResult, what: string): string {
   return parts.join('; ');
 }
 
-function shellSteps(shellId: ShellId, explicit: boolean, deps: UninstallDeps): UninstallStep[] {
+/** What a shell has on disk, read once per plan. */
+interface ShellFacts {
+  shellId: ShellId;
+  managedRc: boolean;
+  config: boolean;
+}
+
+function shellSteps(facts: ShellFacts, explicit: boolean, deps: UninstallDeps): UninstallStep[] {
+  const { shellId } = facts;
   const shell = getShell(shellId);
   if (!shell) return [];
   const steps: UninstallStep[] = [];
   if (shell.rcFile) {
     const rc = shell.rcFile;
-    if (deps.hasManagedRcBlock(shellId)) {
+    if (facts.managedRc) {
       steps.push({
         id: `rc_${shellId}`,
         title: `${shell.label} rc`,
@@ -109,7 +117,7 @@ function shellSteps(shellId: ShellId, explicit: boolean, deps: UninstallDeps): U
         detail: `no ShellConfigurator lines in ${rc}`,
       });
     }
-  } else if (explicit || deps.hasShellConfig(shellId)) {
+  } else if (explicit || facts.config) {
     steps.push({
       id: `rc_${shellId}`,
       title: `${shell.label} setup`,
@@ -117,7 +125,7 @@ function shellSteps(shellId: ShellId, explicit: boolean, deps: UninstallDeps): U
     });
   }
   const config = getShellConfigPath(shellId);
-  if (deps.hasShellConfig(shellId)) {
+  if (facts.config) {
     steps.push({
       id: `config_${shellId}`,
       title: `${shell.label} config`,
@@ -192,10 +200,14 @@ export async function planUninstall(
   deps: UninstallDeps = DEFAULT_UNINSTALL_DEPS
 ): Promise<UninstallStep[]> {
   const explicit = options.shells !== undefined;
-  const shells =
-    options.shells ??
-    SHELLS.map((s) => s.id).filter((id) => deps.hasManagedRcBlock(id) || deps.hasShellConfig(id));
-  const steps = shells.flatMap((shellId) => shellSteps(shellId, explicit, deps));
+  const facts = (options.shells ?? SHELLS.map((s) => s.id)).map((shellId) => ({
+    shellId,
+    managedRc: deps.hasManagedRcBlock(shellId),
+    config: deps.hasShellConfig(shellId),
+  }));
+  const steps = facts
+    .filter((f) => explicit || f.managedRc || f.config)
+    .flatMap((f) => shellSteps(f, explicit, deps));
   if (options.fontId) steps.push(await fontStep(options.fontId, deps));
   if (options.starship) steps.push(await starshipStep(deps));
   return steps;

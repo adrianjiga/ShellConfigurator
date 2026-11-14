@@ -42,6 +42,13 @@ describe('planUninstall', () => {
     expect(ids(steps)).toEqual(['rc_zsh', 'config_zsh', 'config_bash', 'rc_fish']);
   });
 
+  it('reads each shell once', async () => {
+    const deps = makeDeps(['zsh'], ['zsh']);
+    await planUninstall({}, deps);
+    expect(deps.hasManagedRcBlock).toHaveBeenCalledTimes(5);
+    expect(deps.hasShellConfig).toHaveBeenCalledTimes(5);
+  });
+
   it('plans nothing on a machine ShellConfigurator never touched', async () => {
     expect(await planUninstall({}, makeDeps())).toEqual([]);
   });
