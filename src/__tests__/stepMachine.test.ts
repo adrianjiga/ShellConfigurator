@@ -41,6 +41,16 @@ describe('getNextStep', () => {
     expect(next.step).toBe('preset');
   });
 
+  it('decides the font_select skip on the choice the update carries', () => {
+    const declinedBefore = stateWith('fontcheck', { nerdFontToInstall: NO_NERD_FONT });
+    expect(getNextStep(declinedBefore, { nerdFontToInstall: { kind: 'select' } }).step).toBe(
+      'font_select'
+    );
+
+    const wantedBefore = stateWith('fontcheck', { nerdFontToInstall: { kind: 'select' } });
+    expect(getNextStep(wantedBefore, { nerdFontToInstall: NO_NERD_FONT }).step).toBe('preset');
+  });
+
   it('advances from font_select to preset', () => {
     const next = getNextStep(
       stateWith('font_select', {
