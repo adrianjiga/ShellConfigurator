@@ -85,7 +85,8 @@ t shell-configurator generate --pre
 t shell-configurator apply --preset tok
 t shell-configurator uninstall --shells zsh,fi
 t shell-configurator completions ""
-t shell-configurator rollback --l`,
+t shell-configurator rollback --l
+t shell-configurator --list-presets --js`,
     ]);
     expect(out.split('\n')).toEqual([
       'uninstall',
@@ -94,6 +95,7 @@ t shell-configurator rollback --l`,
       'zsh,fish',
       'bash zsh fish',
       '--list',
+      '--json',
       '',
     ]);
   });
