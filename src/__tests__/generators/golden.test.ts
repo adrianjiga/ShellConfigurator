@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { PRESETS, type PresetDef } from '../../config/presets.ts';
@@ -47,6 +47,12 @@ describe('golden config fixtures', () => {
       // A trailing newline keeps the committed TOML a normal text file; the
       // snapshot asserts it, so a regenerated fixture is byte-identical.
       const generated = `${generateToml(state)}\n`;
+      if (process.env.UPDATE_GOLDEN !== '1') {
+        expect(
+          existsSync(fixturePath(name)),
+          `golden/${name}.toml is missing; write it with UPDATE_GOLDEN=1`
+        ).toBe(true);
+      }
       await expect(generated).toMatchFileSnapshot(fixturePath(name));
     }
   );
