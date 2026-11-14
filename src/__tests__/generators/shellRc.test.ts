@@ -1510,7 +1510,7 @@ describe('removing ShellConfigurator lines', () => {
     const result = removeShellConfigFile('zsh');
 
     expect(result.removed).toBe(true);
-    expect(result.backedUpTo).toMatch(new RegExp(`^${config.replace(/[.]/g, '\\.')}\\.bak-`));
+    expect(result.backedUpTo?.startsWith(`${config}.bak-`)).toBe(true);
     expect(fs.renameSync).toHaveBeenCalledWith(config, result.backedUpTo);
   });
 
