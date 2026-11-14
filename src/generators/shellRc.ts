@@ -692,7 +692,9 @@ export function appliedRcContent(
   const lines = [...carried, ...added.lines];
   const { pathLine } = added;
   if (lines.length === 0) {
-    return { content: cleaned, applied: false, note: 'already configured' };
+    return cleaned === existing
+      ? { content: cleaned, applied: false, note: 'already configured' }
+      : { content: cleaned, applied: true, note: 'removed a stale ShellConfigurator block' };
   }
 
   const marker = options.pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
@@ -918,7 +920,9 @@ export function resetRcContent(
   const note = ownExport ? 'sets its own STARSHIP_CONFIG' : undefined;
 
   if (lines.length === 0 && !needsInit) {
-    return { content, applied: false, note: note ?? 'already configured' };
+    return content === existing
+      ? { content, applied: false, note: note ?? 'already configured' }
+      : { content, applied: true, note: note ?? 'removed a stale ShellConfigurator block' };
   }
 
   const inserted = initPresent ? insertBeforeInit(content, shell, BLOCK_MARKER, lines) : null;

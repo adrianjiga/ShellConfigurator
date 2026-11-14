@@ -961,8 +961,8 @@ describe('applyShellConfig', () => {
 
     const result = applyShellConfig('fish');
 
-    expect(result.applied).toBe(false);
-    expect(result.note).toBe('already configured');
+    expect(result.applied).toBe(true);
+    expect(result.note).toBe('removed a stale ShellConfigurator block');
     const written = lastWrittenContent();
     expect(written).toContain(`set -gx STARSHIP_CONFIG '${fishConfig}'`);
     expect(written).toContain('starship init fish | source');
@@ -994,7 +994,7 @@ describe('applyShellConfig', () => {
 
     const result = applyShellConfig('zsh');
 
-    expect(result.applied).toBe(false);
+    expect(result.applied).toBe(true);
     const written = lastWrittenContent();
     expect(written).toContain('eval "$(starship init zsh)"');
     expect(written).toContain(`export STARSHIP_CONFIG='${expectedConfigPath}'`);
@@ -1111,7 +1111,7 @@ describe('resetSharedShellConfig', () => {
 
     const result = resetSharedShellConfig('fish');
 
-    expect(result).toEqual({ applied: false, note: 'sets its own STARSHIP_CONFIG' });
+    expect(result).toEqual({ applied: true, note: 'sets its own STARSHIP_CONFIG' });
     const written = lastWrittenContent();
     expect(written).toContain('set -gx STARSHIP_CONFIG ~/mine.toml');
     expect(written).toContain('starship init fish | source');
