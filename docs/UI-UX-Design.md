@@ -268,7 +268,13 @@ does not reach it today.
 In `--dry-run` mode the same screen appears but states that nothing will be applied;
 `installing` is still skipped afterwards.
 
-**Keys**: `Enter` confirm (only Enter — a stray `Space` or `Tab` does nothing), `Esc` back
+`e` shows (and hides) **Why each part of the prompt shows**: `starship explain` run
+against the generated config in the preview's sample project (`explainPromptAsync`),
+one row per segment with its output and Starship's description. It is asked once;
+without Starship the section says it cannot explain the prompt. It is not offered in
+adopt mode, where no config is generated.
+
+**Keys**: `Enter` confirm (only Enter — a stray `Space` or `Tab` does nothing), `e` explain the prompt, `Esc` back
 
 ---
 
@@ -335,7 +341,10 @@ plus `ConfigPlan`) and a hint to run without `--dry-run`.
 newest `.bak-*` backups back over the shared and per-shell Starship configs (the
 same code path as the CLI's `--restore`) and prints what was restored. It does not
 undo rc-file edits or terminal font configs, runs at most once, and is disabled in
-dry-run mode (no backups were made).
+dry-run mode (no backups were made). `s` saves the prompt as Markdown to share
+(`writeShareFile`: `starship-prompt.md` in the current folder, or a numbered name
+next to an existing one) and shows where; it works in dry-run mode too, runs once,
+and is not offered in adopt mode.
 
 ---
 

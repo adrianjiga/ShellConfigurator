@@ -33,6 +33,17 @@ fixes can reach all of them. `--json` prints the full report.
 
 ---
 
+## The prompt is slow
+
+Run `shell-configurator timings` in a folder where the prompt feels slow; add
+`--config ~/.config/starship/<shell>.toml` to time the config your shell uses.
+It lists each module's time, slowest first, and suggests what to change: a
+higher `command_timeout` when a tool timed out (its module then shows nothing),
+a higher `scan_timeout` when scanning the folder timed out, and for a slow module
+the line that turns it off. A slow `git_status` in a large repo usually gets
+faster with `git config core.fsmonitor true`. Starship runs modules in parallel,
+so the prompt is about as slow as its slowest module.
+
 ## Nerd Font characters show as boxes or question marks
 
 ShellConfigurator installs Nerd Font files to your system, but **your terminal
