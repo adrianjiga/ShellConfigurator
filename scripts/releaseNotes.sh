@@ -77,14 +77,16 @@ print_section() {
 
 notes="$(mktemp)"
 trap 'rm -f "$notes"' EXIT
-printf '## What changed in %s\n\n' "$label" > "$notes"
-print_section 'Breaking changes' ${breaks[@]+"${breaks[@]}"} >> "$notes"
-print_section 'New features' ${features[@]+"${features[@]}"} >> "$notes"
-print_section 'Bug fixes' ${fixes[@]+"${fixes[@]}"} >> "$notes"
-print_section 'Documentation' ${docs[@]+"${docs[@]}"} >> "$notes"
-print_section 'Tests' ${tests[@]+"${tests[@]}"} >> "$notes"
-print_section 'Maintenance' ${maintenance[@]+"${maintenance[@]}"} >> "$notes"
-print_section 'Other' ${other[@]+"${other[@]}"} >> "$notes"
+{
+  printf '## What changed in %s\n\n' "$label"
+  print_section 'Breaking changes' ${breaks[@]+"${breaks[@]}"}
+  print_section 'New features' ${features[@]+"${features[@]}"}
+  print_section 'Bug fixes' ${fixes[@]+"${fixes[@]}"}
+  print_section 'Documentation' ${docs[@]+"${docs[@]}"}
+  print_section 'Tests' ${tests[@]+"${tests[@]}"}
+  print_section 'Maintenance' ${maintenance[@]+"${maintenance[@]}"}
+  print_section 'Other' ${other[@]+"${other[@]}"}
+} > "$notes"
 
 # Only the header line plus its blank line means the range had no commits.
 if [ "$(wc -l < "$notes")" -eq 2 ]; then

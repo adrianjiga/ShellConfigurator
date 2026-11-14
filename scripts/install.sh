@@ -78,6 +78,7 @@ if ! curl -fsSL ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
   echo "Could not read the latest release from GitHub (rate-limited? set GITHUB_TOKEN)." >&2
   exit 1
 fi
+# shellcheck disable=SC2016
 asset="$(node -e '
   const release = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
   const asset = (release.assets || []).find((a) => a.name.endsWith(".tgz"));
