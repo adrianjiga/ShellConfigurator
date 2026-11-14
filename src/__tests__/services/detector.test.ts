@@ -173,6 +173,15 @@ describe('detectPackageManagerAsync', () => {
     expect(await detectPackageManagerAsync()).toBe('apk');
   });
 
+  it.each([
+    ['apt-get', 'apt'],
+    ['dnf', 'dnf'],
+  ] as const)('falls back to the %s binary for an unknown distro id', async (binary, pm) => {
+    execFileByArg((arg) => arg === binary);
+    readFileAsyncReturns('ID=exotic\n');
+    expect(await detectPackageManagerAsync()).toBe(pm);
+  });
+
   it('returns script as fallback when nothing is detected', async () => {
     execFileFails();
     expect(await detectPackageManagerAsync()).toBe('script');
@@ -320,6 +329,26 @@ describe('detectTerminalAsync', () => {
 
   it('detects foot from TERM', async () => {
     vi.stubEnv('TERM', 'foot');
+    expect(await detectTerminalAsync()).toBe('foot');
+  });
+
+  it.each([
+    ['kitty', 'kitty'],
+    ['ghostty', 'ghostty'],
+    ['WezTerm', 'wezterm'],
+    ['Alacritty', 'alacritty'],
+  ] as const)('detects TERM_PROGRAM=%s', async (program, terminal) => {
+    vi.stubEnv('TERM_PROGRAM', program);
+    expect(await detectTerminalAsync()).toBe(terminal);
+  });
+
+  it('detects alacritty from its IPC socket', async () => {
+    vi.stubEnv('ALACRITTY_SOCKET', '/run/user/1000/Alacritty-wayland-0.sock');
+    expect(await detectTerminalAsync()).toBe('alacritty');
+  });
+
+  it('detects foot from a foot-extra TERM', async () => {
+    vi.stubEnv('TERM', 'foot-extra');
     expect(await detectTerminalAsync()).toBe('foot');
   });
 
