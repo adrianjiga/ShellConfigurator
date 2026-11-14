@@ -30,13 +30,13 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 ## At a glance
 
-| Status           | Items                                                                                                                          |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · P4.1–P4.3 · #1 #2 #4 #5 #7 #8 #10 #11 #12 #13 #14 #17 #19 #20 #22 #24 #26 #27 |
-| TODO             | P4.4–P4.10 · P5.1–P5.3 · #6 #9 #15 #18 #21 #23 #25                                                                             |
-| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy)                                                                       |
-| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                                        |
-| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title                |
+| Status           | Items                                                                                                                              |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · P4.1–P4.4 · #1 #2 #4 #5 #7 #8 #10 #11 #12 #13 #14 #17 #19 #20 #22 #23 #24 #26 #27 |
+| TODO             | P4.5–P4.10 · P5.1–P5.3 · #6 #9 #15 #18 #21 #25                                                                                     |
+| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy)                                                                           |
+| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                                            |
+| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title                    |
 
 ---
 
@@ -251,11 +251,16 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
   latest Starship version, which needs a network or package-index query; the recorded install version and
   the doctor's drift check cover the common case.
 
-**P4.4 — `completions` (#23)** — **TODO**
+**P4.4 — `completions` (#23)** — **DONE**
 
 - Emit bash/zsh/fish completion scripts for shell-configurator itself, mirroring starship's own `completions` command.
 - **Why.** Standard CLI ergonomics; one subcommand + three templates. Cheap, expected, and the tool already installs into interactive shells so users will hit completion.
 - **How.** One subcommand + three templates over the frozen flag surface (D2). **Effort.** S. **D:** P1.2.
+- **Shipped:** `shell-configurator completions <bash|zsh|fish>`. The scripts are generated from one description
+  of the CLI (`services/cliSurface.ts`), which a test keeps in step with the parser. They complete
+  subcommands, each subcommand's flags, and values: presets, palettes, shells (comma lists), fonts,
+  characters and files. They are tested in real bash, zsh and fish, and the generate smoke loads the bash
+  script on every distro cell. `--run` ids are not completed.
 
 **P4.5 — Dry-run diff vs disk (#9)** — **TODO**
 
@@ -353,7 +358,7 @@ they can be picked up in parallel with any phase but each stays its own PR.
 
 ## Suggested next order (remaining work)
 
-1. The small wins: **P4.4 `completions`**, **P4.6 `WHAT-CHANGED.md`**, **P4.8 list flags**.
+1. The small wins: **P4.6 `WHAT-CHANGED.md`**, **P4.8 list flags**.
 2. Then **P5.1 (#6) transient prompt**, **P5.2 (#15) prompt-manager detection**, **P5.3 (#25) bootstrap**.
 
 ## Merge & verification strategy
