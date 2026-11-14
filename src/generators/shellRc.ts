@@ -462,8 +462,20 @@ function ownPathLines(shell: ShellDef): string[] {
   return [shell.pathLine(dir), legacy];
 }
 
+/**
+ * The same lines for a `~/.local/bin` under another home folder, as in dotfiles
+ * shared between a Linux and a macOS machine. A line that names `$HOME` is the
+ * user's own.
+ */
+const OTHER_HOME_PATH_LINE: Partial<Record<ShellId, RegExp>> = {
+  bash: /^export PATH=(?:'\/[^']*\/\.local\/bin':"\$PATH"|"\/[^"$]*\/\.local\/bin:\$PATH")$/,
+  zsh: /^export PATH=(?:'\/[^']*\/\.local\/bin':"\$PATH"|"\/[^"$]*\/\.local\/bin:\$PATH")$/,
+  fish: /^fish_add_path (?:'\/[^']*\/\.local\/bin'|\/[^\s'"$]*\/\.local\/bin)$/,
+};
+
 function isPathLine(shell: ShellDef, line: string): boolean {
-  return ownPathLines(shell).includes(line.trim());
+  const t = line.trim();
+  return ownPathLines(shell).includes(t) || Boolean(OTHER_HOME_PATH_LINE[shell.id]?.test(t));
 }
 
 function isConfigLine(shell: ShellDef, line: string): boolean {

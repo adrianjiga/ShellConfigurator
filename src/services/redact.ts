@@ -1,10 +1,7 @@
 import * as os from 'node:os';
 import { quoteArgv, splitQuotedArgv } from './args.ts';
+import { escapeRegExp } from './escapeRegExp.ts';
 import { homeDir } from './paths.ts';
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 /** Shows the home directory as `~`, so a pasted report does not name the user. */
 export function redactHome(text: string, home: string = homeDir()): string {

@@ -1494,6 +1494,19 @@ describe('removing ShellConfigurator lines', () => {
     expect(result.note).toBe('your own Starship init line stays');
   });
 
+  it.each([
+    `export PATH='/home/other/.local/bin':"$PATH"`,
+    'export PATH="/home/other/.local/bin:$PATH"',
+  ])('removes a whole block whose PATH line names another home folder: %s', (pathLine) => {
+    rcHolds(
+      `# Added by ShellConfigurator\n${pathLine}\nexport STARSHIP_CONFIG='/h/bash.toml'\neval "$(starship init bash)"\n`
+    );
+
+    removeManagedRcBlocks('bash');
+
+    expect(lastWrittenContent()).toBe('');
+  });
+
   it('still removes a PATH line written by a version before 1.3.0', () => {
     const bin = path.join(os.homedir(), '.local', 'bin');
     rcHolds(

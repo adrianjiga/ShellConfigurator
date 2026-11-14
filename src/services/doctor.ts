@@ -26,6 +26,7 @@ import {
   isStarshipInstalledAsync,
 } from './detector.ts';
 import { errorMessage } from './errors.ts';
+import { escapeRegExp } from './escapeRegExp.ts';
 import { runCapture } from './exec.ts';
 import { lastRunShells } from './history.ts';
 import {
@@ -134,12 +135,16 @@ function fontDirs(): string[] {
     : [getNerdFontsDir(), '/usr/share/fonts', '/usr/local/share/fonts'];
 }
 
-/** A file name of the Nerd Font `fontId` (its family with the spaces dropped), or of any Nerd Font. */
+/**
+ * A font file of the Nerd Font `fontId`, or of any Nerd Font: its family name,
+ * then Nerd Font, spaces dropped. Nerd Fonts 3 names it `JetBrainsMonoNerdFont-
+ * Regular.ttf`, version 2 `JetBrains Mono Regular Nerd Font Complete.ttf`.
+ */
 function nerdFontFile(fontId?: string | null): RegExp {
   const family = NERD_FONTS.find((font) => font.id === fontId)?.family;
   if (!family) return NERD_FONT_FILE;
-  const name = family.replace(/\s+/g, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`${name}.*\\.(ttf|otf)$`, 'i');
+  const name = escapeRegExp(family.replace(/\s*Nerd Font$/, '').replace(/\s+/g, ''));
+  return new RegExp(`^${name}.*NerdFont.*\\.(ttf|otf)$`, 'i');
 }
 
 /** Any font file under `dir` whose name matches `pattern`, at any nesting depth. */

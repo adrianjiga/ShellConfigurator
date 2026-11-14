@@ -847,6 +847,12 @@ describe('DEFAULT_DOCTOR_DEPS.hasNerdFonts', () => {
     expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts()).toBe(true);
   });
 
+  it('finds a Nerd Fonts 2 install by its older file names', () => {
+    add('JetBrains Mono Regular Nerd Font Complete.ttf');
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('JetBrainsMono')).toBe(true);
+    expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('FiraCode')).toBe(false);
+  });
+
   it('looks for the requested font, not any Nerd Font', () => {
     add('JetBrainsMonoNerdFont-Regular.ttf');
     expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('FiraCode')).toBe(false);
