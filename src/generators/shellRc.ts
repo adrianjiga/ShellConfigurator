@@ -437,12 +437,13 @@ export function keepsOwnConfig(shellId: ShellId, io: RcIo = FS_RC_IO): boolean {
   if (!shell?.rcFile || !shell.configEnv) return false;
   const configPath = getShellConfigPath(shellId);
   try {
+    if (!io.exists(shell.rcFile)) return false;
+    const content = io.readFile(shell.rcFile);
+    const setting = lastStarshipConfigLine(shell, content, true);
     return (
-      io.exists(shell.rcFile) &&
-      io
-        .readFile(shell.rcFile)
-        .split('\n')
-        .some((line) => exportsConfigPath(shell, line, configPath)) &&
+      setting !== undefined &&
+      (exportsConfigPath(shell, setting, configPath) ||
+        rcExportedConfigPath(shellId, content) === configPath) &&
       io.exists(configPath)
     );
   } catch {
@@ -888,12 +889,23 @@ function starshipUnsetLine(shellId: ShellId): string | null {
 }
 
 /** True when the line sets STARSHIP_CONFIG, in any form a user or an earlier run wrote. */
-function setsStarshipConfig(shell: ShellDef, line: string): boolean {
+function setsStarshipConfig(shell: ShellDef, line: string, exportedOnly = false): boolean {
   const t = line.trim();
   if (t.startsWith('#')) return false;
-  return shell.id === 'fish'
-    ? fishExportsStarshipConfig(t)
-    : /^(?:(?:export|(?:typeset|declare)\s+-\w*x\w*)\s+)?STARSHIP_CONFIG=/.test(t);
+  if (shell.id === 'fish') return fishExportsStarshipConfig(t);
+  const exported = /^(?:export|(?:typeset|declare)\s+-\w*x\w*)\s+STARSHIP_CONFIG=/.test(t);
+  return exported || (!exportedOnly && /^STARSHIP_CONFIG=/.test(t));
+}
+
+function lastStarshipConfigLine(
+  shell: ShellDef,
+  content: string,
+  exportedOnly = false
+): string | undefined {
+  return content
+    .split('\n')
+    .filter((line) => setsStarshipConfig(shell, line, exportedOnly))
+    .at(-1);
 }
 
 function starshipConfigValue(shell: ShellDef, line: string): string {
@@ -909,12 +921,16 @@ function starshipConfigValue(shell: ShellDef, line: string): string {
 
 export function rcStarshipConfig(shellId: ShellId, content: string): string | null {
   const shell = getShell(shellId);
-  if (!shell) return null;
-  const setting = content
-    .split('\n')
-    .filter((line) => setsStarshipConfig(shell, line))
-    .at(-1);
-  return setting === undefined ? null : starshipConfigValue(shell, setting);
+  const setting = shell && lastStarshipConfigLine(shell, content);
+  return setting ? starshipConfigValue(shell, setting) : null;
+}
+
+/** The config path the rc's last exported STARSHIP_CONFIG line hands Starship, expanded. */
+export function rcExportedConfigPath(shellId: ShellId, content: string): string | null {
+  const shell = getShell(shellId);
+  const setting = shell && lastStarshipConfigLine(shell, content, true);
+  const value = setting ? starshipConfigValue(shell, setting) : '';
+  return value ? (expandShellPath(value) ?? value) : null;
 }
 
 function startupFiles(shell: ShellDef): string[] {

@@ -70,6 +70,19 @@ describe('a later run that selects other shells', () => {
     ).toEqual([]);
   });
 
+  it('reads the export the way doctor does: written with $HOME, and the last one wins', () => {
+    writeShellConfig('format = "$character"\n', 'bash');
+    const bashrc = path.join(home, '.bashrc');
+    fs.writeFileSync(
+      bashrc,
+      'export STARSHIP_CONFIG="$HOME/.config/starship/bash.toml"\neval "$(starship init bash)"\n'
+    );
+    expect(keepsOwnConfig('bash')).toBe(true);
+
+    fs.appendFileSync(bashrc, 'export STARSHIP_CONFIG=/elsewhere.toml\n');
+    expect(keepsOwnConfig('bash')).toBe(false);
+  });
+
   it('runs the same check in a real run as in the plan', async () => {
     const detect = vi
       .spyOn(await import('../../services/detector.ts'), 'detectInstalledShellsAsync')

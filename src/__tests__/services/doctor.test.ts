@@ -508,13 +508,41 @@ describe('runDoctor', () => {
     expect(report.ok).toBe(true);
   });
 
-  it('passes a shell that sets its own STARSHIP_CONFIG', async () => {
+  it('passes a shell that sets its own STARSHIP_CONFIG, with $HOME expanded', async () => {
+    const own = path.join(os.homedir(), '.config', 'my', 'starship.toml');
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `${ZSH_INIT}\nexport STARSHIP_CONFIG="$HOME/.config/my/starship.toml"\n`);
+    files.set(own, 'x\n');
+    const report = await runDoctor(null, makeDeps(files));
+    expect(find(report, 'shell:zsh')).toMatchObject({
+      status: 'pass',
+      detail: `configured via ${own}`,
+    });
+    expect(report.ok).toBe(true);
+  });
+
+  it('warns when an expanded STARSHIP_CONFIG names a file that does not exist', async () => {
     const files = new Map<string, string>();
     files.set(ZSH_RC, `${ZSH_INIT}\nexport STARSHIP_CONFIG="$HOME/.config/my/starship.toml"\n`);
     const report = await runDoctor(null, makeDeps(files));
+    expect(find(report, 'shell:zsh')).toMatchObject({ status: 'warn' });
+    expect(find(report, 'shell:zsh').detail).toMatch(/does not exist/);
+  });
+
+  it('passes a STARSHIP_CONFIG set from a variable it cannot know', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `${ZSH_INIT}\nexport STARSHIP_CONFIG="$DOTFILES/starship.toml"\n`);
+    const report = await runDoctor(null, makeDeps(files));
     expect(find(report, 'shell:zsh')).toMatchObject({ status: 'pass' });
     expect(find(report, 'shell:zsh').detail).toMatch(/sets its own STARSHIP_CONFIG/);
-    expect(report.ok).toBe(true);
+  });
+
+  it('reads a STARSHIP_CONFIG assigned without export as not reaching Starship', async () => {
+    const files = new Map<string, string>();
+    files.set(ZSH_RC, `${ZSH_INIT}\nSTARSHIP_CONFIG=${ZSH_CONFIG}\n`);
+    files.set(ZSH_CONFIG, 'x\n');
+    const report = await runDoctor(null, makeDeps(files));
+    expect(find(report, 'shell:zsh').detail).not.toContain(`configured via ${ZSH_CONFIG}`);
   });
 
   it('accepts an export written under a different XDG_CONFIG_HOME', async () => {

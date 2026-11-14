@@ -13,6 +13,7 @@ import {
   initReachable,
   loginLoadsBashrc,
   manualSetupAppliedWith,
+  rcExportedConfigPath,
   rcStarshipConfig,
   startsStarship,
 } from '../generators/shellRc.ts';
@@ -176,7 +177,7 @@ export function shellPointsAtShared(
  * install time — so running the doctor under a different env is not a failure.
  */
 function exportedConfigPath(content: string, shellId: ShellId): string | null {
-  return rcStarshipConfig(shellId, content) || null;
+  return rcExportedConfigPath(shellId, content);
 }
 
 function setsOwnConfig(content: string, shellId: ShellId): boolean {
