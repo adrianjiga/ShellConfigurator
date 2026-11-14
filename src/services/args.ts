@@ -212,6 +212,36 @@ export function quoteArgv(argv: string[]): string {
     .join(' ');
 }
 
+/** Splits a `quoteArgv` command back into its arguments; null when it is not one. */
+export function splitQuotedArgv(command: string): string[] | null {
+  const argv: string[] = [];
+  let current = '';
+  let inArg = false;
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i]!;
+    if (c === "'") {
+      const end = command.indexOf("'", i + 1);
+      if (end === -1) return null;
+      current += command.slice(i + 1, end);
+      inArg = true;
+      i = end;
+    } else if (c === '\\') {
+      if (i + 1 >= command.length) return null;
+      current += command[++i];
+      inArg = true;
+    } else if (c === ' ') {
+      if (inArg) argv.push(current);
+      current = '';
+      inArg = false;
+    } else {
+      current += c;
+      inArg = true;
+    }
+  }
+  if (inArg) argv.push(current);
+  return argv;
+}
+
 export function parseCliArgs(argv: string[]): CliFlags {
   const result: CliFlags = {
     subcommand: null,

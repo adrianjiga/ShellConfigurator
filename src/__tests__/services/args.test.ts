@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type CliFlags, parseCliArgs, quoteArgv } from '../../services/args.ts';
+import { type CliFlags, parseCliArgs, quoteArgv, splitQuotedArgv } from '../../services/args.ts';
 
 describe('parseCliArgs', () => {
   it('returns defaults when argv is empty', () => {
@@ -267,6 +267,21 @@ describe('parseCliArgs', () => {
     expect(() => parseCliArgs(['--preset', '--no-powerline'])).toThrow(
       /Flag '--preset' needs a value/
     );
+  });
+
+  describe('splitQuotedArgv', () => {
+    it.each([
+      [['generate', '--preset', 'pure-prompt']],
+      [['--state', 'my card.json']],
+      [["it's.toml", '', 'a\\b', "'"]],
+    ])('splits quoteArgv(%o) back into the same arguments', (argv) => {
+      expect(splitQuotedArgv(quoteArgv(argv))).toEqual(argv);
+    });
+
+    it('is null for text quoteArgv cannot have produced', () => {
+      expect(splitQuotedArgv("apply 'unclosed")).toBeNull();
+      expect(splitQuotedArgv('trailing\\')).toBeNull();
+    });
   });
 
   describe('quoteArgv', () => {
