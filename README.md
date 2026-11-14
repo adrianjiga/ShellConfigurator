@@ -23,6 +23,7 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/),
 - **Post-install verification**: after everything is applied, the written configs are loaded through the real `starship print-config` to catch a broken prompt before you restart
 - **Doctor / repair**: a read-only day-2 health check (Starship, locale, shell wiring, config validity, font installed + selected, version drift, the shell you are running) and a mode that applies fixes and re-checks
 - **Uninstall**: remove the rc lines and per-shell configs the wizard wrote (backed up first), and optionally the Nerd Font and Starship itself
+- **Rollback**: every install, apply and uninstall keeps a copy of the files it changes, so `rollback` can put a whole run back, one run at a time
 
 ## Requirements
 
@@ -57,6 +58,8 @@ shell-configurator doctor --fix / repair      apply the fixes for failing checks
 shell-configurator repair --include-warnings  also apply the fixes warnings suggest (e.g. the terminal font)
 shell-configurator uninstall                  remove the rc lines and per-shell configs it set up, after asking (--yes to skip the prompt)
 shell-configurator uninstall --starship --font <id>  also remove Starship and that Nerd Font (--shells to limit, --dry-run to only list)
+shell-configurator rollback                   put back the files the newest run changed, after asking (--yes, --dry-run, --json)
+shell-configurator rollback --list            list the runs that changed files; --run <id> rolls back a specific one
 shell-configurator --help                     show usage and exit
 shell-configurator --version                  print the version and exit
 shell-configurator --dry-run                  preview the config without installing (also -d, --no-install)
@@ -69,8 +72,8 @@ adopt mode) from its rc file.
 
 `uninstall` removes every `# Added by ShellConfigurator` block from the bash,
 zsh and fish rc files and moves the per-shell configs aside to `.bak-*`
-backups, backing up each rc first; it then prints the `cp` commands that put
-every file back. Your own `starship init` line (or fish's `conf.d` init) stays,
+backups, backing up each rc first; `rollback` undoes it (when the run could not
+be recorded, it prints the `cp` commands that put every file back instead). Your own `starship init` line (or fish's `conf.d` init) stays,
 with the PATH line it needs. Nushell and PowerShell were set up by hand, so it
 names the file to clean instead. Starship is removed only with `--starship`,
 and only once no shell would still start it: the script install's binary, or
@@ -133,7 +136,7 @@ npm run dev
 The wizard exits non-zero if any install step fails, so it can be used in a script.
 
 Exit codes: `0` on success; `1` when an install step failed, `doctor` found a
-failing check, `repair` left one failing, an `uninstall` step failed, `-o`/`--export` could not be written,
+failing check, `repair` left one failing, an `uninstall` step failed, a `rollback` could not put a file back, `-o`/`--export` could not be written,
 an `--import-url` fetch failed, or a fatal error occurred; `2` for a usage error
 (an unknown command or flag, a missing or invalid flag value, `--adopt`/`--import-url`
 outside `apply`, `apply` with no shells selected, `uninstall` off a terminal without `--yes`, or a state card that cannot be
@@ -157,8 +160,15 @@ shell-configurator apply --state my-card.json
 
 Every wizard install and real (non-dry-run) `apply` appends one record to
 `history.jsonl` (under the XDG state dir) and snapshots the card it applied; a
-real `uninstall` appends one too, without a card;
-`generate`, `doctor`, `repair` and dry runs record nothing. `--restore` copies
+real `uninstall` or `rollback` appends one too, without a card;
+`generate`, `doctor`, `repair` and dry runs record nothing. Each of those runs
+also copies the rc files, per-shell configs, shared config and terminal configs
+it is about to change into `runs/<id>/` under the state dir, keeping only the
+ones it changed. `rollback` puts a run's files back to that copy (or deletes the
+ones the run created) and leaves alone any file that changed again since, so a
+later edit is never overwritten; run it again to undo the run before, or roll
+back a rollback to redo it. Fonts, the Starship binary and the login shell are
+not part of a rollback. `--restore` copies
 the newest `.bak-*` backups back over the shared config and the per-shell
 configs, limited to the shells the last recorded run configured; it does not
 touch rc files. Nerd Font archives are cached under the XDG cache dir, verified
