@@ -228,6 +228,10 @@ export function runGlobalFlags(flags: CliFlags): boolean {
       );
     }
     if (lists.length > 1) throw new CliUsageError(`Pass one of ${names} at a time.`);
+    const unused = presentFlags(flags).filter((name) => name !== '--json');
+    if (unused.length > 0) {
+      throw new CliUsageError(`${unused.join(', ')} cannot be used with ${names}.`);
+    }
     const entries = listEntries(lists[0]![1]);
     process.stdout.write(
       flags.json ? `${JSON.stringify(entries, null, 2)}\n` : formatListing(entries)
@@ -270,6 +274,25 @@ function presentConfigFlags(flags: CliFlags): string[] {
   if (flags.importUrl) present.push('--import-url');
   if (flags.outputFile) present.push('-o/--output');
   if (flags.exportFile) present.push('--export');
+  return present;
+}
+
+/** Every flag on the command line except the help, version and list flags, by the name shown to the user. */
+function presentFlags(flags: CliFlags): string[] {
+  const present = presentConfigFlags(flags);
+  const others: Array<[unknown, string]> = [
+    [flags.stateFile, '--state'],
+    [flags.dryRun, '--dry-run'],
+    [flags.restore, '--restore'],
+    [flags.json, '--json'],
+    [flags.fix, '--fix'],
+    [flags.includeWarnings, '--include-warnings'],
+    [flags.yes, '--yes'],
+    [flags.starship, '--starship'],
+    [flags.list, '--list'],
+    [flags.runId, '--run'],
+  ];
+  for (const [value, name] of others) if (value) present.push(name);
   return present;
 }
 
@@ -525,11 +548,7 @@ export async function runRollbackCommand(
 
 /** Prints the completion script for the shell named after `completions`. */
 export function runCompletionsCommand(flags: CliFlags): void {
-  const unused = presentConfigFlags(flags);
-  if (flags.stateFile) unused.push('--state');
-  if (flags.json) unused.push('--json');
-  if (flags.dryRun) unused.push('--dry-run');
-  if (flags.fix) unused.push('--fix');
+  const unused = presentFlags(flags);
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with completions.`);
   }

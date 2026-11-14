@@ -1211,6 +1211,19 @@ describe('index completions command', () => {
     [['completions', 'tcsh'], /No completions for 'tcsh'/],
     [['completions', 'zsh', '--json'], /--json cannot be used with completions/],
     [['completions', 'zsh', '--preset', 'pure-prompt'], /--preset cannot be used with completions/],
+    [
+      [
+        'completions',
+        'bash',
+        '--run',
+        'abc',
+        '--yes',
+        '--include-warnings',
+        '--starship',
+        '--list',
+      ],
+      /--include-warnings, --yes, --starship, --list, --run cannot be used with completions/,
+    ],
   ])('rejects %o', (args, message) => {
     expect(() => runCompletionsCommand(parseCliArgs(args))).toThrow(message);
   });
@@ -1251,6 +1264,15 @@ describe('index list flags', () => {
 
   it('runs before the subcommand check, so --json needs no subcommand', async () => {
     expect((await routeCli(['--list-presets', '--json'])).handled).toBe(true);
+  });
+
+  it('rejects any other flag next to a list flag, except --json', () => {
+    expect(() =>
+      runGlobalFlags(
+        parseCliArgs(['--list-presets', '--shells', 'bash', '--dry-run', '--state', 'x'])
+      )
+    ).toThrow('--shells, --state, --dry-run cannot be used with --list-presets.');
+    expect(runGlobalFlags(parseCliArgs(['--list-presets', '--json']))).toBe(true);
   });
 
   it('rejects a list flag with a subcommand, or two at once', () => {
