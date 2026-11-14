@@ -15,6 +15,7 @@ import {
   writeSnapshot,
 } from '../../services/history.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
+import { restoreEnv } from '../helpers/env.ts';
 
 let tmpDir: string;
 const savedEnv = { ...process.env };
@@ -24,7 +25,7 @@ beforeEach(() => {
   process.env.XDG_STATE_HOME = tmpDir;
 });
 afterEach(() => {
-  process.env = { ...savedEnv };
+  restoreEnv(savedEnv);
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 

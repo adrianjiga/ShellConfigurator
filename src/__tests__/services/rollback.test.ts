@@ -17,6 +17,7 @@ import {
   readRunManifest,
   runDir,
 } from '../../services/runCapture.ts';
+import { restoreEnv } from '../helpers/env.ts';
 
 vi.unmock('../../services/runCapture.ts');
 
@@ -28,7 +29,7 @@ beforeEach(() => {
   process.env.XDG_STATE_HOME = path.join(tmpDir, 'state');
 });
 afterEach(() => {
-  process.env = { ...savedEnv };
+  restoreEnv(savedEnv);
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 

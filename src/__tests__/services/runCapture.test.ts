@@ -35,6 +35,7 @@ import {
   trackedFiles,
   UNREADABLE_AFTER,
 } from '../../services/runCapture.ts';
+import { restoreEnv } from '../helpers/env.ts';
 
 let tmpDir: string;
 const savedEnv = { ...process.env };
@@ -44,7 +45,7 @@ beforeEach(() => {
   process.env.XDG_STATE_HOME = path.join(tmpDir, 'state');
 });
 afterEach(() => {
-  process.env = { ...savedEnv };
+  restoreEnv(savedEnv);
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 

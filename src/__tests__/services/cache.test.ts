@@ -13,6 +13,7 @@ import {
   sha256Digest,
 } from '../../services/cache.ts';
 import { cacheDir } from '../../services/paths.ts';
+import { restoreEnv } from '../helpers/env.ts';
 
 let tmpDir: string;
 const savedEnv = { ...process.env };
@@ -22,7 +23,7 @@ beforeEach(() => {
   process.env.XDG_CACHE_HOME = tmpDir;
 });
 afterEach(() => {
-  process.env = { ...savedEnv };
+  restoreEnv(savedEnv);
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 

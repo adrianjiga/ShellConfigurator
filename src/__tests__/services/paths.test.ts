@@ -8,10 +8,11 @@ vi.mock('node:os', () => ({
 }));
 
 import * as os from 'node:os';
+import { restoreEnv } from '../helpers/env.ts';
 
 const savedEnv = { ...process.env };
 afterEach(() => {
-  process.env = { ...savedEnv };
+  restoreEnv(savedEnv);
   vi.clearAllMocks();
 });
 
