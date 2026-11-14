@@ -18,6 +18,17 @@ const base: WizardState = {
 };
 
 describe('generateToml', () => {
+  it('keeps the brackets of the Bracketed preset when Powerline cannot be drawn without a Nerd Font', () => {
+    const generated = generateToml({
+      ...base,
+      preset: 'bracketed-segments',
+      powerline: true,
+      hasNerdFont: false,
+    });
+    expect(generated).toContain('format = "(\\\\[[');
+    expect(generated).not.toContain('prev_bg');
+  });
+
   it('includes format line with left modules and $fill for right modules', () => {
     const toml = generateToml(base);
     expect(toml).toContain(

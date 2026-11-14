@@ -170,7 +170,7 @@ export function powerlineDroppedReason(state: GlyphState): string | null {
   return `The ${label} preset uses text symbols only, so it has no powerline separators`;
 }
 
-/** Whether segments are drawn as `[content]`: the bracketed preset, without powerline. */
-export function bracketsSegments(state: { preset: string | null; powerline: boolean }): boolean {
-  return !state.powerline && Boolean(PRESETS.find((p) => p.id === state.preset)?.bracketed);
+/** Whether segments are drawn as `[content]`: the bracketed preset, unless powerline is drawn. */
+export function bracketsSegments(state: GlyphState): boolean {
+  return !drawsPowerline(state) && Boolean(PRESETS.find((p) => p.id === state.preset)?.bracketed);
 }
