@@ -3,6 +3,7 @@ import {
   assertBashCompletions,
   assertDebugInfo,
   assertGenerate,
+  assertScriptingSurface,
   requireScratchHome,
   runSmoke,
 } from './smokeHome.mjs';
@@ -15,4 +16,5 @@ await runSmoke('Headless generate smoke', () => {
   assertGenerate(homeDir, 'bash');
   assertDebugInfo(homeDir);
   assertBashCompletions(homeDir);
+  assertScriptingSurface();
 });

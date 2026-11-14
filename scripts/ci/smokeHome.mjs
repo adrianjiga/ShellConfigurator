@@ -231,3 +231,20 @@ export function assertWhatChanged(out, rcPath) {
     `the summary does not offer rollback:\n${text}`
   );
 }
+
+/** Runs the list flags and `apply --dry-run --json` for real and parses what they print. */
+export function assertScriptingSurface() {
+  const presets = JSON.parse(runCli(['--list-presets', '--json']));
+  assert.ok(
+    presets.some((preset) => preset.id === 'tokyo-night'),
+    '--list-presets --json has no tokyo-night'
+  );
+  assert.match(runCli(['--list-fonts']), /^JetBrainsMono\s+JetBrains Mono$/m, '--list-fonts text');
+
+  const plan = JSON.parse(
+    runCli(['apply', '--dry-run', '--json', '--shells', 'bash', '--no-nerd-font'])
+  );
+  assert.equal(plan.dryRun, true, 'apply --dry-run --json is not a dry-run plan');
+  assert.deepEqual(plan.shells, ['bash'], 'apply --dry-run --json has the wrong shells');
+  assert.equal(plan.config.kind, 'per-shell', 'apply --dry-run --json has no generated config');
+}
