@@ -377,6 +377,26 @@ export function manualSetupAppliedWith(
     : pins.every((filePath) => io.exists(filePath));
 }
 
+/**
+ * Whether the shell still has its own working setup from an earlier run: its rc
+ * exports STARSHIP_CONFIG to its per-shell config, and that file exists. Such a
+ * shell already overrides a STARSHIP_CONFIG leaked from a parent shell.
+ */
+export function keepsOwnConfig(shellId: ShellId, io: RcIo = FS_RC_IO): boolean {
+  const shell = getShell(shellId);
+  const exportLine = starshipConfigLine(shellId);
+  if (!shell?.rcFile || !exportLine) return false;
+  try {
+    return (
+      io.exists(shell.rcFile) &&
+      hasLine(io.readFile(shell.rcFile), exportLine) &&
+      io.exists(getShellConfigPath(shellId))
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function manualSetupApplied(shell: ShellDef, pointAtSharedConfig = false): boolean {
   return manualSetupAppliedWith(shell, FS_RC_IO, pointAtSharedConfig);
 }

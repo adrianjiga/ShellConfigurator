@@ -6,6 +6,7 @@ import {
   backupSharedConfig,
   getSharedConfigPath,
   getShellConfigPath,
+  keepsOwnConfig,
   resetSharedShellConfig,
   shellsWithStarshipInit,
   type WriteConfigResult,
@@ -86,7 +87,10 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   sharedConfigExists: () => fs.existsSync(getSharedConfigPath()),
   applyShellConfig,
   resetSharedShellConfig,
-  getShellsUsingStarship: async () => shellsWithStarshipInit(await detectInstalledShellsAsync()),
+  getShellsUsingStarship: async () =>
+    shellsWithStarshipInit(await detectInstalledShellsAsync()).filter(
+      (shellId) => !keepsOwnConfig(shellId)
+    ),
   getMissingStarshipPathDir,
   readStarshipVersion,
   verifyConfig: (configPath, pathDir) => verifyStarshipConfig(configPath, pathDir ?? null),
@@ -161,19 +165,20 @@ export function sharedConfigNote(shellIds: readonly ShellId[], done: boolean): s
   const one = names.length === 1;
   const list = one ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
   const uses = done ? (one ? 'now uses' : 'now use') : 'will use';
-  return `${list} ${one ? 'is' : 'are'} not selected, so ${one ? 'it' : 'they'} ${uses} your shared ${getSharedConfigPath()} again, the same prompt as any shell without its own config. ${one ? 'Its' : 'Their'} own config stays on disk; select ${one ? 'it' : 'them'} in a later run to bring it back.`;
+  return `${list} ${one ? 'is' : 'are'} not selected, so ${one ? 'it' : 'they'} ${uses} your shared ${getSharedConfigPath()} again, the same prompt as any shell without its own config. Select ${one ? 'it' : 'them'} in a later run to give ${one ? 'it its' : 'them their'} own prompt.`;
 }
 
 /**
- * Installed shells outside the selection whose rc already loads Starship: the
- * run adds an unset guard to each so a configured parent's STARSHIP_CONFIG
- * cannot leak into them.
+ * Installed shells outside the selection whose rc already loads Starship but
+ * that have no working setup of their own: the run adds an unset guard to each
+ * so a configured parent's STARSHIP_CONFIG cannot leak into them. A shell with
+ * its own setup already overrides that variable and is left alone.
  */
 export function plannedResetShells(state: WizardState): ShellId[] {
   if (state.skipStarshipInstall) return [];
   return shellsWithStarshipInit(
     state.installedShells.filter((shellId) => !state.selectedShells.includes(shellId))
-  );
+  ).filter((shellId) => !keepsOwnConfig(shellId));
 }
 
 export function buildTaskList(

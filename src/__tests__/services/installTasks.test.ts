@@ -1225,7 +1225,7 @@ describe('sharedConfigNote', () => {
   it('says unselected shells go back to the shared config, before and after a run', () => {
     expect(sharedConfigNote([], false)).toBeNull();
     expect(sharedConfigNote(['fish'], false)).toMatch(
-      /^Fish is not selected, so it will use your shared .*starship\.toml again.*Its own config stays on disk; select it in a later run/
+      /^Fish is not selected, so it will use your shared .*starship\.toml again.*Select it in a later run to give it its own prompt\.$/
     );
     expect(sharedConfigNote(['fish', 'zsh', 'bash'], true)).toMatch(
       /^Fish, Zsh and Bash are not selected, so they now use your shared/
