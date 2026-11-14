@@ -84,18 +84,10 @@ export const SHELLS: ShellDef[] = [
     // The config path is written in literally, so it is the file the wizard wrote.
     get initLine() {
       const pin = `export-env { $env.STARSHIP_CONFIG = "${perShellConfigPath('nushell')}" }`;
-      return `nu -c ${posixShellQuote(
-        `let d = ($nu.data-dir | path join vendor/autoload); mkdir $d; ` +
-          `starship init nu | save -f ($d | path join starship.nu); ` +
-          `'${pin}' | save -f ($d | path join starship-config.nu)`
-      )}`;
+      return nushellAutoloadCommand(`'${pin}' | save -f ($d | path join starship-config.nu)`);
     },
     get adoptInitLine() {
-      return `nu -c ${posixShellQuote(
-        `let d = ($nu.data-dir | path join vendor/autoload); mkdir $d; ` +
-          `starship init nu | save -f ($d | path join starship.nu); ` +
-          `rm -f ($d | path join starship-config.nu)`
-      )}`;
+      return nushellAutoloadCommand('rm -f ($d | path join starship-config.nu)');
     },
     manualNote: 'Run the command above from Bash (it invokes Nushell to write its autoload files).',
     get initPath() {
@@ -129,6 +121,14 @@ function perShellConfigPath(id: ShellId): string {
 }
 
 /** Nushell's `$nu.data-dir`. */
+/** `nu -c` writing Starship's autoload file, then `configStep` with `$d` as the autoload folder. */
+function nushellAutoloadCommand(configStep: string): string {
+  return `nu -c ${posixShellQuote(
+    'let d = ($nu.data-dir | path join vendor/autoload); mkdir $d; ' +
+      `starship init nu | save -f ($d | path join starship.nu); ${configStep}`
+  )}`;
+}
+
 function nushellDataDir(): string {
   if (process.platform === 'darwin') {
     return path.join(homeDir(), 'Library', 'Application Support', 'nushell');
