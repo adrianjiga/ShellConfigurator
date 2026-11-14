@@ -21,6 +21,7 @@ import {
   detectInstalledShellsAsync,
   detectPackageManagerAsync,
   detectTerminalAsync,
+  isStarshipInstalledAsync,
 } from './detector.ts';
 import { CliRunError, CliUsageError, errorMessage } from './errors.ts';
 import { type FileChange, plannedFileChanges } from './fileDiff.ts';
@@ -33,6 +34,7 @@ import {
   FONT_FALLBACK_NOTE,
   plannedResetShells,
   runInstallTasks,
+  TASK_IDS,
 } from './installTasks.ts';
 import { redactUrl, redactUrlText } from './redact.ts';
 import { CapturedRunError, captureRun, trackedFiles } from './runCapture.ts';
@@ -396,7 +398,7 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
   }
   let state = stateFromFlags(flags);
 
-  if (!flags.dryRun && state.selectedShells.length === 0) {
+  if (state.selectedShells.length === 0) {
     throw new CliUsageError(
       'apply configures at least one shell, but none are selected. ' +
         'Pass --shells <id,...> or a --state card that selects shells.'
@@ -436,14 +438,15 @@ export interface DryRunPlan {
 export function dryRunPlan(
   state: WizardState,
   tasks: InstallTask[],
-  resetShells: readonly ShellId[]
+  resetShells: readonly ShellId[],
+  starshipInstalled = false
 ): DryRunPlan {
   const shared = getSharedConfigPath();
   const pathDir = state.skipStarshipInstall ? null : plannedPathDir(state.packageManager);
   return {
     dryRun: true,
     shells: state.selectedShells,
-    installStarship: !state.skipStarshipInstall,
+    installStarship: !state.skipStarshipInstall && !starshipInstalled,
     tasks,
     config: state.keepExistingConfig
       ? state.sharedConfigToml != null
@@ -478,8 +481,11 @@ function printChanges(plan: DryRunPlan): void {
         ? [plan.config.path]
         : []
   );
+  const terminalNote = plan.tasks.some((task) => task.id === TASK_IDS.terminal)
+    ? "Its terminal font step edits the terminal's own config, which is not shown here.\n"
+    : '';
   if (plan.changes.length === 0) {
-    process.stdout.write('\nNo config or rc file on disk would change.\n');
+    process.stdout.write(`\nNo config or rc file on disk would change.\n${terminalNote}`);
     return;
   }
   process.stdout.write('\nChanges to config and rc files on disk:\n');
@@ -493,7 +499,7 @@ function printChanges(plan: DryRunPlan): void {
     }
   }
   process.stdout.write(
-    '\nA real run also saves a backup of each config it replaces and writes WHAT-CHANGED.md.\n'
+    `\nA real run also saves a backup of each config it replaces and writes WHAT-CHANGED.md.\n${terminalNote}`
   );
 }
 
@@ -515,7 +521,9 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
   const tasks = buildTaskList(state, resetShells);
 
   if (flags.dryRun) {
-    const plan = dryRunPlan(state, tasks, resetShells);
+    const starshipInstalled =
+      !state.skipStarshipInstall && (await isStarshipInstalledAsync()).installed;
+    const plan = dryRunPlan(state, tasks, resetShells, starshipInstalled);
     if (flags.json) {
       process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
       return;
@@ -523,7 +531,7 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
     process.stdout.write('shell-configurator apply (dry run) — nothing will be changed.\n\n');
     process.stdout.write(
       `Targets: ${plan.shells.join(', ') || '(none)'} · ` +
-        `will ${plan.installStarship ? 'install' : 'skip'} Starship\n`
+        `${plan.installStarship ? 'will install Starship' : starshipInstalled ? 'Starship is already installed' : 'will skip Starship'}\n`
     );
     printTasks(plan.tasks);
     const config = plan.config;

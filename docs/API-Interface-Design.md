@@ -832,14 +832,16 @@ shell-configurator apply [--state <file>] [generate flags] [--dry-run [--json]] 
   --adopt       keep the shared ~/.config/starship.toml (never writes per-shell files)
   --import-url  fetch a starship.toml and adopt it (implies --adopt; the fetch is
                 bounded — a 10s timeout and a 1 MB cap reject a hung or oversized
-                response. A non-http(s) URL is a usage error; an HTTP error, an
+                response. A non-https URL, or one with a user name or password, is a usage error; an HTTP error, an
                 empty or HTML body is a run error)
   --json        with --dry-run, print { dryRun, shells, installStarship, tasks,
                 config, changes } instead of text; config is { kind: 'per-shell', toml,
                 tomlIfFontFails? } (the glyph-free config written when a planned font
                 install fails),
                 { kind: 'imported', path, toml } or { kind: 'kept', path, exists }.
-                A real apply with --json is a usage error
+                installStarship is false when Starship is already installed.
+                A real apply with --json is a usage error, and a dry run with
+                no shells is one too, as the real run is
 ```
 
 When the run installs a Nerd Font and the config would differ without it, the

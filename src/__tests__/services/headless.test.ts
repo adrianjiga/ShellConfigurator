@@ -10,9 +10,11 @@ const {
   mockDetectPackageManager,
   mockDetectContainer,
   mockDetectTerminal,
+  mockIsStarshipInstalled,
   mockRunInstallTasks,
   mockRecordRun,
 } = vi.hoisted(() => ({
+  mockIsStarshipInstalled: vi.fn(async () => ({ installed: false })),
   mockDetectInstalledShells: vi.fn(),
   mockDetectPackageManager: vi.fn(),
   mockDetectContainer: vi.fn(),
@@ -31,6 +33,7 @@ vi.mock('../../services/detector.ts', async () => {
     detectPackageManagerAsync: mockDetectPackageManager,
     detectContainerAsync: mockDetectContainer,
     detectTerminalAsync: mockDetectTerminal,
+    isStarshipInstalledAsync: mockIsStarshipInstalled,
   };
 });
 
@@ -935,13 +938,37 @@ describe('runApply', () => {
     }
   });
 
-  it('still dry-runs an empty plan as a preview', async () => {
-    await runApply(flags({ subcommand: 'apply', dryRun: true }));
+  it('refuses a dry run with no shells, as the real run does', async () => {
+    await expect(runApply(flags({ subcommand: 'apply', dryRun: true }))).rejects.toThrow(
+      new CliUsageError(
+        'apply configures at least one shell, but none are selected. Pass --shells <id,...> or a --state card that selects shells.'
+      )
+    );
+  });
+
+  it.each([
+    [true, 'Starship is already installed'],
+    [false, 'will install Starship'],
+  ])('says what detection found about Starship (installed: %s)', async (installed, text) => {
+    mockIsStarshipInstalled.mockResolvedValueOnce({ installed });
+
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'], dryRun: true }));
 
     const output = stdoutWrite.mock.calls
       .map((call: [string, ...unknown[]]) => String(call[0]))
       .join('');
-    expect(output).toContain('(none)');
+    expect(output).toContain(text);
+  });
+
+  it("says the terminal font step's own config edit is not in the diff", async () => {
+    mockDetectTerminal.mockResolvedValue('ghostty');
+
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'], dryRun: true, font: 'FiraCode' }));
+
+    const output = stdoutWrite.mock.calls
+      .map((call: [string, ...unknown[]]) => String(call[0]))
+      .join('');
+    expect(output).toContain("terminal font step edits the terminal's own config");
   });
 
   it('survives a history write failure', async () => {
