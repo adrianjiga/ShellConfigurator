@@ -619,11 +619,15 @@ export async function runRollbackCommand(
         }
       )
     : { result: runRollback(target.runId, steps, { dryRun }), runId: null };
+  const alreadyBack = !changes && !dryRun && report.complete;
   process.stdout.write(
     flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatRollbackReport(report)
   );
+  if (alreadyBack && !flags.json) {
+    process.stdout.write('\nEvery file is already back, so that run now counts as rolled back.\n');
+  }
   if (!report.ok) process.exitCode = 1;
-  if (changes) {
+  if (changes || alreadyBack) {
     recordRunSafely({
       kind: 'rollback',
       command,

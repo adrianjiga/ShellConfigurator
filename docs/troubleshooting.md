@@ -287,6 +287,9 @@ off a terminal). Run it again to undo the run before; `--run <id>` picks one.
   or failed, so the run is only partly undone and the next `rollback` tries it
   again. Fix or put back those files, then run it again; files already undone
   report "already as it was before that run".
+- **"that run now counts as rolled back"**: every file the run changed was
+  already back (put back by hand, say), so nothing was written, and the next
+  `rollback` moves on to the run before it.
 - **"Nothing to roll back."**: no recorded run changed any file, or every run
   has been rolled back already. Runs made before rollback existed kept no
   copies, and only the newest 50 runs are kept.

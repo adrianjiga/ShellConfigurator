@@ -1080,6 +1080,37 @@ describe('index rollback command', () => {
     });
   });
 
+  it('marks a run whose files are already back as rolled back, without asking', async () => {
+    fs.writeFileSync(rc(), 'zero');
+    const runId = recordedRun('apply', 'one');
+    fs.writeFileSync(rc(), 'zero');
+    const prompt = io();
+
+    await runRollbackCommand(parseCliArgs(['rollback']), 'rollback', prompt);
+
+    expect(prompt.confirm).not.toHaveBeenCalled();
+    expect(output()).toContain('already as it was before that run');
+    expect(output()).toContain('that run now counts as rolled back');
+    expect(mockRecordRun).toHaveBeenCalledWith({
+      kind: 'rollback',
+      command: 'rollback',
+      exitCode: 0,
+      runId: null,
+      rollbackOf: runId,
+      partial: false,
+    });
+  });
+
+  it('records nothing for a dry run whose files are already back', async () => {
+    fs.writeFileSync(rc(), 'zero');
+    recordedRun('apply', 'one');
+    fs.writeFileSync(rc(), 'zero');
+
+    await runRollbackCommand(parseCliArgs(['rollback', '--dry-run']), 'rollback', io());
+
+    expect(mockRecordRun).not.toHaveBeenCalled();
+  });
+
   it('records a rollback that left a change in place as partial', async () => {
     const other = path.join(tmpDir, 'other');
     fs.writeFileSync(rc(), 'zero');
