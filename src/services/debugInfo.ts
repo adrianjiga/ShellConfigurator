@@ -214,7 +214,8 @@ function redactUrlText(text: string): string {
 /** Shows the home directory as `~`, so a pasted report does not name the user. */
 export function redactHome(text: string, home: string = homeDir()): string {
   if (home.length <= 1) return text;
-  return text.split(home).join('~');
+  const escaped = home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(`${escaped}(?![^/\\s\`'":,)\\]])`, 'g'), '~');
 }
 
 const yesNo = (value: boolean) => (value ? 'yes' : 'no');

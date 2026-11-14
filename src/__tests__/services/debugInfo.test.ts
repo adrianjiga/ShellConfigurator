@@ -195,6 +195,13 @@ describe('redactHome', () => {
     );
   });
 
+  it('only replaces the home directory itself, not a longer name that starts with it', () => {
+    expect(
+      redactHome('/home/al/.zshrc /home/alex/bin `/home/al` "/home/al",x /home/al', '/home/al')
+    ).toBe('~/.zshrc /home/alex/bin `~` "~",x ~');
+    expect(redactHome('/root/bin:/rootfs/bin', '/root')).toBe('~/bin:/rootfs/bin');
+  });
+
   it('leaves text alone when home is the root directory', () => {
     expect(redactHome('/etc/shells', '/')).toBe('/etc/shells');
   });
