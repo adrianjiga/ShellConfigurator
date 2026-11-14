@@ -671,7 +671,7 @@ describe('installNerdFont download guards', () => {
 
     await installNerdFont('FiraCode').catch(() => {});
 
-    expect(fetchMock.mock.calls.length).toBeGreaterThan(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     for (const call of fetchMock.mock.calls) {
       const init = call[1] as RequestInit | undefined;
       expect(init?.signal).toBeInstanceOf(AbortSignal);
