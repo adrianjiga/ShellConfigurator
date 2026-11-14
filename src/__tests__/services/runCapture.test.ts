@@ -363,6 +363,43 @@ describe('recoverInterruptedRuns', () => {
     expect(recoverInterruptedRuns(dead)).toEqual([]);
   });
 
+  it('leaves a dead run to the process that claimed it first', () => {
+    const rc = file('zshrc');
+    fs.writeFileSync(rc, 'before\n');
+    const capture = beginRunCapture([rc], { kind: 'apply' });
+    fs.writeFileSync(rc, 'after\n');
+    const otherPid = 424242;
+    const claimFirst = (pid: number) => {
+      if (pid !== otherPid) {
+        fs.renameSync(
+          path.join(capture.dir, 'pending.json'),
+          path.join(capture.dir, `pending.json.${otherPid}`)
+        );
+      }
+      return pid === otherPid;
+    };
+
+    expect(recoverInterruptedRuns(claimFirst)).toEqual([]);
+    expect(readRunManifest(capture.runId)).toBeNull();
+    expect(readHistory()).toEqual([]);
+    expect(fs.existsSync(path.join(capture.dir, `pending.json.${otherPid}`))).toBe(true);
+  });
+
+  it('recovers a run whose claim was left by a process that died while recovering it', () => {
+    const rc = file('zshrc');
+    fs.writeFileSync(rc, 'before\n');
+    const capture = beginRunCapture([rc], { kind: 'apply' });
+    fs.writeFileSync(rc, 'after\n');
+    fs.renameSync(
+      path.join(capture.dir, 'pending.json'),
+      path.join(capture.dir, 'pending.json.424242')
+    );
+
+    expect(recoverInterruptedRuns(dead)).toEqual([capture.runId]);
+    expect(fs.readdirSync(capture.dir).filter((name) => name.startsWith('pending'))).toEqual([]);
+    expect(readHistory()).toHaveLength(1);
+  });
+
   it('leaves a run alone while its process is alive', () => {
     const rc = file('zshrc');
     fs.writeFileSync(rc, 'before\n');

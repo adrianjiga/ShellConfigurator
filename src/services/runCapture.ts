@@ -1,7 +1,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { SHELLS } from '../config/shells.ts';
-import { bashLoginFiles, getSharedConfigPath, getShellConfigPath } from '../generators/shellRc.ts';
+import {
+  bashLoginFiles,
+  getSharedConfigPath,
+  getShellConfigPath,
+  writeFileAtomic,
+} from '../generators/shellRc.ts';
 import type { WizardState } from '../types.ts';
 import { sha256Digest } from './cache.ts';
 import { errorMessage, isMissingFile } from './errors.ts';
@@ -120,8 +125,7 @@ const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const activeCaptures = new Set<string>();
 
 function writeJsonAtomic(file: string, value: unknown): void {
-  fs.writeFileSync(`${file}.tmp`, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-  fs.renameSync(`${file}.tmp`, file);
+  writeFileAtomic(file, `${JSON.stringify(value, null, 2)}\n`, 0o600);
 }
 
 /**
@@ -244,6 +248,8 @@ export function finishRunCapture(
   return manifest;
 }
 
+type IsAlive = (pid: number, runId: string) => boolean;
+
 function processAlive(pid: number, runId: string): boolean {
   if (pid === process.pid) return activeCaptures.has(runId);
   try {
@@ -257,10 +263,21 @@ function processAlive(pid: number, runId: string): boolean {
 interface DeadRun {
   runId: string;
   dir: string;
+  pendingFile: string;
   pending: PendingCapture;
 }
 
-function deadRuns(isAlive: (pid: number, runId: string) => boolean): DeadRun[] {
+const CLAIM = /^pending\.json\.(\d+)$/;
+
+function pendingFiles(dir: string, runId: string, isAlive: IsAlive): string[] {
+  const claims = fs.readdirSync(dir).flatMap((name) => {
+    const pid = CLAIM.exec(name)?.[1];
+    return pid && !isAlive(Number(pid), runId) ? [path.join(dir, name)] : [];
+  });
+  return [path.join(dir, PENDING), ...claims];
+}
+
+function deadRuns(isAlive: IsAlive): DeadRun[] {
   let runs: string[];
   try {
     runs = fs.readdirSync(runsDir()).sort();
@@ -269,34 +286,42 @@ function deadRuns(isAlive: (pid: number, runId: string) => boolean): DeadRun[] {
   }
   return runs.flatMap((runId) => {
     const dir = runDir(runId);
+    let files: string[];
     try {
-      const pending = JSON.parse(
-        fs.readFileSync(path.join(dir, PENDING), 'utf8')
-      ) as PendingCapture;
-      if (pending.version !== RUN_MANIFEST_VERSION || !Array.isArray(pending.files)) return [];
-      const stale = Date.now() - (pending.startedAt ?? Date.now()) > PENDING_MAX_AGE_MS;
-      return !stale && isAlive(pending.pid, runId) ? [] : [{ runId, dir, pending }];
+      files = pendingFiles(dir, runId, isAlive);
     } catch {
       return [];
     }
+    for (const pendingFile of files) {
+      try {
+        const pending = JSON.parse(fs.readFileSync(pendingFile, 'utf8')) as PendingCapture;
+        if (pending.version !== RUN_MANIFEST_VERSION || !Array.isArray(pending.files)) return [];
+        const stale = Date.now() - (pending.startedAt ?? Date.now()) > PENDING_MAX_AGE_MS;
+        return !stale && isAlive(pending.pid, runId) ? [] : [{ runId, dir, pendingFile, pending }];
+      } catch {}
+    }
+    return [];
   });
 }
 
-export function interruptedRunCount(
-  isAlive: (pid: number, runId: string) => boolean = processAlive
-): number {
+export function interruptedRunCount(isAlive: IsAlive = processAlive): number {
   return deadRuns(isAlive).length;
 }
 
-export function recoverInterruptedRuns(
-  isAlive: (pid: number, runId: string) => boolean = processAlive
-): string[] {
-  return deadRuns(isAlive).flatMap(({ runId, dir, pending }) => {
+export function recoverInterruptedRuns(isAlive: IsAlive = processAlive): string[] {
+  return deadRuns(isAlive).flatMap(({ runId, dir, pendingFile, pending }) => {
+    const claim = path.join(dir, `${PENDING}.${process.pid}`);
+    try {
+      fs.renameSync(pendingFile, claim);
+    } catch {
+      return [];
+    }
     try {
       const manifest = finishRunCapture(
         { runId, dir, files: pending.files },
         { rewritable: pending.rewritable ?? [] }
       );
+      fs.rmSync(claim, { force: true });
       if (!manifest) return [];
       const record = pending.record ?? { kind: 'apply' as const };
       recordRun({
@@ -307,6 +332,9 @@ export function recoverInterruptedRuns(
       });
       return [runId];
     } catch {
+      try {
+        fs.renameSync(claim, path.join(dir, PENDING));
+      } catch {}
       return [];
     }
   });
