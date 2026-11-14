@@ -161,16 +161,36 @@ export async function renderPromptAsync(
     return { mode: 'static', reason: 'starship-missing' };
   }
 
-  let scratch: string | null = null;
   try {
-    scratch = await deps.createScratch();
-    await deps.writeConfig(scratch, generateToml(state));
-    const projectDir = await deps.scaffoldProject(scratch);
-    const text = await deps.runStarshipPrompt(scratch, projectDir, width);
+    const text = await withPreviewProject(state, deps, (scratch, projectDir) =>
+      deps.runStarshipPrompt(scratch, projectDir, width)
+    );
     if (text.trim().length === 0) return { mode: 'static', reason: 'render-failed' };
     return { mode: 'real', text };
   } catch {
     return { mode: 'static', reason: 'render-failed' };
+  }
+}
+
+export type ScratchDeps = Pick<
+  PreviewDeps,
+  'createScratch' | 'writeConfig' | 'scaffoldProject' | 'cleanup'
+>;
+
+/**
+ * Runs `run` with a scratch folder holding the generated config for `state`
+ * and the sample project, and removes the folder afterwards.
+ */
+export async function withPreviewProject<T>(
+  state: WizardState,
+  deps: ScratchDeps,
+  run: (scratch: string, projectDir: string) => Promise<T>
+): Promise<T> {
+  let scratch: string | null = null;
+  try {
+    scratch = await deps.createScratch();
+    await deps.writeConfig(scratch, generateToml(state));
+    return await run(scratch, await deps.scaffoldProject(scratch));
   } finally {
     if (scratch) await deps.cleanup(scratch);
   }

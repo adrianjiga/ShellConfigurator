@@ -1,11 +1,16 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as nodePath from 'node:path';
-import { generateToml } from '../generators/starship.ts';
 import type { WizardState } from '../types.ts';
 import { findStarshipAsync } from './detector.ts';
 import { CAPTURE_TIMEOUT_MS, runCaptureBoth } from './exec.ts';
-import { DEFAULT_PREVIEW_DEPS, STARSHIP_CONFIG_FILE, starshipEnv } from './preview.ts';
+import {
+  DEFAULT_PREVIEW_DEPS,
+  type ScratchDeps,
+  STARSHIP_CONFIG_FILE,
+  starshipEnv,
+  withPreviewProject,
+} from './preview.ts';
 
 const ESC = String.fromCharCode(27);
 const BEL = String.fromCharCode(7);
@@ -279,20 +284,15 @@ export type ExplainResult =
  */
 export async function explainPromptAsync(
   state: WizardState,
-  deps: ProbeDeps = DEFAULT_PROBE_DEPS
+  deps: ProbeDeps = DEFAULT_PROBE_DEPS,
+  scratchDeps: ScratchDeps = DEFAULT_PREVIEW_DEPS
 ): Promise<ExplainResult> {
-  if (!(await deps.isStarshipInstalled()))
+  if (!(await deps.isStarshipInstalled())) {
     return { mode: 'unavailable', reason: 'starship-missing' };
-  let scratch: string | null = null;
+  }
   try {
-    scratch = await DEFAULT_PREVIEW_DEPS.createScratch();
-    await DEFAULT_PREVIEW_DEPS.writeConfig(scratch, generateToml(state));
-    const project = await DEFAULT_PREVIEW_DEPS.scaffoldProject(scratch);
-    const { stdout } = await deps.run(
-      'explain',
-      project,
-      nodePath.join(scratch, STARSHIP_CONFIG_FILE),
-      scratch
+    const { stdout } = await withPreviewProject(state, scratchDeps, (scratch, project) =>
+      deps.run('explain', project, nodePath.join(scratch, STARSHIP_CONFIG_FILE), scratch)
     );
     const items = parseExplain(stdout);
     return items.length > 0
@@ -300,8 +300,6 @@ export async function explainPromptAsync(
       : { mode: 'unavailable', reason: 'explain-failed' };
   } catch {
     return { mode: 'unavailable', reason: 'explain-failed' };
-  } finally {
-    if (scratch) await DEFAULT_PREVIEW_DEPS.cleanup(scratch);
   }
 }
 

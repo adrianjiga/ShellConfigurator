@@ -1,8 +1,10 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.unmock('../../services/starshipProbe.ts');
 
+import { generateToml } from '../../generators/starship.ts';
 import {
   explainPromptAsync,
   type ProbeDeps,
@@ -170,19 +172,33 @@ describe('timePrompt', () => {
 });
 
 describe('explainPromptAsync', () => {
-  it('explains the generated config in the sample project', async () => {
+  const scratchDeps = () => ({
+    createScratch: vi.fn(async () => '/scratch'),
+    writeConfig: vi.fn(async () => {}),
+    scaffoldProject: vi.fn(async () => '/scratch/projects/myapp'),
+    cleanup: vi.fn(async () => {}),
+  });
+
+  it('explains the generated config in the sample project, then removes the scratch folder', async () => {
     const calls: string[][] = [];
-    const result = await explainPromptAsync(DEFAULT_STATE, {
-      isStarshipInstalled: async () => true,
-      run: async (command, path, _configPath, home) => {
-        calls.push([command, path, home ?? '']);
-        return { stdout: EXPLAIN, stderr: '' };
+    const scratch = scratchDeps();
+    const result = await explainPromptAsync(
+      DEFAULT_STATE,
+      {
+        isStarshipInstalled: async () => true,
+        run: async (command, path, configPath, home) => {
+          calls.push([command, path, configPath, home ?? '']);
+          return { stdout: EXPLAIN, stderr: '' };
+        },
       },
-    });
+      scratch
+    );
     expect(result).toEqual({ mode: 'real', items: parseExplain(EXPLAIN) });
-    expect(calls[0][0]).toBe('explain');
-    expect(calls[0][1]).toMatch(/projects[/\\]myapp$/);
-    expect(calls[0][1].startsWith(calls[0][2])).toBe(true);
+    expect(calls).toEqual([
+      ['explain', '/scratch/projects/myapp', path.join('/scratch', 'starship.toml'), '/scratch'],
+    ]);
+    expect(scratch.writeConfig).toHaveBeenCalledWith('/scratch', generateToml(DEFAULT_STATE));
+    expect(scratch.cleanup).toHaveBeenCalledWith('/scratch');
   });
 
   it('is unavailable without Starship, or when explain prints nothing or fails', async () => {
@@ -191,20 +207,22 @@ describe('explainPromptAsync', () => {
       run,
     });
     const ok = async () => ({ stdout: '', stderr: '' });
-    expect(await explainPromptAsync(DEFAULT_STATE, deps(ok, false))).toEqual({
+    expect(await explainPromptAsync(DEFAULT_STATE, deps(ok, false), scratchDeps())).toEqual({
       mode: 'unavailable',
       reason: 'starship-missing',
     });
-    expect(await explainPromptAsync(DEFAULT_STATE, deps(ok))).toEqual({
+    expect(await explainPromptAsync(DEFAULT_STATE, deps(ok), scratchDeps())).toEqual({
       mode: 'unavailable',
       reason: 'explain-failed',
     });
     const fails = async () => {
       throw new Error('boom');
     };
-    expect(await explainPromptAsync(DEFAULT_STATE, deps(fails))).toEqual({
+    const scratch = scratchDeps();
+    expect(await explainPromptAsync(DEFAULT_STATE, deps(fails), scratch)).toEqual({
       mode: 'unavailable',
       reason: 'explain-failed',
     });
+    expect(scratch.cleanup).toHaveBeenCalledWith('/scratch');
   });
 });
