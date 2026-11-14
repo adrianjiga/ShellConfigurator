@@ -235,7 +235,9 @@ export function assertDebugInfo(homeDir) {
   }
   assert.ok(!report.includes(homeDir), `debug-info shows the home directory:\n${report}`);
 
-  const info = JSON.parse(runCli(['debug-info', '--json']));
+  const json = runCli(['debug-info', '--json']);
+  assert.ok(!json.includes(homeDir), `debug-info --json shows the home directory:\n${json}`);
+  const info = JSON.parse(json);
   assert.equal(typeof info.packageManager, 'string', 'debug-info --json has no package manager');
   assert.ok(
     Array.isArray(info.shells) && info.shells.length > 0,

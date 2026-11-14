@@ -10,27 +10,29 @@
 # Usage: curl -fsSL https://raw.githubusercontent.com/adrianjiga/ShellConfigurator/master/scripts/install.sh | sh
 set -eu
 
-REPO="adrianjiga/ShellConfigurator"
-API_LATEST="https://api.github.com/repos/${REPO}/releases/latest"
+main() {
+  REPO="adrianjiga/ShellConfigurator"
+  API_LATEST="https://api.github.com/repos/${REPO}/releases/latest"
+  CURL_LIMITS="--connect-timeout 15 --max-time 300"
 
-for tool in curl tar; do
-  if ! command -v "$tool" >/dev/null 2>&1; then
-    echo "shell-configurator's installer needs $tool, which was not found." >&2
-    exit 1
+  for tool in curl tar; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      echo "shell-configurator's installer needs $tool, which was not found." >&2
+      exit 1
+    fi
+  done
+
+  if command -v node >/dev/null 2>&1; then
+    node_major="$(node --version | cut -d. -f1 | tr -d v)"
+  else
+    node_major=0
   fi
-done
+  case "$node_major" in
+    '' | *[!0-9]*) node_major=0 ;;
+  esac
 
-if command -v node >/dev/null 2>&1; then
-  node_major="$(node --version | cut -d. -f1 | tr -d v)"
-else
-  node_major=0
-fi
-case "$node_major" in
-  '' | *[!0-9]*) node_major=0 ;;
-esac
-
-if [ "$node_major" -lt 24 ]; then
-  cat >&2 <<'EOF'
+  if [ "$node_major" -lt 24 ]; then
+    cat >&2 <<'EOF'
 shell-configurator requires Node.js 24 or newer, which was not found.
 
 Install one of these Node version managers, then re-run this installer:
@@ -38,122 +40,130 @@ Install one of these Node version managers, then re-run this installer:
   fnm:  https://github.com/Schniz/fnm
   volta: https://volta.sh
 EOF
-  exit 1
-fi
-
-case "$(uname -s)" in
-  Darwin)
-    data_dir="${XDG_DATA_HOME:-$HOME/Library/Application Support}/shell-configurator"
-    ;;
-  Linux)
-    data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/shell-configurator"
-    ;;
-  *)
-    echo "Unsupported platform: $(uname -s)" >&2
     exit 1
-    ;;
-esac
-bin_dir="$HOME/.local/bin"
-link="$bin_dir/shell-configurator"
+  fi
 
-if [ -e "$link" ] || [ -L "$link" ]; then
-  case "$(readlink "$link" 2>/dev/null)" in
-    "$data_dir"/*) ;;
+  case "$(uname -s)" in
+    Darwin)
+      data_dir="${XDG_DATA_HOME:-$HOME/Library/Application Support}/shell-configurator"
+      ;;
+    Linux)
+      data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/shell-configurator"
+      ;;
     *)
-      echo "$link already exists and was not made by this installer; move it away and re-run." >&2
+      echo "Unsupported platform: $(uname -s)" >&2
       exit 1
       ;;
   esac
-fi
+  bin_dir="$HOME/.local/bin"
+  link="$bin_dir/shell-configurator"
 
-tmp_dir="$(mktemp -d)"
-trap 'rm -rf "$tmp_dir"' EXIT
+  if [ -e "$link" ] || [ -L "$link" ]; then
+    case "$(readlink "$link" 2>/dev/null)" in
+      "$data_dir"/*) ;;
+      *)
+        echo "$link already exists and was not made by this installer; move it away and re-run." >&2
+        exit 1
+        ;;
+    esac
+  fi
 
-# Resolve the tarball asset attached to the latest GitHub release, with the
-# SHA-256 digest GitHub publishes for it. The release workflow uploads
-# shell-configurator-<version>.tgz via `npm pack`.
-echo "Resolving latest release..."
-if ! curl -fsSL ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
-  "$API_LATEST" -o "$tmp_dir/release.json"; then
-  echo "Could not read the latest release from GitHub (rate-limited? set GITHUB_TOKEN)." >&2
-  exit 1
-fi
-# shellcheck disable=SC2016
-asset="$(node -e '
-  const release = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-  const asset = (release.assets || []).find((a) => a.name.endsWith(".tgz"));
-  if (asset) console.log(`${asset.browser_download_url} ${asset.digest || ""}`);
-' "$tmp_dir/release.json")"
-asset_url="${asset%% *}"
-digest="${asset#* }"
+  tmp_dir="$(mktemp -d)"
+  trap 'rm -rf "$tmp_dir"' EXIT
 
-if [ -z "$asset" ]; then
-  echo "No tarball asset found in the latest release." >&2
-  exit 1
-fi
-case "$digest" in
-  sha256:*) ;;
-  *)
-    echo "The release publishes no sha256 digest for its tarball; refusing to install it." >&2
+  # Resolve the tarball asset attached to the latest GitHub release, with the
+  # SHA-256 digest GitHub publishes for it. The release workflow uploads
+  # shell-configurator-<version>.tgz via `npm pack`.
+  echo "Resolving latest release..."
+  if ! { curl $CURL_LIMITS -fsSL ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
+    "$API_LATEST" -o "$tmp_dir/release.json" ||
+    { [ -n "${GITHUB_TOKEN:-}" ] && curl $CURL_LIMITS -fsSL "$API_LATEST" -o "$tmp_dir/release.json"; }; }; then
+    echo "Could not read the latest release from GitHub (rate-limited? set a valid GITHUB_TOKEN)." >&2
     exit 1
-    ;;
-esac
+  fi
+  # shellcheck disable=SC2016
+  asset="$(node -e '
+    const release = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    const asset = (release.assets || []).find((a) => a.name.endsWith(".tgz"));
+    if (asset) console.log(`${asset.browser_download_url} ${asset.digest || ""}`);
+  ' "$tmp_dir/release.json")"
+  asset_url="${asset%% *}"
+  digest="${asset#* }"
 
-mkdir -p "$(dirname "$data_dir")" "$bin_dir"
+  if [ -z "$asset" ]; then
+    echo "No tarball asset found in the latest release." >&2
+    exit 1
+  fi
+  case "$digest" in
+    sha256:*) ;;
+    *)
+      echo "The release publishes no sha256 digest for its tarball; refusing to install it." >&2
+      exit 1
+      ;;
+  esac
 
-echo "Downloading $asset_url"
-curl -fsSL "$asset_url" -o "$tmp_dir/package.tgz"
-actual="$(node -e '
-  const hash = require("crypto").createHash("sha256");
-  hash.update(require("fs").readFileSync(process.argv[1]));
-  console.log(hash.digest("hex"));
-' "$tmp_dir/package.tgz")"
-if [ "sha256:$actual" != "$digest" ]; then
-  echo "Checksum mismatch: expected $digest, got sha256:$actual. Refusing to install." >&2
-  exit 1
-fi
-tar -xzf "$tmp_dir/package.tgz" -C "$tmp_dir"
+  mkdir -p "$(dirname "$data_dir")" "$bin_dir"
 
-staged="$tmp_dir/package"
-chmod +x "$staged/dist/index.js"
+  echo "Downloading $asset_url"
+  curl $CURL_LIMITS -fsSL "$asset_url" -o "$tmp_dir/package.tgz"
+  actual="$(node -e '
+    const hash = require("crypto").createHash("sha256");
+    hash.update(require("fs").readFileSync(process.argv[1]));
+    console.log(hash.digest("hex"));
+  ' "$tmp_dir/package.tgz")"
+  if [ "sha256:$actual" != "$digest" ]; then
+    echo "Checksum mismatch: expected $digest, got sha256:$actual. Refusing to install." >&2
+    exit 1
+  fi
+  tar -xzf "$tmp_dir/package.tgz" -C "$tmp_dir"
 
-# Boot the new release before touching the current install, so a broken one
-# never replaces a working one.
-if ! boot_error="$(node "$staged/dist/index.js" --version 2>&1 >/dev/null)"; then
-  echo "The downloaded release failed to start; your current install is unchanged:" >&2
-  printf '%s\n' "$boot_error" >&2
-  exit 1
-fi
-echo "Verified the release by launching \`shell-configurator --version\`."
+  staged="$tmp_dir/package"
+  chmod +x "$staged/dist/index.js"
 
-rm -rf "$data_dir.old"
-if [ -e "$data_dir" ]; then mv "$data_dir" "$data_dir.old"; fi
-mv "$staged" "$data_dir"
-rm -rf "$data_dir.old"
-ln -sf "$data_dir/dist/index.js" "$link"
+  # Boot the new release before touching the current install, so a broken one
+  # never replaces a working one.
+  if ! boot_error="$(node "$staged/dist/index.js" --version 2>&1 >/dev/null)"; then
+    echo "The downloaded release failed to start; your current install is unchanged:" >&2
+    printf '%s\n' "$boot_error" >&2
+    exit 1
+  fi
+  echo "Verified the release by launching \`shell-configurator --version\`."
 
-cat <<EOF
+  rm -rf "$data_dir.old"
+  if [ -e "$data_dir" ]; then mv "$data_dir" "$data_dir.old"; fi
+  if ! mv "$staged" "$data_dir"; then
+    if [ -e "$data_dir.old" ]; then mv "$data_dir.old" "$data_dir"; fi
+    echo "Could not move the new release into $data_dir; your current install is unchanged." >&2
+    exit 1
+  fi
+  rm -rf "$data_dir.old"
+  ln -sf "$data_dir/dist/index.js" "$link"
+
+  cat <<EOF
 
 Installed $(basename "$asset_url" .tgz) to $data_dir.
 Binary symlinked as $bin_dir/shell-configurator.
 EOF
 
-if ! printf '%s' "$PATH" | tr ':' '\n' | grep -qFx "$bin_dir"; then
-  cat <<EOF
+  if ! printf '%s' "$PATH" | tr ':' '\n' | grep -qFx "$bin_dir"; then
+    cat <<EOF
 NOTE: $bin_dir is not on your PATH. Add it to your shell profile:
 
   export PATH="\$HOME/.local/bin:\$PATH"     (bash, zsh)
   fish_add_path ~/.local/bin                (fish)
 EOF
-else
-  found="$(command -v shell-configurator 2>/dev/null || true)"
-  if [ -n "$found" ] && [ "$found" != "$link" ]; then
-    cat <<EOF
+  else
+    found="$(command -v shell-configurator 2>/dev/null || true)"
+    if [ -n "$found" ] && [ "$found" != "$link" ]; then
+      cat <<EOF
 NOTE: another shell-configurator comes first on your PATH: $found
 (an npm -g install?). Remove it, or put $bin_dir earlier on PATH.
 EOF
+    fi
   fi
-fi
 
-echo
-echo "Run 'shell-configurator' to configure your Starship prompt."
+  echo
+  echo "Run 'shell-configurator' to configure your Starship prompt."
+}
+
+main "$@"

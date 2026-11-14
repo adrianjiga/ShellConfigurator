@@ -48,7 +48,10 @@ category() {
 
 declare -a breaks features fixes docs tests maintenance other
 
+commits="$(git log --no-merges --format='%H%x1f%s' "$range")"
+
 while IFS= read -r line; do
+  [ -n "$line" ] || continue
   hash="${line%%$'\x1f'*}"
   subject="${line#*$'\x1f'}"
   entry="* ${subject} (${hash:0:7})"
@@ -61,7 +64,7 @@ while IFS= read -r line; do
     maintenance) maintenance+=("$entry") ;;
     *) other+=("$entry") ;;
   esac
-done < <(git log --no-merges --format='%H%x1f%s' "$range")
+done <<<"$commits"
 
 print_section() {
   local name="$1"
