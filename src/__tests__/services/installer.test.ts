@@ -256,7 +256,7 @@ describe('installStarship', () => {
     await installStarship('pacman');
     expect(mockSpawn).toHaveBeenCalledWith(
       'sudo',
-      ['pacman', '-Sy', '--noconfirm', '--needed', 'starship'],
+      ['pacman', '-Syu', '--noconfirm', '--needed', 'starship'],
       { stdio: 'inherit' }
     );
   });
@@ -420,9 +420,9 @@ describe('installShell', () => {
   });
 
   it.each([
-    ['zsh', 'pacman', ['pacman', '-Sy', '--noconfirm', '--needed', 'zsh']],
+    ['zsh', 'pacman', ['pacman', '-Syu', '--noconfirm', '--needed', 'zsh']],
     ['fish', 'dnf', ['dnf', 'install', '-y', 'fish']],
-    ['nushell', 'pacman', ['pacman', '-Sy', '--noconfirm', '--needed', 'nushell']],
+    ['nushell', 'pacman', ['pacman', '-Syu', '--noconfirm', '--needed', 'nushell']],
     ['nushell', 'dnf', ['dnf', 'install', '-y', 'nushell']],
     ['nushell', 'apk', ['apk', 'add', '--no-cache', 'nushell']],
   ] as const)('installs %s via %s with sudo', async (shell, pm, command) => {

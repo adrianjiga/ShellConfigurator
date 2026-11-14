@@ -34,7 +34,7 @@ function needsSudo(): boolean {
 
 /** The scripted path is a separate code branch; omitting it here makes a stray lookup a type error. */
 const INSTALL_CMDS: Record<Exclude<PackageManager, 'script'>, (pkg: string) => string[]> = {
-  pacman: (pkg) => [...sudo(), 'pacman', '-Sy', '--noconfirm', '--needed', pkg],
+  pacman: (pkg) => [...sudo(), 'pacman', '-Syu', '--noconfirm', '--needed', pkg],
   apt: (pkg) => [...sudo(), 'apt-get', 'install', '-y', pkg],
   dnf: (pkg) => [...sudo(), 'dnf', 'install', '-y', pkg],
   brew: (pkg) => ['brew', 'install', pkg],
