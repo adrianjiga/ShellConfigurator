@@ -167,3 +167,30 @@ For a failed package install, check that:
 If you're on a minimal image (Alpine, Arch, Fedora Docker), the shell package
 may not exist under that name. Run `apt-cache search <shell>` or equivalent
 to find the correct package.
+
+---
+
+## Removing ShellConfigurator's changes
+
+`shell-configurator uninstall --dry-run` lists what would go;
+`shell-configurator uninstall` shows the same plan and asks before removing it.
+It strips every `# Added by ShellConfigurator` block from the bash, zsh and fish
+rc files (each rc is backed up to `<rc>.bak-<timestamp>` first) and moves the
+per-shell configs in `~/.config/starship/` to `.bak-*` backups. Add `--starship`
+to remove Starship too, and `--font <id>` to remove a Nerd Font it installed.
+
+- **The prompt still shows after uninstall**: your rc has its own
+  `starship init` line, which uninstall leaves alone. Remove it yourself.
+- **Nushell or PowerShell still loads Starship**: they were set up by hand, so
+  uninstall only names the file to clean (the Nushell autoload folder, or
+  `$PROFILE`).
+- **"pass --yes to go ahead"**: uninstall runs without a terminal to ask on
+  (a script or CI). Add `--yes` once the `--dry-run` plan looks right.
+- **"no cached … archive"**: the font was installed before the font cache
+  existed, so its files cannot be told apart from your other fonts. Delete them
+  from `~/.local/share/fonts` (`~/Library/Fonts` on macOS) yourself.
+- **Starship "was not installed by a package manager here"**: it came from
+  somewhere uninstall cannot undo safely (e.g. `/usr/local/bin` from a root
+  script install). Remove it with whatever installed it.
+- **Changed your mind**: `shell-configurator --restore` brings the per-shell
+  configs back; copy the `.bak-*` rc backup over the rc to restore the lines.
