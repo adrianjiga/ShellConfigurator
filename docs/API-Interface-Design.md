@@ -516,7 +516,11 @@ function trackedFiles(): string[];
 
 function captureRun<T>(
   files: string[],
-  run: () => Promise<T>
+  run: () => Promise<T>,
+  options?: {
+    onChanged?: (runId: string, files: RunFile[], error?: unknown) => void;
+    rewritable?: readonly string[];
+  }
 ): Promise<{ result: T; runId: string | null }>;
 // Copies the files into <stateDir>/runs/<runId>/files before run(), then keeps
 // only those the run changed in manifest.json ({ version, runId, files: [{ path,
@@ -528,9 +532,15 @@ function captureRun<T>(
 // record. A capture that fails partway removes its folder; a file the run left
 // unreadable is kept with after: 'unreadable' (UNREADABLE_AFTER); only the
 // newest 50 run folders are kept (pruneRuns, KEPT_RUNS). Tests get a stub from
-// setup.ts.
+// setup.ts. onChanged runs once the run is over and changed files (also after a
+// throw, with the error), before the manifest is written, so whatever it writes
+// to a captured file is part of the run; its own errors are ignored. Files in
+// rewritable are marked `rewritable: true`: rollback leaves such a file alone,
+// without counting it as left, only when a later captured run wrote its current
+// content (laterRunWrites). The manifest is written to a temp file and renamed.
 
 function readRunManifest(runId: string): RunManifest | null;
+function laterRunWrites(runId: string, file: string): Set<string | null>;
 ```
 
 ### rollback.ts
@@ -564,24 +574,21 @@ function runRollback(
 ### whatChanged.ts / listings.ts
 
 ```typescript
-function writeWhatChangedSafely(
-  runId: string | null,
-  run: Omit<WhatChangedRun, 'manifest'>
-): string | null;
-// After a wizard install or apply that changed files (a captured runId):
-// writes ~/.config/starship/WHAT-CHANGED.md (renderWhatChanged) listing the
+function writeWhatChangedSafely(run: WhatChangedRun): string | null;
+// Called from the onChanged step of a wizard install's or apply's captureRun,
+// so only for a run that changed files (a crashed apply too, with its unfinished
+// tasks failed; the wizard skips it once its screen has unmounted): writes ~/.config/starship/WHAT-CHANGED.md (renderWhatChanged) listing the
 // tasks and their outcome, the files the run changed (created/modified/removed,
-// from its manifest), each selected shell's Starship lines and config (the
+// the files the capture step passes), each selected shell's Starship lines and config (the
 // shared starship.toml in adopt mode), and the rollback/uninstall/doctor
 // commands, with a note that a later uninstall or rollback may have undone it.
-// The write is recorded in the run itself (writeInRun in runCapture.ts, with
-// `summary: true`), so rolling the run back puts the previous summary back; a
-// later run rewriting the summary does not make an older run's rollback partial.
-// A run that changed nothing leaves the last summary alone, and uninstall and
-// rollback never touch it. Home is shown as ~, the recorded command has URL
+// The summary is a captured, rewritable file of that run, so rolling the run
+// back puts the previous summary back; a later run rewriting it does not make
+// an older run's rollback partial, while a hand edit does. A run that changed
+// nothing leaves the last summary alone, and uninstall and rollback never touch
+// it. Home is shown as ~, the recorded command has URL
 // credentials and queries dropped (redactUrls), and the --font and --starship
-// removal hints appear only when this run installed them. The wizard writes it
-// as soon as the run ends, before its pause. Returns the path, or null when it
+// removal hints appear only when this run installed them. Returns the path, or null when it
 // did not write (never throws). Tests get a stub from setup.ts.
 
 function listEntries(kind: 'presets' | 'modules' | 'fonts'): ListEntry[];
