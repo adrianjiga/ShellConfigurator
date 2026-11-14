@@ -88,13 +88,17 @@ function Explanation({ result }: { result: ExplainResult | null }) {
   if (result.mode === 'unavailable') {
     return <Text color={uiColor('gray')}>{EXPLAIN_UNAVAILABLE[result.reason]}</Text>;
   }
-  const width = Math.max(...result.items.map((item) => item.output.length));
+  const columns = (text: string) => [...text].length;
+  const width = Math.max(...result.items.map((item) => columns(item.output)));
+  const rows = result.items.map((item, position) => ({ ...item, position }));
   return (
     <Box flexDirection="column">
-      {result.items.map((item) => (
-        <Box key={`${item.output}:${item.description}`} gap={2}>
-          <Text color={uiColor('cyan')}>{item.output.padEnd(width)}</Text>
-          <Text>{item.description}</Text>
+      {rows.map((row) => (
+        <Box key={row.position} gap={2}>
+          <Text color={uiColor('cyan')}>
+            {row.output + ' '.repeat(width - columns(row.output))}
+          </Text>
+          <Text>{row.description}</Text>
         </Box>
       ))}
     </Box>

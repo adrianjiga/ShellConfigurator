@@ -304,6 +304,28 @@ describe('ReviewScreen explain', () => {
     expect(explainPromptAsync).toHaveBeenCalledOnce();
   });
 
+  it('lines up the descriptions after icons outside the basic plane, and repeated rows', async () => {
+    vi.mocked(explainPromptAsync).mockResolvedValueOnce({
+      mode: 'real',
+      items: [
+        { output: '\u{F024B} x', description: 'First' },
+        { output: 'abc', description: 'Second' },
+        { output: 'abc', description: 'Second' },
+      ],
+    });
+    const { instance } = setup();
+    await flush();
+    instance.stdin.write('e');
+    await flush();
+    const lines = (instance.lastFrame() ?? '').split('\n');
+    const column = (word: string) => {
+      const line = lines.find((candidate) => candidate.includes(word))!;
+      return [...line.slice(0, line.indexOf(word))].length;
+    };
+    expect(column('First')).toBe(column('Second'));
+    expect(lines.filter((line) => line.includes('Second'))).toHaveLength(2);
+  });
+
   it('says why there is no explanation when Starship cannot give one', async () => {
     const { instance } = setup();
     await flush();
