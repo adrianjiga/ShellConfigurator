@@ -531,16 +531,17 @@ export type StarshipRemoval =
  */
 export async function plannedStarshipRemoval(pm: PackageManager): Promise<StarshipRemoval> {
   const scriptBinary = path.join(scriptInstallBinDir(), 'starship');
-  if (fs.existsSync(scriptBinary)) {
-    return isRecordedScriptInstall(scriptBinary)
-      ? { kind: 'script', path: scriptBinary }
-      : { kind: 'manual', path: scriptBinary };
+  const scriptExists = fs.existsSync(scriptBinary);
+  if (scriptExists && isRecordedScriptInstall(scriptBinary)) {
+    return { kind: 'script', path: scriptBinary };
   }
   const onPath = commandPath('starship');
-  if (!onPath) return { kind: 'absent' };
   const remove = REMOVE_CMDS[pm];
-  if (!remove || !(await packageOwnsStarship(pm, onPath))) return { kind: 'manual', path: onPath };
-  return { kind: 'package', pm, command: pm === 'brew' ? remove : [...sudo(), ...remove] };
+  if (onPath && onPath !== scriptBinary && remove && (await packageOwnsStarship(pm, onPath))) {
+    return { kind: 'package', pm, command: pm === 'brew' ? remove : [...sudo(), ...remove] };
+  }
+  if (scriptExists) return { kind: 'manual', path: scriptBinary };
+  return onPath ? { kind: 'manual', path: onPath } : { kind: 'absent' };
 }
 
 export async function removeStarship(plan: StarshipRemoval, signal?: AbortSignal): Promise<void> {

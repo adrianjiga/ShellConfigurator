@@ -1060,6 +1060,16 @@ describe('plannedStarshipRemoval', () => {
     expect(await plannedStarshipRemoval('apt')).toEqual({ kind: 'manual', path: scriptBinary });
   });
 
+  it('still offers to remove a package Starship next to a ~/.local/bin/starship it did not install', async () => {
+    starshipAt('/usr/bin/starship', { pacman: 'starship\n' });
+    scriptBinaryHolds('someone-elses-starship', 'starship-binary');
+    expect(await plannedStarshipRemoval('pacman')).toEqual({
+      kind: 'package',
+      pm: 'pacman',
+      command: ['sudo', 'pacman', '-R', '--noconfirm', 'starship'],
+    });
+  });
+
   it('has nothing to remove when Starship is not installed', async () => {
     mockExistsSync.mockReturnValue(false);
     mockExecFileSync.mockImplementation(() => {
