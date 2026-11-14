@@ -73,9 +73,10 @@ function tomlSections(content: string): TomlSection[] {
     current.end = match.index;
     sections.push(current);
     const lineEnd = match.index + match[0].length;
+    const breakLength = content.startsWith('\r\n', lineEnd) ? 2 : 1;
     current = {
       name: match[1]!.trim(),
-      start: Math.min(lineEnd + 1, content.length),
+      start: Math.min(lineEnd + breakLength, content.length),
       end: content.length,
     };
   }

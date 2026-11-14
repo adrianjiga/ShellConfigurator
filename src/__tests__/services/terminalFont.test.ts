@@ -273,6 +273,16 @@ describe('wireTerminalFont', () => {
     }
   );
 
+  it('edits a CRLF alacritty file in place and only once', () => {
+    write('alacritty/alacritty.toml', '[font.normal]\r\nfamily = "Old"\r\n');
+
+    wireTerminalFont('alacritty', 'Hack Nerd Font');
+    const again = wireTerminalFont('alacritty', 'Hack Nerd Font');
+
+    expect(read('alacritty/alacritty.toml')).toBe('[font.normal]\r\nfamily = "Hack Nerd Font"\r\n');
+    expect(again.applied).toBe(false);
+  });
+
   it('keeps blank lines and indentation before the family key', () => {
     write('alacritty/alacritty.toml', '[font.normal]\nstyle = "Regular"\n\n  family = "Old"\n');
 
