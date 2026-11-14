@@ -20,8 +20,28 @@ export function TaskPlan({ title, tasks }: { title: string; tasks: InstallTask[]
   );
 }
 
+export const CONFIG_PREVIEW_LINES = 8;
+
+/** The first lines of `toml`, and a line saying how many more there are. */
+function FoldedToml({ toml, expanded }: { toml: string; expanded: boolean }) {
+  const lines = toml.trimEnd().split('\n');
+  const hidden = expanded ? 0 : Math.max(0, lines.length - CONFIG_PREVIEW_LINES);
+  return (
+    <Box flexDirection="column">
+      <Text color={uiColor('gray')} dimColor>
+        {(hidden > 0 ? lines.slice(0, CONFIG_PREVIEW_LINES) : lines).join('\n')}
+      </Text>
+      {hidden > 0 && (
+        <Text color={uiColor('gray')} italic>
+          … {hidden} more lines (press t to show them)
+        </Text>
+      )}
+    </Box>
+  );
+}
+
 /** The config a run writes, or in adopt mode the shared config it keeps. */
-export function ConfigPlan({ state }: { state: WizardState }) {
+export function ConfigPlan({ state, expanded = true }: { state: WizardState; expanded?: boolean }) {
   return (
     <Box flexDirection="column" marginTop={1} gap={1}>
       <Text bold>{state.keepExistingConfig ? 'Config to keep' : 'Configuration to write'}</Text>
@@ -32,9 +52,7 @@ export function ConfigPlan({ state }: { state: WizardState }) {
           </Text>
           <Box marginLeft={2}>
             {state.sharedConfigToml ? (
-              <Text color={uiColor('gray')} dimColor>
-                {state.sharedConfigToml}
-              </Text>
+              <FoldedToml toml={state.sharedConfigToml} expanded={expanded} />
             ) : (
               <Text color={uiColor('gray')}>The existing config will be kept as-is.</Text>
             )}
@@ -49,9 +67,7 @@ export function ConfigPlan({ state }: { state: WizardState }) {
             </Text>
           ))}
           <Box marginLeft={2}>
-            <Text color={uiColor('gray')} dimColor>
-              {generateToml(state)}
-            </Text>
+            <FoldedToml toml={generateToml(state)} expanded={expanded} />
           </Box>
         </Box>
       )}

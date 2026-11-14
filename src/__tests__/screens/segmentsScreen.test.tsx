@@ -39,6 +39,18 @@ async function press(instance: ReturnType<typeof render>, ...keys: string[]) {
 }
 
 describe('SegmentsScreen', () => {
+  it('fits a usual terminal, showing a window of rows around the cursor', async () => {
+    const { instance } = setup();
+    await flush();
+    const frame = instance.lastFrame() ?? '';
+    expect(frame.split('\n').length).toBeLessThan(40);
+    expect(frame).toMatch(/↓ \d+ more/);
+    expect(frame).not.toMatch(/↑ \d+ more/);
+
+    await press(instance, ...Array(20).fill(DOWN));
+    expect(instance.lastFrame()).toMatch(/↑ \d+ more/);
+  });
+
   it('renders the configurable modules without character', async () => {
     const { instance } = setup();
     await flush();

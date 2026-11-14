@@ -100,6 +100,9 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 
 ### 5 & 6. Segments (Left / Right)
 
+The list shows 12 rows at a time around the cursor, with `↑ N more` / `↓ N more`
+lines for the rest, so the screen fits a usual terminal.
+
 **Purpose**: Choose and order the modules for each side of the prompt.
 
 **Layout**: A filter line, then a checklist in two groups — **Prompt order** (the selected modules, numbered in the order they render) and **Available** (everything else):
@@ -220,8 +223,8 @@ is not selected, already starts Starship and has no working setup of its own get
 config" row and a note, from `sharedConfigNote`, that it will use the shared
 `starship.toml` again; Done repeats the note for
 the shells it switched), the
-config paths with the generated TOML shown once (`ConfigPlan`), a **Files on
-files** list of every config and rc file the run creates or edits with its added
+config paths with the generated TOML shown once (`ConfigPlan`: its first 8 lines,
+`t` shows the rest), a **Config and rc files** list of every config and rc file the run creates or edits with its added
 and removed line counts (paths under home shown as `~/…`), then a **Shell wiring**
 section with, per selected shell, the diff of its rc file against what is on disk
 (`plannedFileChanges`, from the same planner the real write uses: where the block

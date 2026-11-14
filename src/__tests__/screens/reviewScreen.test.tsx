@@ -194,11 +194,28 @@ describe('ReviewScreen manual shells', () => {
   });
 });
 
+describe('ReviewScreen config', () => {
+  it('shows the first lines of the config and the rest on t', async () => {
+    const { instance } = setup();
+    await flush();
+    const folded = (instance.lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(folded).toMatch(/… \d+ more lines \(press t to show them\)/);
+    expect(folded).not.toContain('[character]');
+    expect((instance.lastFrame() ?? '').split('\n').length).toBeLessThan(60);
+
+    instance.stdin.write('t');
+    await flush();
+    const whole = (instance.lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(whole).not.toContain('more lines');
+    expect(whole).toContain('[character]');
+  });
+});
+
 describe('ReviewScreen dry run', () => {
   it('does not promise an install in the key hint', async () => {
     const { instance } = setup({ dryRun: true });
     await flush();
-    expect(instance.lastFrame()).toContain('finish the dry run');
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain('finish the dry run');
     expect(instance.lastFrame()).not.toMatch(/Enter\s+install/);
   });
 });
@@ -295,7 +312,7 @@ describe('ReviewScreen explain', () => {
     const frame = instance.lastFrame() ?? '';
     expect(frame).toContain('Why each part of the prompt shows');
     expect(frame).toContain('The current working directory');
-    expect(frame).toContain('hide the explanation');
+    expect(frame.replace(/\s+/g, ' ')).toContain('hide the explanation');
 
     instance.stdin.write('e');
     await flush();

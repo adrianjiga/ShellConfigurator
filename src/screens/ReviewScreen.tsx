@@ -124,6 +124,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
   );
 
   const [explainShown, setExplainShown] = useState(false);
+  const [configShown, setConfigShown] = useState(false);
   const [explanation, setExplanation] = useState<ExplainResult | null>(null);
   const explainPending = useRef(false);
   const explainShownNow = useRef(false);
@@ -136,6 +137,10 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
   );
 
   useInput((char, key) => {
+    if (char.toLowerCase() === 't') {
+      setConfigShown((shown) => !shown);
+      return;
+    }
     if (char.toLowerCase() === 'e' && !state.keepExistingConfig) {
       const showing = !explainShownNow.current;
       explainShownNow.current = showing;
@@ -179,7 +184,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
         {sharedConfigNote(resetShells, false) && (
           <Text color={uiColor('yellow')}>{sharedConfigNote(resetShells, false)}</Text>
         )}
-        <ConfigPlan state={state} />
+        <ConfigPlan state={state} expanded={configShown} />
         {fontFallback && <Text color={uiColor('gray')}>{FONT_FALLBACK_NOTE}</Text>}
 
         {explainShown && (
@@ -260,6 +265,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
           ...(state.keepExistingConfig
             ? []
             : [{ key: 'e', label: explainShown ? 'hide the explanation' : 'explain the prompt' }]),
+          { key: 't', label: configShown ? 'fold config' : 'full config' },
           { key: 'Esc', label: 'back' },
         ]}
       />
