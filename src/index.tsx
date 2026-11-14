@@ -630,7 +630,7 @@ export async function runRollbackCommand(
   }
   if (changes) {
     const proceed = await confirmChanges(
-      target.interrupted && io.isTerminal() && !flags.json ? { ...flags, yes: false } : flags,
+      flags,
       io,
       'rollback rewrites files',
       () => formatRollbackReport(runRollback(target.runId, steps, { dryRun: true })),

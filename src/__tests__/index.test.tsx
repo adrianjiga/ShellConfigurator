@@ -1230,15 +1230,26 @@ describe('index rollback command', () => {
       return runId;
     }
 
-    it('warns that later edits come back too, and asks on a terminal even with --yes', async () => {
+    it('warns that later edits come back too, and asks on a terminal', async () => {
       interruptedRun();
       const prompt = io({ confirm: vi.fn().mockResolvedValue(false) });
 
-      await runRollbackCommand(parseCliArgs(['rollback', '--yes']), 'rollback', prompt);
+      await runRollbackCommand(parseCliArgs(['rollback']), 'rollback', prompt);
 
       expect(output()).toContain('That run was interrupted');
       expect(prompt.confirm).toHaveBeenCalled();
       expect(fs.readFileSync(rc(), 'utf8')).toBe('one');
+    });
+
+    it('still warns, but goes ahead without asking, with --yes on a terminal', async () => {
+      interruptedRun();
+      const prompt = io();
+
+      await runRollbackCommand(parseCliArgs(['rollback', '--yes']), 'rollback', prompt);
+
+      expect(output()).toContain('That run was interrupted');
+      expect(prompt.confirm).not.toHaveBeenCalled();
+      expect(fs.readFileSync(rc(), 'utf8')).toBe('zero');
     });
 
     it('goes ahead with --yes --json on a terminal, where nothing can be asked', async () => {

@@ -311,7 +311,9 @@ Every wizard install, `apply`, `repair` and `uninstall` keeps a copy of the rc
 files, per-shell configs, shared config and terminal configs it changes. A run
 that was killed partway (Ctrl+C twice, a closed terminal window, a `kill`)
 shows up as "interrupted" the next time ShellConfigurator runs, and rolls back
-like any other.
+like any other. Its record is only finished then, so rolling it back also puts
+back an edit you made to those files after it was killed; `rollback` says so
+before it starts.
 `shell-configurator rollback --list` shows those runs, newest first, and
 `shell-configurator rollback` puts the newest one back (asking first; `--yes`
 off a terminal). Run it again to undo the run before; `--run <id>` picks one.
