@@ -623,7 +623,9 @@ function timePrompt(toml: string, path: string, deps?: ProbeDeps): Promise<Timin
 // (git_status/git_metrics: core.fsmonitor or disabling it; a language module
 // that runs a version command: disabling it; directory: a slow drive). Modules
 // run in parallel, so `slow` compares the slowest module with SLOW_PROMPT_MS
-// (200). `character`, `line_break` and `fill` never get a fix. The config's own
+// (200). `character`, `line_break` and `fill` never get a fix, and a module
+// whose tool timed out gets only the command_timeout advice. The config is
+// written with the injectable scratch helpers (ScratchDeps) the preview uses. The config's own
 // command_timeout/scan_timeout are read from its top level (past multi-line
 // strings, with `_` digit separators). Rejects with StarshipMissingError without
 // Starship, and with StarshipTimedOutError when Starship is killed after 30s.
@@ -640,7 +642,8 @@ function renderShare(state: WizardState): string;
 // starship.toml and a state card (serializeState of shareableState, which drops
 // this machine's shells, font install and default shell) that rebuilds exactly
 // that TOML with `apply --state prompt.json --shells <your shells>`. The home
-// folder is shown as `~` (redactHome), and the Markdown says so when it was.
+// folder is shown as `~` (redactHome), and the Markdown says so when it was;
+// with directory substitutions it also says to check those paths before posting.
 
 function withPreviewProject<T>(state, deps: ScratchDeps, run): Promise<T>;
 // preview.ts: a scratch folder with the generated config and the sample project

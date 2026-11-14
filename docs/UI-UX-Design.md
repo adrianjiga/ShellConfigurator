@@ -270,8 +270,9 @@ In `--dry-run` mode the same screen appears but states that nothing will be appl
 
 `e` shows (and hides) **Why each part of the prompt shows**: `starship explain` run
 against the generated config in the preview's sample project (`explainPromptAsync`),
-one row per segment with its output and Starship's description. It is asked once;
-without Starship the section says it cannot explain the prompt. It is not offered in
+one row per segment with its output and Starship's description (a description
+Starship wraps is joined back into one). A good answer is kept; after a failure the
+next `e` asks again. Without Starship the section says it cannot explain the prompt. It is not offered in
 adopt mode, where no config is generated.
 
 **Keys**: `Enter` confirm (only Enter — a stray `Space` or `Tab` does nothing), `e` explain the prompt, `Esc` back
