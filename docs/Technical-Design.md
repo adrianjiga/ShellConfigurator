@@ -441,7 +441,7 @@ because fonts are per-host and `chsh` is meaningless there.
 
 ### Async-Only Detection
 
-Every detection function is async and there are no sync counterparts — they run during the Ink render loop. They use `promisify(execFile)` rather than `execFileSync`, with one exception: when `starship` is not on PATH, `findStarshipAsync` calls `getMissingStarshipPathDir`, which runs one short `command -v starship` through `execFileSync` (`probe` in `src/services/exec.ts`):
+Every detection function is async and there are no sync counterparts — they run during the Ink render loop. They use `promisify(execFile)` rather than `execFileSync`; when `starship` is not on PATH, `findStarshipAsync` only checks for the binary in the script-install bin dir. Outside detection, the preview and the Review screen still call `getMissingStarshipPathDir`, which runs one short sync `command -v starship` (`probe` in `src/services/exec.ts`):
 
 - **`detectPackageManagerAsync`**: Parallelizes independent checks — `brew` + `pacman` run together, then the os-release read + `apt-get` + `dnf` + `apk` together — while preserving priority order
 - **`detectInstalledShellsAsync`**: Runs all shell checks in parallel via `Promise.all` (biggest performance win — wall-clock time drops from 5 sequential forks to 1 parallel batch)

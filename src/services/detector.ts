@@ -3,8 +3,7 @@ import { promisify } from 'node:util';
 import { SHELLS } from '../config/shells.ts';
 import type { PackageManager, RemoteSession, ShellId, TerminalId } from '../types.ts';
 import { commandExistsAsync, commandPathAsync, runCapture } from './exec.ts';
-import { getMissingStarshipPathDir } from './installer.ts';
-import { withPathDir } from './paths.ts';
+import { scriptInstallBinDir, withPathDir } from './paths.ts';
 
 const readFileP = promisify(fs.readFile);
 
@@ -111,8 +110,8 @@ export async function findStarshipAsync(): Promise<{
 }> {
   const onPath = await isStarshipInstalledAsync();
   if (onPath.installed) return onPath;
-  const pathDir = getMissingStarshipPathDir();
-  if (!pathDir) return onPath;
+  const pathDir = scriptInstallBinDir();
+  if (!fs.existsSync(`${pathDir}/starship`)) return onPath;
   try {
     const version = await runCapture('starship', ['-V'], {
       env: { ...process.env, PATH: withPathDir(pathDir) },

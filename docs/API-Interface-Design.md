@@ -407,10 +407,10 @@ never leave a half-written file.
 ### detector.ts
 
 All detection is async — there are no sync counterparts, because every function
-runs while the Ink render loop is live. One short sync probe remains:
-when `starship` is not on PATH, `findStarshipAsync` calls
-`getMissingStarshipPathDir`, which runs `command -v starship` through
-`execFileSync` before it looks in the script-install bin dir.
+runs while the Ink render loop is live. When `starship` is not on PATH,
+`findStarshipAsync` only checks for the binary in the script-install bin dir.
+The preview and the Review screen still call `getMissingStarshipPathDir`,
+which runs one short sync `command -v starship`.
 
 ```typescript
 function detectPackageManagerAsync(): Promise<PackageManager>;
