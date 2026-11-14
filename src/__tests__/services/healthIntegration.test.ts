@@ -50,10 +50,29 @@ vi.mock('node:fs', async (importOriginal) => {
   };
 });
 
-const ZSH_RC = getShell('zsh')!.rcFile!;
 const ZSH_INIT = getShell('zsh')!.initLine;
-const ZSH_CONFIG = getShellConfigPath('zsh');
-const ZSH_CONFIG_LINE = starshipConfigLine('zsh')!;
+let ZSH_RC: string;
+let ZSH_CONFIG: string;
+let ZSH_CONFIG_LINE: string;
+
+const DETECTION_ENV = [
+  'ZDOTDIR',
+  'LC_ALL',
+  'LC_CTYPE',
+  'TERM',
+  'TERM_PROGRAM',
+  'KITTY_WINDOW_ID',
+  'GHOSTTY_RESOURCES_DIR',
+  'WEZTERM_PANE',
+  'ALACRITTY_WINDOW_ID',
+  'ALACRITTY_SOCKET',
+  'CODESPACES',
+  'REMOTE_CONTAINERS',
+  'DEVCONTAINER',
+  'CI',
+  'KUBERNETES_SERVICE_HOST',
+  'container',
+];
 
 // The finding ids every doctor run must produce — the "check list end-to-end".
 const CHECK_IDS = [
@@ -95,10 +114,19 @@ beforeEach(() => {
   vi.clearAllMocks();
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sc-health-'));
 
-  vi.stubEnv('XDG_CACHE_HOME', tmp);
+  vi.stubEnv('HOME', tmp);
+  vi.stubEnv('XDG_CONFIG_HOME', path.join(tmp, '.config'));
+  vi.stubEnv('XDG_CACHE_HOME', path.join(tmp, '.cache'));
+  vi.stubEnv('XDG_DATA_HOME', path.join(tmp, '.local', 'share'));
+  vi.stubEnv('XDG_STATE_HOME', path.join(tmp, '.local', 'state'));
   vi.stubEnv('SHELL', '/usr/bin/zsh');
   vi.stubEnv('LANG', 'en_US.UTF-8');
-  for (const name of ['LC_ALL', 'LC_CTYPE', 'TERM', 'TERM_PROGRAM']) vi.stubEnv(name, '');
+  for (const name of DETECTION_ENV) vi.stubEnv(name, '');
+
+  ZSH_RC = getShell('zsh')!.rcFile!;
+  ZSH_CONFIG = getShellConfigPath('zsh');
+  ZSH_CONFIG_LINE = starshipConfigLine('zsh')!;
+  expect(ZSH_RC.startsWith(tmp)).toBe(true);
 
   versionFile = path.join(cacheDir(), 'starship.version');
 
@@ -128,9 +156,20 @@ describe('doctor health check via the real deps', () => {
   it('produces the full check list end-to-end through DEFAULT_DOCTOR_DEPS', async () => {
     const report = await runDoctor(null, DEFAULT_DOCTOR_DEPS);
 
-    expect(report.findings.map((f) => f.id)).toEqual(CHECK_IDS);
+    expect(report.findings.map((f) => [f.id, f.status])).toEqual([
+      ['starship', 'pass'],
+      ['locale', 'pass'],
+      ['shell:zsh', 'pass'],
+      ['config', 'pass'],
+      ['font-installed', 'pass'],
+      ['font-selected', 'warn'],
+      ['version-drift', 'pass'],
+      ['current-shell', 'pass'],
+    ]);
+    expect(report.findings.find((f) => f.id === 'font-selected')?.detail).toMatch(
+      /no supported terminal detected/
+    );
     expect(report.ok).toBe(true);
-    expect(report.findings.every((f) => f.status !== 'fail')).toBe(true);
   });
 
   it('fails the config check when print-config exits 0 but warns on stderr', async () => {
