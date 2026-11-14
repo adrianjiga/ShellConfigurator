@@ -1,10 +1,12 @@
 import * as fs from 'node:fs';
+import { getShell } from '../config/shells.ts';
 import {
   type ApplyShellConfigOptions,
   applyShellConfig,
   backupSharedConfig,
   getSharedConfigPath,
   getShellConfigPath,
+  keepsOwnConfig,
   resetSharedShellConfig,
   shellsWithStarshipInit,
   type WriteConfigResult,
@@ -85,7 +87,10 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   sharedConfigExists: () => fs.existsSync(getSharedConfigPath()),
   applyShellConfig,
   resetSharedShellConfig,
-  getShellsUsingStarship: async () => shellsWithStarshipInit(await detectInstalledShellsAsync()),
+  getShellsUsingStarship: async () =>
+    shellsWithStarshipInit(await detectInstalledShellsAsync()).filter(
+      (shellId) => !keepsOwnConfig(shellId)
+    ),
   getMissingStarshipPathDir,
   readStarshipVersion,
   verifyConfig: (configPath, pathDir) => verifyStarshipConfig(configPath, pathDir ?? null),
@@ -147,19 +152,33 @@ function plannedDefaultShell(state: WizardState): ShellId | null {
 }
 
 function resetLabel(shellId: ShellId): string {
-  return `Clear old STARSHIP_CONFIG in ${shellId}`;
+  return `Point ${getShell(shellId)?.label ?? shellId} back at the shared config`;
 }
 
 /**
- * Installed shells outside the selection whose rc already loads Starship: the
- * run adds an unset guard to each so a configured parent's STARSHIP_CONFIG
- * cannot leak into them.
+ * What switching unselected shells back to the shared config means for them:
+ * before a run (`done` false) or after it.
+ */
+export function sharedConfigNote(shellIds: readonly ShellId[], done: boolean): string | null {
+  if (shellIds.length === 0) return null;
+  const names = shellIds.map((shellId) => getShell(shellId)?.label ?? shellId);
+  const one = names.length === 1;
+  const list = one ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+  const uses = done ? (one ? 'now uses' : 'now use') : 'will use';
+  return `${list} ${one ? 'is' : 'are'} not selected, so ${one ? 'it' : 'they'} ${uses} your shared ${getSharedConfigPath()} again, the same prompt as any shell without its own config. Select ${one ? 'it' : 'them'} in a later run to give ${one ? 'it its' : 'them their'} own prompt.`;
+}
+
+/**
+ * Installed shells outside the selection whose rc already loads Starship but
+ * that have no working setup of their own: the run adds an unset guard to each
+ * so a configured parent's STARSHIP_CONFIG cannot leak into them. A shell with
+ * its own setup already overrides that variable and is left alone.
  */
 export function plannedResetShells(state: WizardState): ShellId[] {
   if (state.skipStarshipInstall) return [];
   return shellsWithStarshipInit(
     state.installedShells.filter((shellId) => !state.selectedShells.includes(shellId))
-  );
+  ).filter((shellId) => !keepsOwnConfig(shellId));
 }
 
 export function buildTaskList(

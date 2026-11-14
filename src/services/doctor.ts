@@ -7,7 +7,7 @@ import {
   getSharedConfigPath,
   getShellConfigPath,
   hasManagedConfigExport,
-  hasStarshipInit,
+  initReachable,
   manualSetupAppliedWith,
 } from '../generators/shellRc.ts';
 import { fontIdToInstall, type ShellId, type TerminalId, type WizardState } from '../types.ts';
@@ -302,9 +302,9 @@ function shellHasInit(
   shellId: ShellId,
   rcFile: string,
   content: string,
-  deps: Pick<DoctorDeps, 'exists'>
+  deps: Pick<DoctorDeps, 'exists' | 'readFile' | 'env'>
 ): boolean {
-  if (hasStarshipInit(content, shellId)) return true;
+  if (initReachable(content, shellId, deps, deps.env)) return true;
   return shellId === 'fish' && deps.exists(fishInitFile(rcFile));
 }
 

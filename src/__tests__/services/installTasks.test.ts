@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { generateToml } from '../../generators/starship.ts';
-import { buildTaskList, configIfFontFails, runInstallTasks } from '../../services/installTasks.ts';
+import {
+  buildTaskList,
+  configIfFontFails,
+  runInstallTasks,
+  sharedConfigNote,
+} from '../../services/installTasks.ts';
 import { DEFAULT_STATE, NO_NERD_FONT, type WizardState } from '../../types.ts';
 import { fakeDeps } from '../helpers/installTasks.ts';
 
@@ -935,7 +940,7 @@ describe('runInstallTasks', () => {
 
     expect(onUpdate.mock.calls[0]).toEqual([
       'reset_bash',
-      { label: 'Clear old STARSHIP_CONFIG in bash', status: 'pending' },
+      { label: 'Point Bash back at the shared config', status: 'pending' },
     ]);
     expect(deps.resetSharedShellConfig).toHaveBeenCalledTimes(1);
     expect(deps.resetSharedShellConfig).toHaveBeenCalledWith('bash');
@@ -1016,7 +1021,7 @@ describe('buildTaskList', () => {
     const tasks = buildTaskList(state({ selectedShells: ['zsh'] }), ['bash', 'zsh']);
 
     expect(tasks.map((t) => t.id).slice(-2)).toEqual(['verify', 'reset_bash']);
-    expect(tasks.at(-1)?.label).toBe('Clear old STARSHIP_CONFIG in bash');
+    expect(tasks.at(-1)?.label).toBe('Point Bash back at the shared config');
   });
 
   it('plans no reset rows when Starship is skipped', () => {
@@ -1213,5 +1218,17 @@ describe('configIfFontFails', () => {
     expect(configIfFontFails({ ...withFont, nerdFontToInstall: NO_NERD_FONT })).toBeNull();
     expect(configIfFontFails({ ...withFont, container: true })).toBeNull();
     expect(configIfFontFails({ ...withFont, keepExistingConfig: true })).toBeNull();
+  });
+});
+
+describe('sharedConfigNote', () => {
+  it('says unselected shells go back to the shared config, before and after a run', () => {
+    expect(sharedConfigNote([], false)).toBeNull();
+    expect(sharedConfigNote(['fish'], false)).toMatch(
+      /^Fish is not selected, so it will use your shared .*starship\.toml again.*Select it in a later run to give it its own prompt\.$/
+    );
+    expect(sharedConfigNote(['fish', 'zsh', 'bash'], true)).toMatch(
+      /^Fish, Zsh and Bash are not selected, so they now use your shared/
+    );
   });
 });

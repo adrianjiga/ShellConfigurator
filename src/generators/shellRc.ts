@@ -279,6 +279,56 @@ export const FS_RC_IO: RcIo = {
   readFile: (filePath) => fs.readFileSync(filePath, 'utf8'),
 };
 
+const MAX_SOURCE_DEPTH = 3;
+
+function expandPath(raw: string, env: NodeJS.ProcessEnv): string | null {
+  let unresolved = false;
+  const expanded = raw
+    .replace(/^(["'])(.*)\1$/, '$2')
+    .replace(/^~(?=\/|$)/, homeDir())
+    .replace(/\$\{(\w+)\}|\$(\w+)/g, (_match, braced: string, bare: string) => {
+      const value = env[braced ?? bare];
+      if (value === undefined) unresolved = true;
+      return value ?? '';
+    });
+  return !unresolved && path.isAbsolute(expanded) ? expanded : null;
+}
+
+/** The files a shell script sources (`source f`, `. f`), expanded; ones it cannot resolve are left out. */
+export function sourcedFiles(content: string, env: NodeJS.ProcessEnv = process.env): string[] {
+  return content.split('\n').flatMap((line) => {
+    if (line.trimStart().startsWith('#')) return [];
+    return [
+      ...line.matchAll(/(?:^|[;&|]|\s)\s*(?:source|\.)\s+("[^"]*"|'[^']*'|[^\s;&|]+)/g),
+    ].flatMap((match) => expandPath(match[1], env) ?? []);
+  });
+}
+
+/**
+ * Whether `content`, or a file it sources (three levels deep), runs the shell's
+ * Starship init, as Omarchy's ~/.bashrc does through $OMARCHY_PATH/default/bash/rc.
+ */
+export function initReachable(
+  content: string,
+  shellId: ShellId,
+  io: RcIo = FS_RC_IO,
+  env: NodeJS.ProcessEnv = process.env,
+  depth = 0,
+  seen: Set<string> = new Set()
+): boolean {
+  if (hasStarshipInit(content, shellId)) return true;
+  if (depth >= MAX_SOURCE_DEPTH) return false;
+  return sourcedFiles(content, env).some((file) => {
+    if (seen.has(file)) return false;
+    seen.add(file);
+    try {
+      return io.exists(file) && initReachable(io.readFile(file), shellId, io, env, depth + 1, seen);
+    } catch {
+      return false;
+    }
+  });
+}
+
 /**
  * Of the given installed shells, the ones whose rc actually loads Starship.
  * Clearing a leaked STARSHIP_CONFIG only makes sense where Starship runs.
@@ -289,7 +339,7 @@ export function shellsWithStarshipInit(shells: ShellId[], io: RcIo = FS_RC_IO): 
     if (!shell?.rcFile) return false;
     try {
       if (!io.exists(shell.rcFile)) return false;
-      if (hasStarshipInit(io.readFile(shell.rcFile), shellId)) return true;
+      if (initReachable(io.readFile(shell.rcFile), shellId, io)) return true;
       return shellId === 'fish' && io.exists(fishInitFile(shell.rcFile));
     } catch {
       return false;
@@ -325,6 +375,26 @@ export function manualSetupAppliedWith(
   return pointAtSharedConfig
     ? pins.every((filePath) => !io.exists(filePath))
     : pins.every((filePath) => io.exists(filePath));
+}
+
+/**
+ * Whether the shell still has its own working setup from an earlier run: its rc
+ * exports STARSHIP_CONFIG to its per-shell config, and that file exists. Such a
+ * shell already overrides a STARSHIP_CONFIG leaked from a parent shell.
+ */
+export function keepsOwnConfig(shellId: ShellId, io: RcIo = FS_RC_IO): boolean {
+  const shell = getShell(shellId);
+  const exportLine = starshipConfigLine(shellId);
+  if (!shell?.rcFile || !exportLine) return false;
+  try {
+    return (
+      io.exists(shell.rcFile) &&
+      hasLine(io.readFile(shell.rcFile), exportLine) &&
+      io.exists(getShellConfigPath(shellId))
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function manualSetupApplied(shell: ShellDef, pointAtSharedConfig = false): boolean {
@@ -570,7 +640,8 @@ export function appliedRcContent(
   const cleaned = removeShellConfiguratorBlocks(existing, shell, cleanNeedles, carriedPathLines);
 
   const initPresent =
-    hasStarshipInit(cleaned, shell.id) || (shell.id === 'fish' && io.exists(fishInitFile(rcPath)));
+    initReachable(cleaned, shell.id, io) ||
+    (shell.id === 'fish' && io.exists(fishInitFile(rcPath)));
 
   const added = buildAdditionLines(shell, cleaned, options.ensurePathDir, configLine, initPresent);
   const carried = [...new Set(carriedPathLines)].filter(
@@ -692,7 +763,7 @@ export function resetRcContent(
   }
 
   const initPresent =
-    hasStarshipInit(content, shellId) || (shell.id === 'fish' && io.exists(fishInitFile(rcPath)));
+    initReachable(content, shellId, io) || (shell.id === 'fish' && io.exists(fishInitFile(rcPath)));
   const needsInit = !initPresent && hasStarshipInit(existing, shellId);
   const lines = [
     ...[...new Set(carried)].filter((line) => !hasLine(content, line)),
@@ -751,7 +822,7 @@ export function startsStarship(
     const kept = withoutManagedBlocks
       ? removeShellConfiguratorBlocks(content, shell, [EVERY_BLOCK])
       : content;
-    return hasStarshipInit(kept, shellId);
+    return initReachable(kept, shellId, io);
   } catch {
     return false;
   }
@@ -782,9 +853,12 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
   }
 
   const ownInit = hasStarshipInit(stripped, shellId);
-  const confDInit = !ownInit && shellId === 'fish' && fs.existsSync(fishInitFile(rcPath));
+  const otherInit =
+    !ownInit &&
+    ((shellId === 'fish' && fs.existsSync(fishInitFile(rcPath))) ||
+      initReachable(stripped, shellId));
   const kept =
-    ownInit || confDInit ? [...new Set(carried)].filter((line) => !hasLine(stripped, line)) : [];
+    ownInit || otherInit ? [...new Set(carried)].filter((line) => !hasLine(stripped, line)) : [];
   const lines = stripped.split('\n');
   if (kept.length > 0) {
     const at = ownInit
@@ -797,7 +871,13 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
   writeFileAtomic(rcPath, lines.join('\n'));
   const notes = [
     ...(ownInit ? ['your own Starship init line stays'] : []),
-    ...(confDInit ? ['your conf.d/starship.fish init stays'] : []),
+    ...(otherInit
+      ? [
+          shellId === 'fish' && fs.existsSync(fishInitFile(rcPath))
+            ? 'your conf.d/starship.fish init stays'
+            : 'the Starship init in a file it sources stays',
+        ]
+      : []),
     ...(kept.length > 0 ? ['kept the PATH line it needs'] : []),
   ];
   return {

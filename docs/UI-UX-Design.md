@@ -215,7 +215,11 @@ Expanded, the other sections look like this (the focused row's hint sits on its 
 been written yet, so this is the last chance to change things (Esc) before the
 irreversible install/config-write phase.
 
-**Layout**: Install plan from `buildTaskList` (the `TaskPlan` component), the
+**Layout**: Install plan from `buildTaskList` (the `TaskPlan` component; a shell that
+is not selected, already starts Starship and has no working setup of its own gets a "Point <Shell> back at the shared
+config" row and a note, from `sharedConfigNote`, that it will use the shared
+`starship.toml` again; Done repeats the note for
+the shells it switched), the
 config paths with the generated TOML shown once (`ConfigPlan`), a **Files on
 files** list of every config and rc file the run creates or edits with its added
 and removed line counts (paths under home shown as `~/…`), then a **Shell wiring**
