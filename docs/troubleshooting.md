@@ -219,6 +219,10 @@ off a terminal). Run it again to undo the run before; `--run <id>` picks one.
 - **"changed since that run, so it is left as it is"**: you (or a later run)
   edited that file after the run, and rollback never overwrites a later edit.
   Roll back the later run first, or fix the file by hand.
+- **"so it stays next to roll back"**: some files were skipped (changed since)
+  or failed, so the run is only partly undone and the next `rollback` tries it
+  again. Fix or put back those files, then run it again; files already undone
+  report "already as it was before that run".
 - **"Nothing to roll back."**: no recorded run changed any file, or every run
   has been rolled back already. Runs made before rollback existed kept no
   copies.
