@@ -19,7 +19,8 @@ export type Subcommand =
   | 'rollback'
   | 'debug-info'
   | 'completions'
-  | 'timings';
+  | 'timings'
+  | 'share';
 
 export const SUBCOMMANDS: readonly Subcommand[] = [
   'generate',
@@ -31,6 +32,7 @@ export const SUBCOMMANDS: readonly Subcommand[] = [
   'debug-info',
   'completions',
   'timings',
+  'share',
 ];
 
 export interface CliFlags {

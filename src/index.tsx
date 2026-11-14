@@ -5,7 +5,7 @@ import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { posixShellQuote } from './config/shells.ts';
-import { restoreConfigBackups } from './generators/shellRc.ts';
+import { restoreConfigBackups, writeFileAtomic } from './generators/shellRc.ts';
 import { generateToml } from './generators/starship.ts';
 import type { CliFlags } from './services/args.ts';
 import { parseCliArgs, quoteArgv, SUBCOMMANDS } from './services/args.ts';
@@ -33,6 +33,7 @@ import {
   runRollback,
 } from './services/rollback.ts';
 import { captureRun, trackedFiles } from './services/runCapture.ts';
+import { renderShare } from './services/share.ts';
 import {
   DEFAULT_PROBE_DEPS,
   formatTimings,
@@ -104,6 +105,7 @@ Usage:
   shell-configurator debug-info   print a report of the setup to attach to a bug report
   shell-configurator completions <bash|zsh|fish>   print a shell completion script
   shell-configurator timings      time each prompt module here and suggest fixes for slow ones
+  shell-configurator share        print the prompt as Markdown to share, with the card that rebuilds it
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
@@ -189,6 +191,11 @@ timings options (reads only; times the modules in the current folder):
                        generate flags (--preset, --palette, --state, ...)
   --json               Print the timings and suggestions as JSON
   Modules run in parallel, so the prompt is about as slow as its slowest one.
+
+share options (takes the generate flags, e.g. shell-configurator share --preset tokyo-night):
+  -o, --output <file>  Write the Markdown to this file instead of stdout
+  The card it prints has no shells or font install of this machine; whoever uses
+  it adds --shells (and --font) to apply.
 
 completions (install the script where your shell loads completions from):
   bash   shell-configurator completions bash > ~/.local/share/bash-completion/completions/shell-configurator
@@ -325,6 +332,7 @@ const LOOK_FLAGS = [
   '--state',
 ];
 const TIMINGS_FLAGS = new Set([...LOOK_FLAGS, '--config', '--json']);
+const SHARE_FLAGS = new Set([...LOOK_FLAGS, '-o/--output']);
 const UNINSTALL_FLAGS = new Set([
   '--shells',
   '--font',
@@ -627,6 +635,28 @@ export async function runTimingsCommand(
   );
 }
 
+/**
+ * Prints the prompt the config flags build as Markdown to share: its TOML and
+ * the state card that rebuilds it. -o writes it to a file instead.
+ */
+export function runShareCommand(flags: CliFlags): void {
+  const unused = presentFlags(flags).filter((flag) => !SHARE_FLAGS.has(flag));
+  if (unused.length > 0) {
+    throw new CliUsageError(`${unused.join(', ')} cannot be used with share.`);
+  }
+  const text = renderShare(stateFromFlags(flags));
+  if (!flags.outputFile) {
+    process.stdout.write(text);
+    return;
+  }
+  try {
+    writeFileAtomic(flags.outputFile, text);
+  } catch (err) {
+    throw new CliRunError(`Could not write '${flags.outputFile}': ${errorMessage(err)}`);
+  }
+  process.stdout.write(`Wrote ${flags.outputFile}\n`);
+}
+
 export function runCompletionsCommand(flags: CliFlags): void {
   const unused = presentFlags(flags);
   if (unused.length > 0) {
@@ -699,6 +729,10 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   }
   if (flags.subcommand === 'timings') {
     await runTimingsCommand(flags);
+    return true;
+  }
+  if (flags.subcommand === 'share') {
+    runShareCommand(flags);
     return true;
   }
   if (flags.subcommand === 'uninstall') {

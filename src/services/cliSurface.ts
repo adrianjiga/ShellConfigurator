@@ -73,6 +73,7 @@ export const FLAGS = {
   list: flag('--list', 'List the runs that changed files'),
   run: flag('--run', 'Roll back this run (an id from --list)', 'text'),
   config: flag('--config', 'Time this starship.toml instead of one built from flags', 'file'),
+  shareOutput: flag('--output', 'Write the Markdown to this file', 'file', '-o'),
 } satisfies Record<string, FlagInfo>;
 
 export const GLOBAL_FLAGS: readonly FlagInfo[] = [FLAGS.help, FLAGS.version];
@@ -163,5 +164,9 @@ export const SUBCOMMAND_INFO: Record<Subcommand, SubcommandInfo> = {
   timings: {
     description: 'Time each prompt module here and suggest fixes for slow ones',
     flags: [...LOOK_FLAGS, FLAGS.config, FLAGS.json],
+  },
+  share: {
+    description: 'Print the prompt as Markdown to share, with the card that rebuilds it',
+    flags: [...LOOK_FLAGS, FLAGS.shareOutput],
   },
 };

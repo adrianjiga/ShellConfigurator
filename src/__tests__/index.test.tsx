@@ -100,6 +100,7 @@ import {
   runGlobalFlags,
   runHeadlessCommand,
   runRollbackCommand,
+  runShareCommand,
   runTimingsCommand,
   runUninstallCommand,
   type UninstallIo,
@@ -1366,5 +1367,44 @@ describe('index timings command', () => {
     await expect(
       runHeadlessCommand(parseCliArgs(['generate', '--config', 'x']), '')
     ).rejects.toThrow('--config only applies to timings.');
+  });
+});
+
+describe('index share command', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+  const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+  });
+  afterEach(() => stdoutWrite.mockRestore());
+
+  it('prints the prompt the flags build as Markdown', () => {
+    runShareCommand(parseCliArgs(['share', '--preset', 'pure-prompt']));
+    expect(output()).toMatch(/^# Starship prompt: Pure Prompt\n/);
+    expect(output()).toContain('```toml');
+  });
+
+  it('writes it to the -o file instead', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-share-cli-'));
+    const file = path.join(dir, 'prompt.md');
+    try {
+      runShareCommand(parseCliArgs(['share', '-o', file]));
+      expect(fs.readFileSync(file, 'utf8')).toContain('## starship.toml');
+      expect(output()).toBe(`Wrote ${file}\n`);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    [['--shells', 'zsh'], /--shells cannot be used with share/],
+    [['--json'], /--json cannot be used with share/],
+  ])('rejects %o', (args, message) => {
+    expect(() => runShareCommand(parseCliArgs(['share', ...args]))).toThrow(message);
+  });
+
+  it('documents share in the help text', () => {
+    runGlobalFlags(parseCliArgs(['--help']));
+    expect(output()).toContain('shell-configurator share');
   });
 });
