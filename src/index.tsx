@@ -8,6 +8,13 @@ import { posixShellQuote } from './config/shells.ts';
 import { restoreConfigBackups } from './generators/shellRc.ts';
 import type { CliFlags } from './services/args.ts';
 import { parseCliArgs, quoteArgv } from './services/args.ts';
+import {
+  collectDebugInfo,
+  DEFAULT_DEBUG_INFO_DEPS,
+  type DebugInfoDeps,
+  formatDebugInfo,
+  redactHome,
+} from './services/debugInfo.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
 import { CliRunError, CliUsageError } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
@@ -83,6 +90,7 @@ Usage:
   shell-configurator repair       fix the problems doctor finds
   shell-configurator uninstall    remove what the wizard set up
   shell-configurator rollback     put back the files the last run changed
+  shell-configurator debug-info   print a report of the setup to attach to a bug report
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
@@ -154,6 +162,10 @@ rollback options (undoes the newest run that changed files; asks first):
   --json               Print the report (or the --list runs) as JSON
   A file changed again since that run is left alone. Rolling back again undoes
   the run before; rolling back a rollback redoes the run.
+
+debug-info options (reads only; e.g. shell-configurator debug-info > issue.md):
+  --json               Print the report data as JSON instead of Markdown
+  Your home directory is shown as ~ so the report does not name you.
 `);
 }
 
@@ -464,8 +476,26 @@ export async function runRollbackCommand(
   }
 }
 
+/** Prints the debug report (Markdown, or JSON with --json) with the home directory shown as `~`. */
+export async function runDebugInfoCommand(
+  flags: CliFlags,
+  deps: DebugInfoDeps = DEFAULT_DEBUG_INFO_DEPS
+): Promise<void> {
+  const unused = presentConfigFlags(flags);
+  if (flags.stateFile) unused.push('--state');
+  if (flags.fix) unused.push('--fix');
+  if (flags.dryRun) unused.push('--dry-run');
+  if (unused.length > 0) {
+    throw new CliUsageError(`${unused.join(', ')} cannot be used with debug-info.`);
+  }
+  const info = await collectDebugInfo(VERSION, deps);
+  process.stdout.write(
+    flags.json ? redactHome(`${JSON.stringify(info, null, 2)}\n`) : formatDebugInfo(info)
+  );
+}
+
 /**
- * Runs a headless subcommand (`generate`, `apply`, `doctor`, `repair`, `uninstall` or `rollback`) to completion,
+ * Runs a headless subcommand (`generate`, `apply`, `doctor`, `repair`, `uninstall`, `rollback` or `debug-info`) to completion,
  * returning true when the flags targeted one so the Ink wizard is skipped
  * entirely. Errors propagate for the caller's fatal handler — headless runs
  * never render. `command` is the original invocation line, recorded for
@@ -487,6 +517,10 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   }
   if (flags.subcommand === 'rollback') {
     await runRollbackCommand(flags, command);
+    return true;
+  }
+  if (flags.subcommand === 'debug-info') {
+    await runDebugInfoCommand(flags);
     return true;
   }
   if (flags.subcommand === 'uninstall') {
@@ -523,7 +557,7 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.fix) dropped.push('--fix');
   if (dropped.length > 0) {
     throw new CliUsageError(
-      `${dropped.join(', ')} require a subcommand (generate, apply, doctor, repair, uninstall or rollback).`
+      `${dropped.join(', ')} require a subcommand (generate, apply, doctor, repair, uninstall, rollback or debug-info).`
     );
   }
   return false;

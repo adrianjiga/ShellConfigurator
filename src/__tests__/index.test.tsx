@@ -95,6 +95,7 @@ import {
   recordInstallOutcome,
   reportFatal,
   routeCli,
+  runDebugInfoCommand,
   runGlobalFlags,
   runHeadlessCommand,
   runRollbackCommand,
@@ -102,8 +103,10 @@ import {
   type UninstallIo,
 } from '../index.tsx';
 import { parseCliArgs } from '../services/args.ts';
+import type { DebugInfoDeps } from '../services/debugInfo.ts';
 import { CliRunError, CliUsageError } from '../services/errors.ts';
 import { appendHistory } from '../services/history.ts';
+import { homeDir } from '../services/paths.ts';
 import { beginRunCapture, captureRun, finishRunCapture, runDir } from '../services/runCapture.ts';
 import { serializeState } from '../services/state.ts';
 import type { UninstallDeps } from '../services/uninstall.ts';
@@ -1067,5 +1070,74 @@ describe('index rollback command', () => {
     runGlobalFlags(parseCliArgs(['--help']));
     expect(output()).toContain('shell-configurator rollback');
     expect(output()).toContain('--run <id>');
+  });
+});
+
+describe('index debug-info command', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+  const home = homeDir();
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+    mockFormatDoctorReport.mockReturnValue('Starship health check\n\nPASS    Starship — ok\n');
+  });
+
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+  });
+
+  const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
+  const deps: DebugInfoDeps = {
+    detectPackageManager: async () => 'apt',
+    detectInstalledShells: async () => ['bash'],
+    detectTerminal: async () => null,
+    detectContainer: async () => true,
+    detectCurrentShell: async () => 'bash',
+    findStarship: async () => ({ installed: false }),
+    starshipPath: () => null,
+    recordedStarshipVersion: () => null,
+    distro: () => 'Debian GNU/Linux 12 (bookworm)',
+    runDoctor: async () => ({ ok: false, findings: [] }),
+    history: () => [],
+    shellFacts: () => ({ startsStarship: false, managedBlock: false, config: false }),
+    hasStarshipIn: () => false,
+    env: { PATH: `${home}/bin:/usr/bin` },
+    os: () => 'Linux 6.1.0 (linux/x64)',
+  };
+
+  it('prints the Markdown report with the version and the doctor findings', async () => {
+    await runDebugInfoCommand(parseCliArgs(['debug-info']), deps);
+
+    expect(output()).toMatch(
+      /^# shell-configurator debug info\n\n- shell-configurator: \d+\.\d+\.\d+\n/
+    );
+    expect(output()).toContain('- OS: Linux 6.1.0 (linux/x64) — Debian GNU/Linux 12 (bookworm)');
+    expect(output()).toContain('- Installed: no');
+    expect(output()).toContain('PASS    Starship — ok');
+    expect(output()).toContain('- `~/bin`');
+  });
+
+  it('prints the data as JSON with the home directory hidden', async () => {
+    await runDebugInfoCommand(parseCliArgs(['debug-info', '--json']), deps);
+
+    const info = JSON.parse(output());
+    expect(info).toMatchObject({ packageManager: 'apt', container: true, currentShell: 'bash' });
+    expect(info.path[0].dir).toBe('~/bin');
+    expect(output()).not.toContain(home);
+  });
+
+  it.each([
+    [['--preset', 'pure-prompt'], /--preset cannot be used with debug-info/],
+    [['--state', 'card.json'], /--state cannot be used with debug-info/],
+    [['--dry-run'], /--dry-run cannot be used with debug-info/],
+  ])('rejects %o', async (args, message) => {
+    await expect(runDebugInfoCommand(parseCliArgs(['debug-info', ...args]), deps)).rejects.toThrow(
+      message
+    );
+  });
+
+  it('documents debug-info in the help text', () => {
+    runGlobalFlags(parseCliArgs(['--help']));
+    expect(output()).toContain('shell-configurator debug-info');
   });
 });
