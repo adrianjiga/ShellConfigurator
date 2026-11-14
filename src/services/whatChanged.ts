@@ -4,6 +4,7 @@ import { getShell, setupCommand } from '../config/shells.ts';
 import { statusMark } from '../config/status.ts';
 import { getSharedConfigPath, getShellConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
 import { fontIdToInstall, type InstallTask, type WizardState } from '../types.ts';
+import { TASK_IDS } from './installTasks.ts';
 import { configHome, redactHome } from './paths.ts';
 import type { RunManifest } from './runCapture.ts';
 
@@ -41,7 +42,10 @@ function shellLine(run: WhatChangedRun, shellId: WizardState['selectedShells'][n
 
 /** The Markdown summary of a run: what ran, which files changed, and how to undo it. */
 export function renderWhatChanged(run: WhatChangedRun): string {
-  const fontId = fontIdToInstall(run.state.nerdFontToInstall);
+  const fontInstalled = run.results.some(
+    (task) => task.id === TASK_IDS.font && task.status === 'done'
+  );
+  const fontId = fontInstalled ? fontIdToInstall(run.state.nerdFontToInstall) : null;
   const lines = [
     '# What ShellConfigurator changed',
     '',

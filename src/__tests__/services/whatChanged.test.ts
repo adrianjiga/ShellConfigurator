@@ -41,7 +41,7 @@ function run(overrides: Partial<WhatChangedRun> = {}): WhatChangedRun {
     results: [
       { id: 'starship', label: 'Install Starship', status: 'done', note: 'starship 1.27.0' },
       { id: 'rc_zsh', label: 'Configure zsh', status: 'failed', error: 'read-only' },
-      { id: 'font', label: 'Install Hack', status: 'skipped' },
+      { id: 'font', label: 'Install Hack', status: 'done' },
     ],
     manifest: {
       version: 1,
@@ -66,7 +66,7 @@ describe('renderWhatChanged', () => {
     );
     expect(text).toContain('- ✓ Install Starship (starship 1.27.0)');
     expect(text).toContain('- ✗ Configure zsh — read-only');
-    expect(text).toContain('- – Install Hack');
+    expect(text).toContain('- ✓ Install Hack');
     expect(text).toContain('- modified `/etc/zshrc-ish`');
     expect(text).toContain(`- created \`${getShellConfigPath('zsh')}\``);
     expect(text).toContain('- removed `/gone`');
@@ -76,6 +76,15 @@ describe('renderWhatChanged', () => {
     expect(text).toMatch(/- Nushell: set up by hand with `nu -c /);
     expect(text).toContain('- `shell-configurator rollback` puts the files above back');
     expect(text).toContain('add `--font Hack` to remove the font');
+  });
+
+  it('offers no font removal when the run installed no font', () => {
+    const skipped = run().results.map((task) =>
+      task.id === 'font' ? { ...task, status: 'skipped' as const } : task
+    );
+    expect(renderWhatChanged(run({ results: skipped }))).not.toContain('--font');
+    const inContainer = run().results.filter((task) => task.id !== 'font');
+    expect(renderWhatChanged(run({ results: inContainer }))).not.toContain('--font');
   });
 
   it('says no changed files were recorded, without claiming a failure, and offers no rollback', () => {
