@@ -13,6 +13,7 @@ vi.mock('node:fs', async (importOriginal) => {
   return { ...actual, readFileSync: mockReadFileSync, existsSync: mockExistsSync };
 });
 
+import { quoteArgv } from '../../services/args.ts';
 import {
   collectDebugInfo,
   DEFAULT_DEBUG_INFO_DEPS,
@@ -157,7 +158,29 @@ describe('redactUrls', () => {
       redactUrls(
         "apply --import-url 'https://ana:ghp_secret@gist.githubusercontent.com/ana/raw/s.toml?token=abc#x' --shells zsh"
       )
-    ).toBe("apply --import-url 'https://gist.githubusercontent.com/ana/raw/s.toml' --shells zsh");
+    ).toBe('apply --import-url https://gist.githubusercontent.com/ana/raw/s.toml --shells zsh');
+  });
+
+  it('drops credentials that contain a quote, as quoteArgv recorded them', () => {
+    const recorded = quoteArgv([
+      'apply',
+      '--import-url',
+      "https://ana:p'w@d@example.com/s.toml?token=abc",
+      '--shells',
+      'zsh',
+    ]);
+    const redacted = redactUrls(recorded);
+
+    expect(redacted).toBe(
+      quoteArgv(['apply', '--import-url', 'https://example.com/s.toml', '--shells', 'zsh'])
+    );
+    expect(redacted).not.toContain('ana');
+  });
+
+  it('drops credentials from a --flag=value URL', () => {
+    expect(redactUrls(quoteArgv(['apply', '--import-url=https://u:tok@example.com/a?b=1']))).toBe(
+      quoteArgv(['apply', '--import-url=https://example.com/a'])
+    );
   });
 
   it('leaves a command without URLs alone', () => {
