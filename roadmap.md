@@ -278,7 +278,8 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 - After install, write `~/.config/starship/WHAT-CHANGED.md`: per-shell what changed, where the rc lines are, and the exact one-liners to undo (→ `uninstall` / `--rollback`).
 - **Why.** Human-readable trail for the "what did I run?" moment a week later — a differentiator for newcomers.
 - **How.** A renderer over `installResults`, written after the install chain. **Effort.** S. **D:** none.
-- **Shipped:** `services/whatChanged.ts` writes the summary after every real wizard install and `apply`: the
+- **Shipped:** `services/whatChanged.ts` writes the summary after every real wizard install and `apply` that
+  changed files, as part of that run so `rollback` puts the previous summary back: the
   tasks and their outcome, the files the run changed (from its rollback manifest), each shell's Starship
   lines and config, and `rollback`/`uninstall`/`doctor` to undo or check. The Done screen and `apply` name
   it. Best-effort, so a failed write never fails the run.

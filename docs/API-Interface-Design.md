@@ -564,23 +564,25 @@ function runRollback(
 ### whatChanged.ts / listings.ts
 
 ```typescript
-function writeWhatChangedSafely(run: WhatChangedRun): string | null;
-// After a wizard install or apply: writes ~/.config/starship/WHAT-CHANGED.md
-// (renderWhatChanged) listing the tasks and their outcome, the files the run
-// changed (created/modified/removed, from its manifest), each selected shell's
-// Starship lines and config (the shared starship.toml in adopt mode), and the
-// rollback/uninstall/doctor commands; with no manifest it says no changed files
-// were recorded. Home is shown as ~, and the recorded command has URL
-// credentials and queries dropped (redactUrls). The font removal hint appears
-// only when the run's font task finished. The wizard skips it once the install
-// screen has unmounted. Returns the path, or null when it could not write (never throws).
-// Tests get a stub from setup.ts.
-
-function removeWhatChangedSafely(): void;
-// Deletes the summary inside a captured uninstall or rollback that changed
-// files (a rollback keeps one the run it undoes had removed), so it never
-// describes a run that was undone, and rolling those back brings it back.
-// Stubbed in setup.ts too.
+function writeWhatChangedSafely(
+  runId: string | null,
+  run: Omit<WhatChangedRun, 'manifest'>
+): string | null;
+// After a wizard install or apply that changed files (a captured runId):
+// writes ~/.config/starship/WHAT-CHANGED.md (renderWhatChanged) listing the
+// tasks and their outcome, the files the run changed (created/modified/removed,
+// from its manifest), each selected shell's Starship lines and config (the
+// shared starship.toml in adopt mode), and the rollback/uninstall/doctor
+// commands, with a note that a later uninstall or rollback may have undone it.
+// The write is recorded in the run itself (writeInRun in runCapture.ts, with
+// `summary: true`), so rolling the run back puts the previous summary back; a
+// later run rewriting the summary does not make an older run's rollback partial.
+// A run that changed nothing leaves the last summary alone, and uninstall and
+// rollback never touch it. Home is shown as ~, the recorded command has URL
+// credentials and queries dropped (redactUrls), and the --font and --starship
+// removal hints appear only when this run installed them. The wizard writes it
+// as soon as the run ends, before its pause. Returns the path, or null when it
+// did not write (never throws). Tests get a stub from setup.ts.
 
 function listEntries(kind: 'presets' | 'modules' | 'fonts'): ListEntry[];
 // The ids --list-presets/--list-modules/--list-fonts print, with label,
@@ -778,10 +780,17 @@ shell-configurator apply [--state <file>] [generate flags] [--dry-run [--json]] 
                 response. A non-http(s) URL is a usage error; an HTTP error, an
                 empty or HTML body is a run error)
   --json        with --dry-run, print { dryRun, shells, installStarship, tasks,
-                config, changes } instead of text; config is { kind: 'per-shell', toml },
+                config, changes } instead of text; config is { kind: 'per-shell', toml,
+                tomlIfFontFails? } (the glyph-free config written when a planned font
+                install fails),
                 { kind: 'imported', path, toml } or { kind: 'kept', path, exists }.
                 A real apply with --json is a usage error
 ```
+
+When the run installs a Nerd Font and the config would differ without it, the
+text dry run and the Review screen add `If the Nerd Font install fails, the config
+is written without Nerd Font glyphs instead.` (`configIfFontFails` in
+`installTasks.ts`).
 
 A dry run also diffs the config and rc files the run would write against what is
 on disk (`plannedFileChanges` in `services/fileDiff.ts`), using the same planners

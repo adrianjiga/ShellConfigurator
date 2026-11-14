@@ -293,7 +293,7 @@ src/
     ├── debugInfo.ts           Read-only Markdown/JSON report of the setup for bug reports
     ├── cliSurface.ts          Description of every subcommand and flag, for completions
     ├── completions.ts         Generates the bash/zsh/fish completion scripts
-    ├── whatChanged.ts         Writes the WHAT-CHANGED.md summary after an install or apply; uninstall and rollback remove it
+    ├── whatChanged.ts         Writes the WHAT-CHANGED.md summary of an install or apply as part of that run
     ├── listings.ts            The preset/module/font lists behind --list-presets etc.
     ├── state.ts               State card serialization (serializeState / parseState)
     ├── history.ts             history.jsonl ledger + snapshot writes
@@ -301,5 +301,6 @@ src/
     ├── exec.ts                Async spawn wrapper (runCommand, runCapture) + binary checks
     ├── errors.ts              Error classes (CliUsageError)
     ├── paths.ts               XDG dir resolution
+    ├── redact.ts              redactHome / redactUrls for reports and the summary
     └── tty.ts                 Terminal handover while child commands run
 ```
