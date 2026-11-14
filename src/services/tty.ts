@@ -57,9 +57,7 @@ function stopReadingStdin(): void {
     handle.reading = false;
     handle.readStop();
     stoppedRead = handle;
-  } catch {
-    // No handle to stop: nothing is reading.
-  }
+  } catch {}
 }
 
 function restartReadingStdin(): void {
@@ -69,9 +67,7 @@ function restartReadingStdin(): void {
   try {
     handle.reading = true;
     handle.readStart?.();
-  } catch {
-    // The terminal is gone; there is nothing left to read.
-  }
+  } catch {}
 }
 
 /** Hands the terminal to a child process. Nestable; resume the same number of times. */
