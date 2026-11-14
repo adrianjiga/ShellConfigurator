@@ -199,7 +199,7 @@ describe('runRepair', () => {
 
   it('wires the terminal font and reports when it cannot be edited', async () => {
     const wired = makeDeps(
-      report([finding({ kind: 'wire-font', terminalId: 'wezterm', family: 'Hack Nerd Font' })])
+      report([finding({ kind: 'wire-font', terminalId: 'kitty', family: 'Hack Nerd Font' })])
     );
     expect((await runRepair(null, wired)).actions[0]).toMatchObject({ status: 'fixed' });
 
