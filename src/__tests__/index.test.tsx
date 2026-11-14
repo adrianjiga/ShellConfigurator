@@ -996,6 +996,19 @@ describe('index uninstall command', () => {
     ).rejects.toThrow(message);
   });
 
+  it.each([
+    [['apply', '--shells', 'zsh', '--export', 'card.json', '-o', 'out.toml'], '--output, --export'],
+    [['generate', '--json'], '--json'],
+    [['apply', '--shells', 'zsh', '--fix'], '--fix'],
+    [['doctor', '--dry-run'], '--dry-run without --fix'],
+    [['completions', 'bash', '--json'], '--json'],
+  ])('refuses %j instead of ignoring %s', async (argv, flags) => {
+    const subcommand = argv[0];
+    await expect(runHeadlessCommand(parseCliArgs(argv), '')).rejects.toThrow(
+      new CliUsageError(`${flags} cannot be used with ${subcommand}.`)
+    );
+  });
+
   it('rejects --yes and --starship outside uninstall', async () => {
     await expect(runHeadlessCommand(parseCliArgs(['doctor', '--yes']), '')).rejects.toThrow(
       '--yes only applies to repair, doctor --fix, uninstall and rollback.'

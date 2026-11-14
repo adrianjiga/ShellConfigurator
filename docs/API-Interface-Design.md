@@ -826,7 +826,7 @@ shell-configurator generate --preset <id> [flags]
 ```
 shell-configurator apply [--state <file>] [generate flags] [--dry-run [--json]] [--adopt] [--import-url <url>]
   --state       the state card to install (also: --import); without it, apply
-                takes the generate flags above and --shells is required
+                takes the generate flags above except -o and --export, and --shells is required
   --adopt       keep the shared ~/.config/starship.toml (never writes per-shell files)
   --import-url  fetch a starship.toml and adopt it (implies --adopt; the fetch is
                 bounded — a 10s timeout and a 1 MB cap reject a hung or oversized
@@ -917,8 +917,11 @@ puts back the files they changed, and the run is recorded in history as
 Flags may appear before or after the subcommand; when a flag is repeated, the
 last one wins. Unknown or malformed flags (a bogus `--name`, an unparseable
 value on a boolean flag, a missing value, a stray positional) throw a
-`CliUsageError`, so a typo can never start the real installer. Config flags
-passed to `doctor`/`repair` without `--state` are ignored with a stderr warning.
+`CliUsageError`, so a typo can never start the real installer. So does a known
+flag the subcommand would ignore (its flags are those `SUBCOMMAND_INFO` lists),
+such as `apply -o`, `generate --json` or `doctor --dry-run` without `--fix`.
+Config flags passed to `doctor`/`repair` without `--state` are ignored with a
+stderr warning.
 
 ### uninstall
 

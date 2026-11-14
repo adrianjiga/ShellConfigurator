@@ -158,8 +158,8 @@ apply options (a headless install from a state card):
                        regenerating it (per-shell files are never written)
   --import-url <url>   Fetch a starship.toml over the web and adopt it (implies --adopt)
   --json               With --dry-run, print the plan, config and diffs as JSON
-  Without --state, apply also takes the generate options above; --shells is
-  then required.
+  Without --state, apply also takes the generate options above except -o and
+  --export; --shells is then required.
 
 doctor options (checks the setup; exits non-zero when a check fails):
   --state <file>       Check the setup described by a saved state card
@@ -207,11 +207,11 @@ timings options (changes no config; times the modules in the current folder):
   ~/.config/starship.toml, else Starship's built-in default prompt.
   --config <file>      Time this starship.toml instead
   --json               Print the timings and suggestions as JSON
-  The generate flags (--preset, --palette, --state, ...) time a config built
+  The look flags (--preset, --palette, --font, --state, ...) time a config built
   from them. Modules run in parallel, so the prompt is about as slow as its
   slowest one.
 
-share options (takes the generate flags, e.g. shell-configurator share --preset tokyo-night):
+share options (takes the look flags, e.g. shell-configurator share --preset tokyo-night):
   -o, --output <file>  Write the Markdown to this file instead of stdout
   The card it prints has no shells or font install of this machine; whoever uses
   it adds --shells (and --font) to apply.
@@ -341,6 +341,27 @@ function presentFlags(flags: CliFlags): string[] {
 
 function acceptedFlags(subcommand: Subcommand): Set<string> {
   return new Set(SUBCOMMAND_INFO[subcommand].flags.map((info) => info.name));
+}
+
+const NOT_STATE_FLAGS = new Set(['--import-url', '--output', '--export']);
+
+/**
+ * Stops on a flag the subcommand would ignore. doctor and repair keep taking the
+ * flags that layer onto a --state card, and only warn about them without one.
+ */
+function refuseUnusedFlags(flags: CliFlags, subcommand: Subcommand): void {
+  const accepted = acceptedFlags(subcommand);
+  const layered =
+    subcommand === 'doctor' || subcommand === 'repair'
+      ? presentConfigFlags(flags).filter((flag) => !NOT_STATE_FLAGS.has(flag))
+      : [];
+  const unused = presentFlags(flags).filter(
+    (flag) => !accepted.has(flag) && !layered.includes(flag)
+  );
+  if (subcommand === 'doctor' && flags.dryRun && !flags.fix) unused.push('--dry-run without --fix');
+  if (unused.length > 0) {
+    throw new CliUsageError(`${unused.join(', ')} cannot be used with ${subcommand}.`);
+  }
 }
 
 function warnIgnoredFlags(flags: CliFlags, subcommand: string): void {
@@ -783,6 +804,7 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if ((flags.list || flags.runId) && flags.subcommand !== 'rollback') {
     throw new CliUsageError(`${flags.list ? '--list' : '--run'} only applies to rollback.`);
   }
+  if (flags.subcommand) refuseUnusedFlags(flags, flags.subcommand);
   if (flags.subcommand === 'rollback') {
     await runRollbackCommand(flags, command);
     return true;
