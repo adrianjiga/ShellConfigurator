@@ -308,6 +308,23 @@ describe('DoneScreen dry run', () => {
     expect(frame).not.toContain('Default shell not set');
     expect(frame).not.toContain('print-config');
   });
+
+  it('shows the kept shared config, not a generated one, in adopt mode', () => {
+    const { lastFrame } = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          dryRun: true,
+          keepExistingConfig: true,
+          selectedShells: ['zsh'],
+        }}
+      />
+    );
+    const frame = lastFrame() ?? '';
+    expect(frame).toContain('Config to keep');
+    expect(frame).not.toContain(getShellConfigPath('zsh'));
+    expect(frame).not.toContain('format = ');
+  });
 });
 
 describe('DoneScreen in a container', () => {

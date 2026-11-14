@@ -2,13 +2,13 @@ import * as fs from 'node:fs';
 import { Box, Text, useInput } from 'ink';
 import { useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
+import { ConfigPlan, TaskPlan } from '../components/PlanSections.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { getShell, setupCommand } from '../config/shells.ts';
-import { getSharedConfigPath, getShellConfigPath, plannedRcBlock } from '../generators/shellRc.ts';
-import { generateToml } from '../generators/starship.ts';
+import { getSharedConfigPath, plannedRcBlock } from '../generators/shellRc.ts';
 import { fontLabel, plannedPathDir } from '../services/installer.ts';
-import { buildTaskList, plannedResetShells, TASK_IDS } from '../services/installTasks.ts';
+import { buildTaskList, plannedResetShells } from '../services/installTasks.ts';
 import { fontIdToInstall, type ShellId, type WizardState } from '../types.ts';
 
 interface ReviewScreenProps {
@@ -73,52 +73,8 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
               : 'Everything below will be installed and written. Use Esc to go back and change things.'}
         </Text>
 
-        <Box flexDirection="column" marginTop={1} gap={0}>
-          <Text bold>This run will</Text>
-          {tasks.map((task) => (
-            <Box key={task.id} flexDirection="row" gap={1} marginLeft={1}>
-              <Text color={uiColor('cyan')}>•</Text>
-              <Text color={uiColor(task.id === TASK_IDS.config ? 'green' : 'gray')}>
-                {task.label}
-              </Text>
-            </Box>
-          ))}
-        </Box>
-
-        <Box flexDirection="column" marginTop={1} gap={1}>
-          <Text bold>{state.keepExistingConfig ? 'Config to keep' : 'Configuration to write'}</Text>
-          {state.keepExistingConfig ? (
-            // Adopt mode: every shell reads the one shared config.
-            <Box flexDirection="column" marginLeft={1}>
-              <Text color={uiColor('cyan')} bold>
-                {getSharedConfigPath()} (shared by every shell)
-              </Text>
-              <Box marginLeft={2}>
-                {state.sharedConfigToml ? (
-                  <Text color={uiColor('gray')} dimColor>
-                    {state.sharedConfigToml}
-                  </Text>
-                ) : (
-                  <Text color={uiColor('gray')}>The existing config will be kept as-is.</Text>
-                )}
-              </Box>
-            </Box>
-          ) : (
-            // The same TOML goes to every shell's file, so it is shown once.
-            <Box flexDirection="column" marginLeft={1}>
-              {state.selectedShells.map((shellId) => (
-                <Text key={shellId} color={uiColor('cyan')} bold>
-                  {getShellConfigPath(shellId)} ({getShell(shellId)?.label ?? shellId})
-                </Text>
-              ))}
-              <Box marginLeft={2}>
-                <Text color={uiColor('gray')} dimColor>
-                  {generateToml(state)}
-                </Text>
-              </Box>
-            </Box>
-          )}
-        </Box>
+        <TaskPlan title="This run will" tasks={tasks} />
+        <ConfigPlan state={state} />
 
         {sharedConfigShadowed && (
           <Text color={uiColor('yellow')}>

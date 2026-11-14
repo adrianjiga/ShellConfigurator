@@ -357,7 +357,7 @@ describe('dry-run wizard walkthrough', () => {
     const frame = instance.lastFrame();
     expect(frame).toContain('Dry run');
     expect(frame).toContain('Tasks that would run');
-    expect(frame).toContain('Generated config');
+    expect(frame).toContain('Configuration to write');
   });
 
   it('never writes any config or rc files in dry-run mode', async () => {

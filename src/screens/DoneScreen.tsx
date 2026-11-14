@@ -1,5 +1,6 @@
 import { Box, Text, useApp, useInput } from 'ink';
 import { useState } from 'react';
+import { ConfigPlan, TaskPlan } from '../components/PlanSections.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { getShell, setupCommand } from '../config/shells.ts';
@@ -9,7 +10,6 @@ import {
   type RestoreOutcome,
   restoreConfigBackups,
 } from '../generators/shellRc.ts';
-import { generateToml } from '../generators/starship.ts';
 import { errorMessage } from '../services/errors.ts';
 import { fontLabel, getFontFamily, MANUAL_STARSHIP_INSTALL } from '../services/installer.ts';
 import { buildTaskList, plannedResetShells, rcTaskId, TASK_IDS } from '../services/installTasks.ts';
@@ -114,29 +114,11 @@ export function DoneScreen({ state }: DoneScreenProps) {
               A real run would carry out the tasks below and write the config below.
             </Text>
 
-            <Box marginTop={1} flexDirection="column" gap={1}>
-              <Text bold>Tasks that would run</Text>
-              {buildTaskList(state, plannedResetShells(state)).map((task) => (
-                <Box key={task.id} flexDirection="row" gap={1}>
-                  <Text color={uiColor('gray')}>would-run</Text>
-                  <Text color={uiColor('gray')}>{task.label}</Text>
-                </Box>
-              ))}
-            </Box>
-
-            <Box marginTop={1} flexDirection="column" gap={1}>
-              <Text bold>Generated config</Text>
-              {state.selectedShells.map((shellId) => (
-                <Text key={shellId} color={uiColor('cyan')}>
-                  {getShellConfigPath(shellId)}
-                </Text>
-              ))}
-              <Box marginLeft={2}>
-                <Text color={uiColor('gray')} dimColor>
-                  {generateToml(state)}
-                </Text>
-              </Box>
-            </Box>
+            <TaskPlan
+              title="Tasks that would run"
+              tasks={buildTaskList(state, plannedResetShells(state))}
+            />
+            <ConfigPlan state={state} />
           </>
         )}
 
