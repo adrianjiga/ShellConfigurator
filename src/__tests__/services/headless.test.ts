@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { captureRun, trackedFiles } from '../../services/runCapture.ts';
+import { CapturedRunError, captureRun, trackedFiles } from '../../services/runCapture.ts';
 
 const {
   mockDetectInstalledShells,
@@ -663,6 +663,18 @@ describe('runApply', () => {
       .map((call: [string, ...unknown[]]) => String(call[0]))
       .join('');
     expect(output).toContain('Install Starship');
+  });
+
+  it('records the files a crashing run changed, then rethrows its error', async () => {
+    const failure = new Error('chain broke');
+    vi.mocked(captureRun).mockRejectedValueOnce(new CapturedRunError('run-8', failure));
+
+    await expect(
+      runApply(flags({ subcommand: 'apply', shells: ['zsh'] }), 'apply --shells zsh')
+    ).rejects.toBe(failure);
+    expect(mockRecordRun).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'apply', exitCode: 1, runId: 'run-8' })
+    );
   });
 
   it('sets exit code 1 and records it when a task fails', async () => {

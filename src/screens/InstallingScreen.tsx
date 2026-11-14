@@ -9,7 +9,7 @@ import {
   DEFAULT_INSTALL_TASK_DEPS,
   runInstallTasks,
 } from '../services/installTasks.ts';
-import { captureRun, trackedFiles } from '../services/runCapture.ts';
+import { CapturedRunError, captureRun, trackedFiles } from '../services/runCapture.ts';
 import { isUiSuspended, subscribeToUiSuspension } from '../services/tty.ts';
 import type { InstallTask, InstallTaskId, WizardState } from '../types.ts';
 
@@ -79,6 +79,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
         results = captured.result;
         runId = captured.runId;
       } catch (err) {
+        if (err instanceof CapturedRunError) runId = err.runId;
         // The chain itself broke: report every step as failed rather than hang here.
         results = buildTaskList(state).map((task) => ({
           ...task,

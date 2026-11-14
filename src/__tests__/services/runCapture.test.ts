@@ -10,6 +10,7 @@ import { getSharedConfigPath, getShellConfigPath } from '../../generators/shellR
 import { sha256Digest } from '../../services/cache.ts';
 import {
   beginRunCapture,
+  CapturedRunError,
   captureRun,
   finishRunCapture,
   readRunManifest,
@@ -117,14 +118,17 @@ describe('captureRun', () => {
     expect((await captureRun([file('rc')], async () => 'x')).runId).toBeNull();
   });
 
-  it('still writes the manifest when the run throws', async () => {
-    await expect(
-      captureRun([file('rc')], async () => {
-        fs.writeFileSync(file('rc'), 'half done');
-        throw new Error('boom');
-      })
-    ).rejects.toThrow('boom');
-    expect(fs.readdirSync(runsDir())).toHaveLength(1);
+  it('rejects with the runId of what the run had changed when it threw', async () => {
+    const failure = captureRun([file('rc')], async () => {
+      fs.writeFileSync(file('rc'), 'half done');
+      throw new Error('boom');
+    });
+
+    const err = await failure.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(CapturedRunError);
+    expect((err as CapturedRunError).message).toBe('boom');
+    expect(((err as CapturedRunError).cause as Error).message).toBe('boom');
+    expect(readRunManifest((err as CapturedRunError).runId!)?.files).toHaveLength(1);
   });
 
   it('runs anyway when the capture cannot be written', async () => {

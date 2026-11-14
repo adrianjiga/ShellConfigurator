@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { SHELLS } from '../config/shells.ts';
 import { getSharedConfigPath, getShellConfigPath } from '../generators/shellRc.ts';
 import { sha256Digest } from './cache.ts';
-import { isMissingFile } from './errors.ts';
+import { errorMessage, isMissingFile } from './errors.ts';
 import { stateDir } from './paths.ts';
 import { terminalFontConfigFiles } from './terminalFont.ts';
 
@@ -140,7 +140,8 @@ export function finishRunCapture(capture: RunCapture): RunManifest | null {
 /**
  * Runs `run` between a capture and its manifest. Capturing is best-effort: a
  * capture that cannot be written never stops the run, it only leaves nothing
- * to roll back. `runId` is null then, and when the run changed no file.
+ * to roll back. `runId` is null then, and when the run changed no file. A
+ * throwing run rejects with a CapturedRunError carrying its runId.
  */
 export async function captureRun<T>(
   files: string[],
@@ -152,14 +153,24 @@ export async function captureRun<T>(
   } catch {
     capture = null;
   }
-  let runId: string | null;
   let result: T;
   try {
     result = await run();
-  } finally {
-    runId = capture ? finishSafely(capture) : null;
+  } catch (err) {
+    throw new CapturedRunError(capture ? finishSafely(capture) : null, err);
   }
-  return { result, runId };
+  return { result, runId: capture ? finishSafely(capture) : null };
+}
+
+/** A run that threw partway; `runId` still names the files it had changed by then. */
+export class CapturedRunError extends Error {
+  constructor(
+    readonly runId: string | null,
+    cause: unknown
+  ) {
+    super(errorMessage(cause), { cause });
+    this.name = 'CapturedRunError';
+  }
 }
 
 function finishSafely(capture: RunCapture): string | null {
