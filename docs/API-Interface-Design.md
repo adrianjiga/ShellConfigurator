@@ -365,8 +365,9 @@ function plannedRcBlock(
 // lines yet (empty for manual-only shells). ReviewScreen shows this exact block.
 
 function resetSharedShellConfig(shellId: ShellId): { applied: boolean; note?: string };
-// Removes the per-shell config export and appends an unset guard, while
-// preserving the Starship init line so the shell uses the shared config.
+// Removes a per-shell block an earlier run wrote (keeping its PATH line and the
+// Starship init) and adds an unset guard above the init line, so the shell uses
+// the shared config. A user's own STARSHIP_CONFIG export is left in place.
 ```
 
 Config and rc file writes (per-shell, shared, and rc appends) go through a

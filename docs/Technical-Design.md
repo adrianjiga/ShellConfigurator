@@ -208,14 +208,14 @@ Two further details:
 - **PATH fix-up**: when Starship was installed via the official script and the binary landed in `~/.local/bin` (not on PATH in most environments), a PATH line in that shell's own syntax (`export PATH=...` for zsh/bash, `fish_add_path` for fish) is prepended before the init line — `getMissingStarshipPathDir()` is checked once after the install so the rc lines can repair PATH when the script install left the binary somewhere the shell won't look.
 - **Order matters**: the PATH and `STARSHIP_CONFIG` lines must come before the init line, or `starship init` cannot resolve either the binary or its config.
 
-`resetSharedShellConfig(shellId)` appends `unset STARSHIP_CONFIG` (fish:
-`set -e STARSHIP_CONFIG`) so the shell falls back to the shared file instead of
-inheriting a config leaked from a parent. It preserves an existing Starship init
-line, ensuring that an unselected shell still starts Starship with the shared
-config. A shell whose rc already sets `STARSHIP_CONFIG` (the user's own export,
-or an earlier run's per-shell wiring) cannot inherit a leaked value, so it is
-left alone apart from dropping a stale unset guard that would cancel that
-export. `applyShellConfig` likewise removes stale unset guards, so re-running
+`resetSharedShellConfig(shellId)` adds `unset STARSHIP_CONFIG` (fish:
+`set -e STARSHIP_CONFIG`) above the init line so the shell falls back to the
+shared file instead of inheriting a config leaked from a parent. It first removes
+a per-shell block an earlier run wrote, carrying its PATH line over and keeping
+the Starship init line, so an unselected shell still starts Starship with the
+shared config. A shell whose own, hand-written line sets `STARSHIP_CONFIG`
+cannot inherit a leaked value, so it is left alone apart from dropping a stale
+unset guard that would cancel that export. `applyShellConfig` likewise removes stale unset guards, so re-running
 the wizard can switch modes without losing shell startup wiring.
 
 **Adopt mode** reorders the three states rather than adding a fourth surface. `applyShellConfig`
