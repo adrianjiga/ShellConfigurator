@@ -20,6 +20,8 @@ vi.mock('fs', () => ({
   rmSync: vi.fn(),
 }));
 
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /** The content of the module's last atomic write (the temp-file write). */
 function lastWrittenContent(): string {
   return vi.mocked(fs.writeFileSync).mock.calls.at(-1)?.[1] as string;
@@ -97,7 +99,7 @@ describe('writeShellConfig', () => {
 
     // The content goes to a temp file that is renamed over the target.
     const tmpPath = expect.stringMatching(
-      new RegExp(`/\\.${path.basename(expectedConfigPath)}\\.\\d+\\.[0-9a-f]+\\.tmp$`)
+      new RegExp(`/\\.${escapeRegExp(path.basename(expectedConfigPath))}\\.\\d+\\.[0-9a-f]+\\.tmp$`)
     );
     expect(fs.writeFileSync).toHaveBeenCalledWith(tmpPath, toml, {
       encoding: 'utf8',
@@ -1188,9 +1190,7 @@ describe('backupSharedConfig', () => {
 
     const backup = backupSharedConfig();
 
-    expect(backup).toMatch(
-      new RegExp(`^${path.join(os.homedir(), '.config', 'starship.toml.bak-')}`)
-    );
+    expect(backup?.startsWith(path.join(os.homedir(), '.config', 'starship.toml.bak-'))).toBe(true);
   });
 
   it('is best-effort — returns null when the copy fails', () => {
