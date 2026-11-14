@@ -91,17 +91,20 @@ import { getShellConfigPath } from '../generators/shellRc.ts';
 import {
   applyInstallOutcomeExitCode,
   crash,
+  type PromptIo,
   recordInstallOutcome,
   reportFatal,
   routeCli,
   runGlobalFlags,
   runHeadlessCommand,
+  runRollbackCommand,
   runUninstallCommand,
   type UninstallIo,
 } from '../index.tsx';
 import { parseCliArgs } from '../services/args.ts';
 import { CliRunError, CliUsageError } from '../services/errors.ts';
-import { captureRun } from '../services/runCapture.ts';
+import { appendHistory } from '../services/history.ts';
+import { beginRunCapture, captureRun, finishRunCapture, runDir } from '../services/runCapture.ts';
 import { serializeState } from '../services/state.ts';
 import type { UninstallDeps } from '../services/uninstall.ts';
 import { DEFAULT_STATE, type InstallTask, type ShellId } from '../types.ts';
@@ -743,11 +746,29 @@ describe('index uninstall command', () => {
     expect(mockRecordRun).not.toHaveBeenCalled();
   });
 
-  it('removes everything once confirmed, records the run and prints how to undo it', async () => {
+  it('removes everything once confirmed, records the run and points at rollback', async () => {
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
       result: await run(),
       runId: 'run-9',
     }));
+    const io = fakeIo();
+
+    await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);
+
+    expect(io.deps.removeManagedRcBlocks).toHaveBeenCalledWith('zsh');
+    expect(io.deps.removeShellConfigFile).toHaveBeenCalledWith('zsh');
+    expect(output()).toContain('REMOVED Zsh config');
+    expect(output()).toContain('Undo it with: shell-configurator rollback');
+    expect(output()).not.toContain('  cp ');
+    expect(mockRecordRun).toHaveBeenCalledWith({
+      kind: 'uninstall',
+      command: 'uninstall',
+      exitCode: 0,
+      runId: 'run-9',
+    });
+  });
+
+  it('prints the copy-back commands when the run could not be captured', async () => {
     const io = fakeIo(
       {},
       {
@@ -758,19 +779,10 @@ describe('index uninstall command', () => {
 
     await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);
 
-    expect(io.deps.removeManagedRcBlocks).toHaveBeenCalledWith('zsh');
-    expect(io.deps.removeShellConfigFile).toHaveBeenCalledWith('zsh');
-    expect(output()).toContain('REMOVED Zsh config');
     expect(output()).toContain('To undo, copy the backups back:');
     expect(output()).toContain(`  cp '/h/.zshrc.bak-1' '${getShell('zsh')!.rcFile}'`);
     expect(output()).toContain(`  cp '/h/it'\\''s.toml.bak-1' '${getShellConfigPath('zsh')}'`);
-    expect(output()).not.toContain('--restore');
-    expect(mockRecordRun).toHaveBeenCalledWith({
-      kind: 'uninstall',
-      command: 'uninstall',
-      exitCode: 0,
-      runId: 'run-9',
-    });
+    expect(output()).not.toContain('rollback');
   });
 
   it('goes ahead without asking under --yes', async () => {
@@ -865,7 +877,7 @@ describe('index uninstall command', () => {
 
   it('rejects --yes and --starship outside uninstall', async () => {
     await expect(runHeadlessCommand(parseCliArgs(['repair', '--yes']), '')).rejects.toThrow(
-      '--yes only applies to uninstall.'
+      '--yes only applies to uninstall and rollback.'
     );
     await expect(runHeadlessCommand(parseCliArgs(['doctor', '--starship']), '')).rejects.toThrow(
       '--starship only applies to uninstall.'
@@ -876,5 +888,163 @@ describe('index uninstall command', () => {
     runGlobalFlags(parseCliArgs(['--help']));
     expect(output()).toContain('shell-configurator uninstall');
     expect(output()).toContain('-y, --yes');
+  });
+});
+
+describe('index rollback command', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+  let tmpDir: string;
+  const savedEnv = { ...process.env };
+  const savedExitCode = process.exitCode;
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-rollback-cli-'));
+    process.env.XDG_STATE_HOME = path.join(tmpDir, 'state');
+    mockRecordRun.mockClear();
+  });
+
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+    process.env = { ...savedEnv };
+    process.exitCode = savedExitCode;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
+  const rc = () => path.join(tmpDir, 'rc');
+  const io = (overrides: Partial<PromptIo> = {}): PromptIo => ({
+    confirm: vi.fn().mockResolvedValue(true),
+    isTerminal: () => true,
+    ...overrides,
+  });
+
+  /** Records a run of `kind` that wrote `content` to the rc; returns its runId. */
+  function recordedRun(kind: 'install' | 'apply', content: string): string {
+    const capture = beginRunCapture([rc()]);
+    fs.writeFileSync(rc(), content);
+    const runId = finishRunCapture(capture)!.runId;
+    appendHistory({ version: 1, timestamp: new Date().toISOString(), kind, runId });
+    return runId;
+  }
+
+  it('lists the runs that changed files', async () => {
+    const first = recordedRun('install', 'one');
+    const second = recordedRun('apply', 'two');
+
+    await runRollbackCommand(parseCliArgs(['rollback', '--list']), 'rollback --list', io());
+
+    expect(output()).toBe(
+      `${second}  apply     1 file (next to roll back)\n${first}  install   1 file\n`
+    );
+  });
+
+  it('lists the runs as JSON', async () => {
+    const runId = recordedRun('install', 'one');
+    await runRollbackCommand(parseCliArgs(['rollback', '--list', '--json']), 'rollback', io());
+    expect(JSON.parse(output())).toEqual([expect.objectContaining({ runId, files: 1 })]);
+  });
+
+  it('puts the newest run back once confirmed and records the rollback', async () => {
+    fs.writeFileSync(rc(), 'zero');
+    recordedRun('install', 'one');
+    const second = recordedRun('apply', 'two');
+    const prompt = io();
+
+    await runRollbackCommand(parseCliArgs(['rollback']), 'rollback', prompt);
+
+    expect(prompt.confirm).toHaveBeenCalled();
+    expect(fs.readFileSync(rc(), 'utf8')).toBe('one');
+    expect(output()).toContain(`RESTORED ${rc()}`);
+    expect(mockRecordRun).toHaveBeenCalledWith({
+      kind: 'rollback',
+      command: 'rollback',
+      exitCode: 0,
+      runId: null,
+      rollbackOf: second,
+    });
+  });
+
+  it('rolls back the run --run names', async () => {
+    fs.writeFileSync(rc(), 'zero');
+    const first = recordedRun('install', 'one');
+    recordedRun('apply', 'two');
+
+    await runRollbackCommand(parseCliArgs(['rollback', '--run', first, '--yes']), 'rollback', io());
+
+    expect(output()).toContain('changed since that run');
+    expect(fs.readFileSync(rc(), 'utf8')).toBe('two');
+  });
+
+  it('changes nothing when the user says no', async () => {
+    recordedRun('install', 'one');
+    await runRollbackCommand(
+      parseCliArgs(['rollback']),
+      'rollback',
+      io({ confirm: vi.fn().mockResolvedValue(false) })
+    );
+    expect(fs.readFileSync(rc(), 'utf8')).toBe('one');
+    expect(output()).toContain('Nothing was changed.');
+    expect(mockRecordRun).not.toHaveBeenCalled();
+  });
+
+  it('only prints the plan in a dry run', async () => {
+    recordedRun('install', 'one');
+    await runRollbackCommand(parseCliArgs(['rollback', '--dry-run']), 'rollback', io());
+    expect(output()).toContain(`PLANNED ${rc()}`);
+    expect(fs.existsSync(rc())).toBe(true);
+  });
+
+  it('refuses to change files off a terminal without --yes', async () => {
+    recordedRun('install', 'one');
+    await expect(
+      runRollbackCommand(parseCliArgs(['rollback']), 'rollback', io({ isTerminal: () => false }))
+    ).rejects.toThrow(/rollback rewrites files; pass --yes/);
+  });
+
+  it('says when there is nothing to roll back', async () => {
+    await runRollbackCommand(parseCliArgs(['rollback']), 'rollback', io());
+    expect(output()).toBe('Nothing to roll back.\n');
+  });
+
+  it('rejects an unknown run id', async () => {
+    await expect(
+      runRollbackCommand(parseCliArgs(['rollback', '--run', 'nope']), 'rollback', io())
+    ).rejects.toThrow(/No recorded run 'nope'/);
+  });
+
+  it('exits non-zero when a file cannot be put back', async () => {
+    fs.writeFileSync(rc(), 'zero');
+    const runId = recordedRun('install', 'one');
+    fs.rmSync(path.join(runDir(runId), 'files'), { recursive: true });
+
+    await runRollbackCommand(parseCliArgs(['rollback', '--yes']), 'rollback', io());
+
+    expect(process.exitCode).toBe(1);
+    expect(output()).toContain(`FAILED  ${rc()}`);
+  });
+
+  it.each([
+    [['--preset', 'pure-prompt'], /--preset cannot be used with rollback/],
+    [['--state', 'card.json'], /--state cannot be used with rollback/],
+  ])('rejects %o', async (args, message) => {
+    await expect(
+      runRollbackCommand(parseCliArgs(['rollback', ...args]), 'rollback', io())
+    ).rejects.toThrow(message);
+  });
+
+  it('rejects --list and --run outside rollback', async () => {
+    await expect(runHeadlessCommand(parseCliArgs(['doctor', '--list']), '')).rejects.toThrow(
+      '--list only applies to rollback.'
+    );
+    await expect(runHeadlessCommand(parseCliArgs(['apply', '--run', 'x']), '')).rejects.toThrow(
+      '--run only applies to rollback.'
+    );
+  });
+
+  it('documents rollback in the help text', () => {
+    runGlobalFlags(parseCliArgs(['--help']));
+    expect(output()).toContain('shell-configurator rollback');
+    expect(output()).toContain('--run <id>');
   });
 });

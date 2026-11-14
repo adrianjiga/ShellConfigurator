@@ -13,7 +13,15 @@ import { CliRunError, CliUsageError } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
 import { lastRunShells, recordRunSafely } from './services/history.ts';
 import { formatRepairReport, runRepair } from './services/repair.ts';
-import { captureRun, trackedFiles } from './services/runCapture.ts';
+import {
+  defaultRollbackRun,
+  formatRollbackReport,
+  formatRollbackRuns,
+  listRollbackRuns,
+  planRollback,
+  runRollback,
+} from './services/rollback.ts';
+import { captureRun, readRunManifest, trackedFiles } from './services/runCapture.ts';
 import { restoreTty } from './services/tty.ts';
 import {
   DEFAULT_UNINSTALL_DEPS,
@@ -74,6 +82,7 @@ Usage:
   shell-configurator doctor       check an existing setup and report problems
   shell-configurator repair       fix the problems doctor finds
   shell-configurator uninstall    remove what the wizard set up
+  shell-configurator rollback     put back the files the last run changed
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
@@ -134,8 +143,17 @@ uninstall options (removes the Starship setup; asks before changing anything):
   -y, --yes            Go ahead without asking (required off a terminal)
   --dry-run            Print what it would remove; change nothing
   --json               Print the report as JSON instead of the text summary
-  rc files and configs are backed up first, and it prints the commands that copy
-  them back. Starship stays while any shell would still start it.
+  rc files and configs are backed up first, and rollback undoes it. Starship
+  stays while any shell would still start it.
+
+rollback options (undoes the newest run that changed files; asks first):
+  --list               Show the runs that changed files, newest first
+  --run <id>           Undo this run instead (an id from --list)
+  -y, --yes            Go ahead without asking (required off a terminal)
+  --dry-run            Print what it would put back; change nothing
+  --json               Print the report (or the --list runs) as JSON
+  A file changed again since that run is left alone. Rolling back again undoes
+  the run before; rolling back a rollback redoes the run.
 `);
 }
 
@@ -266,17 +284,42 @@ async function askToProceed(question: string): Promise<boolean> {
   }
 }
 
-export interface UninstallIo {
+export interface PromptIo {
   confirm: (question: string) => Promise<boolean>;
   isTerminal: () => boolean;
+}
+
+export interface UninstallIo extends PromptIo {
   deps: UninstallDeps;
 }
 
-const DEFAULT_UNINSTALL_IO: UninstallIo = {
+const DEFAULT_PROMPT_IO: PromptIo = {
   confirm: askToProceed,
   isTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
-  deps: DEFAULT_UNINSTALL_DEPS,
 };
+
+const DEFAULT_UNINSTALL_IO: UninstallIo = { ...DEFAULT_PROMPT_IO, deps: DEFAULT_UNINSTALL_DEPS };
+
+/**
+ * Whether a command that changes files may go ahead: --yes says so, a terminal
+ * user is shown the plan and asked, and anything else is refused.
+ */
+async function confirmChanges(
+  flags: CliFlags,
+  io: PromptIo,
+  refusal: string,
+  plan: () => string,
+  question: string
+): Promise<boolean> {
+  if (flags.yes) return true;
+  if (flags.json || !io.isTerminal()) {
+    throw new CliUsageError(`${refusal}; pass --yes to go ahead, or --dry-run to see the plan.`);
+  }
+  process.stdout.write(plan());
+  if (await io.confirm(question)) return true;
+  process.stdout.write('Nothing was changed.\n');
+  return false;
+}
 
 /**
  * Removes what the wizard set up. On a terminal it shows the plan and asks
@@ -308,17 +351,16 @@ export async function runUninstallCommand(
   );
   const dryRun = flags.dryRun ?? false;
   const changes = !dryRun && steps.some((step) => step.run);
-  if (changes && !flags.yes) {
-    if (flags.json || !io.isTerminal()) {
-      throw new CliUsageError(
-        'uninstall removes files; pass --yes to go ahead, or --dry-run to see the plan.'
-      );
-    }
-    process.stdout.write(formatUninstallReport(await runUninstall(steps, { dryRun: true })));
-    if (!(await io.confirm('\nRemove these? [y/N] '))) {
-      process.stdout.write('Nothing was changed.\n');
-      return;
-    }
+  if (changes) {
+    const preview = formatUninstallReport(await runUninstall(steps, { dryRun: true }));
+    const proceed = await confirmChanges(
+      flags,
+      io,
+      'uninstall removes files',
+      () => preview,
+      '\nRemove these? [y/N] '
+    );
+    if (!proceed) return;
   }
 
   const { result: report, runId } = changes
@@ -329,7 +371,9 @@ export async function runUninstallCommand(
   } else {
     process.stdout.write(formatUninstallReport(report));
     const backups = report.actions.flatMap((a) => (a.backup ? [a.backup] : []));
-    if (backups.length > 0) {
+    if (runId) {
+      process.stdout.write('\nUndo it with: shell-configurator rollback\n');
+    } else if (backups.length > 0) {
       process.stdout.write('\nTo undo, copy the backups back:\n');
       for (const { file, backup } of backups) {
         process.stdout.write(`  cp ${posixShellQuote(backup)} ${posixShellQuote(file)}\n`);
@@ -343,7 +387,84 @@ export async function runUninstallCommand(
 }
 
 /**
- * Runs a headless subcommand (`generate`, `apply`, `doctor`, `repair` or `uninstall`) to completion,
+ * Puts back the files a captured run changed: the newest run that still stands,
+ * or the one --run names. Files changed again since are left alone. --list
+ * shows the runs instead. Asks like uninstall; a failed file exits non-zero.
+ */
+export async function runRollbackCommand(
+  flags: CliFlags,
+  command: string,
+  io: PromptIo = DEFAULT_PROMPT_IO
+): Promise<void> {
+  const unused = presentConfigFlags(flags);
+  if (flags.stateFile) unused.push('--state');
+  if (flags.fix) unused.push('--fix');
+  if (unused.length > 0) {
+    throw new CliUsageError(`${unused.join(', ')} cannot be used with rollback.`);
+  }
+
+  const runs = listRollbackRuns();
+  if (flags.list) {
+    process.stdout.write(
+      flags.json ? `${JSON.stringify(runs, null, 2)}\n` : formatRollbackRuns(runs)
+    );
+    return;
+  }
+  const target = flags.runId
+    ? runs.find((run) => run.runId === flags.runId)
+    : defaultRollbackRun(runs);
+  if (flags.runId && !target) {
+    throw new CliUsageError(
+      `No recorded run '${flags.runId}' changed any files; see shell-configurator rollback --list.`
+    );
+  }
+  const manifest = target ? readRunManifest(target.runId) : null;
+  if (!target || !manifest) {
+    process.stdout.write(
+      flags.json
+        ? `${JSON.stringify({ runId: null, actions: [], ok: true, dryRun: flags.dryRun ?? false }, null, 2)}\n`
+        : 'Nothing to roll back.\n'
+    );
+    return;
+  }
+
+  const steps = planRollback(manifest);
+  const dryRun = flags.dryRun ?? false;
+  const changes = !dryRun && steps.some((step) => step.run);
+  if (changes) {
+    const proceed = await confirmChanges(
+      flags,
+      io,
+      'rollback rewrites files',
+      () => formatRollbackReport(runRollback(target.runId, steps, { dryRun: true })),
+      '\nRoll these back? [y/N] '
+    );
+    if (!proceed) return;
+  }
+
+  const { result: report, runId } = changes
+    ? await captureRun(
+        manifest.files.map((file) => file.path),
+        async () => runRollback(target.runId, steps)
+      )
+    : { result: runRollback(target.runId, steps, { dryRun }), runId: null };
+  process.stdout.write(
+    flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatRollbackReport(report)
+  );
+  if (!report.ok) process.exitCode = 1;
+  if (changes) {
+    recordRunSafely({
+      kind: 'rollback',
+      command,
+      exitCode: report.ok ? 0 : 1,
+      runId,
+      rollbackOf: target.runId,
+    });
+  }
+}
+
+/**
+ * Runs a headless subcommand (`generate`, `apply`, `doctor`, `repair`, `uninstall` or `rollback`) to completion,
  * returning true when the flags targeted one so the Ink wizard is skipped
  * entirely. Errors propagate for the caller's fatal handler — headless runs
  * never render. `command` is the original invocation line, recorded for
@@ -354,8 +475,18 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.includeWarnings && !repairs) {
     throw new CliUsageError('--include-warnings only applies to repair (or doctor --fix).');
   }
-  if ((flags.yes || flags.starship) && flags.subcommand !== 'uninstall') {
-    throw new CliUsageError(`${flags.yes ? '--yes' : '--starship'} only applies to uninstall.`);
+  if (flags.yes && flags.subcommand !== 'uninstall' && flags.subcommand !== 'rollback') {
+    throw new CliUsageError('--yes only applies to uninstall and rollback.');
+  }
+  if (flags.starship && flags.subcommand !== 'uninstall') {
+    throw new CliUsageError('--starship only applies to uninstall.');
+  }
+  if ((flags.list || flags.runId) && flags.subcommand !== 'rollback') {
+    throw new CliUsageError(`${flags.list ? '--list' : '--run'} only applies to rollback.`);
+  }
+  if (flags.subcommand === 'rollback') {
+    await runRollbackCommand(flags, command);
+    return true;
   }
   if (flags.subcommand === 'uninstall') {
     await runUninstallCommand(flags, command);
@@ -391,7 +522,7 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.fix) dropped.push('--fix');
   if (dropped.length > 0) {
     throw new CliUsageError(
-      `${dropped.join(', ')} require a subcommand (generate, apply, doctor, repair or uninstall).`
+      `${dropped.join(', ')} require a subcommand (generate, apply, doctor, repair, uninstall or rollback).`
     );
   }
   return false;
