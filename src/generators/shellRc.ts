@@ -304,6 +304,28 @@ export function sourcedFiles(content: string, env: NodeJS.ProcessEnv = process.e
   });
 }
 
+/** Whether `content`, or a file it sources (three levels deep), passes `test`. */
+function reachableSome(
+  content: string,
+  test: (text: string) => boolean,
+  io: RcIo,
+  env: NodeJS.ProcessEnv,
+  depth = 0,
+  seen: Set<string> = new Set()
+): boolean {
+  if (test(content)) return true;
+  if (depth >= MAX_SOURCE_DEPTH) return false;
+  return sourcedFiles(content, env).some((file) => {
+    if (seen.has(file)) return false;
+    seen.add(file);
+    try {
+      return io.exists(file) && reachableSome(io.readFile(file), test, io, env, depth + 1, seen);
+    } catch {
+      return false;
+    }
+  });
+}
+
 /**
  * Whether `content`, or a file it sources (three levels deep), runs the shell's
  * Starship init, as Omarchy's ~/.bashrc does through $OMARCHY_PATH/default/bash/rc.
@@ -312,21 +334,9 @@ export function initReachable(
   content: string,
   shellId: ShellId,
   io: RcIo = FS_RC_IO,
-  env: NodeJS.ProcessEnv = process.env,
-  depth = 0,
-  seen: Set<string> = new Set()
+  env: NodeJS.ProcessEnv = process.env
 ): boolean {
-  if (hasStarshipInit(content, shellId)) return true;
-  if (depth >= MAX_SOURCE_DEPTH) return false;
-  return sourcedFiles(content, env).some((file) => {
-    if (seen.has(file)) return false;
-    seen.add(file);
-    try {
-      return io.exists(file) && initReachable(io.readFile(file), shellId, io, env, depth + 1, seen);
-    } catch {
-      return false;
-    }
-  });
+  return reachableSome(content, (text) => hasStarshipInit(text, shellId), io, env);
 }
 
 /**
@@ -377,6 +387,15 @@ export function manualSetupAppliedWith(
     : pins.every((filePath) => io.exists(filePath));
 }
 
+/** Whether `line` exports STARSHIP_CONFIG to `configPath`, quoted the way any version wrote it. */
+function exportsConfigPath(shell: ShellDef, line: string, configPath: string): boolean {
+  const prefix = shell.configEnv?.exportPrefix;
+  const t = line.trim();
+  if (!prefix || !t.startsWith(prefix)) return false;
+  const value = t.slice(prefix.length);
+  return [posixShellQuote(configPath), `"${configPath}"`, configPath].includes(value);
+}
+
 /**
  * Whether the shell still has its own working setup from an earlier run: its rc
  * exports STARSHIP_CONFIG to its per-shell config, and that file exists. Such a
@@ -384,13 +403,16 @@ export function manualSetupAppliedWith(
  */
 export function keepsOwnConfig(shellId: ShellId, io: RcIo = FS_RC_IO): boolean {
   const shell = getShell(shellId);
-  const exportLine = starshipConfigLine(shellId);
-  if (!shell?.rcFile || !exportLine) return false;
+  if (!shell?.rcFile || !shell.configEnv) return false;
+  const configPath = getShellConfigPath(shellId);
   try {
     return (
       io.exists(shell.rcFile) &&
-      hasLine(io.readFile(shell.rcFile), exportLine) &&
-      io.exists(getShellConfigPath(shellId))
+      io
+        .readFile(shell.rcFile)
+        .split('\n')
+        .some((line) => exportsConfigPath(shell, line, configPath)) &&
+      io.exists(configPath)
     );
   } catch {
     return false;
@@ -726,7 +748,52 @@ function setsStarshipConfig(shell: ShellDef, line: string): boolean {
   if (t.startsWith('#')) return false;
   return shell.id === 'fish'
     ? fishExportsStarshipConfig(t)
-    : /^(export\s+)?STARSHIP_CONFIG=/.test(t);
+    : /^(?:(?:export|(?:typeset|declare)\s+-\w*x\w*)\s+)?STARSHIP_CONFIG=/.test(t);
+}
+
+/** The startup files the shell reads before or beside its rc. */
+function startupFiles(shell: ShellDef): string[] {
+  const home = homeDir();
+  if (shell.id === 'zsh' && shell.rcFile) {
+    const dir = path.dirname(shell.rcFile);
+    return [
+      ...new Set([
+        path.join(home, '.zshenv'),
+        path.join(dir, '.zshenv'),
+        path.join(dir, '.zprofile'),
+      ]),
+    ];
+  }
+  if (shell.id === 'bash') {
+    return ['.bash_profile', '.bash_login', '.profile'].map((name) => path.join(home, name));
+  }
+  return [];
+}
+
+/**
+ * Whether the user sets STARSHIP_CONFIG for this shell themselves: in `rcContent`
+ * (the rc without ShellConfigurator's blocks), a file it sources, or another
+ * startup file of the shell. A guard would cancel such a setting.
+ */
+function setsOwnStarshipConfig(
+  shell: ShellDef,
+  rcContent: string,
+  io: RcIo,
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  const sets = (text: string) =>
+    removeShellConfiguratorBlocks(text, shell, [EVERY_BLOCK])
+      .split('\n')
+      .some((line) => setsStarshipConfig(shell, line));
+  const skipRc = () => new Set(shell.rcFile ? [shell.rcFile] : []);
+  if (reachableSome(rcContent, sets, io, env, 0, skipRc())) return true;
+  return startupFiles(shell).some((file) => {
+    try {
+      return io.exists(file) && reachableSome(io.readFile(file), sets, io, env, 1, skipRc());
+    } catch {
+      return false;
+    }
+  });
 }
 
 function fishExportsStarshipConfig(line: string): boolean {
@@ -776,7 +843,7 @@ export function resetRcContent(
   const carried: string[] = [];
 
   let content = removeShellConfiguratorBlocks(existing, shell, [isConfigExport(shell)], carried);
-  const ownExport = content.split('\n').some((line) => setsStarshipConfig(shell, line));
+  const ownExport = setsOwnStarshipConfig(shell, content, io);
   // A stale unset guard after the shell's own export would cancel it.
   if (ownExport && hasLine(content, unsetLine)) {
     content = removeShellConfiguratorBlocks(content, shell, [unsetLine], carried);
