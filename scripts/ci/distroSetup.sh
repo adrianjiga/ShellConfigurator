@@ -37,7 +37,7 @@ if [ "$node_major" -lt 24 ]; then
       exit 1
       ;;
   esac
-  node_version="${NODE_VERSION:-v24.22.2}"
+  node_version="${NODE_VERSION:?NODE_VERSION is passed in by distroSmoke.sh}"
   tarball="node-${node_version}-linux-${node_arch}.tar.gz"
 
   # Download once into the cache dir when provided (GitHub caches it across
