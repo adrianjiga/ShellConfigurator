@@ -17,7 +17,8 @@ export type Subcommand =
   | 'repair'
   | 'uninstall'
   | 'rollback'
-  | 'debug-info';
+  | 'debug-info'
+  | 'completions';
 
 export const SUBCOMMANDS: readonly Subcommand[] = [
   'generate',
@@ -27,6 +28,7 @@ export const SUBCOMMANDS: readonly Subcommand[] = [
   'uninstall',
   'rollback',
   'debug-info',
+  'completions',
 ];
 
 export interface CliFlags {
@@ -71,6 +73,8 @@ export interface CliFlags {
   list?: boolean;
   /** The run rollback undoes, instead of the newest (--run). */
   runId?: string;
+  /** The shell `completions` writes a script for: its one positional argument. */
+  completionShell?: string;
   help: boolean;
   version: boolean;
   restore: boolean;
@@ -185,6 +189,13 @@ const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
   },
 };
 
+/** Every flag the parser accepts: long boolean and value flags, and the short aliases. */
+export const KNOWN_FLAGS = {
+  boolean: Object.keys(BOOLEAN_FLAGS),
+  value: Object.keys(VALUE_FLAGS),
+  short: { ...SHORT_FLAGS },
+} as const;
+
 const SHORT_BOOLEAN_FLAGS = new Set(
   Object.entries(SHORT_FLAGS)
     .filter(([, long]) => BOOLEAN_FLAGS[long] !== undefined)
@@ -258,6 +269,10 @@ export function parseCliArgs(argv: string[]): CliFlags {
 
     if (!flag.startsWith('-')) {
       if (subcommandSeen) {
+        if (result.subcommand === 'completions' && result.completionShell === undefined) {
+          result.completionShell = arg;
+          continue;
+        }
         throw new CliUsageError(`Unexpected argument '${arg}'`);
       }
       if (SUBCOMMANDS.includes(flag as Subcommand)) {
