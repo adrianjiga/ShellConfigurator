@@ -53,6 +53,7 @@ vi.mock('../generators/shellRc.ts', () => ({
 }));
 
 vi.mock('../services/installer.ts', () => ({
+  MANUAL_STARSHIP_INSTALL: 'curl -sS https://starship.rs/install.sh | sh',
   NERD_FONTS: [{ id: 'JetBrainsMono', label: 'JetBrains Mono', zipName: 'JetBrainsMono.zip' }],
   installStarship: vi.fn().mockResolvedValue(undefined),
   installShell: mockInstallShell,

@@ -11,7 +11,7 @@ import {
 } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import { errorMessage } from '../services/errors.ts';
-import { fontLabel, getFontFamily } from '../services/installer.ts';
+import { fontLabel, getFontFamily, MANUAL_STARSHIP_INSTALL } from '../services/installer.ts';
 import { buildTaskList, plannedResetShells, rcTaskId, TASK_IDS } from '../services/installTasks.ts';
 import { fontIdToInstall, type InstallTask, type WizardState } from '../types.ts';
 
@@ -317,7 +317,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
               {state.skipStarshipInstall && (
                 <Text color={uiColor('yellow')}>
                   Starship is not installed, so shell init lines were not added. Install it (e.g.{' '}
-                  <Text color={uiColor('cyan')}>curl -sS https://starship.rs/install.sh | sh</Text>
+                  <Text color={uiColor('cyan')}>{MANUAL_STARSHIP_INSTALL}</Text>
                   ), then re-run the wizard to configure your shells.
                 </Text>
               )}

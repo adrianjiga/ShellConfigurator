@@ -110,6 +110,8 @@ export function scriptInstallBinDir(): string {
 
 const STARSHIP_INSTALL_URL = 'https://starship.rs/install.sh';
 
+export const MANUAL_STARSHIP_INSTALL = `curl -sS ${STARSHIP_INSTALL_URL} | sh`;
+
 async function installStarshipViaScript(signal?: AbortSignal): Promise<void> {
   // Accepted risk: we deliberately run Starship's official install script
   // unchanged (only pinning --bin-dir). That trusts starship.rs, its CDN and

@@ -10,6 +10,7 @@ import {
   detectTerminalAsync,
   findStarshipAsync,
 } from '../services/detector.ts';
+import { MANUAL_STARSHIP_INSTALL } from '../services/installer.ts';
 import { TERMINAL_LABELS } from '../services/terminalFont.ts';
 import type { PackageManager, TerminalId, WizardState } from '../types.ts';
 
@@ -193,9 +194,7 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
                       )}
                       <Text color={uiColor('gray')}>
                         Install Starship:{' '}
-                        <Text color={uiColor('cyan')}>
-                          curl -sS https://starship.rs/install.sh | sh
-                        </Text>
+                        <Text color={uiColor('cyan')}>{MANUAL_STARSHIP_INSTALL}</Text>
                       </Text>
                       <Text color={uiColor('gray')}>
                         Or see{' '}
