@@ -69,12 +69,14 @@ adopt mode) from its rc file.
 
 `uninstall` removes every `# Added by ShellConfigurator` block from the bash,
 zsh and fish rc files and moves the per-shell configs aside to `.bak-*`
-backups; `--restore` brings the configs back, and each rc file is backed up
-before it is edited. Your own `starship init` line stays, with the PATH line it
-needs. Nushell and PowerShell were set up by hand, so it names the file to
-clean instead. Starship is removed only with `--starship` (the script install's
-binary, or the pacman, apk or Homebrew package), and a font only with
-`--font <id>`, listed from its cached archive. On a terminal it shows the plan
+backups, backing up each rc first; it then prints the `cp` commands that put
+every file back. Your own `starship init` line (or fish's `conf.d` init) stays,
+with the PATH line it needs. Nushell and PowerShell were set up by hand, so it
+names the file to clean instead. Starship is removed only with `--starship`,
+and only once no shell would still start it: the script install's binary, or
+the pacman, apk or Homebrew package when that package manager owns the binary.
+A font goes only with `--font <id>`, its files listed from its cached archive;
+the plan names any terminal still set to it. On a terminal it shows the plan
 and asks first; elsewhere it needs `--yes`.
 
 Flags may appear before or after the subcommand (e.g. `--dry-run apply --state card.json`);
