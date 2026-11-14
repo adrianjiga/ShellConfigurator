@@ -297,5 +297,32 @@ describe('parseCliArgs', () => {
     it('aborts on an unknown short flag', () => {
       expect(() => parseCliArgs(['-z'])).toThrow("Unknown flag '-z'");
     });
+
+    it('names an unknown flag without its inline value', () => {
+      expect(() => parseCliArgs(['--bogus=1'])).toThrow("Unknown flag '--bogus'");
+    });
+
+    it('aborts on an unknown flag before reading the word after it', () => {
+      expect(() => parseCliArgs(['--bogus', 'value'])).toThrow("Unknown flag '--bogus'");
+    });
+
+    it('aborts when -o ends the command line', () => {
+      expect(() => parseCliArgs(['generate', '-o'])).toThrow(/Flag '--output' needs a value/);
+    });
+  });
+
+  describe('flag placement', () => {
+    it('reads flags placed before the subcommand', () => {
+      const flags = parseCliArgs(['--dry-run', '--shells', 'zsh', 'apply']);
+      expect(flags.subcommand).toBe('apply');
+      expect(flags.dryRun).toBe(true);
+      expect(flags.shells).toEqual(['zsh']);
+    });
+
+    it('keeps the last value of a repeated value flag', () => {
+      expect(parseCliArgs(['--preset', 'pure-prompt', '--preset', 'jetpack']).preset).toBe(
+        'jetpack'
+      );
+    });
   });
 });
