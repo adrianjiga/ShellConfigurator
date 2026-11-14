@@ -299,7 +299,7 @@ function presentConfigFlags(flags: CliFlags): string[] {
   if (flags.skipStarship) present.push('--skip-starship');
   if (flags.adopt) present.push('--adopt');
   if (flags.importUrl) present.push('--import-url');
-  if (flags.outputFile) present.push('-o/--output');
+  if (flags.outputFile) present.push('--output');
   if (flags.exportFile) present.push('--export');
   return present;
 }
@@ -324,13 +324,8 @@ function presentFlags(flags: CliFlags): string[] {
   return present;
 }
 
-/** The flags SUBCOMMAND_INFO describes for `subcommand`, as presentFlags names them. */
 function acceptedFlags(subcommand: Subcommand): Set<string> {
-  return new Set(
-    SUBCOMMAND_INFO[subcommand].flags.flatMap((info) =>
-      info.name === '--output' ? ['-o/--output'] : info.name === '--import' ? [] : [info.name]
-    )
-  );
+  return new Set(SUBCOMMAND_INFO[subcommand].flags.map((info) => info.name));
 }
 
 function warnIgnoredFlags(flags: CliFlags, subcommand: string): void {
