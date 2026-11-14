@@ -50,6 +50,8 @@ vi.mock('../services/history.ts', async () => {
   return {
     ...actual,
     recordRun: mockRecordRun,
+    recordRunSafely: (options: Parameters<typeof actual.recordRun>[0]) =>
+      actual.recordRunSafely(options, mockRecordRun),
   };
 });
 

@@ -7,9 +7,9 @@ import { restoreConfigBackups } from './generators/shellRc.ts';
 import type { CliFlags } from './services/args.ts';
 import { parseCliArgs, quoteArgv } from './services/args.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
-import { CliRunError, CliUsageError, errorMessage } from './services/errors.ts';
+import { CliRunError, CliUsageError } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags } from './services/headless.ts';
-import { lastRunShells, recordRun } from './services/history.ts';
+import { lastRunShells, recordRunSafely } from './services/history.ts';
 import { formatRepairReport, runRepair } from './services/repair.ts';
 import { restoreTty } from './services/tty.ts';
 import type { InstallTask, WizardState } from './types.ts';
@@ -19,31 +19,14 @@ const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.u
 
 let installFailed = false;
 
-/** Records whether the install finished with any failed task. */
+/** Records whether the install finished with any failed task, and the run in history. */
 export function recordInstallOutcome(
   results: InstallTask[] | undefined,
   state?: WizardState
 ): void {
   installFailed = results?.some((t) => t.status === 'failed') ?? false;
-  if (results && state) recordWizardInstall(results, state);
-}
-
-/**
- * Snapshots the run's state card and appends it to history.jsonl (P1.1). The
- * ledger is best-effort: a wizard that just installed must not die because the
- * history file could not be written. The snapshot id is the rollback handle #14
- * resolves later.
- */
-function recordWizardInstall(results: InstallTask[], state: WizardState): void {
-  try {
-    recordRun({
-      kind: 'install',
-      state,
-      results,
-      exitCode: results.some((t) => t.status === 'failed') ? 1 : 0,
-    });
-  } catch (err) {
-    process.stderr.write(`Warning: could not record this run in history: ${errorMessage(err)}\n`);
+  if (results && state) {
+    recordRunSafely({ kind: 'install', state, results, exitCode: installFailed ? 1 : 0 });
   }
 }
 

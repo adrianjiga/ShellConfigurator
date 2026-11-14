@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { writeFileAtomic } from '../generators/shellRc.ts';
 import type { InstallTask, ShellId, WizardState } from '../types.ts';
-import { isMissingFile } from './errors.ts';
+import { errorMessage, isMissingFile } from './errors.ts';
 import { stateDir } from './paths.ts';
 import { parseState, serializeState } from './state.ts';
 
@@ -62,6 +62,21 @@ export function recordRun(options: RecordRunOptions): void {
     ...(options.command ? { command: options.command } : {}),
     ...(options.exitCode !== undefined ? { exitCode: options.exitCode } : {}),
   });
+}
+
+/**
+ * Records a run without letting a history failure end it: a run that just
+ * installed must not die because the ledger could not be written.
+ */
+export function recordRunSafely(
+  options: RecordRunOptions,
+  record: (options: RecordRunOptions) => void = recordRun
+): void {
+  try {
+    record(options);
+  } catch (err) {
+    process.stderr.write(`Warning: could not record this run in history: ${errorMessage(err)}\n`);
+  }
 }
 
 /**

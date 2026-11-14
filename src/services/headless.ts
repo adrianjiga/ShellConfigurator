@@ -22,7 +22,7 @@ import {
   detectTerminalAsync,
 } from './detector.ts';
 import { CliRunError, CliUsageError, errorMessage } from './errors.ts';
-import { recordRun } from './history.ts';
+import { recordRunSafely } from './history.ts';
 import { NERD_FONTS } from './installer.ts';
 import {
   buildTaskList,
@@ -452,17 +452,11 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
 
   if (failed) process.exitCode = 1;
 
-  // The ledger is best-effort: a run that just installed must not die because
-  // the history file could not be written.
-  try {
-    recordRun({
-      kind: 'apply',
-      state,
-      command,
-      results,
-      exitCode: failed ? 1 : 0,
-    });
-  } catch (err) {
-    process.stderr.write(`Warning: could not record this run in history: ${errorMessage(err)}\n`);
-  }
+  recordRunSafely({
+    kind: 'apply',
+    state,
+    command,
+    results,
+    exitCode: failed ? 1 : 0,
+  });
 }

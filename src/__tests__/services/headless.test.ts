@@ -42,9 +42,16 @@ vi.mock('../../services/installTasks.ts', async () => {
   };
 });
 
-vi.mock('../../services/history.ts', () => ({
-  recordRun: mockRecordRun,
-}));
+vi.mock('../../services/history.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../services/history.ts')>(
+    '../../services/history.ts'
+  );
+  return {
+    recordRun: mockRecordRun,
+    recordRunSafely: (options: Parameters<typeof actual.recordRun>[0]) =>
+      actual.recordRunSafely(options, mockRecordRun),
+  };
+});
 
 import type { ModuleId } from '../../config/modules.ts';
 import type { CliFlags } from '../../services/args.ts';
