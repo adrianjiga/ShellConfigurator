@@ -150,7 +150,9 @@ npm install
 npm run dev
 ```
 
-The wizard exits non-zero if any install step fails, so it can be used in a script.
+The wizard exits non-zero if any install step fails. It needs a terminal for its
+input and output, and refuses to start without one (use `apply` there); it
+draws normally even when `CI` is set.
 
 Exit codes: `0` on success; `1` when an install step failed, `doctor` found a
 failing check, `repair` left one failing, an `uninstall` step failed, a `rollback` could not put a file back, `-o`/`--export` could not be written,

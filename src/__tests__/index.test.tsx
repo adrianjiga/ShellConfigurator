@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('ink', async () => {
@@ -91,7 +92,9 @@ import { getShell } from '../config/shells.ts';
 import { getShellConfigPath } from '../generators/shellRc.ts';
 import {
   applyInstallOutcomeExitCode,
+  assertWizardTerminal,
   crash,
+  isEntryPoint,
   type PromptIo,
   recordInstallOutcome,
   reportFatal,
@@ -758,6 +761,41 @@ describe('index crash handler', () => {
     crash('ShellConfigurator crashed', new CliUsageError('Unknown preset: nope'));
 
     expect(exit).toHaveBeenCalledWith(2);
+  });
+});
+
+describe('assertWizardTerminal', () => {
+  it.each([
+    [{ isTTY: false }, { isTTY: true }],
+    [{ isTTY: true }, {}],
+  ])('refuses to start the wizard without a terminal (%o, %o)', (stdin, stdout) => {
+    expect(() => assertWizardTerminal(stdin, stdout)).toThrow(
+      new CliUsageError(
+        'The wizard needs a terminal: its input and output cannot be redirected. To set up without one, run shell-configurator apply --shells <id,...> (see --help).'
+      )
+    );
+  });
+
+  it('lets the wizard start on a terminal', () => {
+    expect(() => assertWizardTerminal({ isTTY: true }, { isTTY: true })).not.toThrow();
+  });
+});
+
+describe('isEntryPoint', () => {
+  it('starts the program only when this file is the one being run, also through a symlink', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-entry-'));
+    try {
+      const self = fileURLToPath(new URL('../index.tsx', import.meta.url));
+      const link = path.join(dir, 'shell-configurator');
+      fs.symlinkSync(self, link);
+
+      expect(isEntryPoint(self)).toBe(true);
+      expect(isEntryPoint(link)).toBe(true);
+      expect(isEntryPoint(path.join(dir, 'other.js'))).toBe(false);
+      expect(isEntryPoint(undefined)).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
+import { fileURLToPath } from 'node:url';
 import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
@@ -858,9 +859,6 @@ export function crash(prefix: string, err: unknown): void {
   process.exit(process.exitCode ?? 1);
 }
 
-process.on('uncaughtException', (err) => crash('ShellConfigurator crashed', err));
-process.on('unhandledRejection', (err) => crash('ShellConfigurator crashed', err));
-
 /** Everything before the wizard: global flags, headless subcommands. */
 export async function routeCli(argv: string[]): Promise<{ handled: boolean; flags: CliFlags }> {
   const flags: CliFlags = parseCliArgs(argv);
@@ -869,9 +867,21 @@ export async function routeCli(argv: string[]): Promise<{ handled: boolean; flag
   return { handled, flags };
 }
 
+export function assertWizardTerminal(
+  stdin: { isTTY?: boolean } = process.stdin,
+  stdout: { isTTY?: boolean } = process.stdout
+): void {
+  if (stdin.isTTY && stdout.isTTY) return;
+  throw new CliUsageError(
+    'The wizard needs a terminal: its input and output cannot be redirected. ' +
+      'To set up without one, run shell-configurator apply --shells <id,...> (see --help).'
+  );
+}
+
 async function main(): Promise<void> {
   const { handled, flags } = await routeCli(process.argv.slice(2));
   if (handled) return;
+  assertWizardTerminal();
 
   const app = render(
     <ErrorBoundary
@@ -884,7 +894,7 @@ async function main(): Promise<void> {
       <App dryRun={flags.dryRun ?? false} onInstallOutcome={recordInstallOutcome} />
     </ErrorBoundary>,
     // Ctrl+C during the install must cancel it, not leave it running unseen.
-    { exitOnCtrlC: false }
+    { exitOnCtrlC: false, interactive: true }
   );
 
   await app.waitUntilExit();
@@ -892,4 +902,17 @@ async function main(): Promise<void> {
   restoreTty();
 }
 
-main().catch((err) => reportFatal('ShellConfigurator exited abnormally', err));
+export function isEntryPoint(script: string | undefined = process.argv[1]): boolean {
+  if (!script) return false;
+  try {
+    return realpathSync(script) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) {
+  process.on('uncaughtException', (err) => crash('ShellConfigurator crashed', err));
+  process.on('unhandledRejection', (err) => crash('ShellConfigurator crashed', err));
+  main().catch((err) => reportFatal('ShellConfigurator exited abnormally', err));
+}
