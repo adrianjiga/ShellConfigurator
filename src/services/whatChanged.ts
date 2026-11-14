@@ -4,9 +4,9 @@ import { getShell, setupCommand } from '../config/shells.ts';
 import { statusMark } from '../config/status.ts';
 import { getSharedConfigPath, getShellConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
 import { fontIdToInstall, type InstallTask, type WizardState } from '../types.ts';
-import { redactUrls } from './debugInfo.ts';
 import { TASK_IDS } from './installTasks.ts';
-import { configHome, redactHome } from './paths.ts';
+import { configHome } from './paths.ts';
+import { redactHome, redactUrls } from './redact.ts';
 import { type RunManifest, readRunManifest, writeInRun } from './runCapture.ts';
 
 export function whatChangedPath(): string {

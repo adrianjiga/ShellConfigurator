@@ -21,7 +21,7 @@ import { CliRunError, CliUsageError } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
 import { lastRunShells, recordRunSafely } from './services/history.ts';
 import { formatListing, listEntries } from './services/listings.ts';
-import { redactHome } from './services/paths.ts';
+import { redactHome } from './services/redact.ts';
 import { formatRepairReport, runRepair } from './services/repair.ts';
 import {
   defaultRollbackRun,

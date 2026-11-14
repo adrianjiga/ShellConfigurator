@@ -16,7 +16,7 @@ import {
   plannedFont,
   plannedResetShells,
 } from '../services/installTasks.ts';
-import { redactHome } from '../services/paths.ts';
+import { redactHome } from '../services/redact.ts';
 import type { ShellId, WizardState } from '../types.ts';
 
 interface ReviewScreenProps {
