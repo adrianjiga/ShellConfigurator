@@ -84,7 +84,7 @@ export function WizardLayout({ state, children, hidePreview }: WizardLayoutProps
           )}
         </Box>
 
-        {/* Right: live preview (hidden on narrow terminals and on welcome/done) */}
+        {/* Right: live preview (hidden on narrow terminals and on welcome, installing and done) */}
         {showPreview && (
           <Box flexDirection="column" width={previewWidth}>
             {/* The frame's border and padding take four columns. */}

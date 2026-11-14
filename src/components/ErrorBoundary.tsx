@@ -12,9 +12,8 @@ interface ErrorBoundaryState {
 }
 
 /**
- * Renders a readable message instead of dumping a React stack trace over a
- * half-drawn TUI. Ink has no built-in boundary, and a throw inside a screen
- * would otherwise tear down the render mid-frame.
+ * Renders a readable message instead of Ink's own error screen, which prints the
+ * stack trace over a half-drawn TUI, and hands the error to `onError`.
  */
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { error: null };

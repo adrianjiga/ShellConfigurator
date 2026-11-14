@@ -52,12 +52,6 @@ function previewSignature(state: WizardState): string {
 }
 
 /**
- * The live prompt panel. It asks the preview service for a real render of the
- * current config and paints that output; until one arrives (or when starship is
- * missing or the render fails) it draws the static approximation. Rendering is
- * debounced so a keyboard storm settles on exactly one starship invocation.
- */
-/**
  * The last finished render. Every screen mounts its own preview, so without this
  * each step change would flash the static frame and run starship again.
  */
@@ -71,6 +65,12 @@ export function resetPreviewCacheForTests(): void {
 const renderWithStarship = (state: WizardState, width: number) =>
   renderPromptAsync(state, undefined, width);
 
+/**
+ * The live prompt panel. It asks the preview service for a real render of the
+ * current config and paints that output; until one arrives (or when starship is
+ * missing or the render fails) it draws the static approximation. Rendering is
+ * debounced so a keyboard storm settles on exactly one starship invocation.
+ */
 export function PromptPreview({
   state,
   renderPreview = renderWithStarship,

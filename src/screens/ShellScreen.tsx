@@ -21,9 +21,8 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
   const [selected, setSelected] = useState<Set<ShellId>>(() => new Set(state.selectedShells));
   const [installedShells, setInstalledShells] = useState<ShellId[] | null>(null);
   const [defaultShell, setDefaultShell] = useState<ShellId | null>(state.setDefaultShell);
-  // Both pieces of state read inside useInput go through refs. Ink re-registers the
-  // handler each render so a direct read usually works, but mixing the two styles
-  // invites a stale-closure bug the next time this handler changes.
+  // The selection and default shell are read through refs inside useInput, so a
+  // burst of keys in one input chunk sees each earlier key's change.
   const defaultShellRef = useRef(defaultShell);
   defaultShellRef.current = defaultShell;
   const selectedRef = useRef(selected);
@@ -114,7 +113,7 @@ export function ShellScreen({ state, onNext, onUpdate, onBack }: ShellScreenProp
     if (key.return && selectedRef.current.size > 0 && installedShells !== null) {
       onNext({
         selectedShells: orderedSelection(),
-        installedShells: installedShells ?? [],
+        installedShells,
         setDefaultShell: defaultShell,
       });
     }
