@@ -291,12 +291,12 @@ interface ShellDef {
 
 ### Shell Init Lines
 
-| Shell      | RC File                      | Init Line                                                 |
-| ---------- | ---------------------------- | --------------------------------------------------------- |
-| zsh        | `~/.zshrc`                   | `eval "$(starship init zsh)"`                             |
-| bash       | `~/.bashrc`                  | `eval "$(starship init bash)"`                            |
-| fish       | `~/.config/fish/config.fish` | `starship init fish \| source`                            |
-| nushell    | `null` (manual)              | `nu -c '<quoted Nushell setup script>'` (Bash-compatible) |
+| Shell      | RC File                      | Init Line                                                                                                                       |
+| ---------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| zsh        | `~/.zshrc`                   | `eval "$(starship init zsh)"`                                                                                                   |
+| bash       | `~/.bashrc`                  | `eval "$(starship init bash)"`                                                                                                  |
+| fish       | `~/.config/fish/config.fish` | `starship init fish \| source`                                                                                                  |
+| nushell    | `null` (manual)              | `nu -c '<quoted Nushell setup script>'` (Bash-compatible)                                                                       |
 | powershell | `null` (manual)              | `$env:STARSHIP_CONFIG = '<config dir>/starship/powershell.toml'; Invoke-Expression (&starship init powershell)` (absolute path) |
 
 Shells with `rcFile: null` are not wired through an RC file. Instead, `manualNote`
@@ -645,23 +645,23 @@ passed to `doctor`/`repair` without `--state` are ignored with a stderr warning.
 
 ### Exit Codes
 
-| Code | Meaning                                                                                                                                          |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `0`  | Success.                                                                                                                                         |
+| Code | Meaning                                                                                                                                                                                                                                                    |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`  | Success.                                                                                                                                                                                                                                                   |
 | `1`  | A wizard install finished with at least one failed task, a headless run failed (`CliRunError`, e.g. a failed `--import-url` fetch or an unwritable `-o`/`--export`), a `doctor`/`repair` check still fails, a `--restore` copy failed, or any fatal crash. |
-| `2`  | `CliUsageError` — an unknown or malformed flag, an invalid flag value, `--adopt`/`--import-url` with `generate` or no subcommand, config flags without a subcommand, or an unreadable state card; reads clean with no stack trace. |
+| `2`  | `CliUsageError` — an unknown or malformed flag, an invalid flag value, `--adopt`/`--import-url` with `generate` or no subcommand, config flags without a subcommand, or an unreadable state card; reads clean with no stack trace.                         |
 
 ### Persisted Run Data
 
 All of it lives under XDG dirs resolved by `src/services/paths.ts`, so the
 tarball stays self-contained and nothing is written next to the binary:
 
-| Path                                                                                | Contents                                                                                                                                        |
-| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `$XDG_STATE_HOME` or `~/.local/state`/`shell-configurator/history.jsonl`            | Append-only ledger; one JSON `HistoryRecord` per run (`install`/`apply`/…), in file order = chronological order.                                |
+| Path                                                                                | Contents                                                                                                                                                                                                                                                 |
+| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `$XDG_STATE_HOME` or `~/.local/state`/`shell-configurator/history.jsonl`            | Append-only ledger; one JSON `HistoryRecord` per run (`install`/`apply`/…), in file order = chronological order.                                                                                                                                         |
 | `…/snapshots/<iso-timestamp>.json`                                                  | The versioned state card each wizard install or headless `apply` applied; the id is the ISO timestamp with `:` replaced by `-`. The ledger's `snapshotId` points at it, and `--restore` reads the newest one to learn which shells the last run touched. |
-| `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/fonts/<id>.zip` + `<id>.sha256` | Font cache: the verified archive plus its pinned SHA-256 pin file. A cached archive is reused offline only while its bytes still match the pin. |
-| `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/starship.version`               | The starship version recorded by the last run that freshly installed Starship (`recordStarshipVersion`). Feeds the doctor's `version-drift` check. |
+| `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/fonts/<id>.zip` + `<id>.sha256` | Font cache: the verified archive plus its pinned SHA-256 pin file. A cached archive is reused offline only while its bytes still match the pin.                                                                                                          |
+| `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/starship.version`               | The starship version recorded by the last run that freshly installed Starship (`recordStarshipVersion`). Feeds the doctor's `version-drift` check.                                                                                                       |
 
 ### State Card (`serializeState` / `parseState` in `src/services/state.ts`)
 
