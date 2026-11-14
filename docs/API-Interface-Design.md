@@ -570,9 +570,17 @@ function writeWhatChangedSafely(run: WhatChangedRun): string | null;
 // changed (created/modified/removed, from its manifest), each selected shell's
 // Starship lines and config (the shared starship.toml in adopt mode), and the
 // rollback/uninstall/doctor commands; with no manifest it says no changed files
-// were recorded. Home is shown as ~. The wizard skips it once the install
+// were recorded. Home is shown as ~, and the recorded command has URL
+// credentials and queries dropped (redactUrls). The font removal hint appears
+// only when the run's font task finished. The wizard skips it once the install
 // screen has unmounted. Returns the path, or null when it could not write (never throws).
 // Tests get a stub from setup.ts.
+
+function removeWhatChangedSafely(): void;
+// Deletes the summary inside a captured uninstall or rollback that changed
+// files (a rollback keeps one the run it undoes had removed), so it never
+// describes a run that was undone, and rolling those back brings it back.
+// Stubbed in setup.ts too.
 
 function listEntries(kind: 'presets' | 'modules' | 'fonts'): ListEntry[];
 // The ids --list-presets/--list-modules/--list-fonts print, with label,
@@ -775,14 +783,19 @@ shell-configurator apply [--state <file>] [generate flags] [--dry-run [--json]] 
                 A real apply with --json is a usage error
 ```
 
-A dry run also diffs every config and rc file the run would write against what is
+A dry run also diffs the config and rc files the run would write against what is
 on disk (`plannedFileChanges` in `services/fileDiff.ts`), using the same planners
-as the real writers. The text output ends with `Changes to files on disk:` and a
-`git diff`-style unified diff per file, or `No config or rc file on disk would
-change.` In `--json`, `changes` is a list of `{ path, status: 'create' | 'modify',
-added, removed, diff }`, or `{ path, status: 'unreadable', error }` for a file it
-cannot read; files that would stay as they are are left out. Fonts, the Starship
-binary and terminal configs are not part of it.
+as the real writers. The text output ends with `Changes to config and rc files on
+disk:` and a `git diff`-style unified diff per file (a last line without a newline
+is marked `\ No newline at end of file`, as git does); a config the run creates is
+not repeated there, only pointed at (`create <path>: the config shown above`).
+Then a line notes that a real run also saves backups of the configs it replaces
+and writes WHAT-CHANGED.md. With nothing to change it says `No config or rc file on
+disk would change.` In `--json`, `changes` is a list of `{ path, status: 'create'
+| 'modify', added, removed, diff }`, or `{ path, status: 'unreadable', error }`
+for a file it cannot read; files that would stay as they are are left out.
+Backups, WHAT-CHANGED.md, fonts, the Starship binary and terminal configs are not
+part of it.
 
 A real apply writes `~/.config/starship/WHAT-CHANGED.md` and ends with
 `What changed, and how to undo it: <path>`; the wizard's Done screen shows the

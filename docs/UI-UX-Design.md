@@ -217,7 +217,7 @@ irreversible install/config-write phase.
 
 **Layout**: Install plan from `buildTaskList` (the `TaskPlan` component), the
 config paths with the generated TOML shown once (`ConfigPlan`), a **Files on
-disk** list of every config and rc file the run creates or edits with its added
+files** list of every config and rc file the run creates or edits with its added
 and removed line counts (paths under home shown as `~/…`), then a **Shell wiring**
 section with, per selected shell, the diff of its rc file against what is on disk
 (`plannedFileChanges`, from the same planner the real write uses: where the block
@@ -240,7 +240,7 @@ so; nushell/PowerShell show their manual setup command:
       format = "$directory$character"
       ...
 
-  Files on disk
+  Config and rc files
     create ~/.config/starship/zsh.toml (+42 -0)
     edit   ~/.zshrc (+4 -0)
 
