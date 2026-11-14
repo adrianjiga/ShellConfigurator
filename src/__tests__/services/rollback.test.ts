@@ -84,6 +84,16 @@ describe('planRollback / runRollback', () => {
     expect(read('rc')).toBe('three');
   });
 
+  it('puts back the exact bytes, even ones that are not UTF-8', async () => {
+    const latin1 = Buffer.from([0x61, 0x6c, 0x69, 0x61, 0x73, 0x20, 0xe9, 0x0a]);
+    fs.writeFileSync(file('rc'), latin1);
+    const manifest = await capturedRun(['rc'], () => fs.appendFileSync(file('rc'), 'more\n'));
+
+    runRollback(manifest.runId, planRollback(manifest));
+
+    expect(fs.readFileSync(file('rc')).equals(latin1)).toBe(true);
+  });
+
   it('checks each file again just before changing it', async () => {
     fs.writeFileSync(file('rc'), 'one');
     const manifest = await capturedRun(['rc', 'new'], () => {

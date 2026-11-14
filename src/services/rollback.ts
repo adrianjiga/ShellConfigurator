@@ -120,7 +120,7 @@ export function planRollback(manifest: RunManifest): RollbackStep[] {
       detail: 'put back its content from before that run',
       run: () => {
         if (!unchanged()) return { status: 'skipped', detail: CHANGED_SINCE };
-        const content = fs.readFileSync(copy, 'utf8');
+        const content = fs.readFileSync(copy);
         fs.mkdirSync(path.dirname(file.path), { recursive: true });
         writeFileAtomic(file.path, content);
         return { status: 'restored', detail: 'put back its content from before that run' };

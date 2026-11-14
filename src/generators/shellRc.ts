@@ -94,7 +94,7 @@ function resolveWriteTarget(filePath: string): { target: string; mode?: number }
  * its permissions. A reader never sees a truncated file. On failure the temp
  * file is removed and the original error re-thrown.
  */
-export function writeFileAtomic(filePath: string, content: string): void {
+export function writeFileAtomic(filePath: string, content: string | Buffer): void {
   const { target, mode } = resolveWriteTarget(filePath);
   const tmpPath = path.join(
     path.dirname(target),
