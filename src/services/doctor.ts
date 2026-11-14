@@ -694,8 +694,7 @@ async function checkFontSelected(
 
 /**
  * The installed shells that were set up: the last recorded run chose them, or
- * they start Starship or carry a ShellConfigurator block. A shell nobody set up
- * is not checked, so a bash that was never chosen is no failure.
+ * they start Starship or carry a ShellConfigurator block.
  */
 async function shellsSetUp(deps: DoctorDeps): Promise<ShellId[]> {
   const lastRun = deps.lastRunShells() ?? [];

@@ -273,7 +273,7 @@ function showControlCharacters(text: string): string {
  * Every line of `toml` that may set a command Starship runs on every prompt: a
  * `command`, `when` or `shell` key in any form (dotted, quoted, inline table),
  * a `custom` table header, and the rest of a multi-line string such a key
- * starts. It over-reports rather than miss one, since it is a warning.
+ * starts.
  */
 export function customCommands(toml: string): string[] {
   const lines = toml.split(/\r?\n/);

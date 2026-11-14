@@ -301,8 +301,7 @@ export function fishInitFile(rcFile: string): string {
 }
 
 /**
- * A file this tool is about to rewrite, as text. Bytes that are not UTF-8 would
- * not survive the rewrite, so such a file is refused.
+ * A file this tool is about to rewrite, as text. A file that is not UTF-8 is refused.
  */
 export function readTextToRewrite(file: string): string {
   const text = fs.readFileSync(file, 'utf8');
@@ -868,7 +867,7 @@ export function removeBashLoginBlock(file: string): RemovalResult {
   };
 }
 
-/** `content` with the line endings of `existing`, so lines added to a CRLF file end the same way. */
+/** `content` in CRLF when `existing` uses CRLF on every line. */
 function keepLineEndings(existing: string, content: string): string {
   const crlfOnly = existing.includes('\r\n') && !existing.replace(/\r\n/g, '').includes('\n');
   return crlfOnly ? content.replace(/\r?\n/g, '\r\n') : content;

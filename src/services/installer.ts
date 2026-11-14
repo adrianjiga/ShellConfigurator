@@ -187,9 +187,7 @@ async function installStarshipViaScript(signal?: AbortSignal): Promise<void> {
     );
     try {
       recordScriptInstall(path.join(scriptInstallBinDir(), 'starship'));
-    } catch {
-      // Without the record, uninstall leaves the binary to the user.
-    }
+    } catch {}
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -431,9 +429,7 @@ async function installFontFiles(fontId: string, zipName: string, buffer: Buffer)
       fontId,
       fontFiles.map((file) => file.name)
     );
-  } catch {
-    // Without the list, uninstall reads the names from the cached archive.
-  }
+  } catch {}
 
   await refreshFontCache(fontsDir);
 }

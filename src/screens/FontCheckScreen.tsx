@@ -32,7 +32,6 @@ const items: SelectItem<FontChoice>[] = [
 export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps) {
   // Fonts belong to the host terminal, so a container never installs one.
   const choices = fontsElsewhere(state) ? items.filter((item) => item.value !== 'install') : items;
-  // Coming back, keep the answer given before highlighted.
   const answered =
     state.fontAnswer ?? (state.nerdFontToInstall.kind === 'none' ? 'have' : 'install');
   const initialIndex = Math.max(

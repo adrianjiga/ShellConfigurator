@@ -50,7 +50,6 @@ interface StdinHandle {
   readStart?: () => number;
 }
 
-/** Node keeps reading a TTY after its input listeners are gone; only stopping the handle hands the input to the child. */
 function stopReadingStdin(): void {
   try {
     const handle = (process.stdin as unknown as { _handle?: StdinHandle })._handle;

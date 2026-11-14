@@ -109,9 +109,7 @@ async function applyFix(
       if (version) {
         try {
           deps.recordStarshipVersion(version);
-        } catch {
-          // Best-effort drift tracking.
-        }
+        } catch {}
       }
       return { detail: `reinstalled Starship via ${pm}`, status: 'fixed' };
     }

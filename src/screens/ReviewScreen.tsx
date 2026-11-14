@@ -21,7 +21,6 @@ import { redactHome } from '../services/redact.ts';
 import { type ExplainResult, explainPromptAsync } from '../services/starshipProbe.ts';
 import type { ShellId, WizardState } from '../types.ts';
 
-/** Enter that arrives this soon after the screen appears was held down on the step before, not read here. */
 export const REVIEW_SETTLE_MS = 500;
 
 interface ReviewScreenProps {
