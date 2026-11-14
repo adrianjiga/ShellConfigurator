@@ -14,7 +14,7 @@ import {
   runCommand,
 } from './exec.ts';
 import { type ExtractedFontFile, extractFontFiles, fontFileNames } from './fontExtractor.ts';
-import { homeDir, scriptInstallBinDir, xdgBaseDir } from './paths.ts';
+import { homeDir, scriptInstallBinDir, withPathDir, xdgBaseDir } from './paths.ts';
 
 export { scriptInstallBinDir } from './paths.ts';
 
@@ -201,13 +201,6 @@ export async function installStarship(pm: PackageManager, signal?: AbortSignal):
 export function getMissingStarshipPathDir(): string | null {
   if (commandExists('starship')) return null;
   return fs.existsSync(path.join(scriptInstallBinDir(), 'starship')) ? scriptInstallBinDir() : null;
-}
-
-/** PATH with `dir` in front, for running a script install that PATH lacks. */
-function withPathDir(dir: string | null): NodeJS.ProcessEnv['PATH'] {
-  const current = process.env.PATH;
-  if (!dir) return current;
-  return current ? `${dir}${path.delimiter}${current}` : dir;
 }
 
 /** `starship -V`, with `pathDir` on PATH for a script install PATH lacks; null when it fails. */

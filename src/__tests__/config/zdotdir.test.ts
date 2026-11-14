@@ -27,7 +27,7 @@ describe('the zsh rc file', () => {
 
   it.each([
     'ZDOTDIR=$HOME/.config/zsh',
-    'export ZDOTDIR="${XDG_CONFIG_HOME:-$HOME/.config}/zsh"',
+    `export ZDOTDIR="\${XDG_CONFIG_HOME:-$HOME/.config}/zsh"`,
     'ZDOTDIR=~/.config/zsh # zsh reads its files from here',
   ])('follows a ZDOTDIR that ~/.zshenv sets without exporting it: %s', (line) => {
     fs.writeFileSync(path.join(home, '.zshenv'), `${line}\n`);

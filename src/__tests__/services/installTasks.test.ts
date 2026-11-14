@@ -34,6 +34,19 @@ describe('runInstallTasks', () => {
     expect(starship?.label).toContain('starship 1.20');
   });
 
+  it('fails the Starship step when the install finished but starship cannot be found', async () => {
+    const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
+      getMissingStarshipPathDir: vi.fn().mockReturnValue(null),
+    });
+    const results = await runInstallTasks(state(), deps, vi.fn());
+
+    expect(results.find((t) => t.id === 'starship')).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('starship cannot be found'),
+    });
+  });
+
   it('says when the installed Starship is too old for the config', async () => {
     const deps = fakeDeps({
       isStarshipInstalled: vi
@@ -89,6 +102,7 @@ describe('runInstallTasks', () => {
 
   it('records the version of a script install that PATH cannot see yet', async () => {
     const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
       // Nothing is there before the install; the script then lands it off PATH.
       getMissingStarshipPathDir: vi
         .fn<() => string | null>()
@@ -460,7 +474,7 @@ describe('runInstallTasks', () => {
   });
 
   it('skips verification when starship is not on PATH', async () => {
-    const deps = fakeDeps();
+    const deps = fakeDeps({ isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }) });
     const results = await runInstallTasks(
       state({ selectedShells: ['zsh'], installedShells: ['zsh'] }),
       deps,
@@ -860,7 +874,10 @@ describe('runInstallTasks', () => {
   });
 
   it('verifies through the script install dir and says so', async () => {
-    const deps = fakeDeps({ getMissingStarshipPathDir: vi.fn(() => '/home/u/.local/bin') });
+    const deps = fakeDeps({
+      isStarshipInstalled: vi.fn().mockResolvedValue({ installed: false }),
+      getMissingStarshipPathDir: vi.fn(() => '/home/u/.local/bin'),
+    });
 
     const results = await runInstallTasks(
       state({ selectedShells: ['zsh'], installedShells: ['zsh'] }),

@@ -116,9 +116,8 @@ function describeRemoval(result: RemovalResult, what: string, file: string): Ste
   if (result.removed && result.backedUpTo) parts.push(`backup: ${result.backedUpTo}`);
   if (result.removed && result.note) parts.push(result.note);
   const detail = parts.join('; ');
-  return result.removed && result.backedUpTo
-    ? { detail, backup: { file, backup: result.backedUpTo } }
-    : { detail };
+  if (!result.removed) return { detail, status: 'skipped' };
+  return result.backedUpTo ? { detail, backup: { file, backup: result.backedUpTo } } : { detail };
 }
 
 /** What a shell has on disk, read once per plan. */

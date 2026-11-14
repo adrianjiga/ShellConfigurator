@@ -371,6 +371,11 @@ export async function runInstallTasks(
       // when a later package-manager update moves starship under its nose.
       const after = await deps.isStarshipInstalled();
       const scriptDir = after.version ? null : deps.getMissingStarshipPathDir();
+      if (!after.installed && !scriptDir) {
+        throw new Error(
+          'the install command finished, but starship cannot be found on PATH or in ~/.local/bin'
+        );
+      }
       const version =
         after.version ?? (scriptDir ? await deps.readStarshipVersion(scriptDir) : null);
       if (version) {

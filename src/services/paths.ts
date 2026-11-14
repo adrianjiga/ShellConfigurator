@@ -47,3 +47,10 @@ export function cacheDir(): string {
     'shell-configurator'
   );
 }
+
+/** PATH with `dir` in front, for running a script install that PATH lacks. */
+export function withPathDir(dir: string | null): NodeJS.ProcessEnv['PATH'] {
+  const current = process.env.PATH;
+  if (!dir) return current;
+  return current ? `${dir}${path.delimiter}${current}` : dir;
+}

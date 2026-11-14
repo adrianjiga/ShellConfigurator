@@ -1147,7 +1147,7 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
   };
 }
 
-/** Moves a shell's per-shell config aside to a backup, which `--restore` can bring back. */
+/** Moves a shell's per-shell config aside to a backup. */
 export function removeShellConfigFile(shellId: ShellId): RemovalResult {
   const configPath = getShellConfigPath(shellId);
   if (!fs.existsSync(configPath)) return { removed: false, note: `${configPath} does not exist` };

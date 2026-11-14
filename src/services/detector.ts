@@ -1,10 +1,10 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { SHELLS } from '../config/shells.ts';
 import type { PackageManager, RemoteSession, ShellId, TerminalId } from '../types.ts';
 import { commandExistsAsync, commandPathAsync, runCapture } from './exec.ts';
 import { getMissingStarshipPathDir } from './installer.ts';
+import { withPathDir } from './paths.ts';
 
 const readFileP = promisify(fs.readFile);
 
@@ -115,7 +115,7 @@ export async function findStarshipAsync(): Promise<{
   if (!pathDir) return onPath;
   try {
     const version = await runCapture('starship', ['-V'], {
-      env: { ...process.env, PATH: `${pathDir}${path.delimiter}${process.env.PATH ?? ''}` },
+      env: { ...process.env, PATH: withPathDir(pathDir) },
     });
     return { installed: true, version, pathDir };
   } catch {

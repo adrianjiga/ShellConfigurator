@@ -278,12 +278,15 @@ describe('runUninstall', () => {
     expect(deps.forgetStarshipVersion).not.toHaveBeenCalled();
   });
 
-  it('passes on the note of a removal that changed nothing', async () => {
+  it('reports a removal that changed nothing as skipped, with its note', async () => {
     const deps = makeDeps(['zsh'], [], {
       removeManagedRcBlocks: vi.fn(() => ({ removed: false, note: 'no ShellConfigurator lines' })),
     });
     const report = await runUninstall(await planUninstall({}, deps));
-    expect(report.actions[0]!.detail).toBe('no ShellConfigurator lines');
+    expect(report.actions[0]).toMatchObject({
+      status: 'skipped',
+      detail: 'no ShellConfigurator lines',
+    });
   });
 
   it('only plans in a dry run', async () => {

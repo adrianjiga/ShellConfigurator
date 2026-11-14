@@ -106,7 +106,13 @@ async function applyFix(
       const pm = await deps.detectPackageManager();
       await deps.installStarship(pm);
       const version = await deps.readStarshipVersion(deps.getMissingStarshipPathDir());
-      if (version) deps.recordStarshipVersion(version);
+      if (version) {
+        try {
+          deps.recordStarshipVersion(version);
+        } catch {
+          // Best-effort drift tracking.
+        }
+      }
       return { detail: `reinstalled Starship via ${pm}`, status: 'fixed' };
     }
     case 'write-config': {
