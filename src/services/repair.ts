@@ -84,7 +84,7 @@ function describeFix(fix: DoctorFix): string {
     case 'reinstall-starship':
       return 'reinstall Starship via the detected package manager';
     case 'configure-shell':
-      return `add the starship init line to ${fix.shellId}`;
+      return `add the missing Starship lines to the ${fix.shellId} rc`;
     case 'write-config':
       return `write the Starship config for ${fix.shellId}`;
     case 'reinstall-font':
@@ -117,7 +117,7 @@ async function applyFix(
       const shared = pointAtShared ?? deps.shellPointsAtShared(fix.shellId);
       const result = deps.applyShellConfig(fix.shellId, { pointAtSharedConfig: shared });
       return result.applied
-        ? { detail: `added the starship init line to ${fix.shellId}`, status: 'fixed' }
+        ? { detail: `added the missing Starship lines to the ${fix.shellId} rc`, status: 'fixed' }
         : { detail: result.note ?? 'already configured', status: 'skipped' };
     }
     case 'reinstall-font': {
