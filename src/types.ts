@@ -84,6 +84,8 @@ export const STEP_ORDER = [
 
 export type WizardStep = (typeof STEP_ORDER)[number];
 
+export type RemoteSession = 'ssh' | 'wsl' | null;
+
 export interface WizardState {
   step: WizardStep;
   hasNerdFont: boolean;
@@ -127,6 +129,8 @@ export interface WizardState {
   /** True inside a container/CI sandbox: fonts are per-host and chsh is not
    *  meaningful, so those install steps are skipped. Runtime field. */
   container: boolean;
+  /** An SSH session or WSL: the terminal and its fonts belong to another computer or to Windows. Runtime field. */
+  remoteSession: RemoteSession;
   nerdFontToInstall: NerdFontChoice;
   setDefaultShell: ShellId | null;
   skipStarshipInstall: boolean;
@@ -160,6 +164,7 @@ export const DEFAULT_STATE: WizardState = {
   installedShells: [],
   terminal: null,
   container: false,
+  remoteSession: null,
   nerdFontToInstall: NO_NERD_FONT,
   setDefaultShell: null,
   skipStarshipInstall: false,

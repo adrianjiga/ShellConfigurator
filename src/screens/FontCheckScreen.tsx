@@ -4,6 +4,7 @@ import { LIST_HINTS, NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { NERD_FONT_SYMBOLS } from '../config/promptSymbols.ts';
+import { fontsElsewhere } from '../services/installTasks.ts';
 import { NO_NERD_FONT, type WizardState } from '../types.ts';
 
 interface FontCheckScreenProps {
@@ -30,7 +31,7 @@ const items: SelectItem<FontChoice>[] = [
 
 export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps) {
   // Fonts belong to the host terminal, so a container never installs one.
-  const choices = state.container ? items.filter((item) => item.value !== 'install') : items;
+  const choices = fontsElsewhere(state) ? items.filter((item) => item.value !== 'install') : items;
   // Coming back after asking for an install, keep that answer highlighted.
   const initialIndex = Math.max(
     0,

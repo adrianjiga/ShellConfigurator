@@ -20,6 +20,7 @@ import {
   detectContainerAsync,
   detectInstalledShellsAsync,
   detectPackageManagerAsync,
+  detectRemoteSessionAsync,
   detectTerminalAsync,
   isStarshipInstalledAsync,
 } from './detector.ts';
@@ -412,13 +413,14 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
       sharedConfigToml: await fetchImportedConfig(flags.importUrl),
     };
   }
-  const [installedShells, packageManager, container, terminal] = await Promise.all([
+  const [installedShells, packageManager, container, terminal, remoteSession] = await Promise.all([
     detectInstalledShellsAsync(),
     detectPackageManagerAsync(),
     detectContainerAsync(),
     detectTerminalAsync(),
+    detectRemoteSessionAsync(),
   ]);
-  return { ...state, installedShells, packageManager, container, terminal };
+  return { ...state, installedShells, packageManager, container, terminal, remoteSession };
 }
 
 export type DryRunConfig =

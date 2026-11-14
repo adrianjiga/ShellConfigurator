@@ -120,10 +120,22 @@ export function shellTaskId(shellId: ShellId): `shell_${ShellId}` {
   return `shell_${shellId}`;
 }
 
-/** The font this run installs: a chosen one, never inside a container. */
+/** Why fonts installed here would not reach the terminal, or null when they would. */
+export function fontsElsewhere(state: WizardState): string | null {
+  if (state.container) return 'inside a container fonts belong to the host terminal';
+  if (state.remoteSession === 'ssh') {
+    return 'over SSH, fonts belong to the computer your terminal runs on';
+  }
+  if (state.remoteSession === 'wsl') {
+    return 'in WSL, Windows Terminal uses fonts installed on Windows';
+  }
+  return null;
+}
+
+/** The font this run installs: a chosen one, never where fonts live elsewhere. */
 export function plannedFont(state: WizardState): string | null {
   const fontId = fontIdToInstall(state.nerdFontToInstall);
-  return fontId && !state.container ? fontId : null;
+  return fontId && !fontsElsewhere(state) ? fontId : null;
 }
 
 export const FONT_FALLBACK_NOTE =

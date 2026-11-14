@@ -67,6 +67,7 @@ function runtimeDefaults(): Pick<
   | 'installedShells'
   | 'terminal'
   | 'container'
+  | 'remoteSession'
   | 'dryRun'
   | 'installResults'
   | 'sharedConfigToml'
@@ -79,6 +80,7 @@ function runtimeDefaults(): Pick<
     installedShells: [],
     terminal: null,
     container: false,
+    remoteSession: null,
     runId: null,
     summaryPath: null,
     dryRun: false,

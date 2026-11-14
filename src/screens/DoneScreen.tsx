@@ -14,6 +14,7 @@ import { errorMessage } from '../services/errors.ts';
 import { fontLabel, getFontFamily, MANUAL_STARSHIP_INSTALL } from '../services/installer.ts';
 import {
   buildTaskList,
+  fontsElsewhere,
   plannedResetShells,
   rcTaskId,
   sharedConfigNote,
@@ -211,15 +212,13 @@ export function DoneScreen({ state }: DoneScreenProps) {
               )}
             </Box>
 
-            {fontId && state.container && (
+            {fontId && fontsElsewhere(state) && (
               <Box flexDirection="row" gap={1}>
                 <StatusMark status="skipped" />
-                <Text>
-                  Nerd Font skipped — inside a container fonts belong to the host terminal
-                </Text>
+                <Text>Nerd Font skipped — {fontsElsewhere(state)}</Text>
               </Box>
             )}
-            {fontId && !state.container && (
+            {fontId && !fontsElsewhere(state) && (
               <Box flexDirection="column">
                 <Box flexDirection="row" gap={1}>
                   <StatusMark status={fontTask?.status ?? 'unknown'} />

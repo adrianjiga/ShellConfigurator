@@ -24,6 +24,7 @@ vi.mock('../services/detector.ts', () => ({
   detectCurrentShellAsync: vi.fn().mockResolvedValue(null),
   detectTerminalAsync: vi.fn().mockResolvedValue(null),
   detectContainerAsync: vi.fn().mockResolvedValue(false),
+  detectRemoteSessionAsync: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('../services/exec.ts', async (importOriginal) => {

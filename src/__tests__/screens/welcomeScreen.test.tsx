@@ -4,6 +4,7 @@ import { WelcomeScreen } from '../../screens/WelcomeScreen.tsx';
 import {
   detectContainerAsync,
   detectPackageManagerAsync,
+  detectRemoteSessionAsync,
   detectTerminalAsync,
   findStarshipAsync,
 } from '../../services/detector.ts';
@@ -15,6 +16,7 @@ vi.mock('../../services/detector.ts', () => ({
   findStarshipAsync: vi.fn(),
   detectTerminalAsync: vi.fn(),
   detectContainerAsync: vi.fn(),
+  detectRemoteSessionAsync: vi.fn().mockResolvedValue(null),
 }));
 
 afterEach(() => {
@@ -26,6 +28,7 @@ beforeEach(() => {
   vi.mocked(findStarshipAsync).mockResolvedValue({ installed: false });
   vi.mocked(detectTerminalAsync).mockResolvedValue(null);
   vi.mocked(detectContainerAsync).mockResolvedValue(false);
+  vi.mocked(detectRemoteSessionAsync).mockResolvedValue(null);
 });
 
 function setup() {
@@ -62,6 +65,7 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: null,
       container: false,
+      remoteSession: null,
       skipStarshipInstall: false,
     });
   });
@@ -126,6 +130,7 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: null,
       container: false,
+      remoteSession: null,
       skipStarshipInstall: false,
     });
   });
@@ -152,6 +157,7 @@ describe('WelcomeScreen', () => {
       packageManager: 'script',
       terminal: null,
       container: false,
+      remoteSession: null,
       skipStarshipInstall: true,
     });
   });
@@ -182,6 +188,7 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: null,
       container: false,
+      remoteSession: null,
       skipStarshipInstall: false,
     });
   });
@@ -202,6 +209,7 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: 'kitty',
       container: false,
+      remoteSession: null,
       skipStarshipInstall: false,
     });
   });
@@ -221,7 +229,24 @@ describe('WelcomeScreen', () => {
       packageManager: 'apt',
       terminal: null,
       container: true,
+      remoteSession: null,
       skipStarshipInstall: false,
     });
+  });
+
+  it('flags an SSH session, says the font steps are skipped, and passes it through', async () => {
+    vi.mocked(detectRemoteSessionAsync).mockResolvedValue('ssh');
+    const { instance, onNext } = setup();
+    await flush();
+    await flush();
+
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
+      'SSH session detected — the font steps will be skipped'
+    );
+
+    instance.stdin.write(ENTER);
+    await flush();
+
+    expect(onNext).toHaveBeenCalledWith(expect.objectContaining({ remoteSession: 'ssh' }));
   });
 });

@@ -15,6 +15,7 @@ vi.mock('../services/detector.ts', () => ({
   detectCurrentShellAsync: vi.fn().mockResolvedValue('zsh'),
   detectTerminalAsync: vi.fn().mockResolvedValue(null),
   detectContainerAsync: vi.fn().mockResolvedValue(false),
+  detectRemoteSessionAsync: vi.fn().mockResolvedValue(null),
 }));
 
 const mocks = vi.hoisted(() => ({ exit: vi.fn() }));

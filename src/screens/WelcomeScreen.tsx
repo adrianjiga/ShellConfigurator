@@ -7,12 +7,13 @@ import { uiColor } from '../config/colors.ts';
 import {
   detectContainerAsync,
   detectPackageManagerAsync,
+  detectRemoteSessionAsync,
   detectTerminalAsync,
   findStarshipAsync,
 } from '../services/detector.ts';
 import { MANUAL_STARSHIP_INSTALL } from '../services/installer.ts';
 import { TERMINAL_LABELS } from '../services/terminalFont.ts';
-import type { PackageManager, TerminalId, WizardState } from '../types.ts';
+import type { PackageManager, RemoteSession, TerminalId, WizardState } from '../types.ts';
 
 interface WelcomeScreenProps {
   state: WizardState;
@@ -24,6 +25,7 @@ interface Detection {
   pm: PackageManager;
   terminal: TerminalId | null;
   container: boolean;
+  remoteSession: RemoteSession;
 }
 
 type InstallChoice = 'auto' | 'manual';
@@ -52,14 +54,15 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
 
   const runDetection = useCallback(
     async (shouldDrop: () => boolean = () => false): Promise<Detection | null> => {
-      const [pm, starship, terminal, container] = await Promise.all([
+      const [pm, starship, terminal, container, remoteSession] = await Promise.all([
         detectPackageManagerAsync(),
         findStarshipAsync(),
         detectTerminalAsync(),
         detectContainerAsync(),
+        detectRemoteSessionAsync(),
       ]);
       if (shouldDrop()) return null;
-      const found = { pm, starship, terminal, container };
+      const found = { pm, starship, terminal, container, remoteSession };
       setDetection(found);
       return found;
     },
@@ -80,6 +83,7 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
       packageManager: found.pm,
       terminal: found.terminal,
       container: found.container,
+      remoteSession: found.remoteSession,
       skipStarshipInstall,
     });
   }
@@ -163,6 +167,18 @@ export function WelcomeScreen({ state, onNext }: WelcomeScreenProps) {
                 <Box flexDirection="row" gap={1}>
                   <Text color={uiColor('gray')}>
                     Container detected — font and default-shell steps will be skipped
+                  </Text>
+                </Box>
+              )}
+
+              {!detection.container && detection.remoteSession && (
+                <Box flexDirection="row" gap={1}>
+                  <Text color={uiColor('gray')}>
+                    {detection.remoteSession === 'ssh' ? 'SSH session' : 'WSL'} detected — the font
+                    steps will be skipped, since{' '}
+                    {detection.remoteSession === 'ssh'
+                      ? 'fonts belong to the computer your terminal runs on'
+                      : 'Windows Terminal uses fonts installed on Windows'}
                   </Text>
                 </Box>
               )}
