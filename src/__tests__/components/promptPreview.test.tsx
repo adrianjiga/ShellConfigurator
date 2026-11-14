@@ -36,7 +36,8 @@ describe('PromptPreview', () => {
   it('renders the prompt character for each symbol choice', () => {
     expect(frame({ characterSymbol: 'arrow' })).toContain('❯');
     expect(frame({ characterSymbol: 'lambda' })).toContain('λ');
-    expect(frame({ characterSymbol: 'dollar' })).toContain('$ ');
+    const dollarLines = frame({ characterSymbol: 'dollar' }).split('\n');
+    expect(dollarLines.some((line) => /^[│\s]*\$[│\s]*$/.test(line))).toBe(true);
   });
 
   it('renders the character even though it has no MODULES entry', () => {
