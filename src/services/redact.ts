@@ -10,10 +10,7 @@ function escapeRegExp(text: string): string {
 export function redactHome(text: string, home: string = homeDir()): string {
   const trimmed = home.replace(/\/+$/, '');
   if (trimmed.length <= 1) return text;
-  return text.replace(
-    new RegExp(`(?<![^\\s\`'"=:,(\\[])${escapeRegExp(trimmed)}(?![^/\\s\`'":,)\\]])`, 'g'),
-    '~'
-  );
+  return text.replace(new RegExp(`(?<![\\w.~-])${escapeRegExp(trimmed)}(?![\\w.~-])`, 'g'), '~');
 }
 
 function currentUser(): string {
@@ -31,7 +28,7 @@ function currentUser(): string {
 export function redactUser(text: string, user: string = currentUser()): string {
   if (user.length < 2) return text;
   return text.replace(
-    new RegExp(`(?<=/(?:[Uu]sers|home)/)${escapeRegExp(user)}(?=/|$|[\\s\`'":,)\\]])`, 'gm'),
+    new RegExp(`(?<=/(?:[Uu]sers|home)/)${escapeRegExp(user)}(?![\\w.~-])`, 'g'),
     '<user>'
   );
 }

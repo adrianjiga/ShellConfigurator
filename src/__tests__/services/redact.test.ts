@@ -39,6 +39,19 @@ describe('redactUrls', () => {
 });
 
 describe('redactHome', () => {
+  it.each([
+    ['file:///home/ana/x', 'file://~/x'],
+    ['a;/home/ana/x|/home/ana<b>{/home/ana}', 'a;~/x|~<b>{~}'],
+    ['/srv/people/ana/.zshrc', '/srv/people/ana/.zshrc'],
+  ])('finds the home directory after any separator in %s', (text, expected) => {
+    expect(redactHome(text, '/home/ana')).toBe(expected);
+    expect(redactHome('cd /srv/people/ana/x', '/srv/people/ana')).toBe('cd ~/x');
+  });
+
+  it('does not take a longer path that ends with the home path for it', () => {
+    expect(redactHome('/data/home/ana/x', '/home/ana')).toBe('/data/home/ana/x');
+  });
+
   it('replaces the home directory when HOME ends in a slash', () => {
     expect(redactHome('/home/ana/.zshrc and /home/ana', '/home/ana/')).toBe('~/.zshrc and ~');
   });
