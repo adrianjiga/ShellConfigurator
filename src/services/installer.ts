@@ -9,6 +9,8 @@ import {
   cacheFont,
   forgetScriptInstall,
   isRecordedScriptInstall,
+  recordedFontFiles,
+  recordFontFiles,
   recordScriptInstall,
   sha256Digest,
 } from './cache.ts';
@@ -404,7 +406,7 @@ function verifyChecksum(zipName: string, buffer: Buffer, expectedDigest: string)
   }
 }
 
-async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> {
+async function installFontFiles(fontId: string, zipName: string, buffer: Buffer): Promise<void> {
   let fontFiles: ExtractedFontFile[];
   try {
     fontFiles = await extractFontFiles(buffer);
@@ -423,6 +425,14 @@ async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> 
   for (const file of fontFiles) {
     // extractFontFiles flattens entry paths to basenames; do not join onto the raw path.
     fs.writeFileSync(path.join(fontsDir, file.name), file.bytes);
+  }
+  try {
+    recordFontFiles(
+      fontId,
+      fontFiles.map((file) => file.name)
+    );
+  } catch {
+    // Without the list, uninstall reads the names from the cached archive.
   }
 
   await refreshFontCache(fontsDir);
@@ -464,17 +474,17 @@ export async function installNerdFont(
   } catch (err) {
     if (signal?.aborted) throw new CommandCancelledError(`look up ${font.zipName} checksum`);
     if (!cached) throw err;
-    await installFontFiles(font.zipName, cached.buffer);
+    await installFontFiles(fontId, font.zipName, cached.buffer);
     return `installed ${font.label} from cache`;
   }
   if (cached && cached.digest === asset.digest) {
-    await installFontFiles(font.zipName, cached.buffer);
+    await installFontFiles(fontId, font.zipName, cached.buffer);
     return `installed ${font.label} from cache`;
   }
 
   const buffer = await downloadFont(font.zipName, asset.url, signal);
   verifyChecksum(font.zipName, buffer, asset.digest);
-  await installFontFiles(font.zipName, buffer);
+  await installFontFiles(fontId, font.zipName, buffer);
 
   // Pin the verified archive so a later run reuses it without re-downloading.
   // A cache that cannot be written (no space, read-only ~/.cache) must not undo
@@ -545,16 +555,16 @@ export async function removeStarship(plan: StarshipRemoval, signal?: AbortSignal
 }
 
 /**
- * The files of an installed Nerd Font, listed from its cached archive. Null when
- * no verified archive is cached, so the files cannot be told apart from others.
+ * The files of an installed Nerd Font, listed from its cached archive, else from
+ * the names its install recorded. Null when neither is there, so the files
+ * cannot be told apart from others.
  */
 export async function installedFontFiles(fontId: string): Promise<string[] | null> {
   const cached = cachedFont(fontId);
-  if (!cached) return null;
+  const names = cached ? fontFileNames(cached.buffer) : recordedFontFiles(fontId);
+  if (!names) return null;
   const fontsDir = getNerdFontsDir();
-  return fontFileNames(cached.buffer)
-    .map((name) => path.join(fontsDir, name))
-    .filter((f) => fs.existsSync(f));
+  return names.map((name) => path.join(fontsDir, name)).filter((f) => fs.existsSync(f));
 }
 
 export async function removeFontFiles(files: string[]): Promise<void> {

@@ -95,7 +95,7 @@ with the PATH line it needs. Nushell and PowerShell were set up by hand, so it
 names the file to clean instead. Starship is removed only with `--starship`,
 and only once no shell would still start it: the binary its own script install put in `~/.local/bin` (while it is unchanged), or
 the pacman, apk or Homebrew package when that package manager owns the binary.
-A font goes only with `--font <id>`, its files listed from its cached archive;
+A font goes only with `--font <id>`, its files listed from its cached archive or, without one, from the names its install recorded;
 the plan names any terminal still set to it. On a terminal it shows the plan
 and asks first; elsewhere it needs `--yes`.
 
