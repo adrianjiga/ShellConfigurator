@@ -266,4 +266,16 @@ describe('writing configs and rc files', () => {
     expect(content).toContain('starship init zsh');
     expect(content.replace(/\r\n/g, '')).not.toContain('\n');
   });
+
+  it('leaves each line of an rc with mixed line endings as it was', () => {
+    const zshrc = path.join(home, '.zshrc');
+    fs.writeFileSync(zshrc, 'export EDITOR=vim\nalias ll="ls -l"\r\nexport PAGER=less\n');
+
+    applyShellConfig('zsh');
+
+    const content = fs.readFileSync(zshrc, 'utf8');
+    expect(content).toContain('starship init zsh');
+    expect(content).toContain('export EDITOR=vim\nalias ll="ls -l"\r\nexport PAGER=less\n');
+    expect(content.match(/\r\n/g)).toHaveLength(1);
+  });
 });

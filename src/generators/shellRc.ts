@@ -883,7 +883,8 @@ export function removeBashLoginBlock(file: string): RemovalResult {
 
 /** `content` with the line endings of `existing`, so lines added to a CRLF file end the same way. */
 function keepLineEndings(existing: string, content: string): string {
-  return existing.includes('\r\n') ? content.replace(/\r?\n/g, '\r\n') : content;
+  const crlfOnly = existing.includes('\r\n') && !existing.replace(/\r\n/g, '').includes('\n');
+  return crlfOnly ? content.replace(/\r?\n/g, '\r\n') : content;
 }
 
 /** Appends a managed block at the end, after a blank line unless the file is empty. */
