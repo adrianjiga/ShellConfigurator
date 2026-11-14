@@ -33,6 +33,7 @@ import {
   runsDir,
   trackedFiles,
   UNREADABLE_AFTER,
+  writeInRun,
 } from '../../services/runCapture.ts';
 
 let tmpDir: string;
@@ -235,5 +236,50 @@ describe('readRunManifest', () => {
     fs.mkdirSync(runDir('old'), { recursive: true });
     fs.writeFileSync(path.join(runDir('old'), 'manifest.json'), '{"version":9,"files":[]}');
     expect(readRunManifest('old')).toBeNull();
+  });
+});
+
+describe('writeInRun', () => {
+  function finishedRun(): string {
+    const file = path.join(tmpDir, 'rc');
+    const capture = beginRunCapture([file]);
+    fs.writeFileSync(file, 'new');
+    return finishRunCapture(capture)!.runId;
+  }
+
+  it('keeps the earlier content and records the write in the run', () => {
+    const runId = finishedRun();
+    const summary = path.join(tmpDir, 'summary.md');
+    fs.writeFileSync(summary, 'earlier', { mode: 0o640 });
+
+    expect(writeInRun(runId, summary, () => fs.writeFileSync(summary, 'later'))).toBe(true);
+
+    const entry = readRunManifest(runId)!.files.at(-1)!;
+    expect(entry).toMatchObject({ path: summary, mode: 0o640, summary: true });
+    expect(entry.after).toBe(sha256Digest(Buffer.from('later')));
+    expect(fs.readFileSync(path.join(runDir(runId), 'files', entry.before!), 'utf8')).toBe(
+      'earlier'
+    );
+  });
+
+  it('writes nothing for a run without a manifest, or a file the run already has', () => {
+    const write = vi.fn();
+    expect(writeInRun('no-such-run', path.join(tmpDir, 'x'), write)).toBe(false);
+    const runId = finishedRun();
+    expect(writeInRun(runId, path.join(tmpDir, 'rc'), write)).toBe(false);
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('drops the kept copy and passes on an error from the write', () => {
+    const runId = finishedRun();
+    const summary = path.join(tmpDir, 'summary.md');
+    fs.writeFileSync(summary, 'earlier');
+    expect(() =>
+      writeInRun(runId, summary, () => {
+        throw new Error('disk full');
+      })
+    ).toThrow('disk full');
+    expect(fs.readdirSync(path.join(runDir(runId), 'files'))).toHaveLength(0);
+    expect(readRunManifest(runId)!.files).toHaveLength(1);
   });
 });

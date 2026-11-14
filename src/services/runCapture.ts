@@ -21,6 +21,8 @@ export interface RunFile {
   after: string | null;
   /** The file's permission bits before the run; absent when it did not exist. */
   mode?: number;
+  /** The run's WHAT-CHANGED.md: a later run rewriting it does not make a rollback partial. */
+  summary?: true;
 }
 
 export interface RunManifest {
@@ -211,6 +213,51 @@ function finishSafely(capture: RunCapture): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Has `write` change `file` as part of the finished run `runId`, so rolling
+ * that run back puts the file back too. False, with nothing written, when the
+ * run's manifest cannot be read or the file's earlier content cannot be kept;
+ * an error from `write` propagates.
+ */
+export function writeInRun(runId: string, file: string, write: () => void): boolean {
+  const manifest = readRunManifest(runId);
+  if (!manifest || manifest.files.some((entry) => entry.path === file)) return false;
+  const copy = path.join(runDir(runId), 'files', `summary-${manifest.files.length}`);
+  let content: Buffer | null;
+  let mode: number | undefined;
+  try {
+    content = readOrNull(file);
+    if (content !== null) {
+      fs.writeFileSync(copy, content, { mode: 0o600 });
+      mode = fs.statSync(file).mode & 0o7777;
+    }
+  } catch {
+    fs.rmSync(copy, { force: true });
+    return false;
+  }
+  try {
+    write();
+  } catch (err) {
+    fs.rmSync(copy, { force: true });
+    throw err;
+  }
+  try {
+    manifest.files.push({
+      path: file,
+      before: content === null ? null : path.basename(copy),
+      after: hashOf(file),
+      ...(mode !== undefined ? { mode } : {}),
+      summary: true,
+    });
+    fs.writeFileSync(
+      path.join(runDir(runId), 'manifest.json'),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      { mode: 0o600 }
+    );
+  } catch {}
+  return true;
 }
 
 /** How many captured runs rollback keeps; older ones are deleted. */
