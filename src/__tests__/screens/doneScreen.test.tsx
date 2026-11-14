@@ -323,7 +323,7 @@ describe('DoneScreen dry run', () => {
     const frame = lastFrame() ?? '';
     expect(frame).toContain('Config to keep');
     expect(frame).not.toContain(getShellConfigPath('zsh'));
-    expect(frame).not.toContain('format = ');
+    expect(frame).not.toContain('$character');
   });
 });
 
