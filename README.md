@@ -11,7 +11,7 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/),
 
 - **Live preview**: see your prompt update in real time, rendered by your installed starship binary when available
 - **Cross-shell**: configure zsh, bash, fish, nushell, and PowerShell in one run
-- **Automated installation**: installs Starship, Nerd Fonts (downloads verified against their published SHA-256 digest, extraction sandboxed in a worker), and any missing shells for you
+- **Automated installation**: installs Starship, Nerd Fonts (downloads verified against their published SHA-256 digest, decompressed in a worker with size caps), and any missing shells for you
 - **12 presets**: from minimal plain-text to Tokyo Night, Gruvbox Rainbow, and Catppuccin
 - **14 colour palettes**: one behind every preset, plus high-contrast and colour-blind-safe options; any of them usable with any preset
 - **Powerline prompts**: interlocking coloured blocks with Nerd Font separators

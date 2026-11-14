@@ -35,8 +35,10 @@ Two defensive layers, in order, inside `installNerdFont`:
    offline re-run keeps working.
 2. **Sandboxed extraction** — decompression moves to an `eval`-script `Worker`
    (`src/services/fontExtractor.ts`) that returns `{ name, bytes }` entries for
-   the _main thread_ to write. A hostile archive can only crash the throwaway
-   worker.
+   the _main thread_ to flatten to basenames and write. A parser crash ends
+   the throwaway worker, not the wizard; size and count caps bound how far an
+   archive can expand. The worker runs with the wizard's rights, so it is not a
+   security boundary.
 
 ### Why these specifics
 
@@ -49,10 +51,12 @@ Two defensive layers, in order, inside `installNerdFont`:
 - **Worker, not a new process or pure sandbox**: a forked helper would need IPC
   project setup and lifecycle management; the worker keeps everything in
   `dist/`. And there is no untrusted _code execution_ worth sandboxing beyond
-  the parser — the main-thread writes keep `path.join(fontsDir, basename)` and
-  `fs.writeFileSync` in one auditable place, and the worker's basename
-  flattening means its output can never escape `fontsDir` even if an entry is
-  full of `../` segments.
+  the parser. The worker keeps parsing off the main thread and bounds how far an
+  archive can expand; it is not a security boundary. The main thread flattens
+  the entry names to basenames (`fontFiles` in `fontExtractor.ts`) and does the
+  writes, keeping `path.join(fontsDir, basename)` and `fs.writeFileSync` in one
+  place, so no entry can escape `fontsDir` even if it is full of `../`
+  segments.
 - **Timeout**: a stuck decompression can't wedge the install chain; the worker
   gets killed after a fixed window.
 - **Existing tests survive**: because writes stay on the main thread, the

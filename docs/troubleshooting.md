@@ -230,15 +230,18 @@ ls ~/Library/Application\ Support/nushell/vendor/autoload/   # macOS
 
 ## A shell install fails
 
-When the wizard tries to install a shell (e.g. fish) and cannot, the
-`Install <shell>` task fails and the run carries on; that shell's `Configure`
-task (and `chsh`, if it was the default shell) fails with it. The task shows
-one of:
+When no package manager was detected, or the detected one has no package for
+the shell, the `Install <shell>` task is skipped with a note (`no package
+manager here` or `no <manager> package`: install the shell yourself). The run
+still sets the shell up, so its Starship config is ready once you install it;
+only `chsh`, if it was the default shell, fails with `Cannot set <shell> as the
+default shell — install it first`.
 
-- `Cannot auto-install <shell>: no package manager detected` or
-  `No package for <shell> on <manager>` — install the shell yourself, then re-run
-- `Command failed with exit code <n>: ...` — the package install itself failed
-- `<binary> not found in PATH` — from `chsh`, when the shell is still missing
+When the package install itself runs and fails, the `Install <shell>` task
+shows `Command failed with exit code <n>: ...` and the run carries on. That
+shell's `Configure` task fails with `Install of <shell> failed`, and `chsh`, if
+it was the default shell, with `Cannot set <shell> as the default shell — its
+install failed`.
 
 For a failed package install, check that:
 

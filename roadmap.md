@@ -119,9 +119,10 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 > Gate met: headless `generate`/`apply` unit tests and the golden fixtures pass, coverage holds, and a CI
 > job now invokes **both** subcommands through the real `dist/index.js` entrypoint — the macOS smoke runs
-> `generate` (stdout + `-o`/`--export`) and a real `apply` (`Verify config` included), and the distro-smoke
-> `script` cell chains headless `generate` and `apply` legs off a real install in the scratch HOME
-> (`scripts/ci/headlessGenerateSmoke.mjs`, `scripts/ci/headlessApplySmoke.mjs`).
+> `generate` (stdout + `-o`/`--export`) and a real `apply` (`Verify config` included). In the scratch HOME
+> every distro-smoke cell runs the headless `generate` smoke, every cell but `brew` the headless `apply`
+> smoke, and the `script` cell first drives the real wizard install
+> (`scripts/ci/headlessGenerateSmoke.mjs`, `scripts/ci/headlessApplySmoke.mjs`, `scripts/ci/wizardSmoke.mjs`).
 
 ---
 
@@ -217,13 +218,14 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 - **Shipped:** `shell-configurator uninstall [--shells …] [--starship] [--font <id>] [--yes] [--dry-run] [--json]`
   (`services/uninstall.ts`). It strips every ShellConfigurator rc block (rc backed up first; a carried PATH
   line stays when the user's own or fish's `conf.d` init does) and moves per-shell configs to `.bak-*`,
-  then prints the `cp` commands that copy each backup back. Starship and the font are opt-in rather than
+  then points at `rollback` to undo it (or, when the run could not be captured, prints the `cp` commands that
+  copy each backup back). Starship and the font are opt-in rather than
   default, since either may predate the wizard: Starship goes only when no shell would still start it, as
   the script binary or a pacman/apk/Homebrew package that package manager owns; font files are listed from
   the cached archive's headers, and terminals still set to the font are named. A shell's config stays when
   its rc could not be cleaned. It asks on a terminal, needs `--yes` elsewhere, and records an `uninstall`
-  run in history. The headless apply smoke now runs a real uninstall, a no-op second uninstall and the
-  printed undo commands on every distro cell. Not reverted: the terminal font setting and `chsh`.
+  run in history. The headless apply smoke runs a real uninstall, a no-op second uninstall and a
+  `rollback --yes` that brings the rc block and config back, on every distro cell but `brew`. Not reverted: the terminal font setting and `chsh`.
 
 **P4.2 — Rollback snapshots (#14)** — **DONE**
 
@@ -290,7 +292,8 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 - **Why.** "My prompt is slow" is its own support class — distinct from health (#10, is it broken?) and correctness (does it work?). Starship ships the measurement; nobody exposes it to the user.
 - **How.** One executor + one table of suggestions, same faked-exec test pattern as the detector; reuse P2.1's scratch-dir harness. **Effort.** S-M. **D:** P2.1.
 - **Shipped:** `shell-configurator timings` (`services/starshipProbe.ts`) runs `starship timings` in the current
-  folder against a config built from the generate flags, or the one `--config` names, and prints each module
+  folder against the config Starship loads now (`$STARSHIP_CONFIG`, else `~/.config/starship.toml`, else
+  Starship's built-in default), the one `--config` names, or one built from the look flags, and prints each module
   slowest first with suggestions: `command_timeout` when a tool timed out, `scan_timeout` when the folder scan
   did, and a fix per module over 50ms. Modules run in parallel, so the slowest one is the prompt's wait.
   `--json` gives the same data.

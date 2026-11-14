@@ -40,12 +40,12 @@ Screens that don't benefit from a preview (Welcome, Installing, Done) set `hideP
 
 **Purpose**: Detect system state, gate entry into the wizard.
 
-**Layout**: Full-width (no preview). Shows title, description, and a bordered detection results box.
+**Layout**: Full-width (no preview). Shows title, description, and the detection results below them (no border).
 
 **Flow**:
 
-- On mount, runs async detection: package manager, Starship status (including a script install that PATH does not reach yet), terminal emulator, and container (installed shells are detected later, on the Shell Select step). A detected container shows a note that the font and default-shell steps will be skipped
-- Displays results as they complete
+- On mount, runs async detection: package manager, Starship status (including a script install that PATH does not reach yet), terminal emulator, container, and SSH/WSL session (installed shells are detected later, on the Shell Select step). A detected container shows a note that the font and default-shell steps will be skipped
+- Shows "Detecting system..." until every check is done, then all results at once
 - If Starship is installed: Enter to continue
 - If not: SelectInput with "Install automatically" / "I'll install manually"
   - "Install manually" shows the install-script command (`curl -sS https://starship.rs/install.sh | sh`) and the docs link, and offers:

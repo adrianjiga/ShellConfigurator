@@ -404,7 +404,7 @@ async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> 
   fs.mkdirSync(fontsDir, { recursive: true });
 
   for (const file of fontFiles) {
-    // The worker flattens entry paths to basenames; do not join onto the raw path.
+    // extractFontFiles flattens entry paths to basenames; do not join onto the raw path.
     fs.writeFileSync(path.join(fontsDir, file.name), file.bytes);
   }
 

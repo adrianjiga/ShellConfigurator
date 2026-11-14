@@ -51,18 +51,21 @@ interface WizardState {
   vimMode: boolean; // Distinct character in vim normal mode
   directoryTruncationLength: number; // Parent folders shown; 0 means full path
   directorySubstitutions: DirectorySubstitution[]; // Folder-name substitutions
+  keepExistingConfig: boolean; // Adopt mode: keep the shared starship.toml as-is
+  sharedConfigToml: string | null; // Imported shared config (--import-url); runtime-only, never serialized
   selectedShells: ShellId[]; // Shells to configure
   packageManager: PackageManager; // Detected package manager
   installedShells: ShellId[]; // Shells already on system
+  terminal: TerminalId | null; // Detected terminal emulator; lets the wizard select the font in it
+  container: boolean; // True inside a container/CI sandbox — fonts are per-host and chsh is skipped
+  remoteSession: RemoteSession; // 'ssh' | 'wsl' | null — the terminal and its fonts belong to another computer or to Windows
   nerdFontToInstall: NerdFontChoice; // {kind:'none'|'select'|'install',id}
   setDefaultShell: ShellId | null; // Shell to set via chsh
   skipStarshipInstall: boolean; // "Continue without Starship" — drops the Starship install, Verify and the unset pass; rc tasks stay in the plan, marked skipped
-  keepExistingConfig: boolean; // Adopt mode: keep the shared starship.toml as-is
-  sharedConfigToml: string | null; // Imported shared config (--import-url); runtime-only, never serialized
   dryRun: boolean; // No install or config-write happens — the wizard only previews
   installResults: InstallTask[]; // Final task statuses from InstallingScreen
-  terminal: TerminalId | null; // Detected terminal emulator; lets the wizard select the font in it
-  container: boolean; // True inside a container/CI sandbox — fonts are per-host and chsh is skipped
+  runId: string | null; // The install's captured run, which rollback can put back; runtime-only
+  summaryPath: string | null; // Where WHAT-CHANGED.md was written; runtime-only
 }
 ```
 
@@ -180,8 +183,8 @@ interface ModuleDef {
   id: ConfigurableModuleId;
   label: string; // Display name in UI
   description: string; // Shown when module is focused
-  defaultLeft: boolean; // Included in left prompt by default
-  defaultRight: boolean; // Included in right prompt by default
+  defaultLeft: boolean; // Only printed by --list-modules --json; the real defaults are CORE_MODULES / DEFAULT_STATE
+  defaultRight: boolean; // Only printed by --list-modules --json
   previewSegment: (hasNerdFont: boolean, sample: PreviewSample) => string; // Text for PromptPreview
   plainPreview?: (hasNerdFont: boolean) => string; // Plain-prompt preview, when starship's default format adds words or brackets
   content: string; // Inner format, e.g. '$symbol$version' — what powerline wraps in separators
@@ -199,7 +202,7 @@ customFormat, directoryTruncationLength, directorySubstitutions, styleFor }`
 where `styleFor(name)` builds the style expression for a palette colour — the
 colour on its own in a normal prompt, or an `fg:fg bg:<colour>` pair under
 powerline. Only modules that carry their colour in differently-named keys
-(`username`/`hostname` → `style_user`/`style_root`, `battery` →
+(`username` → `style_user`/`style_root`, `battery` →
 `[[battery.display]]`) need `styleFor`; the generator emits the plain `style` key
 for everyone else.
 
@@ -403,7 +406,10 @@ never leave a half-written file.
 ### detector.ts
 
 All detection is async — there are no sync counterparts, because every function
-runs while the Ink render loop is live and must not block it.
+runs while the Ink render loop is live. One short sync probe remains:
+when `starship` is not on PATH, `findStarshipAsync` calls
+`getMissingStarshipPathDir`, which runs `command -v starship` through
+`execFileSync` before it looks in the script-install bin dir.
 
 ```typescript
 function detectPackageManagerAsync(): Promise<PackageManager>;
@@ -614,9 +620,15 @@ function completionScript(shell: 'bash' | 'zsh' | 'fish'): string;
 ### starshipProbe.ts / share.ts
 
 ```typescript
-function timePrompt(toml: string, path: string, deps?: ProbeDeps): Promise<TimingsReport>;
-// Writes `toml` to a temporary folder and runs `starship timings --path <path>`
-// against it (PWD = path, the real HOME), then parses the rows (parseTimings,
+function timePrompt(
+  config: { toml: string; path?: string },
+  folder: string,
+  deps?: ProbeDeps,
+  scratchDeps?: Pick<ScratchDeps, 'createScratch' | 'writeConfig' | 'cleanup'>
+): Promise<TimingsReport>;
+// Times `config.path` when it is given; otherwise writes `config.toml` to a
+// temporary folder and times that. Runs `starship timings --path <folder>`
+// (PWD = folder, the real HOME), then parses the rows (parseTimings,
 // slowest first) and suggests fixes (suggestFixes): a command that timed out
 // raises command_timeout (at least 1000ms), a timed-out folder scan raises
 // scan_timeout, and each module at or over SLOW_MODULE_MS (50) gets a fix
@@ -785,7 +797,7 @@ function runInstallTasks(
 
 ## Headless CLI & Run Data
 
-The public flag surface in `src/index.tsx`/`src/services/args.ts`, in ten groups.
+The public flag surface in `src/index.tsx`/`src/services/args.ts`, in twelve groups.
 
 ### Interactive
 
@@ -1197,3 +1209,5 @@ new fixture(s) under `src/__tests__/golden/`.
 4. **`src/services/headless.ts`** and **`src/services/state.ts`** — add to their
    accepted-symbol lists, and to the `--character` line in the `--help` text
    (`src/index.tsx`)
+5. **`src/services/cliSurface.ts`** — add to the value list of `FLAGS.character`,
+   which the shell completions offer

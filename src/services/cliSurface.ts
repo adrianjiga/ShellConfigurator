@@ -71,7 +71,7 @@ export const FLAGS = {
   uninstallFont: flag('--font', 'Also remove this Nerd Font', FONT_IDS),
   list: flag('--list', 'List the runs that changed files'),
   run: flag('--run', 'Roll back this run (an id from --list)', 'text'),
-  config: flag('--config', 'Time this starship.toml instead of one built from flags', 'file'),
+  config: flag('--config', 'Time this starship.toml instead of the one Starship loads now', 'file'),
 } satisfies Record<string, FlagInfo>;
 
 export const GLOBAL_FLAGS: readonly FlagInfo[] = [FLAGS.help, FLAGS.version];

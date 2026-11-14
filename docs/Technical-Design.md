@@ -190,11 +190,12 @@ Normal per-shell setup leaves the shared `~/.config/starship.toml` untouched, so
 
 ```
 # Added by ShellConfigurator
-export STARSHIP_CONFIG="/home/u/.config/starship/zsh.toml"
+export STARSHIP_CONFIG='/home/u/.config/starship/zsh.toml'
 eval "$(starship init zsh)"
 ```
 
-Fish uses `set -gx STARSHIP_CONFIG ...`; nushell and PowerShell have `rcFile: null` and return their
+The path is single-quoted (`starshipConfigLine` via `rcQuote`, which uses `posixShellQuote`).
+Fish uses `set -gx STARSHIP_CONFIG '...'`, quoted by fish's rules (`fishQuote`); nushell and PowerShell have `rcFile: null` and return their
 manual note instead.
 
 **Pipeline**:
@@ -338,13 +339,13 @@ All install commands go through `runCommand` in `src/services/exec.ts` — an as
 
 `installer.ts` (Starship/shell installs, `chsh`) composes commands and delegates to `runCommand`; fonts never go through the shell — `installNerdFont` downloads with `fetch` and hands the archive to a worker (below).
 
-### Verified Font Downloads & Sandboxed Extraction
+### Verified Font Downloads & Worker Extraction
 
 `installNerdFont` treats a downloaded archive as hostile input until proven otherwise:
 
 1. **Download guards**: the request carries an `AbortSignal.timeout` (`FONT_DOWNLOAD_TIMEOUT_MS`), so a hung connection can't wedge the install chain, and the archive is refused when the declared `content-length` or the received buffer exceeds `MAX_FONT_ARCHIVE_BYTES`.
 2. **Checksum verification**: before extraction the buffer's SHA-256 is computed (`node:crypto`) and compared with the `sha256:` digest GitHub publishes in the release asset metadata (`GET /repos/ryanoasis/nerd-fonts/releases/latest`, matched by `zipName`). The lookup also has its own `AbortSignal.timeout`. The check fails closed: a mismatched archive, a release without a digest for the asset, or a failed lookup with nothing cached all refuse to install with distinct errors. A verified archive is cached after install and reused, without downloading, when its digest still matches the latest release or the lookup fails.
-3. **Worker-isolated extraction** (`src/services/fontExtractor.ts`): `extractFontFiles()` decompresses in an `eval`-script `Worker` (CommonJS `require` of the resolved fflate path, archive and path passed through `workerData`), so malformed input can only crash the throwaway worker, never the wizard. It refuses an archive whose entries expand past a per-entry or total size cap. The worker filters entries to font files and flattens them to basenames — deliberately structured-cloned back as `{ name, bytes }` while the _writes_ stay on the main thread, keeping path handling and `fs.writeFileSync` in one auditable place. A ~60s timeout terminates a stuck worker.
+3. **Worker-isolated extraction** (`src/services/fontExtractor.ts`): `extractFontFiles()` decompresses in an `eval`-script `Worker` (CommonJS `require` of the resolved fflate path, archive and path passed through `workerData`), so the parsing runs off the main thread and a parser crash ends the worker, not the wizard. The worker is not a security boundary: it runs with the same rights as the wizard. It keeps only font-file entries and refuses an archive that holds too many of them or whose entries expand past a per-entry or total size cap, checked both from the headers and from the bytes really unpacked. Entries come back structured-cloned as `{ name, bytes }` with their names as stored; the main thread then flattens them to basenames and drops hidden, NUL-bearing or repeated names (`fontFiles`), and does the writes, keeping path handling and `fs.writeFileSync` in one place. A ~60s timeout terminates a stuck worker.
 
 ### Platform-Aware Font Installation
 
@@ -440,7 +441,7 @@ because fonts are per-host and `chsh` is meaningless there.
 
 ### Async-Only Detection
 
-Every detection function is async and there are no sync counterparts — they run during the Ink render loop and must not block it. They use `promisify(execFile)` rather than `execFileSync`:
+Every detection function is async and there are no sync counterparts — they run during the Ink render loop. They use `promisify(execFile)` rather than `execFileSync`, with one exception: when `starship` is not on PATH, `findStarshipAsync` calls `getMissingStarshipPathDir`, which runs one short `command -v starship` through `execFileSync` (`probe` in `src/services/exec.ts`):
 
 - **`detectPackageManagerAsync`**: Parallelizes independent checks — `brew` + `pacman` run together, then the os-release read + `apt-get` + `dnf` + `apk` together — while preserving priority order
 - **`detectInstalledShellsAsync`**: Runs all shell checks in parallel via `Promise.all` (biggest performance win — wall-clock time drops from 5 sequential forks to 1 parallel batch)
