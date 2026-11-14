@@ -663,6 +663,15 @@ describe('index headless routing', () => {
     );
   });
 
+  it('reports a repair with nothing to fix as a real run, not a dry run', async () => {
+    mockRunRepair.mockResolvedValue({ ok: true, actions: [], dryRun: true });
+    mockFormatRepairReport.mockImplementation((report) => `REPORT ${report.dryRun}\n`);
+
+    await route(['repair']);
+
+    expect(stdoutWrite).toHaveBeenCalledWith('REPORT false\n');
+  });
+
   it('sets a non-zero exit code when a repair still fails a check', async () => {
     process.exitCode = 0;
     mockRunRepair.mockResolvedValue({ ok: false, actions: [] });
@@ -1292,6 +1301,24 @@ describe('index rollback command', () => {
       rollbackOf: runId,
       partial: false,
     });
+  });
+
+  it('records nothing for --run on a run that is already rolled back', async () => {
+    fs.writeFileSync(rc(), 'zero');
+    const runId = recordedRun('apply', 'one');
+    fs.writeFileSync(rc(), 'zero');
+    appendHistory({
+      version: 1,
+      timestamp: new Date().toISOString(),
+      kind: 'rollback',
+      runId: 'later-rollback',
+      rollbackOf: runId,
+    });
+
+    await runRollbackCommand(parseCliArgs(['rollback', '--run', runId]), 'rollback', io());
+
+    expect(output()).not.toContain('now counts as rolled back');
+    expect(mockRecordRun).not.toHaveBeenCalled();
   });
 
   it('records nothing for a dry run whose files are already back', async () => {

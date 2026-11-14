@@ -439,7 +439,7 @@ export async function runRepairCommand(
           () => runRepair(state, deps, { ...options, before: plan.before }),
           { record: { kind: 'repair', command, ...(state ? { state } : {}) } }
         )
-      : { result: plan, runId: null };
+      : { result: { ...plan, dryRun: flags.dryRun ?? false }, runId: null };
   } catch (err) {
     if (!(err instanceof CapturedRunError)) throw err;
     record(1, err.runId);
@@ -650,7 +650,7 @@ export async function runRollbackCommand(
         }
       )
     : { result: runRollback(target.runId, steps, { dryRun }), runId: null };
-  const alreadyBack = !changes && !dryRun && report.complete;
+  const alreadyBack = !changes && !dryRun && report.complete && !target.rolledBack;
   process.stdout.write(
     flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatRollbackReport(report)
   );
