@@ -356,13 +356,17 @@ function applyShellConfig(
 // of the opposite mode (unset guard, adopt block, or per-shell export), so a
 // re-run can repair a polluted rc file.
 
-function plannedRcBlock(
+function appliedRcContent(
   shellId: ShellId,
-  pointAtSharedConfig: boolean,
-  pathDir: string | null
-): string[];
-// The marker + lines applyShellConfig appends to an rc file with no Starship
-// lines yet (empty for manual-only shells). ReviewScreen shows this exact block.
+  existing: string,
+  opts?: ApplyShellConfigOptions,
+  io?: RcIo
+): { content: string; applied: boolean; note?: string } | null;
+function resetRcContent(shellId: ShellId, existing: string, io?: RcIo): RcPlan | null;
+// What applyShellConfig / resetSharedShellConfig make of the rc text `existing`,
+// without writing: the writers call these and write `content` when it differs.
+// The dry-run diff and ReviewScreen use them too, so a preview never drifts from
+// the real write. Null for manual-only shells.
 
 function resetSharedShellConfig(shellId: ShellId): { applied: boolean; note?: string };
 // Removes a per-shell block an earlier run wrote (keeping its PATH line and the
@@ -512,7 +516,11 @@ function trackedFiles(): string[];
 
 function captureRun<T>(
   files: string[],
-  run: () => Promise<T>
+  run: () => Promise<T>,
+  options?: {
+    onChanged?: (runId: string, files: RunFile[], error?: unknown) => void;
+    rewritable?: readonly string[];
+  }
 ): Promise<{ result: T; runId: string | null }>;
 // Copies the files into <stateDir>/runs/<runId>/files before run(), then keeps
 // only those the run changed in manifest.json ({ version, runId, files: [{ path,
@@ -524,9 +532,15 @@ function captureRun<T>(
 // record. A capture that fails partway removes its folder; a file the run left
 // unreadable is kept with after: 'unreadable' (UNREADABLE_AFTER); only the
 // newest 50 run folders are kept (pruneRuns, KEPT_RUNS). Tests get a stub from
-// setup.ts.
+// setup.ts. onChanged runs once the run is over and changed files (also after a
+// throw, with the error), before the manifest is written, so whatever it writes
+// to a captured file is part of the run; its own errors are ignored. Files in
+// rewritable are marked `rewritable: true`: rollback leaves such a file alone,
+// without counting it as left, only when a later captured run wrote its current
+// content (laterRunWrites). The manifest is written to a temp file and renamed.
 
 function readRunManifest(runId: string): RunManifest | null;
+function laterRunWrites(runId: string, file: string): Set<string | null>;
 ```
 
 ### rollback.ts
@@ -555,6 +569,46 @@ function runRollback(
 ): RollbackReport;
 // Statuses: restored | removed | skipped | failed | planned. complete is false
 // while a change of the run stays in place (left: true on that action).
+```
+
+### whatChanged.ts / listings.ts
+
+```typescript
+function writeWhatChangedSafely(run: WhatChangedRun): string | null;
+// Called from the onChanged step of a wizard install's or apply's captureRun,
+// so only for a run that changed files (a crashed apply too, with its unfinished
+// tasks failed; the wizard skips it once its screen has unmounted): writes ~/.config/starship/WHAT-CHANGED.md (renderWhatChanged) listing the
+// tasks and their outcome, the files the run changed (created/modified/removed,
+// the files the capture step passes), each selected shell's Starship lines and config (the
+// shared starship.toml in adopt mode), and the rollback/uninstall/doctor
+// commands, with a note that a later uninstall or rollback may have undone it.
+// The summary is a captured, rewritable file of that run, so rolling the run
+// back puts the previous summary back; a later run rewriting it does not make
+// an older run's rollback partial, while a hand edit does. A run that changed
+// nothing leaves the last summary alone, and uninstall and rollback never touch
+// it. Home is shown as ~, the recorded command has URL
+// credentials and queries dropped (redactUrls), and the --font and --starship
+// removal hints appear only when this run installed them. Returns the path, or null when it
+// did not write (never throws). Tests get a stub from setup.ts.
+
+function listEntries(kind: 'presets' | 'modules' | 'fonts'): ListEntry[];
+// The ids --list-presets/--list-modules/--list-fonts print, with label,
+// description and, for --json, the data a script needs (a preset's palette,
+// powerline and modules; a module's default side; a font's family).
+```
+
+### cliSurface.ts / completions.ts
+
+```typescript
+const SUBCOMMAND_INFO: Record<Subcommand, SubcommandInfo>;
+// Each subcommand's description and flags (FLAGS), and completions' positional
+// shell argument. A test keeps FLAGS in step with the parser's KNOWN_FLAGS, so
+// a new flag must be described here.
+
+function completionScript(shell: 'bash' | 'zsh' | 'fish'): string;
+// A completion script generated from SUBCOMMAND_INFO: subcommands, each one's
+// flags, and flag values (preset, palette, shell, font and character ids, files;
+// --shells completes a comma-separated list).
 ```
 
 ### debugInfo.ts
@@ -685,7 +739,7 @@ function runInstallTasks(
 
 ## Headless CLI & Run Data
 
-The public flag surface in `src/index.tsx`/`src/services/args.ts`, in eight groups.
+The public flag surface in `src/index.tsx`/`src/services/args.ts`, in ten groups.
 
 ### Interactive
 
@@ -724,7 +778,7 @@ shell-configurator generate --preset <id> [flags]
 ### apply (an install from a state card)
 
 ```
-shell-configurator apply [--state <file>] [generate flags] [--dry-run] [--adopt] [--import-url <url>]
+shell-configurator apply [--state <file>] [generate flags] [--dry-run [--json]] [--adopt] [--import-url <url>]
   --state       the state card to install (also: --import); without it, apply
                 takes the generate flags above and --shells is required
   --adopt       keep the shared ~/.config/starship.toml (never writes per-shell files)
@@ -732,7 +786,46 @@ shell-configurator apply [--state <file>] [generate flags] [--dry-run] [--adopt]
                 bounded — a 10s timeout and a 1 MB cap reject a hung or oversized
                 response. A non-http(s) URL is a usage error; an HTTP error, an
                 empty or HTML body is a run error)
+  --json        with --dry-run, print { dryRun, shells, installStarship, tasks,
+                config, changes } instead of text; config is { kind: 'per-shell', toml,
+                tomlIfFontFails? } (the glyph-free config written when a planned font
+                install fails),
+                { kind: 'imported', path, toml } or { kind: 'kept', path, exists }.
+                A real apply with --json is a usage error
 ```
+
+When the run installs a Nerd Font and the config would differ without it, the
+text dry run and the Review screen add `If the Nerd Font install fails, the config
+is written without Nerd Font glyphs instead.` (`configIfFontFails` in
+`installTasks.ts`).
+
+A dry run also diffs the config and rc files the run would write against what is
+on disk (`plannedFileChanges` in `services/fileDiff.ts`), using the same planners
+as the real writers. The text output ends with `Changes to config and rc files on
+disk:` and a `git diff`-style unified diff per file (a last line without a newline
+is marked `\ No newline at end of file`, as git does); a config the run creates is
+not repeated there, only pointed at (`create <path>: the config shown above`).
+Then a line notes that a real run also saves backups of the configs it replaces
+and writes WHAT-CHANGED.md. With nothing to change it says `No config or rc file on
+disk would change.` In `--json`, `changes` is a list of `{ path, status: 'create'
+| 'modify', added, removed, diff }`, or `{ path, status: 'unreadable', error }`
+for a file it cannot read; files that would stay as they are are left out.
+Backups, WHAT-CHANGED.md, fonts, the Starship binary and terminal configs are not
+part of it.
+
+A real apply writes `~/.config/starship/WHAT-CHANGED.md` and ends with
+`What changed, and how to undo it: <path>`; the wizard's Done screen shows the
+same line.
+
+### List flags
+
+```
+shell-configurator --list-presets | --list-modules | --list-fonts [--json]
+```
+
+Print the ids `--preset`, the module lists and `--font` accept, as aligned
+`id  label — description` lines, or as JSON. They run without a subcommand, one
+at a time, and only `--json` may go with them; any other flag is a usage error.
 
 ### doctor / repair (day-2 health)
 
@@ -840,6 +933,19 @@ shells, the PATH entries and the full doctor report, plus the last recorded run.
 both, and URL credentials, queries and fragments are dropped from the recorded
 command. It reads only, so a failing doctor check does not change its exit
 code. Config flags, `--state`, `--fix` and `--dry-run` are usage errors.
+
+### completions
+
+```
+shell-configurator completions <bash|zsh|fish>
+```
+
+Prints a completion script for the shell (`src/services/completions.ts`). It
+is the only subcommand that takes a positional argument. A missing or unknown
+shell, or any other flag, is a usage error. `--help` shows where each shell
+loads the script from: `~/.local/share/bash-completion/completions/`, the
+first `$fpath` directory as `_shell-configurator`, and
+`~/.config/fish/completions/`.
 
 ### Exit Codes
 

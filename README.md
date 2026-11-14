@@ -25,6 +25,9 @@ An interactive terminal wizard for configuring [Starship](https://starship.rs/),
 - **Uninstall**: remove the rc lines and per-shell configs the wizard wrote (backed up first), and optionally the Nerd Font and Starship itself
 - **Rollback**: every install, apply and uninstall keeps a copy of the files it changes, so `rollback` can put a whole run back, one run at a time
 - **Debug info**: `debug-info` prints a Markdown report of the setup (detection, Starship, shells, PATH, doctor) to paste into a bug report, with your home directory shown as `~`
+- **What changed**: after an install or `apply`, `~/.config/starship/WHAT-CHANGED.md` lists what ran, every file it changed, where each shell's Starship lines are, and how to undo it
+- **Scripting**: `--list-presets`, `--list-modules` and `--list-fonts` (with `--json`) list the ids the flags accept, and `apply --dry-run --json` prints the plan, config and file diffs as JSON
+- **Shell completions**: `completions <bash|zsh|fish>` prints a completion script for every subcommand, flag and value (presets, palettes, shells, fonts)
 
 ## Requirements
 
@@ -62,6 +65,10 @@ shell-configurator uninstall --starship --font <id>  also remove Starship and th
 shell-configurator rollback                   put back the files the newest run changed, after asking (--yes, --dry-run, --json)
 shell-configurator rollback --list            list the runs that changed files; --run <id> rolls back a specific one
 shell-configurator debug-info > issue.md      write a report of the setup for a bug report (--json for the raw data)
+shell-configurator --list-presets [--json]    list the preset ids (also --list-modules, --list-fonts)
+shell-configurator apply --dry-run            show the install plan and a diff of every config and rc file it would change
+shell-configurator apply --dry-run --json     the same plan, config and diffs as JSON
+shell-configurator completions <bash|zsh|fish>  print a completion script (see --help for where each shell loads it from)
 shell-configurator --help                     show usage and exit
 shell-configurator --version                  print the version and exit
 shell-configurator --dry-run                  preview the config without installing (also -d, --no-install)

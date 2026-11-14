@@ -4,7 +4,6 @@ import * as path from 'node:path';
 import { SHELLS } from '../config/shells.ts';
 import { getShellConfigPath, hasManagedRcBlock, startsStarship } from '../generators/shellRc.ts';
 import type { PackageManager, ShellId, TerminalId } from '../types.ts';
-import { quoteArgv, splitQuotedArgv } from './args.ts';
 import { cachedStarshipVersion } from './cache.ts';
 import {
   detectContainerAsync,
@@ -17,7 +16,7 @@ import {
 import { type DoctorReport, formatDoctorReport, runDoctor } from './doctor.ts';
 import { commandPath } from './exec.ts';
 import { type HistoryRecord, readHistory } from './history.ts';
-import { homeDir } from './paths.ts';
+import { redactHome, redactUrls } from './redact.ts';
 
 export interface DebugShell {
   id: ShellId;
@@ -175,47 +174,6 @@ export async function collectDebugInfo(
       : null,
     doctor,
   };
-}
-
-function redactUrl(value: string): string {
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value;
-  try {
-    const url = new URL(value);
-    url.username = '';
-    url.password = '';
-    url.search = '';
-    url.hash = '';
-    return url.toString();
-  } catch {
-    return redactUrlText(value);
-  }
-}
-
-/**
- * Hides the credentials, query and fragment of every URL in a recorded
- * command, where tokens travel. Each argument (or `--flag=value` value) is
- * parsed as a URL, so quoting inside a password cannot hide it.
- */
-export function redactUrls(command: string): string {
-  const argv = splitQuotedArgv(command);
-  if (!argv) return redactUrlText(command);
-  return quoteArgv(
-    argv.map((arg) => {
-      const eq = arg.startsWith('-') ? arg.indexOf('=') : -1;
-      return eq === -1 ? redactUrl(arg) : `${arg.slice(0, eq + 1)}${redactUrl(arg.slice(eq + 1))}`;
-    })
-  );
-}
-
-function redactUrlText(text: string): string {
-  return text.replace(/(\b[a-z][a-z0-9+.-]*:\/\/)([^/\s'"]*@)?([^\s'"?#]*)[^\s'"]*/gi, '$1$3');
-}
-
-/** Shows the home directory as `~`, so a pasted report does not name the user. */
-export function redactHome(text: string, home: string = homeDir()): string {
-  if (home.length <= 1) return text;
-  const escaped = home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return text.replace(new RegExp(`${escaped}(?![^/\\s\`'":,)\\]])`, 'g'), '~');
 }
 
 const yesNo = (value: boolean) => (value ? 'yes' : 'no');

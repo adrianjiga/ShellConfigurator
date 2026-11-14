@@ -11,6 +11,7 @@ import {
 } from '../services/installTasks.ts';
 import { CapturedRunError, captureRun, trackedFiles } from '../services/runCapture.ts';
 import { isUiSuspended, subscribeToUiSuspension } from '../services/tty.ts';
+import { whatChangedPath, writeWhatChangedSafely } from '../services/whatChanged.ts';
 import type { InstallTask, InstallTaskId, WizardState } from '../types.ts';
 
 export const ADVANCE_AFTER_DONE_MS = 1200;
@@ -72,25 +73,53 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
     (async () => {
       let results: InstallTask[];
       let runId: string | null = null;
+      const failedPlan = (err: unknown): InstallTask[] =>
+        buildTaskList(state).map((task) => ({
+          ...task,
+          status: 'failed',
+          error: errorMessage(err),
+        }));
+      let finished: InstallTask[] | undefined;
+      let summaryPath: string | null = null;
       try {
-        const captured = await captureRun(trackedFiles(), () =>
-          runInstallTasks(state, DEFAULT_INSTALL_TASK_DEPS, updateTask, controller.signal)
+        const captured = await captureRun(
+          [...trackedFiles(), whatChangedPath()],
+          async () => {
+            finished = await runInstallTasks(
+              state,
+              DEFAULT_INSTALL_TASK_DEPS,
+              updateTask,
+              controller.signal
+            );
+            return finished;
+          },
+          {
+            rewritable: [whatChangedPath()],
+            onChanged: (changedRunId, files, error) => {
+              if (unmounted) return;
+              summaryPath = writeWhatChangedSafely({
+                kind: 'install',
+                timestamp: new Date().toISOString(),
+                state,
+                results: finished ?? failedPlan(error),
+                runId: changedRunId,
+                files,
+              });
+            },
+          }
         );
         results = captured.result;
         runId = captured.runId;
       } catch (err) {
         if (err instanceof CapturedRunError) runId = err.runId;
         // The chain itself broke: report every step as failed rather than hang here.
-        results = buildTaskList(state).map((task) => ({
-          ...task,
-          status: 'failed',
-          error: errorMessage(err),
-        }));
+        results = failedPlan(err);
       }
 
       // Advance after a brief pause so the user can see the final state
       await new Promise((r) => setTimeout(r, advanceDelayMs));
-      if (!unmounted) onNext({ installResults: results, runId });
+      if (unmounted) return;
+      onNext({ installResults: results, runId, summaryPath });
     })();
 
     return () => {

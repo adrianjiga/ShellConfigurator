@@ -135,6 +135,8 @@ export interface WizardState {
   installResults: InstallTask[];
   /** The captured files of the install, which rollback can put back; null when none. Runtime field. */
   runId: string | null;
+  /** Where the install's WHAT-CHANGED.md summary was written; null when it was not. Runtime field. */
+  summaryPath: string | null;
 }
 
 export const DEFAULT_STATE: WizardState = {
@@ -164,4 +166,5 @@ export const DEFAULT_STATE: WizardState = {
   dryRun: false,
   installResults: [],
   runId: null,
+  summaryPath: null,
 };

@@ -6,9 +6,17 @@ import { ConfigPlan, TaskPlan } from '../components/PlanSections.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { getShell, setupCommand } from '../config/shells.ts';
-import { getSharedConfigPath, plannedRcBlock } from '../generators/shellRc.ts';
+import { getSharedConfigPath } from '../generators/shellRc.ts';
+import { diffHunkLines, type FileChange, plannedFileChanges } from '../services/fileDiff.ts';
 import { fontLabel, plannedPathDir } from '../services/installer.ts';
-import { buildTaskList, plannedFont, plannedResetShells } from '../services/installTasks.ts';
+import {
+  buildTaskList,
+  configIfFontFails,
+  FONT_FALLBACK_NOTE,
+  plannedFont,
+  plannedResetShells,
+} from '../services/installTasks.ts';
+import { redactHome } from '../services/redact.ts';
 import type { ShellId, WizardState } from '../types.ts';
 
 interface ReviewScreenProps {
@@ -17,36 +25,70 @@ interface ReviewScreenProps {
   onBack: () => void;
 }
 
-/**
- * Preview of one shell's wiring: the STARSHIP_CONFIG export plus the init line
- * that get appended to its rc file, or the manual setup command for shells
- * without an rc file (nushell, powershell). In adopt mode no export is added —
- * the shell reads the shared starship.toml — so only the init line is shown.
- */
-function rcSnippet(
-  shellId: ShellId,
-  pointAtSharedConfig: boolean,
-  pathDir: string | null
-): string[] {
+function manualSetup(shellId: ShellId, pointAtSharedConfig: boolean): string[] {
   const shell = getShell(shellId);
   if (!shell) return [];
-  if (shell.rcFile) return plannedRcBlock(shellId, pointAtSharedConfig, pathDir);
-  // Manual-only shells (nushell, powershell): the note plus the command to run,
-  // or adopt mode where the shared config needs no export.
   const command = setupCommand(shell, pointAtSharedConfig);
   // The note refers to "the command above", so it follows the command.
   return shell.manualNote ? [command, shell.manualNote] : [command];
 }
 
+function diffLineColor(line: string): string | undefined {
+  if (line.startsWith('@@')) return uiColor('gray');
+  if (line.startsWith('+')) return uiColor('green');
+  if (line.startsWith('-')) return uiColor('red');
+  return undefined;
+}
+
+function changeSummary(change: FileChange): string {
+  const file = redactHome(change.path);
+  if (change.status === 'unreadable') return `cannot read ${file}: ${change.error}`;
+  const counts = `+${change.added} -${change.removed}`;
+  return `${change.status === 'create' ? 'create' : 'edit  '} ${file} (${counts})`;
+}
+
+function RcWiring({ change }: { change: FileChange | undefined }) {
+  if (!change) {
+    return (
+      <Box marginLeft={2}>
+        <Text color={uiColor('gray')}>already set up: the file stays as it is</Text>
+      </Box>
+    );
+  }
+  if (change.status === 'unreadable') {
+    return (
+      <Box marginLeft={2}>
+        <Text color={uiColor('yellow')}>cannot read it: {change.error}</Text>
+      </Box>
+    );
+  }
+  const lines = diffHunkLines(change.diff).map((text, position) => ({ text, position }));
+  return (
+    <Box flexDirection="column" marginLeft={2}>
+      {lines.map((line) => (
+        <Text key={line.position} color={diffLineColor(line.text)}>
+          {line.text}
+        </Text>
+      ))}
+    </Box>
+  );
+}
+
 export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
   const fontId = plannedFont(state);
   const fontName = fontId ? fontLabel(fontId) : null;
-  const [tasks] = useState(() => buildTaskList(state, plannedResetShells(state)));
+  const [resetShells] = useState(() => plannedResetShells(state));
+  const [fontFallback] = useState(() => configIfFontFails(state) !== null);
+  const [tasks] = useState(() => buildTaskList(state, resetShells));
   const [sharedConfigShadowed] = useState(
     () => !state.keepExistingConfig && fs.existsSync(getSharedConfigPath())
   );
-  const [pathDir] = useState(() =>
-    state.skipStarshipInstall ? null : plannedPathDir(state.packageManager)
+  const [changes] = useState(() =>
+    plannedFileChanges(
+      state,
+      resetShells,
+      state.skipStarshipInstall ? null : plannedPathDir(state.packageManager)
+    )
   );
 
   useInput((_char, key) => {
@@ -75,6 +117,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
 
         <TaskPlan title="This run will" tasks={tasks} />
         <ConfigPlan state={state} />
+        {fontFallback && <Text color={uiColor('gray')}>{FONT_FALLBACK_NOTE}</Text>}
 
         {sharedConfigShadowed && (
           <Text color={uiColor('yellow')}>
@@ -82,6 +125,23 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
             read their own configs instead. To keep using it, run shell-configurator apply --adopt.
           </Text>
         )}
+
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold>Config and rc files</Text>
+          {changes.length === 0 ? (
+            <Box marginLeft={1}>
+              <Text color={uiColor('gray')}>No config or rc file changes.</Text>
+            </Box>
+          ) : (
+            changes.map((change) => (
+              <Box key={change.path} marginLeft={1}>
+                <Text color={change.status === 'unreadable' ? uiColor('yellow') : undefined}>
+                  {changeSummary(change)}
+                </Text>
+              </Box>
+            ))
+          )}
+        </Box>
 
         <Box flexDirection="column" marginTop={1} gap={1}>
           <Text bold>Shell wiring</Text>
@@ -99,11 +159,15 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
                     {shell?.label ?? shellId}
                     {shell?.rcFile ? ` — ${shell.rcFile}` : ''}
                   </Text>
-                  {rcSnippet(shellId, state.keepExistingConfig, pathDir).map((line) => (
-                    <Box key={line} marginLeft={2}>
-                      <Text color={uiColor('yellow')}>{line}</Text>
-                    </Box>
-                  ))}
+                  {shell?.rcFile ? (
+                    <RcWiring change={changes.find((change) => change.path === shell.rcFile)} />
+                  ) : (
+                    manualSetup(shellId, state.keepExistingConfig).map((line) => (
+                      <Box key={line} marginLeft={2}>
+                        <Text color={uiColor('yellow')}>{line}</Text>
+                      </Box>
+                    ))
+                  )}
                 </Box>
               );
             })}

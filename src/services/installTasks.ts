@@ -123,6 +123,19 @@ export function plannedFont(state: WizardState): string | null {
   return fontId && !state.container ? fontId : null;
 }
 
+export const FONT_FALLBACK_NOTE =
+  'If the Nerd Font install fails, the config is written without Nerd Font glyphs instead.';
+
+/**
+ * The per-shell config the run writes instead when its font install fails;
+ * null when it installs no font or the config would be the same.
+ */
+export function configIfFontFails(state: WizardState): string | null {
+  if (!plannedFont(state) || state.keepExistingConfig) return null;
+  const withoutFont = generateToml({ ...state, hasNerdFont: false });
+  return withoutFont === generateToml(state) ? null : withoutFont;
+}
+
 /** The terminal this run points at the installed font, if any. */
 function plannedTerminal(state: WizardState): TerminalId | null {
   return plannedFont(state) ? state.terminal : null;

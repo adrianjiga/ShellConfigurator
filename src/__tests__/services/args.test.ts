@@ -41,6 +41,16 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['debug-info']).subcommand).toBe('debug-info');
     });
 
+    it('takes the shell completions writes a script for as its one argument', () => {
+      const flags = parseCliArgs(['completions', 'zsh']);
+      expect(flags.subcommand).toBe('completions');
+      expect(flags.completionShell).toBe('zsh');
+      expect(() => parseCliArgs(['completions', 'zsh', 'fish'])).toThrow(
+        /Unexpected argument 'fish'/
+      );
+      expect(() => parseCliArgs(['doctor', 'zsh'])).toThrow(/Unexpected argument 'zsh'/);
+    });
+
     it('rejects an unknown word in the subcommand position', () => {
       expect(() => parseCliArgs(['deploy'])).toThrow(/Unknown command 'deploy'/);
       expect(() => parseCliArgs(['docter'])).toThrow(/Unknown command 'docter'/);
@@ -49,7 +59,7 @@ describe('parseCliArgs', () => {
 
     it('lists the available commands in the error', () => {
       expect(() => parseCliArgs(['deploy'])).toThrow(
-        /generate, apply, doctor, repair, uninstall, rollback, debug-info/
+        /generate, apply, doctor, repair, uninstall, rollback, debug-info, completions/
       );
     });
 
@@ -85,6 +95,9 @@ describe('parseCliArgs', () => {
       ['-y', 'yes', true],
       ['--starship', 'starship', true],
       ['--list', 'list', true],
+      ['--list-presets', 'listPresets', true],
+      ['--list-modules', 'listModules', true],
+      ['--list-fonts', 'listFonts', true],
     ];
 
     it.each(cases)('%s sets %s to %s', (arg, key, expected) => {

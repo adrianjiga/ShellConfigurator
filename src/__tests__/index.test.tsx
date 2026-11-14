@@ -95,6 +95,7 @@ import {
   recordInstallOutcome,
   reportFatal,
   routeCli,
+  runCompletionsCommand,
   runDebugInfoCommand,
   runGlobalFlags,
   runHeadlessCommand,
@@ -103,9 +104,11 @@ import {
   type UninstallIo,
 } from '../index.tsx';
 import { parseCliArgs } from '../services/args.ts';
+import { completionScript } from '../services/completions.ts';
 import type { DebugInfoDeps } from '../services/debugInfo.ts';
 import { CliRunError, CliUsageError } from '../services/errors.ts';
 import { appendHistory } from '../services/history.ts';
+import { formatListing, listEntries } from '../services/listings.ts';
 import { homeDir } from '../services/paths.ts';
 import { beginRunCapture, captureRun, finishRunCapture, runDir } from '../services/runCapture.ts';
 import { serializeState } from '../services/state.ts';
@@ -896,6 +899,8 @@ describe('index uninstall command', () => {
     [['--preset', 'pure-prompt'], /--preset cannot be used with uninstall/],
     [['--state', 'card.json'], /--state cannot be used with uninstall/],
     [['--fix'], /--fix cannot be used with uninstall/],
+    [['--include-warnings'], /--include-warnings cannot be used with uninstall/],
+    [['--restore'], /--restore cannot be used with uninstall/],
     [['--font', 'none'], /not none/],
     [['--font', 'Comic'], /Unknown Nerd Font/],
     [['--shells', 'tcsh'], /Unknown shell id/],
@@ -1089,6 +1094,9 @@ describe('index rollback command', () => {
   it.each([
     [['--preset', 'pure-prompt'], /--preset cannot be used with rollback/],
     [['--state', 'card.json'], /--state cannot be used with rollback/],
+    [['--fix'], /--fix cannot be used with rollback/],
+    [['--include-warnings'], /--include-warnings cannot be used with rollback/],
+    [['--restore'], /--restore cannot be used with rollback/],
   ])('rejects %o', async (args, message) => {
     await expect(
       runRollbackCommand(parseCliArgs(['rollback', ...args]), 'rollback', io())
@@ -1177,5 +1185,112 @@ describe('index debug-info command', () => {
   it('documents debug-info in the help text', () => {
     runGlobalFlags(parseCliArgs(['--help']));
     expect(output()).toContain('shell-configurator debug-info');
+  });
+});
+
+describe('index completions command', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+  });
+
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+  });
+
+  const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
+
+  it.each(['bash', 'zsh', 'fish'] as const)('prints the %s script', (shell) => {
+    runCompletionsCommand(parseCliArgs(['completions', shell]));
+    expect(output()).toBe(completionScript(shell));
+  });
+
+  it('routes the subcommand', async () => {
+    expect(await runHeadlessCommand(parseCliArgs(['completions', 'fish']), '')).toBe(true);
+    expect(output()).toContain('complete -c shell-configurator');
+  });
+
+  it.each([
+    [['completions'], /completions needs a shell: bash, zsh, fish/],
+    [['completions', 'tcsh'], /No completions for 'tcsh'/],
+    [['completions', 'zsh', '--json'], /--json cannot be used with completions/],
+    [['completions', 'zsh', '--preset', 'pure-prompt'], /--preset cannot be used with completions/],
+    [
+      [
+        'completions',
+        'bash',
+        '--run',
+        'abc',
+        '--yes',
+        '--include-warnings',
+        '--starship',
+        '--list',
+      ],
+      /--include-warnings, --yes, --starship, --list, --run cannot be used with completions/,
+    ],
+  ])('rejects %o', (args, message) => {
+    expect(() => runCompletionsCommand(parseCliArgs(args))).toThrow(message);
+  });
+
+  it('documents completions and where to install them in the help text', () => {
+    runGlobalFlags(parseCliArgs(['--help']));
+    expect(output()).toContain('shell-configurator completions <bash|zsh|fish>');
+    expect(output()).toContain('~/.config/fish/completions/shell-configurator.fish');
+  });
+});
+
+describe('index list flags', () => {
+  let stdoutWrite: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+  });
+
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+  });
+
+  const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
+
+  it.each([
+    ['--list-presets', 'presets'],
+    ['--list-modules', 'modules'],
+    ['--list-fonts', 'fonts'],
+  ] as const)('%s prints the %s', (flag, kind) => {
+    expect(runGlobalFlags(parseCliArgs([flag]))).toBe(true);
+    expect(output()).toBe(formatListing(listEntries(kind)));
+  });
+
+  it('prints the data as JSON with --json', () => {
+    runGlobalFlags(parseCliArgs(['--list-fonts', '--json']));
+    expect(JSON.parse(output())).toEqual(listEntries('fonts'));
+  });
+
+  it('runs before the subcommand check, so --json needs no subcommand', async () => {
+    expect((await routeCli(['--list-presets', '--json'])).handled).toBe(true);
+  });
+
+  it('rejects any other flag next to a list flag, except --json', () => {
+    expect(() =>
+      runGlobalFlags(
+        parseCliArgs(['--list-presets', '--shells', 'bash', '--dry-run', '--state', 'x'])
+      )
+    ).toThrow('--shells, --state, --dry-run cannot be used with --list-presets.');
+    expect(runGlobalFlags(parseCliArgs(['--list-presets', '--json']))).toBe(true);
+  });
+
+  it('rejects a list flag with a subcommand, or two at once', () => {
+    expect(() => runGlobalFlags(parseCliArgs(['apply', '--list-presets']))).toThrow(
+      '--list-presets cannot be combined with the apply subcommand.'
+    );
+    expect(() => runGlobalFlags(parseCliArgs(['--list-presets', '--list-fonts']))).toThrow(
+      'Pass one of --list-presets, --list-fonts at a time.'
+    );
+  });
+
+  it('documents the list flags in the help text', () => {
+    runGlobalFlags(parseCliArgs(['--help']));
+    expect(output()).toContain('--list-presets | --list-modules | --list-fonts [--json]');
   });
 });

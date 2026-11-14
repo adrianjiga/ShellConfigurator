@@ -17,7 +17,8 @@ export type Subcommand =
   | 'repair'
   | 'uninstall'
   | 'rollback'
-  | 'debug-info';
+  | 'debug-info'
+  | 'completions';
 
 export const SUBCOMMANDS: readonly Subcommand[] = [
   'generate',
@@ -27,6 +28,7 @@ export const SUBCOMMANDS: readonly Subcommand[] = [
   'uninstall',
   'rollback',
   'debug-info',
+  'completions',
 ];
 
 export interface CliFlags {
@@ -71,6 +73,10 @@ export interface CliFlags {
   list?: boolean;
   /** The run rollback undoes, instead of the newest (--run). */
   runId?: string;
+  completionShell?: string;
+  listPresets?: boolean;
+  listModules?: boolean;
+  listFonts?: boolean;
   help: boolean;
   version: boolean;
   restore: boolean;
@@ -140,6 +146,15 @@ const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> 
   '--list': (r, v) => {
     r.list = v;
   },
+  '--list-presets': (r, v) => {
+    r.listPresets = v;
+  },
+  '--list-modules': (r, v) => {
+    r.listModules = v;
+  },
+  '--list-fonts': (r, v) => {
+    r.listFonts = v;
+  },
 };
 
 /** Value flags; the handler stores the consumed value. */
@@ -184,6 +199,12 @@ const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
     r.runId = v;
   },
 };
+
+export const KNOWN_FLAGS = {
+  boolean: Object.keys(BOOLEAN_FLAGS),
+  value: Object.keys(VALUE_FLAGS),
+  short: { ...SHORT_FLAGS },
+} as const;
 
 const SHORT_BOOLEAN_FLAGS = new Set(
   Object.entries(SHORT_FLAGS)
@@ -258,6 +279,10 @@ export function parseCliArgs(argv: string[]): CliFlags {
 
     if (!flag.startsWith('-')) {
       if (subcommandSeen) {
+        if (result.subcommand === 'completions' && result.completionShell === undefined) {
+          result.completionShell = arg;
+          continue;
+        }
         throw new CliUsageError(`Unexpected argument '${arg}'`);
       }
       if (SUBCOMMANDS.includes(flag as Subcommand)) {

@@ -8,17 +8,20 @@ import { posixShellQuote } from './config/shells.ts';
 import { restoreConfigBackups } from './generators/shellRc.ts';
 import type { CliFlags } from './services/args.ts';
 import { parseCliArgs, quoteArgv } from './services/args.ts';
+import { COMPLETION_SHELLS, type CompletionShell } from './services/cliSurface.ts';
+import { completionScript } from './services/completions.ts';
 import {
   collectDebugInfo,
   DEFAULT_DEBUG_INFO_DEPS,
   type DebugInfoDeps,
   formatDebugInfo,
-  redactHome,
 } from './services/debugInfo.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
 import { CliRunError, CliUsageError } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
 import { lastRunShells, recordRunSafely } from './services/history.ts';
+import { formatListing, listEntries } from './services/listings.ts';
+import { redactHome } from './services/redact.ts';
 import { formatRepairReport, runRepair } from './services/repair.ts';
 import {
   defaultRollbackRun,
@@ -91,10 +94,13 @@ Usage:
   shell-configurator uninstall    remove what the wizard set up
   shell-configurator rollback     put back the files the last run changed
   shell-configurator debug-info   print a report of the setup to attach to a bug report
+  shell-configurator completions <bash|zsh|fish>   print a shell completion script
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
   shell-configurator --restore    restore configs from their newest backup
+  shell-configurator --list-presets | --list-modules | --list-fonts [--json]
+                                  list the ids those flags accept
 
 Options:
   -h, --help          Show this help and exit
@@ -124,10 +130,12 @@ generate options (the config — a versioned state card with --export):
 
 apply options (a headless install from a state card):
   --state <file>       The state card describing the install (also: --import)
-  --dry-run            Print the plan and generated config; change nothing
+  --dry-run            Print the plan, the generated config and a diff of each
+                       file it would change; change nothing
   --adopt              Keep the existing shared starship.toml instead of
                        regenerating it (per-shell files are never written)
   --import-url <url>   Fetch a starship.toml over the web and adopt it (implies --adopt)
+  --json               With --dry-run, print the plan, config and diffs as JSON
   Without --state, apply also takes the generate options above; --shells is
   then required.
 
@@ -166,6 +174,11 @@ rollback options (undoes the newest run that changed files; asks first):
 debug-info options (reads only; e.g. shell-configurator debug-info > issue.md):
   --json               Print the report data as JSON instead of Markdown
   Your home directory is shown as ~ so the report does not name you.
+
+completions (install the script where your shell loads completions from):
+  bash   shell-configurator completions bash > ~/.local/share/bash-completion/completions/shell-configurator
+  zsh    shell-configurator completions zsh > "\${fpath[1]}/_shell-configurator"
+  fish   shell-configurator completions fish > ~/.config/fish/completions/shell-configurator.fish
 `);
 }
 
@@ -199,6 +212,31 @@ export function runGlobalFlags(flags: CliFlags): boolean {
   }
   if (flags.version) {
     process.stdout.write(`${VERSION}\n`);
+    return true;
+  }
+  const lists = (
+    [
+      ['--list-presets', 'presets', flags.listPresets],
+      ['--list-modules', 'modules', flags.listModules],
+      ['--list-fonts', 'fonts', flags.listFonts],
+    ] as const
+  ).filter(([, , asked]) => asked);
+  if (lists.length > 0) {
+    const names = lists.map(([name]) => name).join(', ');
+    if (flags.subcommand) {
+      throw new CliUsageError(
+        `${names} cannot be combined with the ${flags.subcommand} subcommand.`
+      );
+    }
+    if (lists.length > 1) throw new CliUsageError(`Pass one of ${names} at a time.`);
+    const unused = presentFlags(flags).filter((name) => name !== '--json');
+    if (unused.length > 0) {
+      throw new CliUsageError(`${unused.join(', ')} cannot be used with ${names}.`);
+    }
+    const entries = listEntries(lists[0]![1]);
+    process.stdout.write(
+      flags.json ? `${JSON.stringify(entries, null, 2)}\n` : formatListing(entries)
+    );
     return true;
   }
   if (flags.restore) {
@@ -239,6 +277,35 @@ function presentConfigFlags(flags: CliFlags): string[] {
   if (flags.exportFile) present.push('--export');
   return present;
 }
+
+/** Every flag on the command line except the help, version and list flags, by the name shown to the user. */
+function presentFlags(flags: CliFlags): string[] {
+  const present = presentConfigFlags(flags);
+  const others: Array<[unknown, string]> = [
+    [flags.stateFile, '--state'],
+    [flags.dryRun, '--dry-run'],
+    [flags.restore, '--restore'],
+    [flags.json, '--json'],
+    [flags.fix, '--fix'],
+    [flags.includeWarnings, '--include-warnings'],
+    [flags.yes, '--yes'],
+    [flags.starship, '--starship'],
+    [flags.list, '--list'],
+    [flags.runId, '--run'],
+  ];
+  for (const [value, name] of others) if (value) present.push(name);
+  return present;
+}
+
+const UNINSTALL_FLAGS = new Set([
+  '--shells',
+  '--font',
+  '--starship',
+  '--yes',
+  '--dry-run',
+  '--json',
+]);
+const ROLLBACK_FLAGS = new Set(['--list', '--run', '--yes', '--dry-run', '--json']);
 
 function warnIgnoredFlags(flags: CliFlags, subcommand: string): void {
   if (flags.stateFile) return;
@@ -342,9 +409,7 @@ export async function runUninstallCommand(
   command: string,
   io: UninstallIo = DEFAULT_UNINSTALL_IO
 ): Promise<void> {
-  const unused = presentConfigFlags(flags).filter((f) => f !== '--shells' && f !== '--font');
-  if (flags.stateFile) unused.push('--state');
-  if (flags.fix) unused.push('--fix');
+  const unused = presentFlags(flags).filter((flag) => !UNINSTALL_FLAGS.has(flag));
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with uninstall.`);
   }
@@ -416,9 +481,7 @@ export async function runRollbackCommand(
   command: string,
   io: PromptIo = DEFAULT_PROMPT_IO
 ): Promise<void> {
-  const unused = presentConfigFlags(flags);
-  if (flags.stateFile) unused.push('--state');
-  if (flags.fix) unused.push('--fix');
+  const unused = presentFlags(flags).filter((flag) => !ROLLBACK_FLAGS.has(flag));
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with rollback.`);
   }
@@ -471,7 +534,8 @@ export async function runRollbackCommand(
   const { result: report, runId } = changes
     ? await captureRun(
         manifest.files.map((file) => file.path),
-        async () => runRollback(target.runId, steps)
+        async () => runRollback(target.runId, steps),
+        { rewritable: manifest.files.filter((file) => file.rewritable).map((file) => file.path) }
       )
     : { result: runRollback(target.runId, steps, { dryRun }), runId: null };
   process.stdout.write(
@@ -488,6 +552,22 @@ export async function runRollbackCommand(
       partial: !report.complete,
     });
   }
+}
+
+export function runCompletionsCommand(flags: CliFlags): void {
+  const unused = presentFlags(flags);
+  if (unused.length > 0) {
+    throw new CliUsageError(`${unused.join(', ')} cannot be used with completions.`);
+  }
+  const shell = flags.completionShell;
+  if (!COMPLETION_SHELLS.includes(shell as CompletionShell)) {
+    throw new CliUsageError(
+      shell
+        ? `No completions for '${shell}' (available: ${COMPLETION_SHELLS.join(', ')}).`
+        : `completions needs a shell: ${COMPLETION_SHELLS.join(', ')}.`
+    );
+  }
+  process.stdout.write(completionScript(shell as CompletionShell));
 }
 
 /** Prints the debug report (Markdown, or JSON with --json) with the home directory shown as `~`. */
@@ -537,6 +617,10 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
     await runDebugInfoCommand(flags);
     return true;
   }
+  if (flags.subcommand === 'completions') {
+    runCompletionsCommand(flags);
+    return true;
+  }
   if (flags.subcommand === 'uninstall') {
     await runUninstallCommand(flags, command);
     return true;
@@ -571,7 +655,7 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.fix) dropped.push('--fix');
   if (dropped.length > 0) {
     throw new CliUsageError(
-      `${dropped.join(', ')} require a subcommand (generate, apply, doctor, repair, uninstall, rollback or debug-info).`
+      `${dropped.join(', ')} require a subcommand (generate, apply, doctor, repair, uninstall, rollback, debug-info or completions).`
     );
   }
   return false;

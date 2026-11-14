@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildTaskList, runInstallTasks } from '../../services/installTasks.ts';
+import { generateToml } from '../../generators/starship.ts';
+import { buildTaskList, configIfFontFails, runInstallTasks } from '../../services/installTasks.ts';
 import { DEFAULT_STATE, NO_NERD_FONT, type WizardState } from '../../types.ts';
 import { fakeDeps } from '../helpers/installTasks.ts';
 
@@ -1192,5 +1193,25 @@ describe('buildTaskList', () => {
       'verify',
     ]);
     expect(tasks.every((t) => t.status === 'pending')).toBe(true);
+  });
+});
+
+describe('configIfFontFails', () => {
+  const withFont: WizardState = {
+    ...DEFAULT_STATE,
+    hasNerdFont: true,
+    nerdFontToInstall: { kind: 'install', id: 'JetBrainsMono' },
+  };
+
+  it('is the glyph-free config a failed font install leads to', () => {
+    const fallback = configIfFontFails(withFont);
+    expect(fallback).toBe(generateToml({ ...withFont, hasNerdFont: false }));
+    expect(fallback).not.toBe(generateToml(withFont));
+  });
+
+  it('is null without a font install, in a container, or in adopt mode', () => {
+    expect(configIfFontFails({ ...withFont, nerdFontToInstall: NO_NERD_FONT })).toBeNull();
+    expect(configIfFontFails({ ...withFont, container: true })).toBeNull();
+    expect(configIfFontFails({ ...withFont, keepExistingConfig: true })).toBeNull();
   });
 });

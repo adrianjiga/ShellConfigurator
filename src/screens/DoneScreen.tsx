@@ -325,6 +325,12 @@ export function DoneScreen({ state }: DoneScreenProps) {
                 Run <Text color={uiColor('cyan')}>shell-configurator doctor</Text> to check the
                 setup.
               </Text>
+              {state.summaryPath && (
+                <Text color={uiColor('gray')}>
+                  What changed, and how to undo it:{' '}
+                  <Text color={uiColor('cyan')}>{state.summaryPath}</Text>
+                </Text>
+              )}
             </>
           )}
         </Box>

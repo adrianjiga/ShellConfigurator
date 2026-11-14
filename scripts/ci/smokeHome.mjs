@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 import { parse } from '@iarna/toml';
 
@@ -133,6 +133,8 @@ export function assertUninstalled(homeDir, rcPath, shell, before) {
   assert.ok(!rc.includes('ShellConfigurator'), `uninstall left the banner in the rc:\n${rc}`);
   assert.ok(!rc.includes('starship'), `uninstall left Starship lines in the rc:\n${rc}`);
   assert.ok(!existsSync(configPath), `uninstall left ${configPath}`);
+  const summary = whatChangedPath();
+  assert.ok(existsSync(summary), 'uninstall removed the WHAT-CHANGED.md of the last apply');
   const rcBackups = readdirSync(homeDir).filter((f) =>
     f.startsWith(`${nodePath.basename(rcPath)}.bak-`)
   );
@@ -152,6 +154,7 @@ export function assertUninstalled(homeDir, rcPath, shell, before) {
   assert.ok(!undoUninstall.includes('FAILED'), `rollback failed:\n${undoUninstall}`);
   assertRcWired(rcPath, shell);
   assertStarshipConfig(configPath, 'config after rolling back the uninstall');
+  assert.ok(existsSync(summary), 'rolling back the uninstall removed WHAT-CHANGED.md');
 
   const undoApply = runCli(['rollback', '--yes']);
   assert.ok(!undoApply.includes('FAILED'), `second rollback failed:\n${undoApply}`);
@@ -165,6 +168,16 @@ export function assertUninstalled(homeDir, rcPath, shell, before) {
     before.config,
     `rolling back the apply did not restore ${configPath}`
   );
+  assert.equal(
+    readOrNull(summary),
+    before.summary,
+    'rolling back the apply did not put back the WHAT-CHANGED.md from before it'
+  );
+}
+
+/** The WHAT-CHANGED.md path the CLI writes in this scratch home. */
+export function whatChangedPath() {
+  return nodePath.join(process.env.XDG_CONFIG_HOME, 'starship', 'WHAT-CHANGED.md');
 }
 
 /** The per-shell config path the CLI writes in this scratch home. */
@@ -191,5 +204,76 @@ export function assertDebugInfo(homeDir) {
   assert.ok(
     Array.isArray(info.shells) && info.shells.length > 0,
     'debug-info --json has no shells'
+  );
+}
+
+/** Loads the real `completions bash` script into bash and asserts it completes a subcommand and a value. */
+export function assertBashCompletions(homeDir) {
+  const script = nodePath.join(homeDir, 'shell-configurator.bash');
+  writeFileSync(script, runCli(['completions', 'bash']));
+  const out = execFileSync(
+    'bash',
+    [
+      '-c',
+      `source "$COMPLETION_SCRIPT"
+t() { COMP_WORDS=("$@"); COMP_CWORD=$(( $# - 1 )); COMPREPLY=(); _shell_configurator; echo "\${COMPREPLY[*]}"; }
+t shell-configurator debug
+t shell-configurator generate --character la`,
+    ],
+    { encoding: 'utf8', env: { ...process.env, COMPLETION_SCRIPT: script } }
+  );
+  assert.equal(out, 'debug-info\nlambda\n', `bash completions offered:\n${out}`);
+}
+
+/** Asserts a real apply wrote WHAT-CHANGED.md naming the rc it changed and the rollback that undoes it. */
+export function assertWhatChanged(out, rcPath) {
+  const summary = whatChangedPath();
+  assert.ok(
+    out.includes(`What changed, and how to undo it: ${summary}`),
+    `apply did not point at the summary:\n${out}`
+  );
+  const text = readFileSync(summary, 'utf8');
+  assert.ok(
+    text.includes(`\`${rcPath}\``) || text.includes('`~/.bashrc`'),
+    `the summary does not list the rc:\n${text}`
+  );
+  assert.ok(
+    text.includes('`shell-configurator rollback`'),
+    `the summary does not offer rollback:\n${text}`
+  );
+}
+
+/** Runs the list flags and `apply --dry-run --json` for real and parses what they print. */
+export function assertScriptingSurface() {
+  const presets = JSON.parse(runCli(['--list-presets', '--json']));
+  assert.ok(
+    presets.some((preset) => preset.id === 'tokyo-night'),
+    '--list-presets --json has no tokyo-night'
+  );
+  assert.match(runCli(['--list-fonts']), /^JetBrainsMono\s+JetBrains Mono$/m, '--list-fonts text');
+
+  const bashrc = nodePath.join(process.env.HOME, '.bashrc');
+  const bashrcBefore = existsSync(bashrc) ? readFileSync(bashrc, 'utf8') : null;
+  const plan = JSON.parse(
+    runCli(['apply', '--dry-run', '--json', '--shells', 'bash', '--no-nerd-font'])
+  );
+  assert.equal(plan.dryRun, true, 'apply --dry-run --json is not a dry-run plan');
+  assert.deepEqual(plan.shells, ['bash'], 'apply --dry-run --json has the wrong shells');
+  assert.equal(plan.config.kind, 'per-shell', 'apply --dry-run --json has no generated config');
+  const rcChange = plan.changes.find((change) => change.path === bashrc);
+  const addsInit = /^\+eval "\$\(starship init bash\)"$/m;
+  if (bashrcBefore?.includes('starship init bash')) {
+    assert.ok(
+      !rcChange?.diff.match(addsInit),
+      `the dry run adds a second init line to an already wired .bashrc:\n${rcChange?.diff}`
+    );
+  } else {
+    assert.ok(rcChange, `apply --dry-run --json has no change for ${bashrc}`);
+    assert.match(rcChange.diff, addsInit, 'the dry-run diff of .bashrc does not add the init line');
+  }
+  assert.equal(
+    existsSync(bashrc) ? readFileSync(bashrc, 'utf8') : null,
+    bashrcBefore,
+    'apply --dry-run changed .bashrc'
   );
 }

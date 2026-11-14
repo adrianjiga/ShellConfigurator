@@ -5,7 +5,7 @@ import { PALETTES } from '../config/palettes.ts';
 import { PRESETS, powerlineDroppedReason } from '../config/presets.ts';
 import { SHELLS } from '../config/shells.ts';
 import { statusLine, statusMark } from '../config/status.ts';
-import { getSharedConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
+import { getSharedConfigPath, getShellConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import {
   type CharacterSymbol,
@@ -22,16 +22,20 @@ import {
   detectTerminalAsync,
 } from './detector.ts';
 import { CliRunError, CliUsageError, errorMessage } from './errors.ts';
+import { type FileChange, plannedFileChanges } from './fileDiff.ts';
 import { recordRunSafely } from './history.ts';
-import { NERD_FONTS } from './installer.ts';
+import { NERD_FONTS, plannedPathDir } from './installer.ts';
 import {
   buildTaskList,
+  configIfFontFails,
   DEFAULT_INSTALL_TASK_DEPS,
+  FONT_FALLBACK_NOTE,
   plannedResetShells,
   runInstallTasks,
 } from './installTasks.ts';
 import { CapturedRunError, captureRun, trackedFiles } from './runCapture.ts';
 import { parseState, serializeState } from './state.ts';
+import { whatChangedPath, writeWhatChangedSafely } from './whatChanged.ts';
 
 const SHELL_IDS = new Set<string>(SHELLS.map((s) => s.id));
 const MODULE_IDS = new Set<string>([...MODULES.map((m) => m.id), 'character']);
@@ -400,6 +404,84 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
   return { ...state, installedShells, packageManager, container, terminal };
 }
 
+export type DryRunConfig =
+  | { kind: 'per-shell'; toml: string; tomlIfFontFails?: string }
+  | { kind: 'imported'; path: string; toml: string }
+  | { kind: 'kept'; path: string; exists: boolean };
+
+export interface DryRunPlan {
+  dryRun: true;
+  shells: ShellId[];
+  installStarship: boolean;
+  tasks: InstallTask[];
+  config: DryRunConfig;
+  changes: FileChange[];
+}
+
+export function dryRunPlan(
+  state: WizardState,
+  tasks: InstallTask[],
+  resetShells: readonly ShellId[]
+): DryRunPlan {
+  const shared = getSharedConfigPath();
+  const pathDir = state.skipStarshipInstall ? null : plannedPathDir(state.packageManager);
+  return {
+    dryRun: true,
+    shells: state.selectedShells,
+    installStarship: !state.skipStarshipInstall,
+    tasks,
+    config: state.keepExistingConfig
+      ? state.sharedConfigToml != null
+        ? { kind: 'imported', path: shared, toml: state.sharedConfigToml }
+        : { kind: 'kept', path: shared, exists: fs.existsSync(shared) }
+      : perShellConfig(state),
+    changes: plannedFileChanges(state, resetShells, pathDir),
+  };
+}
+
+function perShellConfig(state: WizardState): DryRunConfig {
+  const toml = generateToml(state);
+  const tomlIfFontFails = configIfFontFails(state);
+  return tomlIfFontFails
+    ? { kind: 'per-shell', toml, tomlIfFontFails }
+    : { kind: 'per-shell', toml };
+}
+
+function interruptedTasks(tasks: InstallTask[], error: unknown): InstallTask[] {
+  return tasks.map((task) =>
+    task.status === 'pending' || task.status === 'running'
+      ? { ...task, status: 'failed', error: errorMessage(error) }
+      : task
+  );
+}
+
+function printChanges(plan: DryRunPlan): void {
+  const shownAbove = new Set(
+    plan.config.kind === 'per-shell'
+      ? plan.shells.map((shellId) => getShellConfigPath(shellId))
+      : plan.config.kind === 'imported'
+        ? [plan.config.path]
+        : []
+  );
+  if (plan.changes.length === 0) {
+    process.stdout.write('\nNo config or rc file on disk would change.\n');
+    return;
+  }
+  process.stdout.write('\nChanges to config and rc files on disk:\n');
+  for (const change of plan.changes) {
+    if (change.status === 'unreadable') {
+      process.stdout.write(`\ncannot read ${change.path}: ${change.error}\n`);
+    } else if (change.status === 'create' && shownAbove.has(change.path)) {
+      process.stdout.write(`\ncreate ${change.path}: the config shown above\n`);
+    } else {
+      process.stdout.write(`\n${change.diff}`);
+    }
+  }
+  process.stdout.write(
+    '\nA real run also saves a backup of each config it replaces and writes WHAT-CHANGED.md.\n'
+  );
+}
+
 /**
  * The full `apply` subcommand: headless run of the same install pipeline the
  * wizard drives. `--dry-run` prints the task plan and the TOML that would be
@@ -407,45 +489,81 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
  * `command` is the original invocation line stored for reproducibility.
  */
 export async function runApply(flags: CliFlags, command?: string): Promise<void> {
+  if (flags.json && !flags.dryRun) {
+    throw new CliUsageError(
+      'apply --json only prints a plan, with --dry-run; a real apply reports its tasks as text.'
+    );
+  }
   const state = await prepareApplyState(flags);
 
-  const tasks = buildTaskList(state, plannedResetShells(state));
+  const resetShells = plannedResetShells(state);
+  const tasks = buildTaskList(state, resetShells);
 
   if (flags.dryRun) {
+    const plan = dryRunPlan(state, tasks, resetShells);
+    if (flags.json) {
+      process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
+      return;
+    }
     process.stdout.write('shell-configurator apply (dry run) — nothing will be changed.\n\n');
     process.stdout.write(
-      `Targets: ${state.selectedShells.join(', ') || '(none)'} · ` +
-        `will ${state.skipStarshipInstall ? 'skip' : 'install'} Starship\n`
+      `Targets: ${plan.shells.join(', ') || '(none)'} · ` +
+        `will ${plan.installStarship ? 'install' : 'skip'} Starship\n`
     );
-    printTasks(tasks);
-    if (state.keepExistingConfig) {
-      if (state.sharedConfigToml) {
-        process.stdout.write('\nConfig to keep (no per-shell TOML is generated):\n\n');
-        process.stdout.write(state.sharedConfigToml);
-        if (!state.sharedConfigToml.endsWith('\n')) process.stdout.write('\n');
-      } else {
-        const shared = getSharedConfigPath();
-        process.stdout.write(
-          fs.existsSync(shared)
-            ? `\nConfig to keep: ${shared} (left untouched)\n`
-            : `\nNo config to keep yet: ${shared} does not exist, and a real run would leave that as is.\n`
-        );
-      }
+    printTasks(plan.tasks);
+    const config = plan.config;
+    if (config.kind === 'per-shell') {
+      process.stdout.write(`\nGenerated starship.toml:\n\n${config.toml}`);
+      if (config.tomlIfFontFails) process.stdout.write(`\n\n${FONT_FALLBACK_NOTE}\n`);
+    } else if (config.kind === 'imported') {
+      process.stdout.write('\nConfig to keep (no per-shell TOML is generated):\n\n');
+      process.stdout.write(config.toml.endsWith('\n') ? config.toml : `${config.toml}\n`);
     } else {
-      process.stdout.write('\nGenerated starship.toml:\n\n');
-      process.stdout.write(generateToml(state));
+      process.stdout.write(
+        config.exists
+          ? `\nConfig to keep: ${config.path} (left untouched)\n`
+          : `\nNo config to keep yet: ${config.path} does not exist, and a real run would leave that as is.\n`
+      );
     }
+    printChanges(plan);
     return;
   }
 
+  let progress = tasks;
+  let finished: InstallTask[] | undefined;
+  let summary: string | null = null;
+  const onUpdate = (id: string, patch: Partial<InstallTask>) => {
+    progress = progress.some((task) => task.id === id)
+      ? progress.map((task) => (task.id === id ? { ...task, ...patch } : task))
+      : [...progress, { id: id as InstallTask['id'], label: id, status: 'pending', ...patch }];
+  };
   let captured: { result: InstallTask[]; runId: string | null };
   try {
-    captured = await captureRun(trackedFiles(), () =>
-      runInstallTasks(state, DEFAULT_INSTALL_TASK_DEPS, () => {})
+    captured = await captureRun(
+      [...trackedFiles(), whatChangedPath()],
+      async () => {
+        finished = await runInstallTasks(state, DEFAULT_INSTALL_TASK_DEPS, onUpdate);
+        return finished;
+      },
+      {
+        rewritable: [whatChangedPath()],
+        onChanged: (runId, files, error) => {
+          summary = writeWhatChangedSafely({
+            kind: 'apply',
+            timestamp: new Date().toISOString(),
+            state,
+            results: finished ?? interruptedTasks(progress, error),
+            runId,
+            files,
+            ...(command ? { command } : {}),
+          });
+        },
+      }
     );
   } catch (err) {
     if (!(err instanceof CapturedRunError)) throw err;
     recordRunSafely({ kind: 'apply', state, command, exitCode: 1, runId: err.runId });
+    if (summary) process.stdout.write(`What changed, and how to undo it: ${summary}\n`);
     throw err.cause;
   }
   const { result: results, runId } = captured;
@@ -462,4 +580,6 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
     exitCode: failed ? 1 : 0,
     runId,
   });
+
+  if (summary) process.stdout.write(`\nWhat changed, and how to undo it: ${summary}\n`);
 }

@@ -6,6 +6,7 @@ import { errorMessage } from './errors.ts';
 import { type HistoryKind, type HistoryRecord, readHistory } from './history.ts';
 import {
   hashOf,
+  laterRunWrites,
   type RunManifest,
   readRunManifest,
   runDir,
@@ -142,6 +143,9 @@ export function planRollback(manifest: RunManifest): RollbackStep[] {
       }
       if (current === before) {
         return { path: file.path, detail: 'already as it was before that run' };
+      }
+      if (file.rewritable && laterRunWrites(manifest.runId, file.path).has(current)) {
+        return { path: file.path, detail: 'a later run rewrote it, so it is left as it is' };
       }
       return { path: file.path, detail: CHANGED_SINCE, left: true };
     }

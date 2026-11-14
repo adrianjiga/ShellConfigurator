@@ -27,6 +27,7 @@ import {
   captureRun,
   finishRunCapture,
   KEPT_RUNS,
+  laterRunWrites,
   pruneRuns,
   readRunManifest,
   runDir,
@@ -235,5 +236,86 @@ describe('readRunManifest', () => {
     fs.mkdirSync(runDir('old'), { recursive: true });
     fs.writeFileSync(path.join(runDir('old'), 'manifest.json'), '{"version":9,"files":[]}');
     expect(readRunManifest('old')).toBeNull();
+  });
+});
+
+describe('finishRunCapture with onChanged', () => {
+  const rc = () => path.join(tmpDir, 'rc');
+  const summary = () => path.join(tmpDir, 'summary.md');
+
+  it('runs once the run changed files, and keeps what it writes as part of the run', () => {
+    fs.writeFileSync(summary(), 'earlier', { mode: 0o640 });
+    const capture = beginRunCapture([rc(), summary()]);
+    fs.writeFileSync(rc(), 'new');
+    const onChanged = vi.fn((_runId: string, files: { path: string }[]) => {
+      expect(files.map((file) => file.path)).toEqual([rc()]);
+      fs.writeFileSync(summary(), 'later');
+    });
+
+    const manifest = finishRunCapture(capture, { onChanged, rewritable: [summary()] })!;
+
+    expect(onChanged).toHaveBeenCalledWith(capture.runId, expect.any(Array), undefined);
+    const entry = manifest.files.find((file) => file.path === summary())!;
+    expect(entry).toMatchObject({ mode: 0o640, rewritable: true });
+    expect(entry.after).toBe(sha256Digest(Buffer.from('later')));
+    expect(fs.readFileSync(path.join(runDir(capture.runId), 'files', entry.before!), 'utf8')).toBe(
+      'earlier'
+    );
+    expect(manifest.files.find((file) => file.path === rc())!.rewritable).toBeUndefined();
+    expect(readRunManifest(capture.runId)).toEqual(manifest);
+  });
+
+  it('does not run when the run changed nothing', () => {
+    const onChanged = vi.fn();
+    const capture = beginRunCapture([rc()]);
+    expect(finishRunCapture(capture, { onChanged })).toBeNull();
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it('gets the error of a run that threw, and its own errors do not stop the manifest', async () => {
+    const { captureRun: realCaptureRun } = await vi.importActual<
+      typeof import('../../services/runCapture.ts')
+    >('../../services/runCapture.ts');
+    const onChanged = vi.fn(() => {
+      throw new Error('summary failed');
+    });
+    const failure = new Error('chain broke');
+
+    let caught: unknown;
+    try {
+      await realCaptureRun(
+        [rc()],
+        async () => {
+          fs.writeFileSync(rc(), 'half');
+          throw failure;
+        },
+        { onChanged }
+      );
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(CapturedRunError);
+    const runId = (caught as CapturedRunError).runId!;
+    expect(onChanged).toHaveBeenCalledWith(runId, expect.any(Array), failure);
+    expect(readRunManifest(runId)!.files.map((file) => file.path)).toEqual([rc()]);
+  });
+});
+
+describe('laterRunWrites', () => {
+  it('collects what runs after the given one left in the file', () => {
+    const file = path.join(tmpDir, 'f');
+    const run = (content: string | null) => {
+      const capture = beginRunCapture([file]);
+      if (content === null) fs.rmSync(file);
+      else fs.writeFileSync(file, content);
+      return finishRunCapture(capture)!.runId;
+    };
+    const first = run('one');
+    run('two');
+    run(null);
+
+    expect(laterRunWrites(first, file)).toEqual(new Set([sha256Digest(Buffer.from('two')), null]));
+    expect(laterRunWrites('9999', file)).toEqual(new Set());
   });
 });

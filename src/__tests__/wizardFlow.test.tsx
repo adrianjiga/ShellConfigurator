@@ -48,12 +48,28 @@ vi.mock('../generators/shellRc.ts', () => ({
   shellsWithStarshipInit: () => [],
   getShellConfigPath: () => '/tmp/starship.toml',
   getSharedConfigPath: () => '/nonexistent/starship.toml',
-  plannedRcBlock: (shellId: string) => [
-    '# Added by ShellConfigurator',
-    'export STARSHIP_CONFIG="/tmp/starship.toml"',
-    `eval "$(starship init ${shellId})"`,
-  ],
 }));
+
+vi.mock('../services/fileDiff.ts', async () => {
+  const { getShell } = await import('../config/shells.ts');
+  const actual =
+    await vi.importActual<typeof import('../services/fileDiff.ts')>('../services/fileDiff.ts');
+  return {
+    diffHunkLines: actual.diffHunkLines,
+    plannedFileChanges: (state: { selectedShells: string[] }) =>
+      state.selectedShells.flatMap((shellId) => {
+        const rc = getShell(shellId as 'zsh')?.rcFile;
+        if (!rc) return [];
+        const block = [
+          '+# Added by ShellConfigurator',
+          '+export STARSHIP_CONFIG="/tmp/starship.toml"',
+          `+eval "$(starship init ${shellId})"`,
+        ];
+        const diff = `--- ${rc}\n+++ ${rc}\n@@ -0,0 +1,3 @@\n${block.join('\n')}\n`;
+        return [{ path: rc, status: 'modify', added: 3, removed: 0, diff }];
+      }),
+  };
+});
 
 vi.mock('../services/installer.ts', () => ({
   MANUAL_STARSHIP_INSTALL: 'curl -sS https://starship.rs/install.sh | sh',

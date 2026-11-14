@@ -4,11 +4,13 @@ import {
   assertApplyVerified,
   assertRcWired,
   assertUninstalled,
+  assertWhatChanged,
   readOrNull,
   requireScratchHome,
   runCli,
   runSmoke,
   shellConfigPath,
+  whatChangedPath,
 } from './smokeHome.mjs';
 
 // Headless-apply CI leg: drive the real `apply` subcommand and assert the
@@ -21,11 +23,16 @@ process.env.PATH = `${nodePath.join(homeDir, '.local', 'bin')}:${process.env.PAT
 
 await runSmoke('Headless apply smoke', () => {
   const bashrc = nodePath.join(homeDir, '.bashrc');
-  const before = { rc: readOrNull(bashrc), config: readOrNull(shellConfigPath('bash')) };
+  const before = {
+    rc: readOrNull(bashrc),
+    config: readOrNull(shellConfigPath('bash')),
+    summary: readOrNull(whatChangedPath()),
+  };
 
   const out = runCli(['apply', '--shells', 'bash', '--no-nerd-font']);
 
   assertApplyVerified(out);
   assertRcWired(bashrc, 'bash');
+  assertWhatChanged(out, bashrc);
   assertUninstalled(homeDir, bashrc, 'bash', before);
 });

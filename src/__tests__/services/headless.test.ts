@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CapturedRunError, captureRun, trackedFiles } from '../../services/runCapture.ts';
+import { whatChangedPath, writeWhatChangedSafely } from '../../services/whatChanged.ts';
 
 const {
   mockDetectInstalledShells,
@@ -48,6 +49,7 @@ vi.mock('../../services/history.ts', async () => {
     '../../services/history.ts'
   );
   return {
+    ...actual,
     recordRun: mockRecordRun,
     recordRunSafely: (options: Parameters<typeof actual.recordRun>[0]) =>
       actual.recordRunSafely(options, mockRecordRun),
@@ -58,6 +60,7 @@ import type { ModuleId } from '../../config/modules.ts';
 import type { CliFlags } from '../../services/args.ts';
 import { CliRunError, CliUsageError } from '../../services/errors.ts';
 import {
+  dryRunPlan,
   fetchImportedConfig,
   runApply,
   runGenerate,
@@ -587,6 +590,153 @@ describe('runApply', () => {
     expect(output).toContain('Generated starship.toml');
   });
 
+  it('prints the dry-run plan and config as JSON with --json', async () => {
+    await runApply(
+      flags({
+        subcommand: 'apply',
+        shells: ['bash'],
+        preset: 'pure-prompt',
+        dryRun: true,
+        json: true,
+      })
+    );
+
+    expect(mockRunInstallTasks).not.toHaveBeenCalled();
+    const output = stdoutWrite.mock.calls
+      .map((call: [string, ...unknown[]]) => String(call[0]))
+      .join('');
+    const plan = JSON.parse(output);
+    expect(plan).toMatchObject({ dryRun: true, shells: ['bash'], installStarship: true });
+    expect(plan.tasks.map((t: { id: string }) => t.id)).toContain('rc_bash');
+    expect(plan.config.kind).toBe('per-shell');
+    expect(plan.config.toml).toMatch(/^format\s+= "/m);
+  });
+
+  it('describes the kept shared config in an --adopt --dry-run --json plan', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    const previous = process.env.HOME;
+    process.env.HOME = dir;
+    try {
+      await runApply(
+        flags({ subcommand: 'apply', shells: ['bash'], adopt: true, dryRun: true, json: true })
+      );
+      const output = stdoutWrite.mock.calls
+        .map((call: [string, ...unknown[]]) => String(call[0]))
+        .join('');
+      expect(JSON.parse(output).config).toEqual({
+        kind: 'kept',
+        path: path.join(dir, '.config', 'starship.toml'),
+        exists: false,
+      });
+    } finally {
+      process.env.HOME = previous;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('diffs the files a dry run would change against disk, as text and JSON', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    vi.stubEnv('HOME', dir);
+    vi.stubEnv('XDG_CONFIG_HOME', undefined);
+    try {
+      const bashrc = path.join(dir, '.bashrc');
+      fs.writeFileSync(bashrc, 'alias ll="ls -l"\n');
+      const output = async (json: boolean) => {
+        stdoutWrite.mockClear();
+        await runApply(flags({ subcommand: 'apply', shells: ['bash'], dryRun: true, json }));
+        return stdoutWrite.mock.calls
+          .map((call: [string, ...unknown[]]) => String(call[0]))
+          .join('');
+      };
+
+      const text = await output(false);
+      expect(text).toContain('Changes to config and rc files on disk:');
+      expect(text).toContain(
+        `create ${path.join(dir, '.config', 'starship', 'bash.toml')}: the config shown above`
+      );
+      expect(text).not.toContain('--- /dev/null');
+      expect(text).toContain(
+        'saves a backup of each config it replaces and writes WHAT-CHANGED.md'
+      );
+      expect(text).toContain(`--- ${bashrc}\n+++ ${bashrc}\n@@ -1,1 +1,`);
+      expect(text).toContain(' alias ll="ls -l"\n+\n+# Added by ShellConfigurator\n');
+
+      const plan = JSON.parse(await output(true));
+      expect(plan.changes.map((c: { path: string; status: string }) => [c.path, c.status])).toEqual(
+        [
+          [path.join(dir, '.config', 'starship', 'bash.toml'), 'create'],
+          [bashrc, 'modify'],
+        ]
+      );
+      expect(fs.readFileSync(bashrc, 'utf8')).toBe('alias ll="ls -l"\n');
+      expect(fs.existsSync(path.join(dir, '.config'))).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('diffs an existing per-shell config instead of only pointing at the config above', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    vi.stubEnv('HOME', dir);
+    vi.stubEnv('XDG_CONFIG_HOME', undefined);
+    try {
+      const config = path.join(dir, '.config', 'starship', 'bash.toml');
+      fs.mkdirSync(path.dirname(config), { recursive: true });
+      fs.writeFileSync(config, 'add_newline = false\n');
+      await runApply(flags({ subcommand: 'apply', shells: ['bash'], dryRun: true }));
+      const text = stdoutWrite.mock.calls
+        .map((call: [string, ...unknown[]]) => String(call[0]))
+        .join('');
+      expect(text).toContain(`--- ${config}\n+++ ${config}\n`);
+      expect(text).toContain('-add_newline = false');
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('shows the config a failed font install would write instead', async () => {
+    const output = async (json: boolean) => {
+      stdoutWrite.mockClear();
+      await runApply(
+        flags({ subcommand: 'apply', shells: ['bash'], font: 'JetBrainsMono', dryRun: true, json })
+      );
+      return stdoutWrite.mock.calls.map((call: [string, ...unknown[]]) => String(call[0])).join('');
+    };
+    expect(await output(false)).toContain(
+      'If the Nerd Font install fails, the config is written without Nerd Font glyphs instead.'
+    );
+    const config = JSON.parse(await output(true)).config;
+    expect(config.tomlIfFontFails).toEqual(expect.any(String));
+    expect(config.tomlIfFontFails).not.toBe(config.toml);
+  });
+
+  it('says no file would change when the setup is already in place', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    vi.stubEnv('HOME', dir);
+    vi.stubEnv('XDG_CONFIG_HOME', undefined);
+    try {
+      fs.writeFileSync(path.join(dir, '.bashrc'), 'eval "$(starship init bash)"\n');
+      mockDetectPackageManager.mockResolvedValue('brew');
+      await runApply(flags({ subcommand: 'apply', shells: ['bash'], adopt: true, dryRun: true }));
+      const output = stdoutWrite.mock.calls
+        .map((call: [string, ...unknown[]]) => String(call[0]))
+        .join('');
+      expect(output).toContain('No config or rc file on disk would change.');
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses --json on a real apply', async () => {
+    await expect(
+      runApply(flags({ subcommand: 'apply', shells: ['bash'], json: true }))
+    ).rejects.toThrow(/apply --json only prints a plan, with --dry-run/);
+    expect(mockRunInstallTasks).not.toHaveBeenCalled();
+  });
+
   it('says plainly when --adopt --dry-run finds no config to keep', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
     const previous = process.env.HOME;
@@ -641,9 +791,13 @@ describe('runApply', () => {
 
   it('runs the install pipeline and records a successful run in history', async () => {
     mockRunInstallTasks.mockResolvedValue(doneTasks as never);
-    vi.mocked(captureRun).mockImplementationOnce(async (files, run) => {
-      expect(files).toEqual(trackedFiles());
-      return { result: await run(), runId: 'run-3' };
+    const files = [{ path: '/h/.zshrc', before: '0', after: 'x' }];
+    vi.mocked(captureRun).mockImplementationOnce(async (captured, run, options) => {
+      expect(captured).toEqual([...trackedFiles(), whatChangedPath()]);
+      expect(options?.rewritable).toEqual([whatChangedPath()]);
+      const result = await run();
+      options?.onChanged?.('run-3', files, undefined);
+      return { result, runId: 'run-3' };
     });
     await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }), 'apply --shells zsh');
 
@@ -663,6 +817,69 @@ describe('runApply', () => {
       .map((call: [string, ...unknown[]]) => String(call[0]))
       .join('');
     expect(output).toContain('Install Starship');
+    expect(writeWhatChangedSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'apply',
+        command: 'apply --shells zsh',
+        results: doneTasks,
+        runId: 'run-3',
+        files,
+      })
+    );
+  });
+
+  it('writes no summary for a run that changed nothing', async () => {
+    mockRunInstallTasks.mockResolvedValue(doneTasks as never);
+    vi.mocked(writeWhatChangedSafely).mockClear();
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }));
+    expect(writeWhatChangedSafely).not.toHaveBeenCalled();
+  });
+
+  it('still writes the summary of a run that broke partway, with its unfinished tasks failed', async () => {
+    const failure = new Error('chain broke');
+    mockRunInstallTasks.mockImplementationOnce(
+      async (_state: unknown, _deps: unknown, onUpdate: (id: string, patch: object) => void) => {
+        onUpdate('starship', { status: 'done' });
+        throw failure;
+      }
+    );
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run, options) => {
+      try {
+        return { result: await run(), runId: 'run-4' };
+      } catch (err) {
+        options?.onChanged?.('run-4', [], err);
+        throw new CapturedRunError('run-4', err);
+      }
+    });
+    vi.mocked(writeWhatChangedSafely).mockReturnValueOnce('/h/.config/starship/WHAT-CHANGED.md');
+
+    await expect(runApply(flags({ subcommand: 'apply', shells: ['zsh'] }))).rejects.toBe(failure);
+
+    const results = vi.mocked(writeWhatChangedSafely).mock.lastCall![0].results;
+    expect(results.find((task) => task.id === 'starship')?.status).toBe('done');
+    expect(results.find((task) => task.id === 'rc_zsh')).toMatchObject({
+      status: 'failed',
+      error: 'chain broke',
+    });
+    expect(stdoutWrite).toHaveBeenCalledWith(
+      'What changed, and how to undo it: /h/.config/starship/WHAT-CHANGED.md\n'
+    );
+  });
+
+  it('prints where the summary of what changed was written', async () => {
+    mockRunInstallTasks.mockResolvedValue(doneTasks as never);
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run, options) => {
+      const result = await run();
+      options?.onChanged?.('run-5', [], undefined);
+      return { result, runId: 'run-5' };
+    });
+    vi.mocked(writeWhatChangedSafely).mockReturnValueOnce('/h/.config/starship/WHAT-CHANGED.md');
+
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }));
+
+    expect(stdoutWrite).toHaveBeenCalledWith(
+      '\nWhat changed, and how to undo it: /h/.config/starship/WHAT-CHANGED.md\n'
+    );
   });
 
   it('records the files a crashing run changed, then rethrows its error', async () => {
@@ -1016,5 +1233,16 @@ describe('runApply', () => {
         flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'https://offline.test/raw' })
       )
     ).rejects.toThrow(/Could not fetch.*ENOTFOUND/);
+  });
+});
+
+describe('dryRunPlan', () => {
+  it('labels an empty imported config as imported, since the run writes it', () => {
+    const plan = dryRunPlan(
+      { ...DEFAULT_STATE, keepExistingConfig: true, sharedConfigToml: '' },
+      [],
+      []
+    );
+    expect(plan.config).toMatchObject({ kind: 'imported', toml: '' });
   });
 });

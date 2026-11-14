@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstallingScreen, setAdvanceDelayForTests } from '../../screens/InstallingScreen.tsx';
 import type { InstallTaskDeps } from '../../services/installTasks.ts';
 import { CapturedRunError, captureRun } from '../../services/runCapture.ts';
+import { whatChangedPath, writeWhatChangedSafely } from '../../services/whatChanged.ts';
 import type { InstallTask, WizardState } from '../../types.ts';
 import { DEFAULT_STATE } from '../../types.ts';
 import { flush, waitFor } from '../helpers/wait.ts';
@@ -161,7 +162,13 @@ describe('InstallingScreen', () => {
     expect(signal.current?.aborted).toBe(true);
   });
 
-  it('does not advance after an unmount while the run is still finishing', async () => {
+  it('neither advances nor writes a summary once the screen has unmounted', async () => {
+    vi.mocked(writeWhatChangedSafely).mockClear();
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run, options) => {
+      const result = await run();
+      options?.onChanged?.('run-1', [], undefined);
+      return { result, runId: 'run-1' };
+    });
     mocks.buildTaskList.mockReturnValue(statusFixture());
     let resolveRun: (tasks: InstallTask[]) => void = () => {};
     mocks.runInstallTasks.mockImplementation(
@@ -172,9 +179,10 @@ describe('InstallingScreen', () => {
 
     instance.unmount();
     resolveRun([{ id: 'starship', label: 'Install Starship', status: 'done' }]);
-    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 20));
 
     expect(onNext).not.toHaveBeenCalled();
+    expect(writeWhatChangedSafely).not.toHaveBeenCalled();
   });
 
   it('aborts the chain on unmount', async () => {
@@ -206,10 +214,15 @@ describe('InstallingScreen', () => {
     ];
     mocks.buildTaskList.mockReturnValue(results);
     mocks.runInstallTasks.mockResolvedValue(results);
-    vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
-      result: await run(),
-      runId: 'run-1',
-    }));
+    const files = [{ path: '/h/.zshrc', before: '0', after: 'x' }];
+    vi.mocked(captureRun).mockImplementationOnce(async (captured, run, options) => {
+      expect(captured).toContain(whatChangedPath());
+      expect(options?.rewritable).toEqual([whatChangedPath()]);
+      const result = await run();
+      options?.onChanged?.('run-1', files, undefined);
+      return { result, runId: 'run-1' };
+    });
+    vi.mocked(writeWhatChangedSafely).mockReturnValueOnce('/h/.config/starship/WHAT-CHANGED.md');
     const { instance, onNext } = setup();
     await flush();
 
@@ -219,7 +232,14 @@ describe('InstallingScreen', () => {
     expect(instance.lastFrame()).toContain('Unknown shell');
 
     await waitFor(() => onNext.mock.calls.length > 0);
-    expect(onNext).toHaveBeenCalledWith({ installResults: results, runId: 'run-1' });
+    expect(onNext).toHaveBeenCalledWith({
+      installResults: results,
+      runId: 'run-1',
+      summaryPath: '/h/.config/starship/WHAT-CHANGED.md',
+    });
+    expect(writeWhatChangedSafely).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'install', results, runId: 'run-1', files })
+    );
   });
 
   it('renders nothing while an interactive child owns the terminal', async () => {
@@ -301,6 +321,7 @@ describe('InstallingScreen under StrictMode', () => {
     expect(onNext).toHaveBeenCalledWith({
       installResults: [{ id: 'starship', label: 'Starship', status: 'done' }],
       runId: null,
+      summaryPath: null,
     });
   });
 });

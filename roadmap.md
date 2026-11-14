@@ -30,13 +30,13 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 ## At a glance
 
-| Status           | Items                                                                                                                          |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · P4.1–P4.3 · #1 #2 #4 #5 #7 #8 #10 #11 #12 #13 #14 #17 #19 #20 #22 #24 #26 #27 |
-| TODO             | P4.4–P4.10 · P5.1–P5.3 · #6 #9 #15 #18 #21 #23 #25                                                                             |
-| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy)                                                                       |
-| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                                        |
-| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title                |
+| Status           | Items                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · P4.1–P4.6 · P4.8 · #1 #2 #4 #5 #7 #8 #9 #10 #11 #12 #13 #14 #17 #18 #19 #20 #22 #23 #24 #26 #27 |
+| TODO             | P4.7 · P4.9–P4.10 · P5.1–P5.3 · #6 #15 #21 #25                                                                                                   |
+| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy)                                                                                         |
+| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                                                          |
+| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title                                  |
 
 ---
 
@@ -251,23 +251,38 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
   latest Starship version, which needs a network or package-index query; the recorded install version and
   the doctor's drift check cover the common case.
 
-**P4.4 — `completions` (#23)** — **TODO**
+**P4.4 — `completions` (#23)** — **DONE**
 
 - Emit bash/zsh/fish completion scripts for shell-configurator itself, mirroring starship's own `completions` command.
 - **Why.** Standard CLI ergonomics; one subcommand + three templates. Cheap, expected, and the tool already installs into interactive shells so users will hit completion.
 - **How.** One subcommand + three templates over the frozen flag surface (D2). **Effort.** S. **D:** P1.2.
+- **Shipped:** `shell-configurator completions <bash|zsh|fish>`. The scripts are generated from one description
+  of the CLI (`services/cliSurface.ts`), which a test keeps in step with the parser. They complete
+  subcommands, each subcommand's flags, and values: presets, palettes, shells (comma lists), fonts,
+  characters and files. They are tested in real bash, zsh and fish, and the generate smoke loads the bash
+  script on every distro cell. `--run` ids are not completed.
 
-**P4.5 — Dry-run diff vs disk (#9)** — **TODO**
+**P4.5 — Dry-run diff vs disk (#9)** — **DONE**
 
 - Compare the would-be generated TOML and rc additions against what is currently on disk (backups already exist via `backupSharedConfig`/`restoreConfigBackups`).
 - **Why.** "Preview" today shows the plan; a diff shows the _consequence_. Turns dry-run into a predictable pre-apply check and gives CI a readable artifact.
 - **How.** Reuse the toml/rc writers in a read-only mode; render a `git diff`-style output in the Review screen and/or `--json`. **Effort.** M. **D:** P1.2, P0.2.
+- **Shipped:** `applyShellConfig`/`resetSharedShellConfig` now write from the pure planners
+  `appliedRcContent`/`resetRcContent`, and `services/fileDiff.ts` (`plannedFileChanges`, a dependency-free
+  unified diff) diffs every config and rc file a run would write against disk. `apply --dry-run` prints a
+  diff per file, `--json` adds `changes`, and the Review screen lists the files and shows each rc file's
+  diff in place of the fixed block it showed before.
 
-**P4.6 — Post-run `WHAT-CHANGED.md` (#18)** — **TODO**
+**P4.6 — Post-run `WHAT-CHANGED.md` (#18)** — **DONE**
 
 - After install, write `~/.config/starship/WHAT-CHANGED.md`: per-shell what changed, where the rc lines are, and the exact one-liners to undo (→ `uninstall` / `--rollback`).
 - **Why.** Human-readable trail for the "what did I run?" moment a week later — a differentiator for newcomers.
 - **How.** A renderer over `installResults`, written after the install chain. **Effort.** S. **D:** none.
+- **Shipped:** `services/whatChanged.ts` writes the summary after every real wizard install and `apply` that
+  changed files, as part of that run so `rollback` puts the previous summary back: the
+  tasks and their outcome, the files the run changed (from its rollback manifest), each shell's Starship
+  lines and config, and `rollback`/`uninstall`/`doctor` to undo or check. The Done screen and `apply` name
+  it. Best-effort, so a failed write never fails the run.
 
 **P4.7 — Performance doctor (`--timings`) (#21)** — **TODO**
 
@@ -275,11 +290,14 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 - **Why.** "My prompt is slow" is its own support class — distinct from health (#10, is it broken?) and correctness (does it work?). Starship ships the measurement; nobody exposes it to the user.
 - **How.** One executor + one table of suggestions, same faked-exec test pattern as the detector; reuse P2.1's scratch-dir harness. **Effort.** S-M. **D:** P2.1.
 
-**P4.8 — Scripting surface** — **TODO**
+**P4.8 — Scripting surface** — **DONE**
 
 - `--list-presets` / `--list-modules` / `--list-fonts` and `--dry-run --json`, making headless mode a first-class API.
 - **Why.** Scripting surface that makes #1 a first-class API; also feeds completions.
 - **How.** Read-only renderers over `PRESETS`/`MODULE_DEFS`/`NERD_FONTS`; JSON branch on the dry-run report. **Effort.** S. **D:** P1.2, P4.5.
+- **Shipped:** `--list-presets`, `--list-modules`, `--list-fonts` (text, or data with `--json`) and
+  `apply --dry-run --json` (`{ dryRun, shells, installStarship, tasks, config, changes }`, where `changes`
+  is P4.5's diff against disk).
 
 **P4.9 — `starship explain` in Review** — **TODO**
 
@@ -353,7 +371,7 @@ they can be picked up in parallel with any phase but each stays its own PR.
 
 ## Suggested next order (remaining work)
 
-1. The small wins: **P4.4 `completions`**, **P4.6 `WHAT-CHANGED.md`**, **P4.8 list flags**.
+1. The rest of Phase 4: P4.7 timings, P4.9 explain, P4.10 share.
 2. Then **P5.1 (#6) transient prompt**, **P5.2 (#15) prompt-manager detection**, **P5.3 (#25) bootstrap**.
 
 ## Merge & verification strategy

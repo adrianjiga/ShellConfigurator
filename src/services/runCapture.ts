@@ -21,6 +21,8 @@ export interface RunFile {
   after: string | null;
   /** The file's permission bits before the run; absent when it did not exist. */
   mode?: number;
+  /** Later runs rewrite this file; rollback leaves a later run's rewrite in place. */
+  rewritable?: true;
 }
 
 export interface RunManifest {
@@ -125,45 +127,73 @@ function copyFiles(files: string[], dir: string): CapturedFile[] {
   });
 }
 
-/**
- * Keeps only the files the run changed and writes their manifest. Null, with
- * the run folder removed, when the run changed nothing.
- */
-export function finishRunCapture(capture: RunCapture): RunManifest | null {
-  const changed = capture.files.flatMap((file): RunFile[] => {
+export interface CaptureOptions {
+  /**
+   * Runs once the run is over, when it changed files and before its manifest
+   * is written, so whatever it writes to a captured file is part of the run.
+   * `error` is what the run threw, if it did. Its own errors are ignored.
+   */
+  onChanged?: (runId: string, files: RunFile[], error?: unknown) => void;
+  /** Captured files that later runs rewrite (see RunFile.rewritable). */
+  rewritable?: readonly string[];
+}
+
+function changedFiles(capture: RunCapture, rewritable: readonly string[]): RunFile[] {
+  return capture.files.flatMap((file): RunFile[] => {
     let after: string | null;
     try {
       after = hashOf(file.path);
     } catch {
       after = UNREADABLE_AFTER;
     }
-    if (after === file.beforeHash) {
-      if (file.before) fs.rmSync(path.join(capture.dir, 'files', file.before), { force: true });
-      return [];
-    }
+    if (after === file.beforeHash) return [];
     return [
       {
         path: file.path,
         before: file.before,
         after,
         ...(file.mode !== undefined ? { mode: file.mode } : {}),
+        ...(rewritable.includes(file.path) ? { rewritable: true as const } : {}),
       },
     ];
   });
+}
+
+/**
+ * Keeps only the files the run changed and writes their manifest. Null, with
+ * the run folder removed, when the run changed nothing.
+ */
+export function finishRunCapture(
+  capture: RunCapture,
+  options: CaptureOptions = {},
+  error?: unknown
+): RunManifest | null {
+  const rewritable = options.rewritable ?? [];
+  let changed = changedFiles(capture, rewritable);
   if (changed.length === 0) {
     fs.rmSync(capture.dir, { recursive: true, force: true });
     return null;
+  }
+  if (options.onChanged) {
+    try {
+      options.onChanged(capture.runId, changed, error);
+    } catch {}
+    changed = changedFiles(capture, rewritable);
+  }
+  const kept = new Set(changed.map((file) => file.before));
+  for (const file of capture.files) {
+    if (file.before && !kept.has(file.before)) {
+      fs.rmSync(path.join(capture.dir, 'files', file.before), { force: true });
+    }
   }
   const manifest: RunManifest = {
     version: RUN_MANIFEST_VERSION,
     runId: capture.runId,
     files: changed,
   };
-  fs.writeFileSync(
-    path.join(capture.dir, 'manifest.json'),
-    `${JSON.stringify(manifest, null, 2)}\n`,
-    { mode: 0o600 }
-  );
+  const file = path.join(capture.dir, 'manifest.json');
+  fs.writeFileSync(`${file}.tmp`, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(`${file}.tmp`, file);
   return manifest;
 }
 
@@ -175,7 +205,8 @@ export function finishRunCapture(capture: RunCapture): RunManifest | null {
  */
 export async function captureRun<T>(
   files: string[],
-  run: () => Promise<T>
+  run: () => Promise<T>,
+  options: CaptureOptions = {}
 ): Promise<{ result: T; runId: string | null }> {
   let capture: RunCapture | null;
   try {
@@ -187,9 +218,9 @@ export async function captureRun<T>(
   try {
     result = await run();
   } catch (err) {
-    throw new CapturedRunError(capture ? finishSafely(capture) : null, err);
+    throw new CapturedRunError(capture ? finishSafely(capture, options, err) : null, err);
   }
-  return { result, runId: capture ? finishSafely(capture) : null };
+  return { result, runId: capture ? finishSafely(capture, options) : null };
 }
 
 /** A run that threw partway; `runId` still names the files it had changed by then. */
@@ -203,9 +234,13 @@ export class CapturedRunError extends Error {
   }
 }
 
-function finishSafely(capture: RunCapture): string | null {
+function finishSafely(
+  capture: RunCapture,
+  options: CaptureOptions,
+  error?: unknown
+): string | null {
   try {
-    const runId = finishRunCapture(capture)?.runId ?? null;
+    const runId = finishRunCapture(capture, options, error)?.runId ?? null;
     pruneRuns();
     return runId;
   } catch {
@@ -226,6 +261,26 @@ export function pruneRuns(keep: number = KEPT_RUNS): void {
   for (const runId of runs.slice(0, Math.max(0, runs.length - keep))) {
     fs.rmSync(runDir(runId), { recursive: true, force: true });
   }
+}
+
+/**
+ * What the runs captured after `runId` left in `file`: the hashes they wrote,
+ * and null for a run that removed it.
+ */
+export function laterRunWrites(runId: string, file: string): Set<string | null> {
+  const writes = new Set<string | null>();
+  let runs: string[];
+  try {
+    runs = fs.readdirSync(runsDir());
+  } catch {
+    return writes;
+  }
+  for (const later of runs.filter((name) => name > runId)) {
+    for (const entry of readRunManifest(later)?.files ?? []) {
+      if (entry.path === file) writes.add(entry.after);
+    }
+  }
+  return writes;
 }
 
 /** The manifest of a captured run, or null when it is missing or unreadable. */
