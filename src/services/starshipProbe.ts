@@ -1,0 +1,273 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import * as os from 'node:os';
+import * as nodePath from 'node:path';
+import { generateToml } from '../generators/starship.ts';
+import type { WizardState } from '../types.ts';
+import { findStarshipAsync } from './detector.ts';
+import { runCaptureBoth } from './exec.ts';
+import { DEFAULT_PREVIEW_DEPS, STARSHIP_CONFIG_FILE, starshipEnv } from './preview.ts';
+
+const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
+
+export function stripAnsi(text: string): string {
+  return text.replace(ANSI, '');
+}
+
+export interface ModuleTiming {
+  module: string;
+  ms: number;
+  output: string;
+}
+
+const DURATION_MS: Record<string, number> = { ns: 1e-6, µs: 1e-3, us: 1e-3, ms: 1, s: 1000 };
+
+function parseDuration(text: string): number | null {
+  if (text.startsWith('<')) return 0;
+  const match = /^([\d.]+)(ns|µs|us|ms|s)$/.exec(text);
+  return match ? Number(match[1]) * DURATION_MS[match[2]] : null;
+}
+
+/** The rows of `starship timings`, slowest first. */
+export function parseTimings(text: string): ModuleTiming[] {
+  return stripAnsi(text)
+    .split('\n')
+    .flatMap((line) => {
+      const match = /^\s*(\S+)\s+-\s+(\S+)\s+-\s+"(.*)"\s*$/.exec(line);
+      const ms = match ? parseDuration(match[2]) : null;
+      return match && ms !== null ? [{ module: match[1], ms, output: match[3] }] : [];
+    })
+    .sort((a, b) => b.ms - a.ms);
+}
+
+export interface Explanation {
+  output: string;
+  description: string;
+}
+
+/** The rows of `starship explain`: what each segment shows, and why. */
+export function parseExplain(text: string): Explanation[] {
+  return stripAnsi(text)
+    .split('\n')
+    .flatMap((line) => {
+      const at = line.indexOf('  -  ');
+      if (at === -1) return [];
+      const output = line.slice(0, at).trim();
+      const description = line.slice(at + 5).trim();
+      return output && description ? [{ output, description }] : [];
+    });
+}
+
+/** A module slower than this gets a suggestion. */
+export const SLOW_MODULE_MS = 50;
+/** Starship runs modules in parallel, so a prompt is about as slow as its slowest module. */
+export const SLOW_PROMPT_MS = 200;
+
+const DEFAULT_COMMAND_TIMEOUT_MS = 500;
+const DEFAULT_SCAN_TIMEOUT_MS = 30;
+
+const VERSION_MODULES = new Set([
+  'bun',
+  'c',
+  'cmake',
+  'crystal',
+  'dart',
+  'deno',
+  'dotnet',
+  'elixir',
+  'elm',
+  'erlang',
+  'golang',
+  'gradle',
+  'haskell',
+  'java',
+  'julia',
+  'kotlin',
+  'lua',
+  'nim',
+  'nodejs',
+  'ocaml',
+  'perl',
+  'php',
+  'python',
+  'ruby',
+  'rust',
+  'scala',
+  'swift',
+  'zig',
+]);
+
+export interface Suggestion {
+  module?: string;
+  text: string;
+  toml?: string;
+}
+
+function topLevelNumber(toml: string, key: string): number | null {
+  for (const line of toml.split('\n')) {
+    if (line.trim().startsWith('[')) return null;
+    const match = new RegExp(`^\\s*${key}\\s*=\\s*(\\d+)`).exec(line);
+    if (match) return Number(match[1]);
+  }
+  return null;
+}
+
+function moduleSuggestion(timing: ModuleTiming): Suggestion {
+  const took = `${timing.module} took ${Math.round(timing.ms)}ms`;
+  if (timing.module === 'git_status' || timing.module === 'git_metrics') {
+    return {
+      module: timing.module,
+      text: `${took}: git is slow to report changes in this repo. In a large repo, turn on git's file system monitor (git config core.fsmonitor true), or turn the module off here.`,
+      toml: `[${timing.module}]\ndisabled = true`,
+    };
+  }
+  if (VERSION_MODULES.has(timing.module)) {
+    return {
+      module: timing.module,
+      text: `${took}: it runs the tool's version command on every prompt. Turn it off if you do not need the version shown.`,
+      toml: `[${timing.module}]\ndisabled = true`,
+    };
+  }
+  if (timing.module === 'directory') {
+    return {
+      module: timing.module,
+      text: `${took}: reading this folder is slow, which usually means a network or synced drive rather than the config.`,
+    };
+  }
+  return {
+    module: timing.module,
+    text: `${took}. Turn it off if you can do without it.`,
+    toml: `[${timing.module}]\ndisabled = true`,
+  };
+}
+
+/** What to change, from the timings, Starship's warnings and the config's own timeouts. */
+export function suggestFixes(
+  timings: ModuleTiming[],
+  warnings: string,
+  toml: string
+): Suggestion[] {
+  const commandTimeout = topLevelNumber(toml, 'command_timeout') ?? DEFAULT_COMMAND_TIMEOUT_MS;
+  const scanTimeout = topLevelNumber(toml, 'scan_timeout') ?? DEFAULT_SCAN_TIMEOUT_MS;
+  const plain = stripAnsi(warnings);
+  const suggestions: Suggestion[] = [];
+
+  const timedOut = [...plain.matchAll(/Executing command "([^"]+)" timed out/g)].map((m) =>
+    nodePath.basename(m[1])
+  );
+  if (timedOut.length > 0) {
+    suggestions.push({
+      text: `${[...new Set(timedOut)].join(', ')} did not answer within command_timeout (${commandTimeout}ms), so its module showed nothing. Raise the timeout at the top of the config.`,
+      toml: `command_timeout = ${commandTimeout * 2}`,
+    });
+  }
+  if (/scan\w*[^\n]*timed out/i.test(plain)) {
+    suggestions.push({
+      text: `Scanning this folder took longer than scan_timeout (${scanTimeout}ms), so modules that look for project files may be missing. Raise it at the top of the config.`,
+      toml: `scan_timeout = ${Math.max(scanTimeout * 2, 100)}`,
+    });
+  }
+  for (const timing of timings) {
+    if (timing.ms >= SLOW_MODULE_MS) suggestions.push(moduleSuggestion(timing));
+  }
+  return suggestions;
+}
+
+export interface TimingsReport {
+  path: string;
+  slowestMs: number;
+  slow: boolean;
+  modules: ModuleTiming[];
+  suggestions: Suggestion[];
+}
+
+export interface ProbeDeps {
+  isStarshipInstalled(): Promise<boolean>;
+  /** Runs `starship <command>` for `path` (passed as --path and PWD) against `configPath`. */
+  run(
+    command: 'timings' | 'explain',
+    path: string,
+    configPath: string,
+    home?: string
+  ): Promise<{ stdout: string; stderr: string }>;
+}
+
+export const DEFAULT_PROBE_DEPS: ProbeDeps = {
+  isStarshipInstalled: async () => (await findStarshipAsync()).installed,
+  run: (command, path, configPath, home) =>
+    runCaptureBoth('starship', [command, '--path', path, '--terminal-width', '200'], {
+      env: { ...starshipEnv(configPath, home), PWD: path },
+    }),
+};
+
+export class StarshipMissingError extends Error {
+  constructor() {
+    super('Starship is not installed, so there is nothing to time. Install it first.');
+    this.name = 'StarshipMissingError';
+  }
+}
+
+/**
+ * Times every module of the config `toml` with `starship timings` in the folder
+ * `path`, with the real HOME so modules see what they would in a real prompt.
+ * Reads only: the config goes to a temporary folder.
+ */
+export async function timePrompt(
+  toml: string,
+  path: string,
+  deps: ProbeDeps = DEFAULT_PROBE_DEPS
+): Promise<TimingsReport> {
+  if (!(await deps.isStarshipInstalled())) throw new StarshipMissingError();
+  const scratch = await mkdtemp(nodePath.join(os.tmpdir(), 'shellconf-timings-'));
+  try {
+    const configPath = nodePath.join(scratch, STARSHIP_CONFIG_FILE);
+    await writeFile(configPath, toml, 'utf8');
+    const { stdout, stderr } = await deps.run('timings', path, configPath);
+    const modules = parseTimings(stdout);
+    const slowestMs = modules[0]?.ms ?? 0;
+    return {
+      path,
+      slowestMs,
+      slow: slowestMs >= SLOW_PROMPT_MS,
+      modules,
+      suggestions: suggestFixes(modules, stderr, toml),
+    };
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+export type ExplainResult =
+  | { mode: 'real'; items: Explanation[] }
+  | { mode: 'unavailable'; reason: 'starship-missing' | 'explain-failed' };
+
+/**
+ * Runs `starship explain` for the generated config in the preview's sample
+ * project, so the Review step can say why each segment shows.
+ */
+export async function explainPromptAsync(
+  state: WizardState,
+  deps: ProbeDeps = DEFAULT_PROBE_DEPS
+): Promise<ExplainResult> {
+  if (!(await deps.isStarshipInstalled()))
+    return { mode: 'unavailable', reason: 'starship-missing' };
+  let scratch: string | null = null;
+  try {
+    scratch = await DEFAULT_PREVIEW_DEPS.createScratch();
+    await DEFAULT_PREVIEW_DEPS.writeConfig(scratch, generateToml(state));
+    const project = await DEFAULT_PREVIEW_DEPS.scaffoldProject(scratch);
+    const { stdout } = await deps.run(
+      'explain',
+      project,
+      nodePath.join(scratch, STARSHIP_CONFIG_FILE),
+      scratch
+    );
+    const items = parseExplain(stdout);
+    return items.length > 0
+      ? { mode: 'real', items }
+      : { mode: 'unavailable', reason: 'explain-failed' };
+  } catch {
+    return { mode: 'unavailable', reason: 'explain-failed' };
+  } finally {
+    if (scratch) await DEFAULT_PREVIEW_DEPS.cleanup(scratch);
+  }
+}
