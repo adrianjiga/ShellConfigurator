@@ -117,7 +117,8 @@ export function assertRcWired(rcPath, shell) {
 /**
  * Runs a real `uninstall --yes` for one shell after an apply, then asserts the
  * rc lost every managed line, the per-shell config moved to a backup, a second
- * run finds nothing, and the printed undo commands bring both back.
+ * run finds nothing, a `rollback` brings both back, and a second `rollback`
+ * undoes the apply too.
  */
 export function assertUninstalled(homeDir, rcPath, shell) {
   const configPath = nodePath.join(process.env.XDG_CONFIG_HOME, 'starship', `${shell}.toml`);
@@ -141,9 +142,21 @@ export function assertUninstalled(homeDir, rcPath, shell) {
   const again = runCli(['uninstall', '--yes', '--shells', shell]);
   assert.ok(!again.includes('REMOVED'), `a second uninstall removed something:\n${again}`);
 
-  const undo = out.split('\n').filter((line) => line.startsWith('  cp '));
-  assert.equal(undo.length, 2, `uninstall did not print the rc and config undo commands:\n${out}`);
-  for (const line of undo) execFileSync('sh', ['-c', line]);
+  assert.ok(
+    out.includes('Undo it with: shell-configurator rollback'),
+    `uninstall did not point at rollback:\n${out}`
+  );
+  const runs = runCli(['rollback', '--list']);
+  assert.match(runs, /uninstall .*\(.*next to roll back\)/, `rollback --list:\n${runs}`);
+
+  const undoUninstall = runCli(['rollback', '--yes']);
+  assert.ok(!undoUninstall.includes('FAILED'), `rollback failed:\n${undoUninstall}`);
   assertRcWired(rcPath, shell);
-  assertStarshipConfig(configPath, 'config after undoing the uninstall');
+  assertStarshipConfig(configPath, 'config after rolling back the uninstall');
+
+  const undoApply = runCli(['rollback', '--yes']);
+  assert.ok(!undoApply.includes('FAILED'), `second rollback failed:\n${undoApply}`);
+  const rcAfter = existsSync(rcPath) ? readFileSync(rcPath, 'utf8') : '';
+  assert.ok(!rcAfter.includes('ShellConfigurator'), `rolling back the apply left:\n${rcAfter}`);
+  assert.ok(!existsSync(configPath), `rolling back the apply left ${configPath}`);
 }
