@@ -19,14 +19,14 @@ export type HistoryKind = 'install' | 'apply' | 'uninstall' | 'rollback';
 export interface HistoryRecord {
   /** Schema version of this record. */
   version: 1;
-  /** When the run started, ISO 8601. */
+  /** When the run was recorded (after it finished), ISO 8601. */
   timestamp: string;
   kind: HistoryKind;
-  /** Snapshot id of the state this run applied; the #14 rollback handle. */
+  /** Snapshot id of the state card this run applied. */
   snapshotId?: string;
-  /** Outcome of each install task, for the installer lines of `--list-runs`. */
+  /** Outcome of each install task. */
   results?: InstallTask[];
-  /** Process exit code; omitted when the run was interrupted before finishing. */
+  /** The exit code the run ended with. */
   exitCode?: number;
   /** The headless invocation (e.g. `apply --state saved.json`), for reproduction. */
   command?: string;
@@ -39,7 +39,7 @@ export function historyFilePath(): string {
 
 export interface RecordRunOptions {
   kind: HistoryKind;
-  /** Snapshot the applied state as the rollback handle. */
+  /** Snapshot the applied state card alongside the record. */
   state?: WizardState;
   results?: InstallTask[];
   command?: string;
@@ -117,8 +117,8 @@ function ensureTrailingNewline(file: string): void {
 
 /**
  * The per-run snapshot store: <stateDir>/snapshots/. Each snapshot is the
- * versioned state card the run applied, resolved later by `snapshotId` during
- * `uninstall`/`--rollback` (#14).
+ * versioned state card the run applied, found again by `snapshotId` (as
+ * `lastRunShells` does for `--restore`).
  */
 export function snapshotDir(): string {
   return path.join(stateDir(), 'snapshots');

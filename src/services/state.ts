@@ -18,8 +18,8 @@ import { CliUsageError } from './errors.ts';
  * The public, versioned state-card format (D2). A card captures only what the
  * user *decided* — never wizard runtime (step, detection results, task state) —
  * so the same card produces the same prompt on any machine. The interactive
- * wizard and the headless CLI share these shapes, and `#14` rollback will store
- * the very card an install applied.
+ * wizard and the headless CLI share these shapes, and each wizard install
+ * snapshots the card it applied into the run history.
  *
  * `version` is bumped on any breaking change to the shape; `parseState` refuses
  * cards it does not understand rather than silently misreading them.
@@ -63,7 +63,6 @@ export interface StateCard {
 function runtimeDefaults(): Pick<
   WizardState,
   | 'step'
-  | 'hasNerdFont'
   | 'packageManager'
   | 'installedShells'
   | 'terminal'
@@ -74,7 +73,6 @@ function runtimeDefaults(): Pick<
 > {
   return {
     step: 'welcome',
-    hasNerdFont: false,
     packageManager: 'script',
     installedShells: [],
     terminal: null,
@@ -192,8 +190,7 @@ function parseModuleList(value: unknown, slot: 'left' | 'right'): ModuleId[] | n
 
 /**
  * Reads a card's `directory.substitutions`. Malformed entries are dropped
- * rather than failing the whole card, matching how the other optional fields
- * degrade; a duplicate source keeps the last entry, as TOML would.
+ * rather than failing the whole card; a duplicate source keeps the last entry.
  */
 function parseSubstitutionList(value: unknown): DirectorySubstitution[] {
   if (!Array.isArray(value)) return [];
@@ -242,10 +239,9 @@ function parseNerdFontChoice(value: unknown): NerdFontChoice {
 
 /**
  * Parses a state card into a wizard state. Fails loudly on an unknown version
- * (a card written by a newer tool) rather than guessing. Present-but-malformed
- * fields fall back to their defaults so a hand-edited card degrades instead of
- * crashing the generator; a structurally broken `nerdFontToInstall` is a hard
- * error because an `{kind:'install'}` without an id crashes the installer.
+ * (a card written by a newer tool) rather than guessing, and on any present but
+ * malformed field; absent fields take their defaults. Only malformed directory
+ * substitution entries are dropped instead.
  */
 export function parseState(json: string): WizardState {
   let card: unknown;

@@ -77,11 +77,9 @@ export function validateFlagValues(flags: CliFlags): void {
 }
 
 /**
- * Same fail-fast discipline for a merged state — mainly the values that come
- * from a state card rather than the flags, which the parser's lenient coercion
- * lets through. `stateFromFlags` re-checks so the card path cannot bypass it.
- * Module ids are checked here too (left/right), since a hand-edited card can
- * carry one the generator would otherwise render as a dead `[bogus]` stub.
+ * Same fail-fast discipline for the merged flags-and-card state: the card parser
+ * checks each value on its own, but only the merged state shows an unknown font
+ * id, a default shell that is not being configured, or a font left to the picker.
  */
 function assertValidState(state: WizardState): void {
   if (state.preset !== null && !PRESET_IDS.includes(state.preset)) {

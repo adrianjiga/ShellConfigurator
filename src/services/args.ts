@@ -47,7 +47,6 @@ export interface CliFlags {
   fix?: boolean;
   /** Let repair also apply the fixes warnings carry (--include-warnings). */
   includeWarnings?: boolean;
-  // Global flags, kept for parity with index.tsx's existing surface.
   help: boolean;
   version: boolean;
   restore: boolean;

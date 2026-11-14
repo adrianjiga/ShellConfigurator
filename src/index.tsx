@@ -231,7 +231,7 @@ export async function runRepairCommand(flags: CliFlags): Promise<void> {
 }
 
 /**
- * Runs a headless subcommand (`generate`, `apply` or `doctor`) to completion,
+ * Runs a headless subcommand (`generate`, `apply`, `doctor` or `repair`) to completion,
  * returning true when the flags targeted one so the Ink wizard is skipped
  * entirely. Errors propagate for the caller's fatal handler — headless runs
  * never render. `command` is the original invocation line, recorded for
