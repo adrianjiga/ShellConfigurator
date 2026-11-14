@@ -15,6 +15,7 @@ import {
   type WizardState,
 } from '../types.ts';
 import type { CliFlags } from './args.ts';
+import { cancelOnSignals, signalExitCode } from './cancel.ts';
 import {
   detectContainerAsync,
   detectInstalledShellsAsync,
@@ -538,11 +539,22 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
       : [...progress, { id: id as InstallTask['id'], label: id, status: 'pending', ...patch }];
   };
   let captured: { result: InstallTask[]; runId: string | null };
+  const controller = new AbortController();
+  const stopListening = cancelOnSignals(controller, () =>
+    process.stderr.write(
+      '\nCancelling: the step that is running finishes first (press Ctrl+C again to quit now).\n'
+    )
+  );
   try {
     captured = await captureRun(
       [...trackedFiles(), whatChangedPath()],
       async () => {
-        finished = await runInstallTasks(state, DEFAULT_INSTALL_TASK_DEPS, onUpdate);
+        finished = await runInstallTasks(
+          state,
+          DEFAULT_INSTALL_TASK_DEPS,
+          onUpdate,
+          controller.signal
+        );
         return finished;
       },
       {
@@ -562,25 +574,24 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
       }
     );
   } catch (err) {
+    stopListening();
     if (!(err instanceof CapturedRunError)) throw err;
     recordRunSafely({ kind: 'apply', state, command, exitCode: 1, runId: err.runId });
     if (summary) process.stdout.write(`What changed, and how to undo it: ${summary}\n`);
     throw err.cause;
   }
+  const cancelledBy = stopListening();
   const { result: results, runId } = captured;
   const failed = results.some((t) => t.status === 'failed');
   printTasks(results);
 
-  if (failed) process.exitCode = 1;
+  const exitCode = cancelledBy ? signalExitCode(cancelledBy) : failed ? 1 : 0;
+  if (exitCode !== 0) process.exitCode = exitCode;
 
-  recordRunSafely({
-    kind: 'apply',
-    state,
-    command,
-    results,
-    exitCode: failed ? 1 : 0,
-    runId,
-  });
+  recordRunSafely({ kind: 'apply', state, command, results, exitCode, runId });
 
+  if (cancelledBy && runId) {
+    process.stdout.write('\nCancelled. Undo what it changed with: shell-configurator rollback\n');
+  }
   if (summary) process.stdout.write(`\nWhat changed, and how to undo it: ${summary}\n`);
 }

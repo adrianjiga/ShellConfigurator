@@ -989,7 +989,8 @@ describe('runApply', () => {
         sharedConfigToml: '[character]\nsuccess_symbol = "…"\n',
       }),
       DEFAULT_INSTALL_TASK_DEPS,
-      expect.any(Function)
+      expect.any(Function),
+      expect.any(AbortSignal)
     );
   });
 
@@ -1003,7 +1004,8 @@ describe('runApply', () => {
     expect(mockRunInstallTasks).toHaveBeenCalledWith(
       expect.objectContaining({ container: true }),
       DEFAULT_INSTALL_TASK_DEPS,
-      expect.any(Function)
+      expect.any(Function),
+      expect.any(AbortSignal)
     );
   });
 
@@ -1018,7 +1020,8 @@ describe('runApply', () => {
     expect(mockRunInstallTasks).toHaveBeenCalledWith(
       expect.objectContaining({ terminal: 'kitty' }),
       DEFAULT_INSTALL_TASK_DEPS,
-      expect.any(Function)
+      expect.any(Function),
+      expect.any(AbortSignal)
     );
   });
 
@@ -1031,8 +1034,28 @@ describe('runApply', () => {
     expect(mockRunInstallTasks).toHaveBeenCalledWith(
       expect.objectContaining({ terminal: null }),
       DEFAULT_INSTALL_TASK_DEPS,
-      expect.any(Function)
+      expect.any(Function),
+      expect.any(AbortSignal)
     );
+  });
+
+  it('cancels the steps on Ctrl+C, then records the run and exits like a signal', async () => {
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
+    const listeners = process.listenerCount('SIGINT');
+    mockRunInstallTasks.mockImplementationOnce(async (_state, _deps, _onUpdate, signal) => {
+      process.emit('SIGINT');
+      expect(signal?.aborted).toBe(true);
+      return [{ id: 'config', label: 'Write config files', status: 'failed' }] as never;
+    });
+
+    await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }), 'apply --shells zsh');
+
+    expect(process.exitCode).toBe(130);
+    expect(mockRecordRun).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 130 }));
+    expect(process.listenerCount('SIGINT')).toBe(listeners);
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Cancelling'));
+    stderrWrite.mockRestore();
+    process.exitCode = undefined;
   });
 
   it('adopts the existing shared config when --adopt is passed without --import-url', async () => {

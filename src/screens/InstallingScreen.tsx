@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { statusMark } from '../config/status.ts';
+import { CANCEL_SIGNALS } from '../services/cancel.ts';
 import { errorMessage } from '../services/errors.ts';
 import {
   buildTaskList,
@@ -41,9 +42,9 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
       setCancelling(true);
       abortRef.current?.abort();
     };
-    process.on('SIGINT', onSigint);
+    for (const signal of CANCEL_SIGNALS) process.on(signal, onSigint);
     return () => {
-      process.off('SIGINT', onSigint);
+      for (const signal of CANCEL_SIGNALS) process.off(signal, onSigint);
     };
   }, []);
 
