@@ -28,7 +28,7 @@ import {
   readStarshipVersion,
   verifyStarshipConfig,
 } from './installer.ts';
-import { readTerminalFontFamily, terminalLabel } from './terminalFont.ts';
+import { readTerminalFontFamily, TERMINAL_LABELS } from './terminalFont.ts';
 
 export type DoctorStatus = 'pass' | 'warn' | 'fail';
 
@@ -583,7 +583,7 @@ async function checkFontSelected(
     };
   }
 
-  const label = terminalLabel(terminalId);
+  const label = TERMINAL_LABELS[terminalId];
   const expectedFamily = fontId ? getFontFamily(fontId) : null;
   const wireFix: DoctorFix | undefined = expectedFamily
     ? { kind: 'wire-font', terminalId, family: expectedFamily }

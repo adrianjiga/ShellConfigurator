@@ -19,7 +19,7 @@ import {
   installStarship,
   readStarshipVersion,
 } from './installer.ts';
-import { type TerminalFontResult, terminalLabel, wireTerminalFont } from './terminalFont.ts';
+import { TERMINAL_LABELS, type TerminalFontResult, wireTerminalFont } from './terminalFont.ts';
 
 export type RepairStatus = 'fixed' | 'failed' | 'skipped' | 'planned';
 
@@ -90,7 +90,7 @@ function describeFix(fix: DoctorFix): string {
     case 'reinstall-font':
       return `reinstall ${fontLabel(fix.fontId)}`;
     case 'wire-font':
-      return `set the ${terminalLabel(fix.terminalId)} font to "${fix.family}"`;
+      return `set the ${TERMINAL_LABELS[fix.terminalId]} font to "${fix.family}"`;
   }
 }
 
@@ -128,7 +128,7 @@ async function applyFix(
       const result = deps.wireTerminalFont(fix.terminalId, fix.family);
       return result.applied
         ? {
-            detail: `set the ${terminalLabel(fix.terminalId)} font to "${fix.family}"`,
+            detail: `set the ${TERMINAL_LABELS[fix.terminalId]} font to "${fix.family}"`,
             status: 'fixed',
           }
         : { detail: result.note ?? 'could not edit the terminal config', status: 'skipped' };

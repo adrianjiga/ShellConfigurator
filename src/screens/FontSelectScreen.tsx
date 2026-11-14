@@ -4,7 +4,7 @@ import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { getNerdFontsDir, NERD_FONTS } from '../services/installer.ts';
-import { terminalLabel } from '../services/terminalFont.ts';
+import { TERMINAL_LABELS } from '../services/terminalFont.ts';
 import type { WizardState } from '../types.ts';
 
 interface FontSelectScreenProps {
@@ -38,7 +38,7 @@ export function FontSelectScreen({ state, onNext, onBack }: FontSelectScreenProp
         </Text>
         <Text color={uiColor('gray')} italic>
           {state.terminal && state.terminal !== 'wezterm'
-            ? `It will also be selected in ${terminalLabel(state.terminal)} for you.`
+            ? `It will also be selected in ${TERMINAL_LABELS[state.terminal]} for you.`
             : "You'll need to set this font in your terminal emulator settings after installing."}
         </Text>
 

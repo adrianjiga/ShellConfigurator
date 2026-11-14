@@ -14,10 +14,6 @@ export const TERMINAL_LABELS: Record<TerminalId, string> = {
   foot: 'foot',
 };
 
-export function terminalLabel(id: TerminalId): string {
-  return TERMINAL_LABELS[id];
-}
-
 export interface TerminalFontResult {
   applied: boolean;
   path?: string;

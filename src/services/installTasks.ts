@@ -37,7 +37,7 @@ import {
   shellInstallSupported,
   verifyStarshipConfig,
 } from './installer.ts';
-import { type TerminalFontResult, terminalLabel, wireTerminalFont } from './terminalFont.ts';
+import { TERMINAL_LABELS, type TerminalFontResult, wireTerminalFont } from './terminalFont.ts';
 
 export interface InstallTaskDeps {
   isStarshipInstalled: () => Promise<{ installed: boolean; version?: string }>;
@@ -172,7 +172,7 @@ export function buildTaskList(
   if (terminal) {
     tasks.push({
       id: TASK_IDS.terminal,
-      label: `Set ${terminalLabel(terminal)} font`,
+      label: `Set ${TERMINAL_LABELS[terminal]} font`,
       status: 'pending',
     });
   }
