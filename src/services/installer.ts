@@ -398,6 +398,10 @@ async function installFontFiles(zipName: string, buffer: Buffer): Promise<void> 
     fs.writeFileSync(path.join(fontsDir, file.name), file.bytes);
   }
 
+  await refreshFontCache(fontsDir);
+}
+
+async function refreshFontCache(fontsDir: string): Promise<void> {
   // Captured rather than inherited: fc-cache never reads stdin, and suspending
   // the UI for it would blank the install screen for no reason. Non-fatal:
   // fc-cache may be absent on minimal systems.
@@ -522,13 +526,7 @@ export async function installedFontFiles(fontId: string): Promise<string[] | nul
 
 export async function removeFontFiles(files: string[]): Promise<void> {
   for (const file of files) fs.rmSync(file, { force: true });
-  if (process.platform !== 'darwin') {
-    try {
-      await runCapture('fc-cache', ['-f', getNerdFontsDir()]);
-    } catch {
-      // fc-cache may be absent on minimal systems, as on install.
-    }
-  }
+  await refreshFontCache(getNerdFontsDir());
 }
 
 function listedLoginShells(): string[] {
