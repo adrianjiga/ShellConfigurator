@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import { Box, Text, useInput } from 'ink';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavHints } from '../components/NavHints.tsx';
 import { ConfigPlan, TaskPlan } from '../components/PlanSections.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
@@ -17,6 +17,7 @@ import {
   plannedResetShells,
 } from '../services/installTasks.ts';
 import { redactHome } from '../services/redact.ts';
+import { type ExplainResult, explainPromptAsync } from '../services/starshipProbe.ts';
 import type { ShellId, WizardState } from '../types.ts';
 
 interface ReviewScreenProps {
@@ -74,6 +75,32 @@ function RcWiring({ change }: { change: FileChange | undefined }) {
   );
 }
 
+const EXPLAIN_UNAVAILABLE: Record<
+  Extract<ExplainResult, { mode: 'unavailable' }>['reason'],
+  string
+> = {
+  'starship-missing': 'Starship is not installed yet, so it cannot explain the prompt.',
+  'explain-failed': 'Starship could not explain this prompt.',
+};
+
+function Explanation({ result }: { result: ExplainResult | null }) {
+  if (!result) return <Text color={uiColor('gray')}>Asking Starship…</Text>;
+  if (result.mode === 'unavailable') {
+    return <Text color={uiColor('gray')}>{EXPLAIN_UNAVAILABLE[result.reason]}</Text>;
+  }
+  const width = Math.max(...result.items.map((item) => item.output.length));
+  return (
+    <Box flexDirection="column">
+      {result.items.map((item) => (
+        <Box key={`${item.output}:${item.description}`} gap={2}>
+          <Text color={uiColor('cyan')}>{item.output.padEnd(width)}</Text>
+          <Text>{item.description}</Text>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
   const fontId = plannedFont(state);
   const fontName = fontId ? fontLabel(fontId) : null;
@@ -91,7 +118,28 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
     )
   );
 
-  useInput((_char, key) => {
+  const [explainShown, setExplainShown] = useState(false);
+  const [explanation, setExplanation] = useState<ExplainResult | null>(null);
+  const explainRequested = useRef(false);
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    []
+  );
+
+  useInput((char, key) => {
+    if (char.toLowerCase() === 'e' && !state.keepExistingConfig) {
+      if (!explainRequested.current) {
+        explainRequested.current = true;
+        void explainPromptAsync(state).then((result) => {
+          if (mounted.current) setExplanation(result);
+        });
+      }
+      setExplainShown((shown) => !shown);
+      return;
+    }
     if (key.escape) {
       onBack();
       return;
@@ -118,6 +166,15 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
         <TaskPlan title="This run will" tasks={tasks} />
         <ConfigPlan state={state} />
         {fontFallback && <Text color={uiColor('gray')}>{FONT_FALLBACK_NOTE}</Text>}
+
+        {explainShown && (
+          <Box flexDirection="column">
+            <Text bold>Why each part of the prompt shows</Text>
+            <Box marginLeft={1}>
+              <Explanation result={explanation} />
+            </Box>
+          </Box>
+        )}
 
         {sharedConfigShadowed && (
           <Text color={uiColor('yellow')}>
@@ -184,6 +241,9 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
       <NavHints
         hints={[
           { key: 'Enter', label: state.dryRun ? 'finish the dry run' : 'install' },
+          ...(state.keepExistingConfig
+            ? []
+            : [{ key: 'e', label: explainShown ? 'hide the explanation' : 'explain the prompt' }]),
           { key: 'Esc', label: 'back' },
         ]}
       />

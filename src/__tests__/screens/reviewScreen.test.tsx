@@ -5,6 +5,7 @@ import { cleanup, render } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReviewScreen } from '../../screens/ReviewScreen.tsx';
 import { plannedPathDir } from '../../services/installer.ts';
+import { explainPromptAsync } from '../../services/starshipProbe.ts';
 import { DEFAULT_STATE } from '../../types.ts';
 import { pressEsc } from '../helpers/ink.ts';
 import { flush } from '../helpers/wait.ts';
@@ -270,5 +271,56 @@ describe('ReviewScreen against the files on disk', () => {
     const frame = (instance.lastFrame() ?? '').replace(/\s+/g, ' ');
     expect(frame).toContain('already set up: the file stays as it is');
     expect(frame).toContain('No config or rc file changes.');
+  });
+});
+
+describe('ReviewScreen explain', () => {
+  it('asks Starship once and toggles why each part of the prompt shows with e', async () => {
+    vi.mocked(explainPromptAsync).mockResolvedValueOnce({
+      mode: 'real',
+      items: [
+        { output: '~/projects', description: 'The current working directory' },
+        { output: 'on main', description: 'The active branch of the current Git repo' },
+      ],
+    });
+    const { instance } = setup();
+    await flush();
+    expect(instance.lastFrame()).toContain('explain the prompt');
+    expect(instance.lastFrame()).not.toContain('Why each part');
+
+    instance.stdin.write('e');
+    await flush();
+    const frame = instance.lastFrame() ?? '';
+    expect(frame).toContain('Why each part of the prompt shows');
+    expect(frame).toContain('The current working directory');
+    expect(frame).toContain('hide the explanation');
+
+    instance.stdin.write('e');
+    await flush();
+    expect(instance.lastFrame()).not.toContain('Why each part');
+    instance.stdin.write('e');
+    await flush();
+    expect(instance.lastFrame()).toContain('The active branch');
+    expect(explainPromptAsync).toHaveBeenCalledOnce();
+  });
+
+  it('says why there is no explanation when Starship cannot give one', async () => {
+    const { instance } = setup();
+    await flush();
+    instance.stdin.write('e');
+    await flush();
+    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
+      'Starship is not installed yet, so it cannot explain the prompt.'
+    );
+  });
+
+  it('offers no explanation in adopt mode, where no config is generated', async () => {
+    const { instance } = setup({ keepExistingConfig: true });
+    await flush();
+    instance.stdin.write('e');
+    await flush();
+    expect(instance.lastFrame()).not.toContain('explain the prompt');
+    expect(instance.lastFrame()).not.toContain('Why each part');
+    expect(explainPromptAsync).not.toHaveBeenCalled();
   });
 });
