@@ -626,8 +626,10 @@ function timePrompt(toml: string, path: string, deps?: ProbeDeps): Promise<Timin
 // (200). `character`, `line_break` and `fill` never get a fix, and a module
 // that ran into the timeout gets only the command_timeout advice (git_status,
 // git_metrics and directory keep theirs). An existing config is timed where it
-// is; one built from flags goes to a scratch folder (ScratchDeps). Escapes are
-// stripped with node:util's stripVTControlCharacters. The config's own
+// is, Starship's defaults through the missing path itself, and one built from
+// flags goes to a scratch folder (ScratchDeps). Escapes are stripped with
+// node:util's stripVTControlCharacters; brackets in strings and comments do not
+// count when the top-level timeouts are read. The config's own
 // command_timeout/scan_timeout are read from its top level (past multi-line
 // strings, with `_` digit separators). Rejects with StarshipMissingError without
 // Starship, and with StarshipTimedOutError when Starship is killed after 30s.
