@@ -108,12 +108,14 @@ describe('stateFromFlags', () => {
     expect(stateFromFlags(flags({ preset: 'pure-prompt' })).hasNerdFont).toBe(false);
   });
 
-  it('plans the font install a Nerd Font preset needs', () => {
-    const state = stateFromFlags(flags({ preset: 'pastel-powerline' }));
-    expect(state.nerdFontToInstall).toEqual({ kind: 'install', id: NERD_FONTS[0].id });
-    expect(stateFromFlags(flags({ preset: 'pure-prompt' })).nerdFontToInstall).toEqual({
+  it('never plans a font install the flags did not ask for', () => {
+    expect(stateFromFlags(flags({ preset: 'pastel-powerline' })).nerdFontToInstall).toEqual({
       kind: 'none',
     });
+    expect(
+      stateFromFlags(flags({ preset: 'pastel-powerline', font: NERD_FONTS[0].id }))
+        .nerdFontToInstall
+    ).toEqual({ kind: 'install', id: NERD_FONTS[0].id });
   });
 
   it('does not plan a font install when the user says glyphs already render', () => {
@@ -1033,6 +1035,35 @@ describe('runApply', () => {
 
     expect(mockRunInstallTasks).toHaveBeenCalledWith(
       expect.objectContaining({ terminal: null }),
+      DEFAULT_INSTALL_TASK_DEPS,
+      expect.any(Function),
+      expect.any(AbortSignal)
+    );
+  });
+
+  it('stops a Nerd Font preset without font flags instead of installing a font', async () => {
+    await expect(
+      runApply(flags({ subcommand: 'apply', preset: 'tokyo-night', shells: ['zsh'] }))
+    ).rejects.toThrow(
+      new CliUsageError(
+        `The tokyo-night preset draws Nerd Font icons. Pass --font <id> to install a Nerd Font (${NERD_FONTS.map((font) => font.id).join(', ')}), --has-nerd-font when the terminal already shows them, or --no-nerd-font for a version without icons.`
+      )
+    );
+    expect(mockRunInstallTasks).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ hasNerdFont: true }, { kind: 'none' }],
+    [{ font: 'FiraCode' }, { kind: 'install', id: 'FiraCode' }],
+  ])('runs a Nerd Font preset once %o says how to show its icons', async (extra, font) => {
+    mockRunInstallTasks.mockResolvedValue([] as never);
+
+    await runApply(
+      flags({ subcommand: 'apply', preset: 'tokyo-night', shells: ['zsh'], ...extra })
+    );
+
+    expect(mockRunInstallTasks).toHaveBeenCalledWith(
+      expect.objectContaining({ nerdFontToInstall: font }),
       DEFAULT_INSTALL_TASK_DEPS,
       expect.any(Function),
       expect.any(AbortSignal)

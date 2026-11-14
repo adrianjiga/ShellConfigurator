@@ -166,14 +166,6 @@ export function stateFromFlags(flags: CliFlags): WizardState {
     if (flags.hasNerdFont === undefined && !flags.stateFile) {
       state = { ...state, hasNerdFont: preset.requiresNerdFont };
     }
-    if (
-      preset.requiresNerdFont &&
-      flags.hasNerdFont === undefined &&
-      flags.font === undefined &&
-      !flags.stateFile
-    ) {
-      state = { ...state, nerdFontToInstall: { kind: 'install', id: NERD_FONTS[0].id } };
-    }
   }
 
   if (flags.palette) state = { ...state, palette: flags.palette as WizardState['palette'] };
@@ -380,6 +372,21 @@ export async function fetchImportedConfig(
  * which shells are installed, and which package manager installs should use.
  */
 async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
+  const preset = PRESETS.find((p) => p.id === flags.preset);
+  if (
+    preset?.requiresNerdFont &&
+    flags.hasNerdFont === undefined &&
+    flags.font === undefined &&
+    !flags.stateFile &&
+    !flags.adopt &&
+    !flags.importUrl
+  ) {
+    throw new CliUsageError(
+      `The ${preset.id} preset draws Nerd Font icons. Pass --font <id> to install a Nerd Font ` +
+        `(${NERD_FONTS.map((font) => font.id).join(', ')}), --has-nerd-font when the terminal ` +
+        'already shows them, or --no-nerd-font for a version without icons.'
+    );
+  }
   let state = stateFromFlags(flags);
 
   if (!flags.dryRun && state.selectedShells.length === 0) {
