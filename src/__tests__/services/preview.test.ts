@@ -25,6 +25,7 @@ const { mockExecFile, mockMkdtemp, mockMkdir, mockWriteFile, mockRm } = vi.hoist
   };
 });
 
+vi.unmock('../../services/preview.ts');
 vi.mock('node:child_process', () => ({ execFile: mockExecFile }));
 const { mockMissingPathDir } = vi.hoisted(() => ({
   mockMissingPathDir: vi.fn<() => string | null>(() => null),
