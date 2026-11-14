@@ -22,8 +22,9 @@ import {
   detectTerminalAsync,
 } from './detector.ts';
 import { CliRunError, CliUsageError, errorMessage } from './errors.ts';
+import { type FileChange, plannedFileChanges } from './fileDiff.ts';
 import { recordRunSafely } from './history.ts';
-import { NERD_FONTS } from './installer.ts';
+import { NERD_FONTS, plannedPathDir } from './installer.ts';
 import {
   buildTaskList,
   DEFAULT_INSTALL_TASK_DEPS,
@@ -412,11 +413,20 @@ export interface DryRunPlan {
   installStarship: boolean;
   tasks: InstallTask[];
   config: DryRunConfig;
+  changes: FileChange[];
 }
 
-/** What `apply --dry-run` reports, as text or with --json: the plan and the config a real run would write. */
-export function dryRunPlan(state: WizardState, tasks: InstallTask[]): DryRunPlan {
+/**
+ * What `apply --dry-run` reports, as text or with --json: the plan, the config
+ * a real run would write, and how each file it writes would differ from disk.
+ */
+export function dryRunPlan(
+  state: WizardState,
+  tasks: InstallTask[],
+  resetShells: readonly ShellId[]
+): DryRunPlan {
   const shared = getSharedConfigPath();
+  const pathDir = state.skipStarshipInstall ? null : plannedPathDir(state.packageManager);
   return {
     dryRun: true,
     shells: state.selectedShells,
@@ -427,7 +437,23 @@ export function dryRunPlan(state: WizardState, tasks: InstallTask[]): DryRunPlan
         ? { kind: 'imported', path: shared, toml: state.sharedConfigToml }
         : { kind: 'kept', path: shared, exists: fs.existsSync(shared) }
       : { kind: 'per-shell', toml: generateToml(state) },
+    changes: plannedFileChanges(state, resetShells, pathDir),
   };
+}
+
+function printChanges(changes: FileChange[]): void {
+  if (changes.length === 0) {
+    process.stdout.write('\nNo config or rc file on disk would change.\n');
+    return;
+  }
+  process.stdout.write('\nChanges to files on disk:\n');
+  for (const change of changes) {
+    process.stdout.write(
+      change.status === 'unreadable'
+        ? `\ncannot read ${change.path}: ${change.error}\n`
+        : `\n${change.diff}`
+    );
+  }
 }
 
 /**
@@ -444,10 +470,11 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
   }
   const state = await prepareApplyState(flags);
 
-  const tasks = buildTaskList(state, plannedResetShells(state));
+  const resetShells = plannedResetShells(state);
+  const tasks = buildTaskList(state, resetShells);
 
   if (flags.dryRun) {
-    const plan = dryRunPlan(state, tasks);
+    const plan = dryRunPlan(state, tasks, resetShells);
     if (flags.json) {
       process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
       return;
@@ -471,6 +498,7 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
           : `\nNo config to keep yet: ${config.path} does not exist, and a real run would leave that as is.\n`
       );
     }
+    printChanges(plan.changes);
     return;
   }
 

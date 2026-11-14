@@ -633,6 +633,62 @@ describe('runApply', () => {
     }
   });
 
+  it('diffs the files a dry run would change against disk, as text and JSON', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    vi.stubEnv('HOME', dir);
+    vi.stubEnv('XDG_CONFIG_HOME', undefined);
+    try {
+      const bashrc = path.join(dir, '.bashrc');
+      fs.writeFileSync(bashrc, 'alias ll="ls -l"\n');
+      const output = async (json: boolean) => {
+        stdoutWrite.mockClear();
+        await runApply(flags({ subcommand: 'apply', shells: ['bash'], dryRun: true, json }));
+        return stdoutWrite.mock.calls
+          .map((call: [string, ...unknown[]]) => String(call[0]))
+          .join('');
+      };
+
+      const text = await output(false);
+      expect(text).toContain('Changes to files on disk:');
+      expect(text).toContain(
+        `--- /dev/null\n+++ ${path.join(dir, '.config', 'starship', 'bash.toml')}`
+      );
+      expect(text).toContain(`--- ${bashrc}\n+++ ${bashrc}\n@@ -1,1 +1,`);
+      expect(text).toContain(' alias ll="ls -l"\n+\n+# Added by ShellConfigurator\n');
+
+      const plan = JSON.parse(await output(true));
+      expect(plan.changes.map((c: { path: string; status: string }) => [c.path, c.status])).toEqual(
+        [
+          [path.join(dir, '.config', 'starship', 'bash.toml'), 'create'],
+          [bashrc, 'modify'],
+        ]
+      );
+      expect(fs.readFileSync(bashrc, 'utf8')).toBe('alias ll="ls -l"\n');
+      expect(fs.existsSync(path.join(dir, '.config'))).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('says no file would change when the setup is already in place', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-configurator-'));
+    vi.stubEnv('HOME', dir);
+    vi.stubEnv('XDG_CONFIG_HOME', undefined);
+    try {
+      fs.writeFileSync(path.join(dir, '.bashrc'), 'eval "$(starship init bash)"\n');
+      mockDetectPackageManager.mockResolvedValue('brew');
+      await runApply(flags({ subcommand: 'apply', shells: ['bash'], adopt: true, dryRun: true }));
+      const output = stdoutWrite.mock.calls
+        .map((call: [string, ...unknown[]]) => String(call[0]))
+        .join('');
+      expect(output).toContain('No config or rc file on disk would change.');
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('refuses --json on a real apply', async () => {
     await expect(
       runApply(flags({ subcommand: 'apply', shells: ['bash'], json: true }))
