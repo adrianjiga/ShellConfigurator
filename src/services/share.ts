@@ -68,22 +68,17 @@ export function renderShare(state: WizardState): string {
 const MAX_SHARE_FILES = 100;
 
 export function writeShareFile(state: WizardState, dir: string = process.cwd()): string {
-  const temp = path.join(dir, `.starship-prompt-${process.pid}.tmp`);
-  fs.writeFileSync(temp, renderShare(state), { flag: 'wx' });
-  try {
-    for (let n = 1; n <= MAX_SHARE_FILES; n++) {
-      const file = path.join(dir, n === 1 ? 'starship-prompt.md' : `starship-prompt-${n}.md`);
-      try {
-        fs.linkSync(temp, file);
-        return file;
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
-      }
+  const text = renderShare(state);
+  for (let n = 1; n <= MAX_SHARE_FILES; n++) {
+    const file = path.join(dir, n === 1 ? 'starship-prompt.md' : `starship-prompt-${n}.md`);
+    try {
+      fs.writeFileSync(file, text, { flag: 'wx' });
+      return file;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
     }
-    throw new Error(
-      `starship-prompt.md through starship-prompt-${MAX_SHARE_FILES}.md all exist in ${dir}`
-    );
-  } finally {
-    fs.rmSync(temp, { force: true });
   }
+  throw new Error(
+    `starship-prompt.md through starship-prompt-${MAX_SHARE_FILES}.md all exist in ${dir}`
+  );
 }
