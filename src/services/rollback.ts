@@ -22,6 +22,13 @@ export interface RollbackRun {
  * undone too.
  */
 export function listRollbackRuns(records: HistoryRecord[] = readHistory()): RollbackRun[] {
+  return rollbackRunsWithManifests(records).map(({ run }) => run);
+}
+
+/** `listRollbackRuns`, each run with the manifest it was read from. */
+export function rollbackRunsWithManifests(
+  records: HistoryRecord[] = readHistory()
+): { run: RollbackRun; manifest: RunManifest }[] {
   const captured = records.filter((r): r is HistoryRecord & { runId: string } => Boolean(r.runId));
   const undoers = new Map<string, string[]>();
   for (const r of captured) {
@@ -41,19 +48,18 @@ export function listRollbackRuns(records: HistoryRecord[] = readHistory()): Roll
   };
 
   return captured
-    .flatMap((r): RollbackRun[] => {
+    .flatMap((r) => {
       const manifest = readRunManifest(r.runId);
       if (!manifest) return [];
-      return [
-        {
-          runId: r.runId,
-          timestamp: r.timestamp,
-          kind: r.kind,
-          ...(r.command ? { command: r.command } : {}),
-          files: manifest.files.length,
-          rolledBack: isRolledBack(r.runId),
-        },
-      ];
+      const run: RollbackRun = {
+        runId: r.runId,
+        timestamp: r.timestamp,
+        kind: r.kind,
+        ...(r.command ? { command: r.command } : {}),
+        files: manifest.files.length,
+        rolledBack: isRolledBack(r.runId),
+      };
+      return [{ run, manifest }];
     })
     .reverse();
 }

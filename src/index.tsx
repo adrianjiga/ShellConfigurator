@@ -24,11 +24,11 @@ import {
   defaultRollbackRun,
   formatRollbackReport,
   formatRollbackRuns,
-  listRollbackRuns,
   planRollback,
+  rollbackRunsWithManifests,
   runRollback,
 } from './services/rollback.ts';
-import { captureRun, readRunManifest, trackedFiles } from './services/runCapture.ts';
+import { captureRun, trackedFiles } from './services/runCapture.ts';
 import { restoreTty } from './services/tty.ts';
 import {
   DEFAULT_UNINSTALL_DEPS,
@@ -415,7 +415,8 @@ export async function runRollbackCommand(
     throw new CliUsageError(`${unused.join(', ')} cannot be used with rollback.`);
   }
 
-  const runs = listRollbackRuns();
+  const entries = rollbackRunsWithManifests();
+  const runs = entries.map((entry) => entry.run);
   if (flags.list) {
     process.stdout.write(
       flags.json ? `${JSON.stringify(runs, null, 2)}\n` : formatRollbackRuns(runs)
@@ -430,12 +431,17 @@ export async function runRollbackCommand(
       `No recorded run '${flags.runId}' changed any files; see shell-configurator rollback --list.`
     );
   }
-  const manifest = target ? readRunManifest(target.runId) : null;
+  const manifest = entries.find((entry) => entry.run === target)?.manifest;
   if (!target || !manifest) {
+    const empty = {
+      runId: null,
+      actions: [],
+      ok: true,
+      complete: true,
+      dryRun: flags.dryRun ?? false,
+    };
     process.stdout.write(
-      flags.json
-        ? `${JSON.stringify({ runId: null, actions: [], ok: true, dryRun: flags.dryRun ?? false }, null, 2)}\n`
-        : 'Nothing to roll back.\n'
+      flags.json ? `${JSON.stringify(empty, null, 2)}\n` : 'Nothing to roll back.\n'
     );
     return;
   }

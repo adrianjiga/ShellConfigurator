@@ -1031,6 +1031,17 @@ describe('index rollback command', () => {
     expect(output()).toBe('Nothing to roll back.\n');
   });
 
+  it('reports nothing to roll back as a complete JSON report', async () => {
+    await runRollbackCommand(parseCliArgs(['rollback', '--json']), 'rollback', io());
+    expect(JSON.parse(output())).toEqual({
+      runId: null,
+      actions: [],
+      ok: true,
+      complete: true,
+      dryRun: false,
+    });
+  });
+
   it('rejects an unknown run id', async () => {
     await expect(
       runRollbackCommand(parseCliArgs(['rollback', '--run', 'nope']), 'rollback', io())
