@@ -42,3 +42,17 @@ describe('inkColor', () => {
     expect(inkColor('cyan')).toBe('cyan');
   });
 });
+
+describe('palette colours', () => {
+  const STARSHIP_COLOUR =
+    /^(#[0-9a-f]{6}|(bright-)?(black|red|green|yellow|blue|purple|cyan|white)|\d{1,3})$/i;
+
+  it('are all colours Starship can parse', () => {
+    for (const palette of PALETTES) {
+      for (const [name, value] of Object.entries(palette.colors)) {
+        expect(STARSHIP_COLOUR.test(value), `${palette.id}.${name} = ${value}`).toBe(true);
+        if (/^\d+$/.test(value)) expect(Number(value)).toBeLessThanOrEqual(255);
+      }
+    }
+  });
+});
