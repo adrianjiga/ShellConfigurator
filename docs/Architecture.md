@@ -156,6 +156,7 @@ interface WizardState {
   container: boolean; // True inside a container/CI sandbox — fonts are per-host, chsh skipped
   remoteSession: RemoteSession; // 'ssh' | 'wsl' | null (runtime-only)
   nerdFontToInstall: NerdFontChoice;
+  fontAnswer: 'have' | 'install' | 'none' | null; // The Nerd Font question's answer, highlighted on a revisit (runtime-only)
   setDefaultShell: ShellId | null;
   skipStarshipInstall: boolean; // "Continue without Starship" — no Starship install, Verify or unset pass; rc tasks stay, marked skipped
   dryRun: boolean; // When true no install or config-write happens — the wizard only previews

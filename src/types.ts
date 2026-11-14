@@ -132,6 +132,8 @@ export interface WizardState {
   /** An SSH session or WSL: the terminal and its fonts belong to another computer or to Windows. Runtime field. */
   remoteSession: RemoteSession;
   nerdFontToInstall: NerdFontChoice;
+  /** The answer given on the Nerd Font question, so a revisit highlights it. Runtime field. */
+  fontAnswer: 'have' | 'install' | 'none' | null;
   setDefaultShell: ShellId | null;
   skipStarshipInstall: boolean;
   /** When true no install or config-write happens — the wizard only previews. */
@@ -166,6 +168,7 @@ export const DEFAULT_STATE: WizardState = {
   container: false,
   remoteSession: null,
   nerdFontToInstall: NO_NERD_FONT,
+  fontAnswer: null,
   setDefaultShell: null,
   skipStarshipInstall: false,
   dryRun: false,

@@ -43,7 +43,11 @@ describe('FontCheckScreen', () => {
     instance.stdin.write('\r');
     await flush();
 
-    expect(onNext).toHaveBeenCalledWith({ hasNerdFont: true, nerdFontToInstall: NO_NERD_FONT });
+    expect(onNext).toHaveBeenCalledWith({
+      hasNerdFont: true,
+      nerdFontToInstall: NO_NERD_FONT,
+      fontAnswer: 'have',
+    });
   });
 
   it('asks for a font and routes to the font picker step', async () => {
@@ -58,6 +62,7 @@ describe('FontCheckScreen', () => {
     expect(onNext).toHaveBeenCalledWith({
       hasNerdFont: true,
       nerdFontToInstall: { kind: 'select' },
+      fontAnswer: 'install',
     });
   });
 
@@ -78,6 +83,7 @@ describe('FontCheckScreen', () => {
     expect(onNext).toHaveBeenCalledWith({
       hasNerdFont: true,
       nerdFontToInstall: { kind: 'install', id: 'FiraCode' },
+      fontAnswer: 'install',
     });
   });
 
@@ -92,7 +98,28 @@ describe('FontCheckScreen', () => {
     instance.stdin.write('\r');
     await flush();
 
-    expect(onNext).toHaveBeenCalledWith({ hasNerdFont: false, nerdFontToInstall: NO_NERD_FONT });
+    expect(onNext).toHaveBeenCalledWith({
+      hasNerdFont: false,
+      nerdFontToInstall: NO_NERD_FONT,
+      fontAnswer: 'none',
+    });
+  });
+
+  it('highlights the text-symbols answer when coming back to the question', async () => {
+    const onNext = vi.fn();
+    const instance = render(
+      <FontCheckScreen
+        state={{ ...DEFAULT_STATE, fontAnswer: 'none' }}
+        onNext={onNext}
+        onBack={vi.fn()}
+      />
+    );
+    await flush();
+
+    instance.stdin.write('\r');
+    await flush();
+
+    expect(onNext).toHaveBeenCalledWith(expect.objectContaining({ fontAnswer: 'none' }));
   });
 
   it('goes back on escape', async () => {

@@ -68,6 +68,7 @@ function runtimeDefaults(): Pick<
   | 'terminal'
   | 'container'
   | 'remoteSession'
+  | 'fontAnswer'
   | 'dryRun'
   | 'installResults'
   | 'sharedConfigToml'
@@ -81,6 +82,7 @@ function runtimeDefaults(): Pick<
     terminal: null,
     container: false,
     remoteSession: null,
+    fontAnswer: null,
     runId: null,
     summaryPath: null,
     dryRun: false,

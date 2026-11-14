@@ -32,12 +32,12 @@ const items: SelectItem<FontChoice>[] = [
 export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps) {
   // Fonts belong to the host terminal, so a container never installs one.
   const choices = fontsElsewhere(state) ? items.filter((item) => item.value !== 'install') : items;
-  // Coming back after asking for an install, keep that answer highlighted.
+  // Coming back, keep the answer given before highlighted.
+  const answered =
+    state.fontAnswer ?? (state.nerdFontToInstall.kind === 'none' ? 'have' : 'install');
   const initialIndex = Math.max(
     0,
-    choices.findIndex(
-      (item) => item.value === (state.nerdFontToInstall.kind === 'none' ? 'have' : 'install')
-    )
+    choices.findIndex((item) => item.value === answered)
   );
   useInput((_, key) => {
     if (key.escape) onBack();
@@ -46,7 +46,7 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
   function handleSelect(item: SelectItem<FontChoice>) {
     switch (item.value) {
       case 'have':
-        onNext({ hasNerdFont: true, nerdFontToInstall: NO_NERD_FONT });
+        onNext({ hasNerdFont: true, nerdFontToInstall: NO_NERD_FONT, fontAnswer: 'have' });
         break;
       case 'install':
         onNext({
@@ -55,10 +55,11 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
             state.nerdFontToInstall.kind === 'install'
               ? state.nerdFontToInstall
               : { kind: 'select' },
+          fontAnswer: 'install',
         });
         break;
       case 'none':
-        onNext({ hasNerdFont: false, nerdFontToInstall: NO_NERD_FONT });
+        onNext({ hasNerdFont: false, nerdFontToInstall: NO_NERD_FONT, fontAnswer: 'none' });
         break;
     }
   }

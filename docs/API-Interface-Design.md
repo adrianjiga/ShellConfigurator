@@ -60,6 +60,7 @@ interface WizardState {
   container: boolean; // True inside a container/CI sandbox — fonts are per-host and chsh is skipped
   remoteSession: RemoteSession; // 'ssh' | 'wsl' | null — the terminal and its fonts belong to another computer or to Windows
   nerdFontToInstall: NerdFontChoice; // {kind:'none'|'select'|'install',id}
+  fontAnswer: 'have' | 'install' | 'none' | null; // Nerd Font answer, for a revisit (runtime-only)
   setDefaultShell: ShellId | null; // Shell to set via chsh
   skipStarshipInstall: boolean; // "Continue without Starship" — drops the Starship install, Verify and the unset pass; rc tasks stay in the plan, marked skipped
   dryRun: boolean; // No install or config-write happens — the wizard only previews
