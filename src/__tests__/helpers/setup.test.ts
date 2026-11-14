@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderPromptAsync } from '../../services/preview.ts';
 import { captureRun } from '../../services/runCapture.ts';
+import { writeWhatChangedSafely } from '../../services/whatChanged.ts';
 
 describe('test setup', () => {
   it('keeps screens from running the real starship preview', async () => {
@@ -17,5 +18,10 @@ describe('test setup', () => {
       result: 'ran',
       runId: null,
     });
+  });
+
+  it('keeps runs from writing WHAT-CHANGED.md into the real home', () => {
+    expect(vi.isMockFunction(writeWhatChangedSafely)).toBe(true);
+    expect(writeWhatChangedSafely({} as never)).toBeNull();
   });
 });
