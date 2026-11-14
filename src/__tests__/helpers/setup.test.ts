@@ -22,6 +22,6 @@ describe('test setup', () => {
 
   it('keeps runs from writing WHAT-CHANGED.md into the real home', () => {
     expect(vi.isMockFunction(writeWhatChangedSafely)).toBe(true);
-    expect(writeWhatChangedSafely({} as never)).toBeNull();
+    expect(writeWhatChangedSafely('run', {} as never)).toBeNull();
   });
 });

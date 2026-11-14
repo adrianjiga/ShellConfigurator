@@ -134,7 +134,7 @@ export function assertUninstalled(homeDir, rcPath, shell, before) {
   assert.ok(!rc.includes('starship'), `uninstall left Starship lines in the rc:\n${rc}`);
   assert.ok(!existsSync(configPath), `uninstall left ${configPath}`);
   const summary = nodePath.join(process.env.XDG_CONFIG_HOME, 'starship', 'WHAT-CHANGED.md');
-  assert.ok(!existsSync(summary), 'uninstall left the WHAT-CHANGED.md of the run it undid');
+  assert.ok(existsSync(summary), 'uninstall removed the WHAT-CHANGED.md of the last apply');
   const rcBackups = readdirSync(homeDir).filter((f) =>
     f.startsWith(`${nodePath.basename(rcPath)}.bak-`)
   );
@@ -154,7 +154,7 @@ export function assertUninstalled(homeDir, rcPath, shell, before) {
   assert.ok(!undoUninstall.includes('FAILED'), `rollback failed:\n${undoUninstall}`);
   assertRcWired(rcPath, shell);
   assertStarshipConfig(configPath, 'config after rolling back the uninstall');
-  assert.ok(existsSync(summary), 'rolling back the uninstall did not bring WHAT-CHANGED.md back');
+  assert.ok(existsSync(summary), 'rolling back the uninstall removed WHAT-CHANGED.md');
 
   const undoApply = runCli(['rollback', '--yes']);
   assert.ok(!undoApply.includes('FAILED'), `second rollback failed:\n${undoApply}`);
@@ -168,7 +168,10 @@ export function assertUninstalled(homeDir, rcPath, shell, before) {
     before.config,
     `rolling back the apply did not restore ${configPath}`
   );
-  assert.ok(!existsSync(summary), 'rolling back the apply left its WHAT-CHANGED.md');
+  assert.ok(
+    !existsSync(summary),
+    'rolling back the apply did not put back the missing WHAT-CHANGED.md from before it'
+  );
 }
 
 /** The per-shell config path the CLI writes in this scratch home. */

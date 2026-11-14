@@ -162,7 +162,7 @@ describe('InstallingScreen', () => {
     expect(signal.current?.aborted).toBe(true);
   });
 
-  it('does not advance after an unmount while the run is still finishing', async () => {
+  it('does not advance after an unmount, but still writes the summary of the run that finished', async () => {
     vi.mocked(writeWhatChangedSafely).mockClear();
     mocks.buildTaskList.mockReturnValue(statusFixture());
     let resolveRun: (tasks: InstallTask[]) => void = () => {};
@@ -177,7 +177,7 @@ describe('InstallingScreen', () => {
     await new Promise((r) => setTimeout(r, 20));
 
     expect(onNext).not.toHaveBeenCalled();
-    expect(writeWhatChangedSafely).not.toHaveBeenCalled();
+    expect(writeWhatChangedSafely).toHaveBeenCalledOnce();
   });
 
   it('aborts the chain on unmount', async () => {
@@ -229,6 +229,7 @@ describe('InstallingScreen', () => {
       summaryPath: '/h/.config/starship/WHAT-CHANGED.md',
     });
     expect(writeWhatChangedSafely).toHaveBeenCalledWith(
+      'run-1',
       expect.objectContaining({ kind: 'install', results })
     );
   });

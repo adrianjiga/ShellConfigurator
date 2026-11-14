@@ -7,12 +7,12 @@ vi.unmock('../../services/whatChanged.ts');
 
 import { getShell } from '../../config/shells.ts';
 import { getSharedConfigPath, getShellConfigPath } from '../../generators/shellRc.ts';
+import { planRollback, runRollback } from '../../services/rollback.ts';
+import { beginRunCapture, finishRunCapture, readRunManifest } from '../../services/runCapture.ts';
 import {
-  removeWhatChangedSafely,
   renderWhatChanged,
   type WhatChangedRun,
   whatChangedPath,
-  writeWhatChanged,
   writeWhatChangedSafely,
 } from '../../services/whatChanged.ts';
 import { DEFAULT_STATE } from '../../types.ts';
@@ -23,6 +23,7 @@ const savedEnv = { ...process.env };
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-changed-'));
   process.env.XDG_CONFIG_HOME = path.join(tmpDir, 'config');
+  process.env.XDG_STATE_HOME = path.join(tmpDir, 'state');
 });
 afterEach(() => {
   process.env = { ...savedEnv };
@@ -88,13 +89,10 @@ describe('renderWhatChanged', () => {
     expect(renderWhatChanged(run({ results: inContainer }))).not.toContain('--font');
   });
 
-  it('says no changed files were recorded, without claiming a failure, and offers no rollback', () => {
-    const text = renderWhatChanged(run({ kind: 'install', command: undefined, manifest: null }));
-    expect(text).toContain('Wizard install on 2026-11-14T10:00:00.000Z.');
-    expect(text).toContain(
-      'No changed files were recorded: the run changed none, or their copies could not be saved'
+  it('says a later uninstall or rollback may have undone the run', () => {
+    expect(renderWhatChanged(run())).toContain(
+      'A later `uninstall` or `rollback` may have undone it since; `shell-configurator rollback --list`'
     );
-    expect(text).not.toContain('`shell-configurator rollback`');
   });
 
   it('names the shared config in adopt mode, where no per-shell config is written', () => {
@@ -137,26 +135,72 @@ describe('renderWhatChanged', () => {
   });
 });
 
-describe('writeWhatChanged', () => {
-  it('writes the summary into the starship config folder', () => {
-    const file = writeWhatChanged(run());
-    expect(file).toBe(whatChangedPath());
+/** A captured run that changed `file` to `content`; returns its runId. */
+function capturedRun(file: string, content: string): string {
+  const capture = beginRunCapture([file]);
+  fs.writeFileSync(file, content);
+  return finishRunCapture(capture)!.runId;
+}
+
+describe('writeWhatChangedSafely', () => {
+  const { manifest: _, ...details } = run();
+  const rc = () => path.join(tmpDir, 'rc');
+
+  it('writes the summary of a run that changed files, as part of that run', () => {
+    const runId = capturedRun(rc(), 'one');
+    const file = writeWhatChangedSafely(runId, details);
+
     expect(file).toBe(path.join(process.env.XDG_CONFIG_HOME!, 'starship', 'WHAT-CHANGED.md'));
-    expect(fs.readFileSync(file, 'utf8')).toBe(renderWhatChanged(run()));
+    expect(file).toBe(whatChangedPath());
+    const manifest = readRunManifest(runId)!;
+    expect(fs.readFileSync(file!, 'utf8')).toBe(
+      renderWhatChanged({
+        ...details,
+        manifest: { ...manifest, files: manifest.files.slice(0, 1) },
+      })
+    );
+    expect(manifest.files.at(-1)).toMatchObject({ path: file, before: null, summary: true });
+  });
+
+  it('leaves the last summary alone when the run changed nothing', () => {
+    fs.mkdirSync(path.dirname(whatChangedPath()), { recursive: true });
+    fs.writeFileSync(whatChangedPath(), 'earlier');
+    expect(writeWhatChangedSafely(null, details)).toBeNull();
+    expect(fs.readFileSync(whatChangedPath(), 'utf8')).toBe('earlier');
+  });
+
+  it('is put back to the earlier summary when its run is rolled back', () => {
+    writeWhatChangedSafely(capturedRun(rc(), 'one'), details);
+    const first = fs.readFileSync(whatChangedPath(), 'utf8');
+    const second = capturedRun(rc(), 'two');
+    writeWhatChangedSafely(second, { ...details, timestamp: 'later' });
+    expect(fs.readFileSync(whatChangedPath(), 'utf8')).not.toBe(first);
+
+    const report = runRollback(second, planRollback(readRunManifest(second)!));
+
+    expect(report.complete).toBe(true);
+    expect(fs.readFileSync(whatChangedPath(), 'utf8')).toBe(first);
+  });
+
+  it('does not make rolling back an older run partial once a later run rewrote it', () => {
+    const other = path.join(tmpDir, 'other');
+    const first = capturedRun(rc(), 'one');
+    writeWhatChangedSafely(first, details);
+    writeWhatChangedSafely(capturedRun(other, 'x'), { ...details, timestamp: 'later' });
+    const latest = fs.readFileSync(whatChangedPath(), 'utf8');
+
+    const report = runRollback(first, planRollback(readRunManifest(first)!));
+
+    expect(report.complete).toBe(true);
+    expect(fs.existsSync(rc())).toBe(false);
+    expect(fs.readFileSync(whatChangedPath(), 'utf8')).toBe(latest);
   });
 
   it('returns null instead of throwing when it cannot write', () => {
+    const runId = capturedRun(rc(), 'one');
     fs.mkdirSync(process.env.XDG_CONFIG_HOME!, { recursive: true });
     fs.writeFileSync(path.join(process.env.XDG_CONFIG_HOME!, 'starship'), 'a file, not a folder');
-    expect(writeWhatChangedSafely(run())).toBeNull();
-  });
-});
-
-describe('removeWhatChangedSafely', () => {
-  it('deletes the summary, and does nothing when there is none', () => {
-    const file = writeWhatChanged(run());
-    removeWhatChangedSafely();
-    expect(fs.existsSync(file)).toBe(false);
-    expect(() => removeWhatChangedSafely()).not.toThrow();
+    expect(writeWhatChangedSafely(runId, details)).toBeNull();
+    expect(readRunManifest(runId)!.files.map((f) => f.path)).toEqual([rc()]);
   });
 });

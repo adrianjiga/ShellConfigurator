@@ -797,6 +797,7 @@ describe('runApply', () => {
       .join('');
     expect(output).toContain('Install Starship');
     expect(writeWhatChangedSafely).toHaveBeenCalledWith(
+      'run-3',
       expect.objectContaining({ kind: 'apply', command: 'apply --shells zsh', results: doneTasks })
     );
   });
