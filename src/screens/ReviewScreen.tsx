@@ -5,13 +5,7 @@ import { NavHints } from '../components/NavHints.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { getShell, setupCommand } from '../config/shells.ts';
-import {
-  ADOPT_MARKER,
-  BLOCK_MARKER,
-  getSharedConfigPath,
-  getShellConfigPath,
-  starshipConfigLine,
-} from '../generators/shellRc.ts';
+import { getSharedConfigPath, getShellConfigPath, plannedRcBlock } from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import { fontLabel, plannedPathDir } from '../services/installer.ts';
 import { buildTaskList, plannedResetShells, TASK_IDS } from '../services/installTasks.ts';
@@ -36,17 +30,7 @@ function rcSnippet(
 ): string[] {
   const shell = getShell(shellId);
   if (!shell) return [];
-  if (shell.rcFile) {
-    const configLine = pointAtSharedConfig ? null : starshipConfigLine(shellId);
-    const marker = pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
-    const pathLine = pathDir && shell.pathLine ? shell.pathLine(pathDir) : null;
-    return [
-      marker,
-      ...(pathLine ? [pathLine] : []),
-      ...(configLine ? [configLine] : []),
-      shell.initLine,
-    ];
-  }
+  if (shell.rcFile) return plannedRcBlock(shellId, pointAtSharedConfig, pathDir);
   // Manual-only shells (nushell, powershell): the note plus the command to run,
   // or adopt mode where the shared config needs no export.
   const command = setupCommand(shell, pointAtSharedConfig);

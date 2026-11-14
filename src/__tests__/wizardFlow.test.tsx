@@ -45,11 +45,13 @@ vi.mock('../generators/shellRc.ts', () => ({
   resetSharedShellConfig: mockResetSharedConfig,
   backupSharedConfig: vi.fn(() => null),
   shellsWithStarshipInit: () => [],
-  BLOCK_MARKER: '# Added by ShellConfigurator',
-  ADOPT_MARKER: '# Added by ShellConfigurator (shared config)',
   getShellConfigPath: () => '/tmp/starship.toml',
   getSharedConfigPath: () => '/nonexistent/starship.toml',
-  starshipConfigLine: () => 'export STARSHIP_CONFIG="/tmp/starship.toml"',
+  plannedRcBlock: (shellId: string) => [
+    '# Added by ShellConfigurator',
+    'export STARSHIP_CONFIG="/tmp/starship.toml"',
+    `eval "$(starship init ${shellId})"`,
+  ],
 }));
 
 vi.mock('../services/installer.ts', () => ({

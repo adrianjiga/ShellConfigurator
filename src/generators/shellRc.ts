@@ -491,13 +491,12 @@ function hasLine(content: string, line: string): boolean {
 function buildAdditionLines(
   shell: ShellDef,
   cleaned: string,
-  options: ApplyShellConfigOptions,
+  pathDir: string | null | undefined,
+  configLine: string | null,
   initPresent: boolean
 ): { lines: string[]; pathLine: string | null } {
-  const pathDir = options.ensurePathDir;
   const wantedPath = pathDir && shell.pathLine ? shell.pathLine(pathDir) : null;
   const pathLine = wantedPath && !hasLine(cleaned, wantedPath) ? wantedPath : null;
-  const configLine = options.pointAtSharedConfig ? null : starshipConfigLine(shell.id);
   return {
     lines: [
       ...(pathLine ? [pathLine] : []),
@@ -506,6 +505,19 @@ function buildAdditionLines(
     ],
     pathLine,
   };
+}
+
+/** The block a run appends to an rc file that has no Starship lines yet; empty for shells without one. */
+export function plannedRcBlock(
+  shellId: ShellId,
+  pointAtSharedConfig: boolean,
+  pathDir: string | null
+): string[] {
+  const shell = getShell(shellId);
+  if (!shell?.rcFile) return [];
+  const configLine = pointAtSharedConfig ? null : starshipConfigLine(shellId);
+  const { lines } = buildAdditionLines(shell, '', pathDir, configLine, false);
+  return [pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER, ...lines];
 }
 
 /**
@@ -577,7 +589,7 @@ export function applyShellConfig(
     hasStarshipInit(cleaned, shell.id) ||
     (shell.id === 'fish' && fs.existsSync(fishInitFile(rcPath)));
 
-  const added = buildAdditionLines(shell, cleaned, options, initPresent);
+  const added = buildAdditionLines(shell, cleaned, options.ensurePathDir, configLine, initPresent);
   const carried = [...new Set(carriedPathLines)].filter(
     (line) => line !== added.pathLine && !hasLine(cleaned, line)
   );
