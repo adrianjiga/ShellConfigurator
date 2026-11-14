@@ -125,9 +125,8 @@ export function assertUninstalled(homeDir, rcPath, shell, before) {
   assert.ok(existsSync(configPath), `apply did not write ${configPath}`);
 
   const out = runCli(['uninstall', '--yes', '--shells', shell]);
-  assert.match(
-    out,
-    new RegExp(`REMOVED .*${nodePath.basename(rcPath)}`),
+  assert.ok(
+    out.split('\n').some((line) => line.startsWith('REMOVED') && line.includes(rcPath)),
     `uninstall left the rc:\n${out}`
   );
   const rc = readFileSync(rcPath, 'utf8');
