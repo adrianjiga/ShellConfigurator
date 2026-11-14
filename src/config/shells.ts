@@ -73,7 +73,7 @@ export const SHELLS: ShellDef[] = [
       return path.join(configHome(), 'fish', 'config.fish');
     },
     initLine: 'starship init fish | source',
-    pathLine: (dir) => `fish_add_path ${posixShellQuote(dir)}`,
+    pathLine: (dir) => `fish_add_path ${fishQuote(dir)}`,
     configEnv: { exportPrefix: 'set -gx STARSHIP_CONFIG ', unsetLine: 'set -e STARSHIP_CONFIG' },
   },
   {
@@ -184,6 +184,16 @@ function nushellDataDir(): string {
       ? path.join(homeDir(), 'Library', 'Application Support')
       : path.join(homeDir(), '.local', 'share');
   return path.join(xdgBaseDir('XDG_DATA_HOME', fallback), 'nushell');
+}
+
+/** A fish single-quoted string holding `value` exactly: fish reads `\\` and `\'` inside one. */
+export function fishQuote(value: string): string {
+  return `'${value.replace(/[\\']/g, '\\$&')}'`;
+}
+
+/** The single-quoted form of `value` in the rc file of `shellId`. */
+export function rcQuote(shellId: ShellId, value: string): string {
+  return shellId === 'fish' ? fishQuote(value) : posixShellQuote(value);
 }
 
 export function posixShellQuote(value: string): string {

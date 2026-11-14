@@ -2,7 +2,7 @@ import { isUtf8 } from 'node:buffer';
 import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getShell, isShellId, posixShellQuote, type ShellDef } from '../config/shells.ts';
+import { getShell, isShellId, posixShellQuote, rcQuote, type ShellDef } from '../config/shells.ts';
 import { errorMessage } from '../services/errors.ts';
 import { configHome, homeDir, scriptInstallBinDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
@@ -432,7 +432,12 @@ function exportsConfigPath(shell: ShellDef, line: string, configPath: string): b
   const t = line.trim();
   if (!prefix || !t.startsWith(prefix)) return false;
   const value = t.slice(prefix.length);
-  return [posixShellQuote(configPath), `"${configPath}"`, configPath].includes(value);
+  return [
+    rcQuote(shell.id, configPath),
+    posixShellQuote(configPath),
+    `"${configPath}"`,
+    configPath,
+  ].includes(value);
 }
 
 /**
@@ -615,7 +620,7 @@ export interface ApplyShellConfigOptions {
 export function starshipConfigLine(shellId: ShellId): string | null {
   const env = getShell(shellId)?.configEnv;
   if (!env) return null;
-  return `${env.exportPrefix}${posixShellQuote(getShellConfigPath(shellId))}`;
+  return `${env.exportPrefix}${rcQuote(shellId, getShellConfigPath(shellId))}`;
 }
 
 /** Creates the rc file's parent directory (important for fish) when missing. */

@@ -261,6 +261,15 @@ function formatTask(t: InstallTask): string {
 }
 
 /** The plain-text plan/applied view `apply` prints to stdout. */
+/** `text` with terminal control characters shown as `\\uXXXX`, so a fetched file cannot hide lines. */
+function showControlCharacters(text: string): string {
+  return text.replace(
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: these are what it escapes.
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g,
+    (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`
+  );
+}
+
 function printTasks(tasks: InstallTask[]): void {
   for (const task of tasks) process.stdout.write(`  ${formatTask(task)}\n`);
 }
@@ -279,6 +288,8 @@ function printManualSetup(state: WizardState): void {
 
 /** Cap on how long an --import-url fetch may hang before it is aborted. */
 const IMPORT_FETCH_TIMEOUT_MS = 10_000;
+
+const IMPORT_MAX_REDIRECTS = 5;
 
 /** Cap on how large an --import-url config may be. Starship configs are KBs. */
 const IMPORT_FETCH_MAX_BYTES = 1_000_000;
@@ -326,8 +337,28 @@ export async function fetchImportedConfig(
 
   let response: Response;
   try {
-    response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    const signal = AbortSignal.timeout(timeoutMs);
+    let current = url;
+    for (let hop = 0; ; hop++) {
+      response = await fetch(current, { signal, redirect: 'manual' });
+      const location =
+        response.status >= 300 && response.status < 400 && response.headers.get('location');
+      if (!location) break;
+      if (hop === IMPORT_MAX_REDIRECTS) {
+        throw new CliRunError(
+          `Could not fetch '${shown}': more than ${IMPORT_MAX_REDIRECTS} redirects`
+        );
+      }
+      const next = new URL(location, current);
+      if (next.protocol !== 'https:') {
+        throw new CliRunError(
+          `Could not fetch '${shown}': redirected to a non-https URL ${redactUrl(next.href)}`
+        );
+      }
+      current = next.href;
+    }
   } catch (err) {
+    if (err instanceof CliRunError) throw err;
     // AbortSignal.timeout rejects with a TimeoutError DOMException on timeout.
     if (err instanceof DOMException && err.name === 'TimeoutError') {
       throw new CliRunError(`Could not fetch '${shown}': request timed out after ${timeoutMs}ms`);
@@ -509,7 +540,7 @@ function printChanges(plan: DryRunPlan): void {
     } else if (change.status === 'create' && shownAbove.has(change.path)) {
       process.stdout.write(`\ncreate ${change.path}: the config shown above\n`);
     } else {
-      process.stdout.write(`\n${change.diff}`);
+      process.stdout.write(`\n${showControlCharacters(change.diff)}`);
     }
   }
   process.stdout.write(
@@ -555,7 +586,8 @@ export async function runApply(flags: CliFlags, command?: string): Promise<void>
       if (config.tomlIfFontFails) process.stdout.write(`\n\n${FONT_FALLBACK_NOTE}\n`);
     } else if (config.kind === 'imported') {
       process.stdout.write('\nConfig to keep (no per-shell TOML is generated):\n\n');
-      process.stdout.write(config.toml.endsWith('\n') ? config.toml : `${config.toml}\n`);
+      const shown = showControlCharacters(config.toml);
+      process.stdout.write(shown.endsWith('\n') ? shown : `${shown}\n`);
     } else {
       process.stdout.write(
         config.exists

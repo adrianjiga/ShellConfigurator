@@ -799,6 +799,27 @@ describe('runApply', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('shows terminal control characters of a fetched config in a dry run instead of sending them', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('[character]\n\u001b[1A\u001b[2Kformat = "$all"\n', { status: 200 })
+    );
+
+    await runApply(
+      flags({
+        subcommand: 'apply',
+        shells: ['zsh'],
+        dryRun: true,
+        importUrl: 'https://example.com/raw',
+      })
+    );
+
+    const output = stdoutWrite.mock.calls
+      .map((call: [string, ...unknown[]]) => String(call[0]))
+      .join('');
+    expect(output).toContain('\\u001b[1A\\u001b[2Kformat');
+    expect(output).not.toContain('\u001b[2K');
+  });
+
   it('runs the install pipeline and records a successful run in history', async () => {
     mockRunInstallTasks.mockResolvedValue(doneTasks as never);
     const files = [{ path: '/h/.zshrc', before: '0', after: 'x' }];
@@ -1197,6 +1218,28 @@ describe('runApply', () => {
     expect((error as Error).message).toContain('cannot send a user name or password');
     expect((error as Error).message).not.toMatch(/s3cret|abc123/);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('refuses a redirect through plain http on the way, not only at the end', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(null, { status: 302, headers: { location: 'http://example.com/cfg.toml' } })
+    );
+
+    await expect(fetchImportedConfig('https://example.com/start')).rejects.toThrow(
+      "Could not fetch 'https://example.com/start': redirected to a non-https URL http://example.com/cfg.toml"
+    );
+  });
+
+  it('follows https redirects to the config', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(null, { status: 301, headers: { location: '/moved/cfg.toml' } })
+      )
+      .mockResolvedValueOnce(new Response('[character]\n'));
+
+    await expect(fetchImportedConfig('https://example.com/start')).resolves.toBe('[character]\n');
+    expect(fetchSpy.mock.calls[1]![0]).toBe('https://example.com/moved/cfg.toml');
   });
 
   it('keeps the query out of fetch error messages, also the one fetch gives', async () => {
