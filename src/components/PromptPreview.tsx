@@ -1,7 +1,12 @@
 import { Box, Text } from 'ink';
 import { useEffect, useState } from 'react';
 import { colorsEnabled, uiColor } from '../config/colors.ts';
-import { getModule, isConfigurableModule, type ModuleId } from '../config/modules.ts';
+import {
+  getModule,
+  isConfigurableModule,
+  type ModuleId,
+  placedModules,
+} from '../config/modules.ts';
 import { getPalette, inkColor, type PaletteColorName } from '../config/palettes.ts';
 import { bracketsSegments, drawsPowerline, rendersGlyphs } from '../config/presets.ts';
 import { CHARACTER_SYMBOLS, SEPARATOR_LEFT, SEPARATOR_RIGHT } from '../config/promptSymbols.ts';
@@ -145,9 +150,11 @@ function RealPromptFrame({ text, addNewline }: { text: string; addNewline: boole
 
 function StaticPromptFrame({ state: chosen }: { state: WizardState }) {
   const state = { ...chosen, hasNerdFont: rendersGlyphs(chosen) };
-  const { leftModules, hasNerdFont, characterSymbol } = state;
-  // As in the generator: a module on both sides renders once, on the left.
-  const rightModules = state.rightModules.filter((id) => !leftModules.includes(id));
+  const { hasNerdFont, characterSymbol } = state;
+  const { left: leftModules, right: rightModules } = placedModules(
+    state.leftModules,
+    state.rightModules
+  );
   const palette = getPalette(state.palette);
   // Mirrors the generator: separators are Nerd Font glyphs, so without one the
   // preview must show the plain prompt that will actually be written.

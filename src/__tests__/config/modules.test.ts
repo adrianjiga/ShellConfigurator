@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getModule, MODULES, type PreviewSample } from '../../config/modules.ts';
+import { getModule, MODULES, type PreviewSample, placedModules } from '../../config/modules.ts';
 
 const SAMPLE: PreviewSample = { directoryTruncationLength: 3, directorySubstitutions: [] };
 
@@ -77,5 +77,16 @@ describe('directory preview', () => {
   it('applies substitutions before truncating', () => {
     const sample = { ...SAMPLE, directorySubstitutions: [{ from: 'projects', to: 'p' }] };
     expect(directory.previewSegment(false, sample)).toBe('~/p/myapp');
+  });
+});
+
+describe('placedModules', () => {
+  it('keeps each module once and gives one chosen for both sides to the left', () => {
+    expect(
+      placedModules(['git_branch', 'directory', 'git_branch'], ['nodejs', 'directory', 'nodejs'])
+    ).toEqual({
+      left: ['git_branch', 'directory'],
+      right: ['nodejs'],
+    });
   });
 });

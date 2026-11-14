@@ -1,5 +1,5 @@
 import { clampTruncationLength, DEFAULT_TRUNCATION_LENGTH } from '../config/directory.ts';
-import { CORE_MODULES, getModule, type ModuleId } from '../config/modules.ts';
+import { CORE_MODULES, getModule, type ModuleId, placedModules } from '../config/modules.ts';
 import { PALETTES, type PaletteId } from '../config/palettes.ts';
 import { PRESETS } from '../config/presets.ts';
 import { SHELLS } from '../config/shells.ts';
@@ -58,8 +58,6 @@ export interface StateCard {
     hasNerdFont: boolean;
   };
 }
-
-const CORE_MODULES_DEFAULT = [...CORE_MODULES];
 
 /** The runtime fields a parsed card starts with; detection fills them per run. */
 function runtimeDefaults(): Pick<
@@ -274,11 +272,9 @@ export function parseState(json: string): WizardState {
   }
 
   const selectedShells = parseShellList(wizard.selectedShells);
-  const parsedLeftModules = parseModuleList(wizard.leftModules, 'left');
-  const leftModules = parsedLeftModules ?? [...CORE_MODULES_DEFAULT];
-  const leftModuleSet = new Set(leftModules);
-  const rightModules = (parseModuleList(wizard.rightModules, 'right') ?? []).filter(
-    (id) => !leftModuleSet.has(id)
+  const { left: leftModules, right: rightModules } = placedModules(
+    parseModuleList(wizard.leftModules, 'left') ?? CORE_MODULES,
+    parseModuleList(wizard.rightModules, 'right') ?? []
   );
 
   return {

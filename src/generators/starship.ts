@@ -3,6 +3,7 @@ import {
   getModule,
   isConfigurableModule,
   type ModuleId,
+  placedModules,
 } from '../config/modules.ts';
 import { getPalette, type PaletteColorName } from '../config/palettes.ts';
 import { bracketsSegments, drawsPowerline, rendersGlyphs } from '../config/presets.ts';
@@ -138,10 +139,10 @@ export function generateToml(chosen: WizardState): string {
   const powerline = drawsPowerline(chosen);
   const bracketed = bracketsSegments(state);
 
-  // A module chosen on both sides would otherwise be emitted twice in the format
-  // string and render twice in the prompt. The left side wins.
-  const leftModules = [...new Set(state.leftModules)];
-  const rightModules = [...new Set(state.rightModules)].filter((id) => !leftModules.includes(id));
+  const { left: leftModules, right: rightModules } = placedModules(
+    state.leftModules,
+    state.rightModules
+  );
 
   // An id with no module definition would put a `$bogus` starship warns about.
   const placeable = (id: ModuleId): id is ConfigurableModuleId =>

@@ -597,3 +597,12 @@ export const MODULES: readonly ModuleDef[] = (
 export function getModule(id: string): ModuleDef | undefined {
   return MODULES.find((m) => m.id === id);
 }
+
+/** The modules as the prompt places them: each once, and one chosen for both sides only on the left. */
+export function placedModules(
+  left: readonly ModuleId[],
+  right: readonly ModuleId[]
+): { left: ModuleId[]; right: ModuleId[] } {
+  const placedLeft = [...new Set(left)];
+  return { left: placedLeft, right: [...new Set(right)].filter((id) => !placedLeft.includes(id)) };
+}
