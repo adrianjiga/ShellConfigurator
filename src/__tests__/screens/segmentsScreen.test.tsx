@@ -11,6 +11,9 @@ const DOWN = '\u001B[B';
 const SHIFT_DOWN = '\u001B[1;2B';
 const SHIFT_UP = '\u001B[1;2A';
 const BACKSPACE = '\u007F';
+const LEFT = '\u001B[D';
+const RIGHT = '\u001B[C';
+const CTRL_DOWN = '\u001B[1;5B';
 
 function setup(overrides: Partial<WizardState> = {}, side: 'left' | 'right' = 'left') {
   const state: WizardState = {
@@ -131,6 +134,50 @@ describe('SegmentsScreen', () => {
     await flush();
     await pressEsc(instance.stdin);
     expect(onBack).toHaveBeenCalled();
+  });
+
+  it('goes back on ← when no filter is typed', async () => {
+    const { instance, onBack } = setup();
+    await flush();
+    await press(instance, LEFT);
+    expect(onBack).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Tab', '\t'],
+    ['→', RIGHT],
+  ])('saves and moves on with %s', async (_name, key) => {
+    const { instance, onNext } = setup();
+    await flush();
+    await press(instance, key);
+    expect(onNext).toHaveBeenCalledWith({
+      leftModules: ['directory', 'git_branch', 'character'],
+      rightModules: [],
+    });
+  });
+
+  it('saves the right side without adding the prompt character', async () => {
+    const { instance, onNext } = setup({ rightModules: ['nodejs'] }, 'right');
+    await flush();
+    await press(instance, '\r');
+    expect(onNext).toHaveBeenCalledWith({ rightModules: ['nodejs'] });
+  });
+
+  it('reorders the prompt with Ctrl+Down as well', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+    await press(instance, CTRL_DOWN);
+    expect(onUpdate).toHaveBeenCalledWith({
+      leftModules: ['git_branch', 'directory', 'character'],
+      rightModules: [],
+    });
+  });
+
+  it('keeps Ctrl and Meta combos out of the filter', async () => {
+    const { instance } = setup();
+    await flush();
+    await press(instance, '\u0001', '\u001Bb');
+    expect(instance.lastFrame()).toContain('type to search');
   });
 
   it('filters the list by label', async () => {
