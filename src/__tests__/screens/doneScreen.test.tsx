@@ -551,3 +551,24 @@ describe('DoneScreen share', () => {
     expect(mocks.writeShareFile).not.toHaveBeenCalled();
   });
 });
+
+describe('DoneScreen after shells went back to the shared config', () => {
+  it('says which shells now use the shared config', async () => {
+    const instance = render(
+      <DoneScreen
+        state={{
+          ...DEFAULT_STATE,
+          selectedShells: ['zsh'],
+          installResults: [
+            { id: 'reset_fish', label: 'Point Fish back at the shared config', status: 'done' },
+            { id: 'reset_bash', label: 'Point Bash back at the shared config', status: 'skipped' },
+          ],
+        }}
+      />
+    );
+    await flush();
+    const frame = (instance.lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(frame).toContain('Fish is not selected, so it now uses your shared');
+    expect(frame).not.toContain('Bash is not selected');
+  });
+});

@@ -15,6 +15,7 @@ import {
   FONT_FALLBACK_NOTE,
   plannedFont,
   plannedResetShells,
+  sharedConfigNote,
 } from '../services/installTasks.ts';
 import { redactHome } from '../services/redact.ts';
 import { type ExplainResult, explainPromptAsync } from '../services/starshipProbe.ts';
@@ -175,6 +176,9 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
         </Text>
 
         <TaskPlan title="This run will" tasks={tasks} />
+        {sharedConfigNote(resetShells, false) && (
+          <Text color={uiColor('yellow')}>{sharedConfigNote(resetShells, false)}</Text>
+        )}
         <ConfigPlan state={state} />
         {fontFallback && <Text color={uiColor('gray')}>{FONT_FALLBACK_NOTE}</Text>}
 

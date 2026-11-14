@@ -379,3 +379,18 @@ describe('ReviewScreen explain', () => {
     expect(explainPromptAsync).not.toHaveBeenCalled();
   });
 });
+
+describe('ReviewScreen with a shell going back to the shared config', () => {
+  it('says the unselected shell will use the shared config again', async () => {
+    fs.mkdirSync(path.join(home, '.config', 'fish'), { recursive: true });
+    fs.writeFileSync(
+      path.join(home, '.config', 'fish', 'config.fish'),
+      'starship init fish | source\n'
+    );
+    const { instance } = setup({ installedShells: ['zsh', 'fish'] });
+    await flush();
+    const frame = (instance.lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(frame).toContain('Point Fish back at the shared config');
+    expect(frame).toContain('Fish is not selected, so it will use your shared');
+  });
+});

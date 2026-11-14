@@ -1595,7 +1595,7 @@ describe('a Starship init in a sourced file, as on Omarchy', () => {
     ['/usr/share/omarchy/default/bash/env-bootstrap', 'export OMARCHY_PATH=/usr/share/omarchy\n'],
     [
       '/usr/share/omarchy/default/bash/rc',
-      'source $OMARCHY_PATH/default/bash/aliases\n. "${OMARCHY_PATH}/default/bash/init"\n',
+      `source $OMARCHY_PATH/default/bash/aliases\n. "${'$'}{OMARCHY_PATH}/default/bash/init"\n`,
     ],
     ['/usr/share/omarchy/default/bash/aliases', "alias ls='eza'\n"],
     [

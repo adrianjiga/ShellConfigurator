@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { getShell } from '../config/shells.ts';
 import {
   type ApplyShellConfigOptions,
   applyShellConfig,
@@ -147,7 +148,20 @@ function plannedDefaultShell(state: WizardState): ShellId | null {
 }
 
 function resetLabel(shellId: ShellId): string {
-  return `Clear old STARSHIP_CONFIG in ${shellId}`;
+  return `Point ${getShell(shellId)?.label ?? shellId} back at the shared config`;
+}
+
+/**
+ * What switching unselected shells back to the shared config means for them:
+ * before a run (`done` false) or after it.
+ */
+export function sharedConfigNote(shellIds: readonly ShellId[], done: boolean): string | null {
+  if (shellIds.length === 0) return null;
+  const names = shellIds.map((shellId) => getShell(shellId)?.label ?? shellId);
+  const one = names.length === 1;
+  const list = one ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+  const uses = done ? (one ? 'now uses' : 'now use') : 'will use';
+  return `${list} ${one ? 'is' : 'are'} not selected, so ${one ? 'it' : 'they'} ${uses} your shared ${getSharedConfigPath()} again, the same prompt as any shell without its own config. ${one ? 'Its' : 'Their'} own config stays on disk; select ${one ? 'it' : 'them'} in a later run to bring it back.`;
 }
 
 /**

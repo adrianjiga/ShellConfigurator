@@ -12,12 +12,19 @@ import {
 } from '../generators/shellRc.ts';
 import { errorMessage } from '../services/errors.ts';
 import { fontLabel, getFontFamily, MANUAL_STARSHIP_INSTALL } from '../services/installer.ts';
-import { buildTaskList, plannedResetShells, rcTaskId, TASK_IDS } from '../services/installTasks.ts';
+import {
+  buildTaskList,
+  plannedResetShells,
+  rcTaskId,
+  sharedConfigNote,
+  TASK_IDS,
+} from '../services/installTasks.ts';
 import { writeShareFile } from '../services/share.ts';
 import {
   fontIdToInstall,
   type InstallTask,
   type InstallTaskId,
+  type ShellId,
   type WizardState,
 } from '../types.ts';
 
@@ -62,6 +69,12 @@ export function DoneScreen({ state }: DoneScreenProps) {
   const [outcome, setOutcome] = useState<RestoreOutcome | null>(null);
   const [shared, setShared] = useState<{ file: string } | { error: string } | null>(null);
   const canShare = !state.keepExistingConfig;
+  const resetNote = sharedConfigNote(
+    state.installResults
+      .filter((task) => task.id.startsWith('reset_') && task.status === 'done')
+      .map((task) => task.id.slice('reset_'.length) as ShellId),
+    true
+  );
   const saved = useRef(false);
 
   const failures = state.installResults.filter((t) => t.status === 'failed');
@@ -140,6 +153,8 @@ export function DoneScreen({ state }: DoneScreenProps) {
             <ConfigPlan state={state} />
           </>
         )}
+
+        {!state.dryRun && resetNote && <Text color={uiColor('yellow')}>{resetNote}</Text>}
 
         {!state.dryRun && (
           <Box flexDirection="column" marginTop={1} gap={1}>
