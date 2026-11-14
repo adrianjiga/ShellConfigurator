@@ -60,6 +60,7 @@ vi.mock('../services/installer.ts', () => ({
   setDefaultShell: vi.fn().mockResolvedValue(undefined),
   getMissingStarshipPathDir: vi.fn(() => null),
   plannedPathDir: vi.fn(() => null),
+  verifyStarshipConfig: vi.fn().mockResolvedValue(undefined),
   getNerdFontsDir: () => '/tmp/fonts',
   fontLabel: (id: string) => id,
   getFontFamily: (id: string) => `${id} Nerd Font`,

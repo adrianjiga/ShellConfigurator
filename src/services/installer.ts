@@ -10,6 +10,7 @@ import {
   commandExists,
   commandPath,
   runCapture,
+  runCaptureBoth,
   runCommand,
 } from './exec.ts';
 import { type ExtractedFontFile, extractFontFiles } from './fontExtractor.ts';
@@ -181,6 +182,26 @@ export async function installStarship(pm: PackageManager, signal?: AbortSignal):
 export function getMissingStarshipPathDir(): string | null {
   if (commandExists('starship')) return null;
   return fs.existsSync(path.join(scriptInstallBinDir(), 'starship')) ? scriptInstallBinDir() : null;
+}
+
+/** PATH with `dir` in front, for running a script install that PATH lacks. */
+function withPathDir(dir: string | null): NodeJS.ProcessEnv['PATH'] {
+  const current = process.env.PATH;
+  if (!dir) return current;
+  return current ? `${dir}${path.delimiter}${current}` : dir;
+}
+
+/**
+ * Rejects when starship cannot load the config at `configPath`. `print-config`
+ * exits 0 even on a broken config, so its warnings on stderr are the failure.
+ */
+export async function verifyStarshipConfig(
+  configPath: string,
+  pathDir: string | null = getMissingStarshipPathDir()
+): Promise<void> {
+  const env = { ...process.env, STARSHIP_CONFIG: configPath, PATH: withPathDir(pathDir) };
+  const { stderr } = await runCaptureBoth('starship', ['print-config'], { env });
+  if (stderr) throw new Error(stderr);
 }
 
 /**

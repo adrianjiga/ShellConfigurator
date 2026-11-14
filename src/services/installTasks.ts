@@ -25,7 +25,7 @@ import {
 import { recordStarshipVersion } from './cache.ts';
 import { detectInstalledShellsAsync, isStarshipInstalledAsync } from './detector.ts';
 import { errorMessage } from './errors.ts';
-import { runCapture, runCaptureBoth } from './exec.ts';
+import { runCapture } from './exec.ts';
 import {
   fontLabel,
   getFontFamily,
@@ -35,6 +35,7 @@ import {
   installStarship,
   setDefaultShell,
   shellInstallSupported,
+  verifyStarshipConfig,
 } from './installer.ts';
 import { type TerminalFontResult, terminalLabel, wireTerminalFont } from './terminalFont.ts';
 
@@ -95,14 +96,7 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
       return null;
     }
   },
-  verifyConfig: async (configPath, pathDir) => {
-    const env: Record<string, string | undefined> = { ...process.env, STARSHIP_CONFIG: configPath };
-    // A `script` install drops the binary in a dir the current process PATH may
-    // not include yet; prepend it so verification resolves Starship regardless.
-    if (pathDir) env.PATH = `${pathDir}${process.env.PATH ? `:${process.env.PATH}` : ''}`;
-    const { stderr } = await runCaptureBoth('starship', ['print-config'], { env });
-    if (stderr) throw new Error(stderr);
-  },
+  verifyConfig: (configPath, pathDir) => verifyStarshipConfig(configPath, pathDir ?? null),
   wireTerminalFont,
 };
 

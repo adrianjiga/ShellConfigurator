@@ -18,12 +18,13 @@ import {
   isStarshipInstalledAsync,
 } from './detector.ts';
 import { errorMessage } from './errors.ts';
-import { runCapture, runCaptureBoth } from './exec.ts';
+import { runCapture } from './exec.ts';
 import {
   fontLabel,
   getFontFamily,
   getMissingStarshipPathDir,
   getNerdFontsDir,
+  verifyStarshipConfig,
 } from './installer.ts';
 import { readTerminalFontFamily, terminalLabel } from './terminalFont.ts';
 
@@ -82,17 +83,7 @@ export const DEFAULT_DOCTOR_DEPS: DoctorDeps = {
   detectTerminal: detectTerminalAsync,
   readFontFamily: readTerminalFontFamily,
   hasBundledNerdFonts: hasBundledNerdFonts,
-  verifyConfig: (configPath) => {
-    const pathDir = getMissingStarshipPathDir();
-    const env: Record<string, string | undefined> = {
-      ...process.env,
-      STARSHIP_CONFIG: configPath,
-    };
-    if (pathDir) env.PATH = withPathDir(pathDir);
-    return runCaptureBoth('starship', ['print-config'], { env }).then(({ stderr }) => {
-      if (stderr) throw new Error(stderr);
-    });
-  },
+  verifyConfig: (configPath) => verifyStarshipConfig(configPath),
   readFile: (path) => fs.readFileSync(path, 'utf8'),
   exists: (path) => fs.existsSync(path),
   hasNerdFonts: () => fontDirs().some((dir) => hasNerdFontFiles(dir)),
