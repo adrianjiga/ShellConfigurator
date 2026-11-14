@@ -125,6 +125,7 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
   const [explainShown, setExplainShown] = useState(false);
   const [explanation, setExplanation] = useState<ExplainResult | null>(null);
   const explainPending = useRef(false);
+  const explainShownNow = useRef(false);
   const mounted = useRef(true);
   useEffect(
     () => () => {
@@ -135,7 +136,8 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
 
   useInput((char, key) => {
     if (char.toLowerCase() === 'e' && !state.keepExistingConfig) {
-      const showing = !explainShown;
+      const showing = !explainShownNow.current;
+      explainShownNow.current = showing;
       if (showing && !explainPending.current && explanation?.mode !== 'real') {
         explainPending.current = true;
         setExplanation(null);

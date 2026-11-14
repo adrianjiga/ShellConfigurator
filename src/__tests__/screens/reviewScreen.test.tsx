@@ -326,6 +326,15 @@ describe('ReviewScreen explain', () => {
     expect(lines.filter((line) => line.includes('Second'))).toHaveLength(2);
   });
 
+  it('hides the explanation on a second e that arrives before the screen re-renders', async () => {
+    const { instance } = setup();
+    await flush();
+    instance.stdin.write('e');
+    instance.stdin.write('e');
+    await flush();
+    expect(instance.lastFrame()).not.toContain('Why each part');
+  });
+
   it('says why there is no explanation when Starship cannot give one', async () => {
     const { instance } = setup();
     await flush();
