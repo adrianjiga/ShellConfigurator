@@ -30,13 +30,13 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
 
 ## At a glance
 
-| Status           | Items                                                                                                                      |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · P4.1–P4.2 · #1 #2 #4 #5 #7 #8 #10 #11 #12 #14 #17 #19 #20 #22 #24 #26 #27 |
-| TODO             | P4.3–P4.10 · P5.1–P5.3 · #6 #9 #13 #15 #18 #21 #23 #25                                                                     |
-| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy)                                                                   |
-| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                                    |
-| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title            |
+| Status           | Items                                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| DONE             | P0.1–P0.13 · P1.1–P1.4 · P2.1–P2.6 · P3.1–P3.5 · P4.1–P4.3 · #1 #2 #4 #5 #7 #8 #10 #11 #12 #13 #14 #17 #19 #20 #22 #24 #26 #27 |
+| TODO             | P4.4–P4.10 · P5.1–P5.3 · #6 #9 #15 #18 #21 #23 #25                                                                             |
+| PARTIAL          | #3 (CLI card export/import done, no in-wizard card copy)                                                                       |
+| PARKED (D1)      | P5.4 (#16) · P5.5 (#28)                                                                                                        |
+| PARKED (no task) | WSL/Windows · update checker · offline font · preset alignment · supply-chain polish · lazy-load · window title                |
 
 ---
 
@@ -238,11 +238,18 @@ not complete · **TODO** not started · **PARKED** deliberately deferred.
   Rolling back again undoes the run before; rolling back a rollback redoes it. The distro smoke rolls back
   its uninstall and then its apply. Not covered: fonts, the Starship binary and `chsh`.
 
-**P4.3 — `debug-info` (#13)** — **TODO**
+**P4.3 — `debug-info` (#13)** — **DONE**
 
 - `shell-configurator debug-info > issue.md`: detected PM, distro/OS id, shells + installed status, terminal + locale, relevant PATH entries, installed starship version vs the PM's latest.
 - **Why.** Mirrors starship's `bugreport`; bug reports become "run this, paste the file" instead of "it doesn't work". Almost free — it is a reporter over the detector's existing outputs.
 - **How.** New subcommand in `index.tsx`; compose detector results + doctor checks into Markdown. **Effort.** S. **D:** P2.3.
+- **Shipped:** `shell-configurator debug-info [--json]` (`services/debugInfo.ts`): versions, OS + distro, PM,
+  container, terminal, locale, current shell, Starship (path, version, off-PATH dir, recorded version,
+  `STARSHIP_CONFIG`), a per-shell table, PATH entries, the last recorded run and the doctor report. The home
+  directory shows as `~`, and URL credentials are dropped from the recorded command. The bug report template
+  asks for it, and the generate smoke runs it on every distro cell. Not included: the package manager's
+  latest Starship version, which needs a network or package-index query; the recorded install version and
+  the doctor's drift check cover the common case.
 
 **P4.4 — `completions` (#23)** — **TODO**
 
@@ -346,7 +353,7 @@ they can be picked up in parallel with any phase but each stays its own PR.
 
 ## Suggested next order (remaining work)
 
-1. The small wins: **P4.3 `debug-info`**, **P4.4 `completions`**, **P4.6 `WHAT-CHANGED.md`**, **P4.8 list flags**.
+1. The small wins: **P4.4 `completions`**, **P4.6 `WHAT-CHANGED.md`**, **P4.8 list flags**.
 2. Then **P5.1 (#6) transient prompt**, **P5.2 (#15) prompt-manager detection**, **P5.3 (#25) bootstrap**.
 
 ## Merge & verification strategy
