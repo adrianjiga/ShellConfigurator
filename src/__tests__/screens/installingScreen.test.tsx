@@ -163,6 +163,7 @@ describe('InstallingScreen', () => {
   });
 
   it('does not advance after an unmount while the run is still finishing', async () => {
+    vi.mocked(writeWhatChangedSafely).mockClear();
     mocks.buildTaskList.mockReturnValue(statusFixture());
     let resolveRun: (tasks: InstallTask[]) => void = () => {};
     mocks.runInstallTasks.mockImplementation(
@@ -173,9 +174,10 @@ describe('InstallingScreen', () => {
 
     instance.unmount();
     resolveRun([{ id: 'starship', label: 'Install Starship', status: 'done' }]);
-    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 20));
 
     expect(onNext).not.toHaveBeenCalled();
+    expect(writeWhatChangedSafely).not.toHaveBeenCalled();
   });
 
   it('aborts the chain on unmount', async () => {

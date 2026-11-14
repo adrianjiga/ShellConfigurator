@@ -96,6 +96,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
 
       // Advance after a brief pause so the user can see the final state
       await new Promise((r) => setTimeout(r, advanceDelayMs));
+      if (unmounted) return;
       const summaryPath = writeWhatChangedSafely({
         kind: 'install',
         timestamp: new Date().toISOString(),
@@ -103,7 +104,7 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
         results,
         manifest: runId ? readRunManifest(runId) : null,
       });
-      if (!unmounted) onNext({ installResults: results, runId, summaryPath });
+      onNext({ installResults: results, runId, summaryPath });
     })();
 
     return () => {
