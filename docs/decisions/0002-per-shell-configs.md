@@ -28,14 +28,20 @@ plus `starship init` line to that shell's rc file.
 - A user's existing default config is never clobbered; the wizard's per-shell
   files sit alongside it and are activated by `STARSHIP_CONFIG` per shell.
 - The rc edit must come with the `export` line, so `applyShellConfig` writes a
-  deterministic two-line block (guarded by `Added by ShellConfigurator` markers)
-  and `resetSharedShellConfig` can remove it.
-- Before installation, the shared path is backed up best-effort so `--restore`
-  can offer a way back for the config that previously stood as the default.
-- The installer's config task list one per selected shell, and the review screen
-  shows the per-shell TOML for each chosen shell (in adopt mode — 0002A — the
-  review shows the shared config under "Config to keep" instead, since no
-  per-shell TOML is generated).
+  deterministic block under an `Added by ShellConfigurator` marker: the `export`
+  and `starship init` lines, plus a `PATH` line first when a script install put
+  `starship` somewhere the shell does not look. Shells that run Starship but were
+  not selected get a `STARSHIP_CONFIG` unset guard from `resetSharedShellConfig`
+  instead, unless their rc already sets `STARSHIP_CONFIG` itself.
+- The shared path is backed up best-effort inside the single Config task, which
+  runs after the Starship, font and shell installs and before the per-shell rc
+  tasks, so `--restore` can offer a way back for the config that previously stood
+  as the default.
+- The installer has one Config task that writes every selected shell's file and
+  one rc task per selected shell. The review screen shows the generated TOML
+  once, under each chosen shell's config path, followed by each shell's rc
+  block. (The adopt-mode "Config to keep" section — 0002A — is never reached
+  from the wizard, which does not enter adopt mode.)
 
 ---
 
@@ -55,6 +61,7 @@ hand-tuned config.
 ### Decision
 
 `keepExistingConfig` is carried on `WizardState`. When set, `buildTaskList`
+labels the Config task "Keep existing Starship config" and `runInstallTasks`
 takes the adopt branch:
 
 - The Config task never runs `generateToml` or writes `starship/<shell>.toml`.
@@ -78,8 +85,9 @@ existing file as-is.
 
 - Per-shell divergence is traded away deliberately and only for adopt runs: the
   user chose it, and nothing is regenerated.
-- `STARSHIP_CONFIG` is not exported for adopt-configured shells, so `--restore`
-  and re-runs must recognise the adopt marker as a ShellConfigurator block.
+- `STARSHIP_CONFIG` is not exported for adopt-configured shells, so re-runs must
+  recognise the adopt marker as a ShellConfigurator block. `--restore` only
+  copies config backups back and never touches rc files.
 - `--import-url` is folded into adopt mode rather than parsed back into
   `WizardState` (regenerating a shared file from a hand-written TOML would be a
   lossy round-trip).
