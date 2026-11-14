@@ -114,7 +114,6 @@ export function InstallingScreen({ state, onNext }: InstallingScreenProps) {
       await new Promise((r) => setTimeout(r, advanceDelayMs));
       if (unmounted) return;
       onNext({ installResults: results, runId, summaryPath });
-      // A closed terminal or a kill leaves nobody to read the Done screen.
       if (signal === 'SIGHUP' || signal === 'SIGTERM') {
         restoreTty();
         process.exit(signalExitCode(signal));

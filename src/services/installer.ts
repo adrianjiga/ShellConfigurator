@@ -49,11 +49,6 @@ function sudo(): string[] {
   return needsSudo() ? ['sudo'] : [];
 }
 
-/**
- * Installs one package. pacman installs from the package lists it has, without
- * upgrading the system; when those are too old to download from, the error
- * says to upgrade the system first.
- */
 async function installPackage(
   pm: InstallingManager,
   pkg: string,

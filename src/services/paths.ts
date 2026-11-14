@@ -9,7 +9,6 @@ export function homeDir(): string {
   return os.homedir() || os.userInfo().homedir;
 }
 
-/** `~/.local/bin`, where the Starship install script puts the binary. */
 export function scriptInstallBinDir(): string {
   return path.join(homeDir(), '.local', 'bin');
 }

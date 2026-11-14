@@ -21,10 +21,6 @@ function currentUser(): string {
   }
 }
 
-/**
- * Shows the user name as `<user>` where it names a home folder other than this
- * one, such as WSL's `/mnt/c/Users/<name>` or a second `/home/<name>`.
- */
 export function redactUser(text: string, user: string = currentUser()): string {
   if (user.length < 2) return text;
   return text.replace(
@@ -33,12 +29,10 @@ export function redactUser(text: string, user: string = currentUser()): string {
   );
 }
 
-/** The home folder as `~` and the user name as `<user>`, for text meant for a public issue. */
 export function redactPersonal(text: string, home?: string, user?: string): string {
   return redactUser(redactHome(text, home), user);
 }
 
-/** One URL without its credentials, query and fragment. */
 export function redactUrl(value: string): string {
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value;
   try {
@@ -69,7 +63,6 @@ export function redactUrls(command: string): string {
   );
 }
 
-/** Every URL in free text without its credentials, query and fragment. */
 export function redactUrlText(text: string): string {
   return text.replace(/(\b[a-z][a-z0-9+.-]*:\/\/)([^/\s'"]*@)?([^\s'"?#]*)[^\s'"]*/gi, '$1$3');
 }

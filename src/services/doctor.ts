@@ -73,7 +73,6 @@ export interface DoctorDeps {
   /** The starship version the last install/apply recorded, or null. */
   readCachedStarshipVersion: () => string | null;
   detectInstalledShells: typeof detectInstalledShellsAsync;
-  /** The shells the last recorded run set up, or null. */
   lastRunShells: () => ShellId[] | null;
   detectTerminal: typeof detectTerminalAsync;
   readFontFamily: typeof readTerminalFontFamily;
@@ -82,7 +81,6 @@ export interface DoctorDeps {
   verifyConfig: (configPath: string) => Promise<void>;
   readFile: (path: string) => string;
   exists: (path: string) => boolean;
-  /** Whether the Nerd Font `fontId` is installed, or any Nerd Font without one. */
   hasNerdFonts: (fontId?: string | null) => boolean;
   isContainer: () => Promise<boolean>;
   env: NodeJS.ProcessEnv;
@@ -135,11 +133,6 @@ function fontDirs(): string[] {
     : [getNerdFontsDir(), '/usr/share/fonts', '/usr/local/share/fonts'];
 }
 
-/**
- * A font file of the Nerd Font `fontId`, or of any Nerd Font: its family name,
- * then Nerd Font, spaces dropped. Nerd Fonts 3 names it `JetBrainsMonoNerdFont-
- * Regular.ttf`, version 2 `JetBrains Mono Regular Nerd Font Complete.ttf`.
- */
 function nerdFontFile(fontId?: string | null): RegExp {
   const family = NERD_FONTS.find((font) => font.id === fontId)?.family;
   if (!family) return NERD_FONT_FILE;
@@ -147,7 +140,6 @@ function nerdFontFile(fontId?: string | null): RegExp {
   return new RegExp(`^${name}.*NerdFont.*\\.(ttf|otf)$`, 'i');
 }
 
-/** Any font file under `dir` whose name matches `pattern`, at any nesting depth. */
 function hasNerdFontFiles(dir: string, pattern: RegExp, depth = 3): boolean {
   let entries: Array<fs.Dirent | string>;
   try {
@@ -710,7 +702,6 @@ const NO_SHELL_SET_UP: DoctorFinding = {
   detail: 'no installed shell starts Starship — run shell-configurator to set one up',
 };
 
-/** `deps` that read each file once. */
 function withCachedReads(deps: DoctorDeps): DoctorDeps {
   const reads = new Map<string, string>();
   const exists = new Map<string, boolean>();

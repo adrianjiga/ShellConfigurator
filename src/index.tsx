@@ -356,10 +356,6 @@ function acceptedFlags(subcommand: Subcommand): Set<string> {
 
 const NOT_STATE_FLAGS = new Set(['--import-url', '--output', '--export']);
 
-/**
- * Stops on a flag the subcommand would ignore. doctor and repair keep taking the
- * flags that layer onto a --state card, and only warn about them without one.
- */
 function refuseUnusedFlags(flags: CliFlags, subcommand: Subcommand): void {
   const accepted = acceptedFlags(subcommand);
   const layered =
@@ -410,10 +406,6 @@ export async function runDoctorCommand(
   if (!report.ok) process.exitCode = 1;
 }
 
-/**
- * Runs the doctor's fixes, then re-checks; a still-failing check exits
- * non-zero. Asks like uninstall, and captures the run so rollback can undo it.
- */
 export async function runRepairCommand(
   flags: CliFlags,
   command: string,

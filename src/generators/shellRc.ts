@@ -304,7 +304,6 @@ export function sourcedFiles(content: string, env: NodeJS.ProcessEnv = process.e
   });
 }
 
-/** Whether `content`, or a file it sources (three levels deep), passes `test`. */
 function reachableSome(
   content: string,
   test: (text: string) => boolean,
@@ -326,10 +325,6 @@ function reachableSome(
   });
 }
 
-/**
- * Whether `content`, or a file it sources (three levels deep), runs the shell's
- * Starship init, as Omarchy's ~/.bashrc does through $OMARCHY_PATH/default/bash/rc.
- */
 export function initReachable(
   content: string,
   shellId: ShellId,
@@ -387,7 +382,6 @@ export function manualSetupAppliedWith(
     : pins.every((filePath) => io.exists(filePath));
 }
 
-/** Whether `line` exports STARSHIP_CONFIG to `configPath`, quoted the way any version wrote it. */
 function exportsConfigPath(shell: ShellDef, line: string, configPath: string): boolean {
   const prefix = shell.configEnv?.exportPrefix;
   const t = line.trim();
@@ -454,7 +448,6 @@ function isBlockMarkerLine(line: string): boolean {
   return t === BLOCK_MARKER || t === ADOPT_MARKER;
 }
 
-/** The PATH lines this tool writes, today's form and the one before 1.3.0. */
 function ownPathLines(shell: ShellDef): string[] {
   if (!shell.pathLine) return [];
   const dir = scriptInstallBinDir();
@@ -462,11 +455,6 @@ function ownPathLines(shell: ShellDef): string[] {
   return [shell.pathLine(dir), legacy];
 }
 
-/**
- * The same lines for a `~/.local/bin` under another home folder, as in dotfiles
- * shared between a Linux and a macOS machine. A line that names `$HOME` is the
- * user's own.
- */
 const OTHER_HOME_PATH_LINE: Partial<Record<ShellId, RegExp>> = {
   bash: /^export PATH=(?:'\/[^']*\/\.local\/bin':"\$PATH"|"\/[^"$]*\/\.local\/bin:\$PATH")$/,
   zsh: /^export PATH=(?:'\/[^']*\/\.local\/bin':"\$PATH"|"\/[^"$]*\/\.local\/bin:\$PATH")$/,
@@ -492,11 +480,6 @@ function isManagedLine(shell: ShellDef, line: string): boolean {
   return line.trim() === shell.initLine || isPathLine(shell, line) || isConfigLine(shell, line);
 }
 
-/**
- * Index just past the block whose marker is at `start`. A block holds at most
- * one STARSHIP_CONFIG line and ends after its init line, so a user's own
- * export or init line written right under it is not taken for part of it.
- */
 function managedBlockEnd(lines: string[], start: number, shell: ShellDef): number {
   let configLines = 0;
   let j = start + 1;
@@ -722,29 +705,21 @@ const BASH_LOGIN_FILES = ['.bash_profile', '.bash_login', '.profile'];
 
 export const LOGIN_MARKER = '# Added by ShellConfigurator (login shells read this, not ~/.bashrc)';
 
-/** Only Bash sources ~/.bashrc: sh, dash and ksh login shells read ~/.profile too. */
 const LOGIN_LINE = '[ -n "$BASH_VERSION" ] && [ -f ~/.bashrc ] && . ~/.bashrc';
 
-/** The file a Bash login shell reads: the first of these that exists, else ~/.bash_profile. */
 export function bashLoginFile(io: RcIo = FS_RC_IO): string {
   const files = bashLoginFiles();
   return files.find((file) => io.exists(file)) ?? files[0];
 }
 
-/** Every file a Bash login shell may read first, for capturing a run. */
 export function bashLoginFiles(): string[] {
   return BASH_LOGIN_FILES.map((name) => path.join(homeDir(), name));
 }
 
-/**
- * macOS terminals start Bash as a login shell, which never reads ~/.bashrc on
- * its own, so the prompt set up there would not show.
- */
 export function bashNeedsLoginFile(platform: NodeJS.Platform = process.platform): boolean {
   return platform === 'darwin';
 }
 
-/** Whether the login file text `content`, or a file it sources, loads ~/.bashrc. */
 export function loginLoadsBashrc(
   content: string,
   io: RcIo = FS_RC_IO,
@@ -756,14 +731,12 @@ export function loginLoadsBashrc(
   );
 }
 
-/** The Bash login file text `existing`, with a block that loads ~/.bashrc when nothing does yet. */
 export function bashLoginContent(existing: string, io: RcIo = FS_RC_IO): string {
   return loginLoadsBashrc(existing, io)
     ? existing
     : appendManagedBlock(existing, LOGIN_MARKER, [LOGIN_LINE]);
 }
 
-/** Makes the Bash login file load ~/.bashrc where it must. The file it changed, or null. */
 function ensureBashLogin(): string | null {
   if (!bashNeedsLoginFile()) return null;
   const file = bashLoginFile();
@@ -812,7 +785,6 @@ export function applyShellConfig(
   };
 }
 
-/** The Bash login files that hold the block that loads ~/.bashrc. */
 export function bashLoginBlockFiles(io: RcIo = FS_RC_IO): string[] {
   return bashLoginFiles().filter((file) => {
     try {
@@ -823,10 +795,6 @@ export function bashLoginBlockFiles(io: RcIo = FS_RC_IO): string[] {
   });
 }
 
-/**
- * Takes the block that loads ~/.bashrc back out of a Bash login file, after
- * backing it up, and deletes the file when it held nothing else.
- */
 export function removeBashLoginBlock(file: string): RemovalResult {
   if (!fs.existsSync(file)) return { removed: false, note: `${file} does not exist` };
   const lines = fs.readFileSync(file, 'utf8').split('\n');
@@ -868,7 +836,6 @@ function setsStarshipConfig(shell: ShellDef, line: string): boolean {
     : /^(?:(?:export|(?:typeset|declare)\s+-\w*x\w*)\s+)?STARSHIP_CONFIG=/.test(t);
 }
 
-/** The value a STARSHIP_CONFIG line sets, without its quotes. */
 function starshipConfigValue(shell: ShellDef, line: string): string {
   const t = line.trim();
   const raw =
@@ -880,10 +847,6 @@ function starshipConfigValue(shell: ShellDef, line: string): string {
   return quoted ? quoted[2] : (/^[^\s;&|]*/.exec(value)?.[0] ?? '');
 }
 
-/**
- * The STARSHIP_CONFIG value the rc text sets, read line by line the way the
- * shell runs it (comments skipped, the last setting wins), or null.
- */
 export function rcStarshipConfig(shellId: ShellId, content: string): string | null {
   const shell = getShell(shellId);
   if (!shell) return null;
@@ -894,7 +857,6 @@ export function rcStarshipConfig(shellId: ShellId, content: string): string | nu
   return setting === undefined ? null : starshipConfigValue(shell, setting);
 }
 
-/** The startup files the shell reads before or beside its rc. */
 function startupFiles(shell: ShellDef): string[] {
   const home = homeDir();
   if (shell.id === 'zsh' && shell.rcFile) {
@@ -911,11 +873,6 @@ function startupFiles(shell: ShellDef): string[] {
   return [];
 }
 
-/**
- * Whether the user sets STARSHIP_CONFIG for this shell themselves: in `rcContent`
- * (the rc without ShellConfigurator's blocks), a file it sources, or another
- * startup file of the shell. A guard would cancel such a setting.
- */
 function setsOwnStarshipConfig(
   shell: ShellDef,
   rcContent: string,

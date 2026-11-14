@@ -97,7 +97,6 @@ function createRunFolder(): string {
   }
 }
 
-/** What history records for a run that died before it could record itself. */
 export interface InterruptedRecord {
   kind: HistoryKind;
   command?: string;
@@ -105,7 +104,6 @@ export interface InterruptedRecord {
   state?: WizardState;
 }
 
-/** Written when a capture starts and removed once its manifest is, so a run that dies can be finished later. */
 interface PendingCapture {
   version: typeof RUN_MANIFEST_VERSION;
   pid: number;
@@ -117,10 +115,8 @@ interface PendingCapture {
 
 const PENDING = 'pending.json';
 
-/** No run takes this long, so a pending run this old died, whatever process has its pid now. */
 const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-/** The captures this process has started and not finished. */
 const activeCaptures = new Set<string>();
 
 function writeJsonAtomic(file: string, value: unknown): void {
@@ -185,9 +181,7 @@ export interface CaptureOptions {
   onChanged?: (runId: string, files: RunFile[], error?: unknown) => void;
   /** Captured files that later runs rewrite (see RunFile.rewritable). */
   rewritable?: readonly string[];
-  /** How to record the run in history if it dies before it can. */
   record?: InterruptedRecord;
-  /** The caller already recovered interrupted runs, so captureRun need not. */
   recovered?: boolean;
 }
 
@@ -250,11 +244,6 @@ export function finishRunCapture(
   return manifest;
 }
 
-/**
- * Whether the run's process still runs. A pending run of this very pid is
- * alive only while this process is capturing it: in a container every run can
- * get the same pid, so the pid alone would keep a dead run pending forever.
- */
 function processAlive(pid: number, runId: string): boolean {
   if (pid === process.pid) return activeCaptures.has(runId);
   try {
@@ -271,7 +260,6 @@ interface DeadRun {
   pending: PendingCapture;
 }
 
-/** The captures whose process died before writing their manifest. Reads only. */
 function deadRuns(isAlive: (pid: number, runId: string) => boolean): DeadRun[] {
   let runs: string[];
   try {
@@ -294,19 +282,12 @@ function deadRuns(isAlive: (pid: number, runId: string) => boolean): DeadRun[] {
   });
 }
 
-/** How many interrupted runs the next capture or rollback would record. Changes nothing. */
 export function interruptedRunCount(
   isAlive: (pid: number, runId: string) => boolean = processAlive
 ): number {
   return deadRuns(isAlive).length;
 }
 
-/**
- * Finishes the capture of every run whose process died before writing its
- * manifest (Ctrl+C, a closed terminal, a kill), and records it in history as
- * interrupted, so rollback can put its files back. A run whose process is
- * still alive is left alone. Never throws.
- */
 export function recoverInterruptedRuns(
   isAlive: (pid: number, runId: string) => boolean = processAlive
 ): string[] {

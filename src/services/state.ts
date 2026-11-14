@@ -136,7 +136,6 @@ const WIZARD_KEYS = new Set<string>([
   'hasNerdFont',
 ] satisfies (keyof StateCard['wizard'])[]);
 
-/** Stops on a key the card format does not have, which is most likely a typo. */
 function refuseUnknownKeys(value: object, known: Set<string>, where: string): void {
   const unknown = Object.keys(value).filter((key) => !known.has(key));
   if (unknown.length > 0) {

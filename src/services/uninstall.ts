@@ -83,7 +83,6 @@ export interface UninstallDeps {
   startsStarship: (shellId: ShellId, withoutManagedBlocks: boolean) => boolean;
   removeManagedRcBlocks: (shellId: ShellId) => RemovalResult;
   removeShellConfigFile: (shellId: ShellId) => RemovalResult;
-  /** The Bash login files holding the line that loads ~/.bashrc. */
   bashLoginBlockFiles: () => string[];
   removeBashLoginBlock: (file: string) => RemovalResult;
   detectPackageManager: () => Promise<PackageManager>;

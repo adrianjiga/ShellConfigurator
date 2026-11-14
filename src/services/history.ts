@@ -37,7 +37,6 @@ export interface HistoryRecord {
   rollbackOf?: string;
   /** For a rollback: some of the run's changes were left in place. */
   partial?: boolean;
-  /** The run's process died before it finished; recorded by the next run. */
   interrupted?: boolean;
 }
 

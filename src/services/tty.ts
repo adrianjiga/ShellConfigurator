@@ -12,7 +12,6 @@ const listeners = new Set<SuspendListener>();
 let depth = 0;
 /** Raw mode is only re-armed for a UI that had it: headless runs never do. */
 let rawBeforeSuspend = false;
-/** The terminal read suspendUi stopped, which resumeUi must start again. */
 let stoppedRead: StdinHandle | null = null;
 
 export function isUiSuspended(): boolean {
@@ -51,12 +50,7 @@ interface StdinHandle {
   readStart?: () => number;
 }
 
-/**
- * Stops Node reading the terminal, so a line typed at the child's password
- * prompt reaches the child instead of Node's input buffer. A removed input
- * listener alone does not stop the read, and Node does not start a read it did
- * not stop itself, so resumeUi starts it again.
- */
+/** Node keeps reading a TTY after its input listeners are gone; only stopping the handle hands the input to the child. */
 function stopReadingStdin(): void {
   try {
     const handle = (process.stdin as unknown as { _handle?: StdinHandle })._handle;

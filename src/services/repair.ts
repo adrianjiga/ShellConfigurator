@@ -43,7 +43,6 @@ export interface RepairOptions {
   dryRun?: boolean;
   /** Also apply the fixes warnings carry; they may describe a deliberate choice. */
   includeWarnings?: boolean;
-  /** The doctor report a dry run of this repair already made, so it is not checked twice. */
   before?: DoctorReport;
 }
 

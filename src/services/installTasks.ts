@@ -178,7 +178,6 @@ export function plannedResetShells(state: WizardState): ShellId[] {
   );
 }
 
-/** Of `shells`, the ones that start Starship without a working setup of their own. */
 export function shellsToGuard(shells: ShellId[]): ShellId[] {
   return shellsWithStarshipInit(shells).filter((shellId) => !keepsOwnConfig(shellId));
 }

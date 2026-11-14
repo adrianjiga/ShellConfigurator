@@ -22,7 +22,6 @@ export interface RollbackRun {
   files: number;
   /** A later rollback undid this run, and was not undone itself. */
   rolledBack: boolean;
-  /** The run's process died before it finished. */
   interrupted?: boolean;
 }
 

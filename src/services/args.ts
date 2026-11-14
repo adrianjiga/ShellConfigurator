@@ -205,7 +205,6 @@ const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
   },
 };
 
-/** Flags that no longer exist, with what to use instead. */
 const RETIRED_FLAGS: Record<string, string> = {
   '--undo':
     '--undo is gone: shell-configurator rollback undoes the last run, rc lines included. ' +

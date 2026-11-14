@@ -43,9 +43,8 @@ function buildFormatString(segments: ConfigurableModuleId[]): string {
 
 /**
  * Leading separator styled with starship's `prev_bg` (1.20+) so a collapsed
- * module takes its separator with it. On the left, the module's own colour
- * comes first as the fallback: when nothing was drawn before it (a hidden
- * username), the separator is a plain cell of its colour, not a stray arrow.
+ * module takes its separator with it. On the left, the leading `fg:<color>` is
+ * the fallback for when nothing was drawn before it.
  */
 function powerlineFormat(
   content: string,
