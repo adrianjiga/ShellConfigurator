@@ -8,7 +8,9 @@
 
 ```typescript
 type ShellId = 'zsh' | 'bash' | 'fish' | 'nushell' | 'powershell';
+type TerminalId = 'alacritty' | 'kitty' | 'wezterm' | 'ghostty' | 'foot';
 type CharacterSymbol = 'arrow' | 'lambda' | 'dollar';
+type ContinuationPrompt = 'dot' | 'arrow' | 'none';
 interface DirectorySubstitution {
   from: string;
   to: string;
@@ -16,18 +18,18 @@ interface DirectorySubstitution {
 type PackageManager = 'pacman' | 'apt' | 'dnf' | 'brew' | 'apk' | 'script';
 type InstallStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
 
-type WizardStep =
-  | 'welcome'
-  | 'fontcheck'
-  | 'font_select'
-  | 'preset'
-  | 'segments_left'
-  | 'segments_right'
-  | 'style'
-  | 'shells'
-  | 'review'
-  | 'installing'
-  | 'done';
+type InstallTaskId =
+  | 'starship'
+  | 'font'
+  | 'config'
+  | 'chsh'
+  | 'verify'
+  | 'terminal'
+  | `shell_${ShellId}`
+  | `rc_${ShellId}`
+  | `reset_${ShellId}`;
+
+type WizardStep = (typeof STEP_ORDER)[number]; // derived from STEP_ORDER below
 ```
 
 ### WizardState
@@ -54,7 +56,7 @@ interface WizardState {
   installedShells: ShellId[]; // Shells already on system
   nerdFontToInstall: NerdFontChoice; // {kind:'none'|'select'|'install',id}
   setDefaultShell: ShellId | null; // Shell to set via chsh
-  skipStarshipInstall: boolean; // "Continue without Starship" — skips install + RC steps
+  skipStarshipInstall: boolean; // "Continue without Starship" — drops the Starship install, Verify and the unset pass; rc tasks stay in the plan, marked skipped
   keepExistingConfig: boolean; // Adopt mode: keep the shared starship.toml as-is
   sharedConfigToml: string | null; // Imported shared config (--import-url); runtime-only, never serialized
   dryRun: boolean; // No install or config-write happens — the wizard only previews
@@ -70,7 +72,7 @@ Tracks individual installation task state in InstallingScreen:
 
 ```typescript
 interface InstallTask {
-  id: string; // Unique task identifier
+  id: InstallTaskId; // Unique task identifier
   label: string; // Display label
   status: InstallStatus; // Current status
   error?: string; // Error message if failed
@@ -103,7 +105,7 @@ task-building resolves the concrete font to install.
 ### Constants
 
 ```typescript
-const STEP_ORDER: WizardStep[];
+const STEP_ORDER: readonly [...]; // `as const`; WizardStep is its element type
 // welcome → fontcheck → font_select → preset → segments_left → segments_right → style → shells → review → installing → done
 ```
 
@@ -113,12 +115,14 @@ const STEP_ORDER: WizardStep[];
 
 ```typescript
 function getNextStep(state: WizardState, update?: Partial<WizardState>): WizardState;
-// Merges update, advances to the next step, skipping font_select when not wanted.
-// Returns the original state unchanged if there is no next step.
+// Merges update, advances to the next step, skipping font_select when not wanted
+// and installing in dry-run mode. At `done` (or an unknown step) it does not
+// advance, but still returns the merged state when an update was passed.
 
 function getPrevStep(state: WizardState): WizardState;
 // Moves back a step, skipping font_select when it was never intended.
-// Returns the original state unchanged if there is no previous step.
+// Returns the original state unchanged if there is no previous step, or from
+// installing/done, which can never be re-entered.
 ```
 
 Pure functions — `src/app.tsx` wraps them in `goNext`/`goBack` state setters.
@@ -148,10 +152,26 @@ type ModuleId =
   | 'battery'
   | 'cmd_duration'
   | 'jobs'
+  | 'status'
+  | 'os'
+  | 'shlvl'
+  | 'sudo'
+  | 'git_commit'
+  | 'golang'
+  | 'java'
+  | 'dotnet'
+  | 'ruby'
+  | 'php'
+  | 'c'
+  | 'cpp'
+  | 'zig'
+  | 'lua'
+  | 'swift'
+  | 'elixir'
   | 'character';
 ```
 
-16 built-in modules.
+31 placeable modules (`ConfigurableModuleId`) plus `character`.
 
 ### ModuleDef
 
@@ -162,18 +182,20 @@ interface ModuleDef {
   description: string; // Shown when module is focused
   defaultLeft: boolean; // Included in left prompt by default
   defaultRight: boolean; // Included in right prompt by default
-  previewSegment: (hasNerdFont: boolean) => string; // Text for PromptPreview
+  previewSegment: (hasNerdFont: boolean, sample: PreviewSample) => string; // Text for PromptPreview
+  plainPreview?: (hasNerdFont: boolean) => string; // Plain-prompt preview, when starship's default format adds words or brackets
   content: string; // Inner format, e.g. '$symbol$version' — what powerline wraps in separators
   settings?: (ctx: ModuleTomlContext) => string; // TOML keys other than style/format
   stylesItself?: boolean; // Module carries its colour in keys other than `style`
 }
 ```
 
-`Id` is typed as `ConfigurableModuleId` (the 15 placeable modules); `character`
+`Id` is typed as `ConfigurableModuleId` (the 31 placeable modules); `character`
 is not placeable and so has no entry — it gets special placement on its own line
 and is configured on the Style screen instead.
 
-`ModuleTomlContext` hands each `settings` builder `{ hasNerdFont, styleFor }`
+`ModuleTomlContext` hands each `settings` builder `{ hasNerdFont, powerline,
+customFormat, directoryTruncationLength, directorySubstitutions, styleFor }`
 where `styleFor(name)` builds the style expression for a palette colour — the
 colour on its own in a normal prompt, or an `fg:fg bg:<colour>` pair under
 powerline. Only modules that carry their colour in differently-named keys
@@ -187,21 +209,32 @@ for everyone else.
 function getModule(id: string): ModuleDef | undefined;
 ```
 
+```typescript
+function placedModules(
+  left: readonly ModuleId[],
+  right: readonly ModuleId[]
+): { left: ModuleId[]; right: ModuleId[] };
+// The modules as the prompt places them: each once, and a module chosen for
+// both sides only on the left. The generator, the preview and the state card
+// all go through it.
+```
+
 The `MODULES` array is the single registry. All module-aware code reads from it, and `MODULE_DEFS` is checked with `satisfies Record<ConfigurableModuleId, …>` so a missing entry or a stray one is a compile error.
 
 ### Example Entry
 
 ```typescript
-{
-  id: 'git_branch',
+// MODULE_DEFS is keyed by id; MODULES adds `id` from the key.
+git_branch: {
   label: 'Git Branch',
   description: 'Active git branch name',
   defaultLeft: true,
   defaultRight: false,
-  previewSegment: (nf) => `${nf ? ' ' : 'on '}main`,
+  previewSegment: (nf) => `${nf ? NERD_FONT_SYMBOLS.gitBranch : ''}main`,
+  plainPreview: (nf) => `on ${nf ? NERD_FONT_SYMBOLS.gitBranch : ''}main`,
   content: '$symbol$branch',
   settings: ({ hasNerdFont }) =>
-    `symbol = "${hasNerdFont ? ' ' : 'on '}"`,
+    `symbol = "${tomlBasic(hasNerdFont ? NERD_FONT_SYMBOLS.gitBranch : '')}"`,
 }
 ```
 
@@ -219,10 +252,12 @@ interface PresetDef {
   label: string; // Display name
   description: string; // Shown below preset list
   requiresNerdFont: boolean; // Hidden if user has no Nerd Font
-  leftModules?: ModuleId[]; // Overrides default left modules
-  rightModules?: ModuleId[]; // Overrides default right modules
+  leftModules: readonly ModuleId[]; // Left modules this preset selects
+  rightModules: readonly ModuleId[]; // Right modules this preset selects
   palette: PaletteId; // Colour theme this preset starts from
   powerline: boolean; // Whether segments render as interlocking coloured blocks
+  textOnly?: boolean; // Text symbols only, even with a Nerd Font
+  bracketed?: boolean; // Wraps each segment in square brackets
 }
 ```
 
@@ -249,6 +284,8 @@ interface ShellDef {
   initPath?: string; // Manual setup file used to detect an already-configured shell
   additionalInitPaths?: string[]; // Other required files from manual setup
   pathLine?: (dir: string) => string; // PATH addition in this shell's syntax, used when starship needs one
+  adoptInitLine?: string; // Manual-only shells: the setup command in adopt mode
+  configEnv?: ConfigEnvSyntax; // rc shells: how STARSHIP_CONFIG is exported and unset
 }
 ```
 
@@ -260,7 +297,7 @@ interface ShellDef {
 | bash       | `~/.bashrc`                  | `eval "$(starship init bash)"`                            |
 | fish       | `~/.config/fish/config.fish` | `starship init fish \| source`                            |
 | nushell    | `null` (manual)              | `nu -c '<quoted Nushell setup script>'` (Bash-compatible) |
-| powershell | `null` (manual)              | `$env:STARSHIP_CONFIG = Join-Path $HOME ".config/starship/powershell.toml"; Invoke-Expression (&starship init powershell)` |
+| powershell | `null` (manual)              | `$env:STARSHIP_CONFIG = '<config dir>/starship/powershell.toml'; Invoke-Expression (&starship init powershell)` (absolute path) |
 
 Shells with `rcFile: null` are not wired through an RC file. Instead, `manualNote`
 and the setup command are displayed on DoneScreen. Nushell's command can be run
@@ -269,7 +306,10 @@ from Bash; it invokes `nu` to execute the setup script.
 For nushell the manual command writes two files into `$nu.data-dir/vendor/autoload`:
 an `export-env` block (`starship-config.nu`) that pins `$env.STARSHIP_CONFIG` to the
 shell's per-shell `starship/nushell.toml`, and the `starship init` output
-(`starship.nu`). Setup is detected only when both files exist. Nushell auto-sources
+(`starship.nu`). `$nu.data-dir` is `~/Library/Application Support/nushell` on
+macOS and `$XDG_DATA_HOME/nushell` (default `~/.local/share/nushell`) elsewhere;
+the pinned config path is the same `getShellConfigPath('nushell')` the generator
+writes. Setup is detected only when both files exist. Nushell auto-sources
 every file in that directory at startup, so
 the prompt keeps using the per-shell config with no rc file involved.
 
@@ -316,6 +356,14 @@ function applyShellConfig(
 // of the opposite mode (unset guard, adopt block, or per-shell export), so a
 // re-run can repair a polluted rc file.
 
+function plannedRcBlock(
+  shellId: ShellId,
+  pointAtSharedConfig: boolean,
+  pathDir: string | null
+): string[];
+// The marker + lines applyShellConfig appends to an rc file with no Starship
+// lines yet (empty for manual-only shells). ReviewScreen shows this exact block.
+
 function resetSharedShellConfig(shellId: ShellId): { applied: boolean; note?: string };
 // Removes the per-shell config export and appends an unset guard, while
 // preserving the Starship init line so the shell uses the shared config.
@@ -346,7 +394,8 @@ function detectInstalledShellsAsync(): Promise<ShellId[]>;
 
 function detectTerminalAsync(): Promise<TerminalId | null>;
 // Detects the terminal emulator the wizard runs in (alacritty | kitty | wezterm
-// | ghostty | foot) from $TERM_PROGRAM / config paths. null when unknown.
+// | ghostty | foot) from environment markers ($TERM_PROGRAM, $TERM,
+// KITTY_WINDOW_ID, WEZTERM_PANE, …). null when unknown.
 
 function detectCurrentShellAsync(): Promise<ShellId | null>;
 // Best-effort detection of the shell the wizard runs in (for pre-selecting it
@@ -354,20 +403,22 @@ function detectCurrentShellAsync(): Promise<ShellId | null>;
 // cannot be mapped to a known shell.
 
 function detectContainerAsync(): Promise<boolean>;
-// True inside a container/CI sandbox (marker files like .dockerenv present).
+// True inside a container/CI sandbox: a truthy CODESPACES, REMOTE_CONTAINERS,
+// DEVCONTAINER, CI, KUBERNETES_SERVICE_HOST or container env var, or a marker
+// file (/.dockerenv, /run/.containerenv, /run/systemd/container).
 // Fonts are per-host there and chsh is meaningless, so both tasks are skipped.
 ```
 
 ### installer.ts
 
 ```typescript
-function installStarship(pm: PackageManager): Promise<void>;
+function installStarship(pm: PackageManager, signal?: AbortSignal): Promise<void>;
 // Installs Starship via package manager or curl script
 
-function installShell(shellId: ShellId, pm: PackageManager): Promise<void>;
+function installShell(shellId: ShellId, pm: PackageManager, signal?: AbortSignal): Promise<void>;
 // Installs a shell via package manager. Throws if pm is 'script'.
 
-function installNerdFont(fontId: string): Promise<string | undefined>;
+function installNerdFont(fontId: string, signal?: AbortSignal): Promise<string | undefined>;
 // Downloads the font zip from GitHub, verifies the archive's SHA-256 against the
 // digest published in the release asset metadata (fails closed on mismatch,
 // missing digest, or lookup failure), then extracts it to the platform-specific
@@ -377,7 +428,7 @@ function installNerdFont(fontId: string): Promise<string | undefined>;
 // network, else undefined.
 // macOS: ~/Library/Fonts (fc-cache skipped), Linux: ~/.local/share/fonts (runs fc-cache)
 
-function setDefaultShell(shellId: ShellId): Promise<void>;
+function setDefaultShell(shellId: ShellId, signal?: AbortSignal): Promise<void>;
 // Runs chsh -s <binary_path>
 
 function getNerdFontsDir(): string;
@@ -420,15 +471,18 @@ edited, the exact line is returned as a note instead.
 ```typescript
 type TerminalId = 'alacritty' | 'kitty' | 'wezterm' | 'ghostty' | 'foot';
 
-function terminalLabel(id: TerminalId): string;
-// Human-readable name, for task labels and doctor output.
+const TERMINAL_LABELS: Record<TerminalId, string>;
+// Human-readable names, for task labels and doctor output.
 
 function wireTerminalFont(id: TerminalId, family: string): TerminalFontResult;
-// Sets `family` in the terminal's config (alacritty [font.normal] — TOML or the
-// legacy YAML path, kitty font_family, ghostty font-family, foot font= under
-// [main]), backing up any existing file. Returns { applied, path, backedUpTo, note }.
-// Applied=false signals "changed nothing" — the font was already set, the config
-// was missing but a note explains the manual step (wezterm, alacritty.yml).
+// Sets `family` in the terminal's config (alacritty [font.normal] in
+// alacritty.toml, kitty font_family, ghostty font-family, foot font= under
+// [main]), backing up any existing file; a missing config is created and
+// reported as applied. Returns { applied, path, backedUpTo, note }.
+// Applied=false signals "changed nothing": the font was already set, or the
+// config cannot be edited and a note gives the manual step (WezTerm's Lua
+// config, a legacy alacritty.yml, or an Alacritty older than 0.13 — the YAML
+// file is never edited).
 
 function readTerminalFontFamily(id: TerminalId): string | null;
 // The family the terminal is configured to use, or null when unset/unknown.
@@ -437,16 +491,16 @@ function readTerminalFontFamily(id: TerminalId): string | null;
 ### installTasks.ts
 
 ```typescript
-function buildTaskList(state: WizardState): InstallTask[];
+function buildTaskList(state: WizardState, resetShells?: readonly ShellId[]): InstallTask[];
 // Pure — builds the task queue (starship, font, terminal font, shells, chsh,
-// config, rc, verify)
+// config, rc, verify, then an unset-guard task per resetShells entry)
 
 interface InstallTaskDeps {
   isStarshipInstalled: () => Promise<{ installed: boolean; version?: string }>;
-  installStarship: (pm: PackageManager) => Promise<void>;
-  installNerdFont: (fontId: string) => Promise<string | undefined>;
-  installShell: (shellId: ShellId, pm: PackageManager) => Promise<void>;
-  setDefaultShell: (shellId: ShellId) => Promise<void>;
+  installStarship: (pm: PackageManager, signal?: AbortSignal) => Promise<void>;
+  installNerdFont: (fontId: string, signal?: AbortSignal) => Promise<string | undefined>;
+  installShell: (shellId: ShellId, pm: PackageManager, signal?: AbortSignal) => Promise<void>;
+  setDefaultShell: (shellId: ShellId, signal?: AbortSignal) => Promise<void>;
   generateToml: (state: WizardState) => string;
   writeShellConfig: (toml: string, shellId: ShellId) => WriteConfigResult;
   writeSharedConfig: (toml: string) => WriteConfigResult;
@@ -454,20 +508,24 @@ interface InstallTaskDeps {
   backupSharedConfig: () => string | null;
   // Snapshots the existing shared config to a .bak-* file (null when absent),
   // so --restore can bring it back.
+  sharedConfigExists: () => boolean;
   applyShellConfig: (
     shellId: ShellId,
-    options?: { ensurePathDir?: string | null; pointAtSharedConfig?: boolean }
+    options?: ApplyShellConfigOptions
   ) => {
     applied: boolean;
     note?: string;
   };
   resetSharedShellConfig: (shellId: ShellId) => { applied: boolean; note?: string };
   getShellsUsingStarship: () => Promise<ShellId[]>;
-  // Shells that run Starship and could inherit a leaked STARSHIP_CONFIG.
+  // Installed shells whose rc already loads Starship, so could inherit a leaked
+  // STARSHIP_CONFIG.
   getMissingStarshipPathDir: () => string | null;
+  readStarshipVersion: (pathDir: string) => Promise<string | null>;
+  // Reads the version of a script install that PATH does not reach yet.
   recordStarshipVersion: (version: string) => void;
-  // Persists the freshly installed starship version to the cache dir, so the
-  // doctor can flag drift when a later package-manager update moves it.
+  // Persists the version a fresh Starship install produced to the cache dir, so
+  // the doctor can flag drift when a later package-manager update moves it.
   verifyConfig: (configPath: string, pathDir?: string | null) => Promise<void>;
   // Runs `starship print-config` against the written config; pathDir lets a
   // script install add its own bin dir to PATH before the binary resolves.
@@ -495,7 +553,7 @@ function runInstallTasks(
 
 ## Headless CLI & Run Data
 
-The public flag surface in `src/index.tsx`/`src/services/args.ts`, in four groups.
+The public flag surface in `src/index.tsx`/`src/services/args.ts`, in five groups.
 
 ### Interactive
 
@@ -525,35 +583,41 @@ shell-configurator generate --preset <id> [flags]
   --character <arrow|lambda|dollar>
   --set-default <shell>    chsh target
   --skip-starship          config-only run
-  -o <file>                write the TOML instead of stdout
+  -o, --output <file>      write the TOML instead of stdout
   --export <file>          write the state card (add -o to keep the TOML too)
-  --import <file>          start from a state card instead of flags
+  --import, --state <file> start from a state card instead of flags
 ```
 
 ### apply (an install from a state card)
 
 ```
-shell-configurator apply --state <file> [--dry-run] [--adopt] [--import-url <url>]
+shell-configurator apply [--state <file>] [generate flags] [--dry-run] [--adopt] [--import-url <url>]
+  --state       the state card to install (also: --import); without it, apply
+                takes the generate flags above and --shells is required
   --adopt       keep the shared ~/.config/starship.toml (never writes per-shell files)
   --import-url  fetch a starship.toml and adopt it (implies --adopt; the fetch is
                 bounded — a 10s timeout and a 1 MB cap reject a hung or oversized
-                response, and a non-http(s) URL, HTTP error, or empty body is a
-                usage error)
+                response. A non-http(s) URL is a usage error; an HTTP error, an
+                empty or HTML body is a run error)
 ```
 
 ### doctor / repair (day-2 health)
 
 ```
-shell-configurator doctor [--state <file>] [--json] [--fix]
-shell-configurator repair [--state <file>] [--json]
+shell-configurator doctor [--state <file>] [--json] [--fix [--include-warnings]]
+shell-configurator repair [--state <file>] [--json] [--dry-run] [--include-warnings]
 ```
 
 `doctor` is read-only and never installs. It checks Starship on `PATH`, a
 UTF-8 locale, the `starship init` line and `STARSHIP_CONFIG` export in each
 shell rc (or the shared config in adopt mode), that the configs load under the
 real `starship print-config`, that a Nerd Font is installed, and that it is
-selected in the detected terminal (`src/services/doctor.ts`). Two further
-checks are `warn`-only and read the runtime: **version drift** — the installed
+selected in the detected terminal (`src/services/doctor.ts`). With `--state`
+it checks the card's shells and wiring mode (`keepExistingConfig`); without
+one it checks every installed shell and reads each one's mode (per-shell or
+shared) from its rc. The locale, terminal-font and (without a card)
+font-installed checks only ever warn; a font the card asked for that is missing
+fails. Two further checks are also `warn`-only and read the runtime: **version drift** — the installed
 starship binary no longer matches the version the last install/apply recorded,
 which means a package-manager upgrade happened outside the tool — and the
 **current shell** — the shell this terminal is _running_ is not one of the
@@ -563,22 +627,28 @@ the report object.
 
 `repair` (or `doctor --fix`) applies the fix each failing finding carries —
 re-add the init line, reinstall Starship via the detected package manager,
-reinstall the font from cache, rewire the terminal font — then re-runs the
-doctor and reports the _result_. A check that still fails keeps the exit code
-non-zero.
+rewrite a missing per-shell config from the `--state` card, reinstall the font
+the card names (from the verified cache, else downloaded) — then re-runs the
+doctor and reports the _result_. Warnings are left alone unless
+`--include-warnings` is passed; that also applies the fixes warnings carry, such
+as rewiring the terminal font or adding a missing `STARSHIP_CONFIG` export. The
+font fixes exist only when a `--state` card names a font. `--dry-run` lists the
+planned fixes without applying them. A check that still fails keeps the exit
+code non-zero.
 
 Flags may appear before or after the subcommand; when a flag is repeated, the
-last one wins. Unknown or malformed flags (a bogus `--name`, a value on a
-boolean flag, a missing value) are collected as `warnings` on `CliFlags`,
-printed to stderr, and ignored — they never abort the run.
+last one wins. Unknown or malformed flags (a bogus `--name`, an unparseable
+value on a boolean flag, a missing value, a stray positional) throw a
+`CliUsageError`, so a typo can never start the real installer. Config flags
+passed to `doctor`/`repair` without `--state` are ignored with a stderr warning.
 
 ### Exit Codes
 
 | Code | Meaning                                                                                                                                          |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `0`  | Success.                                                                                                                                         |
-| `1`  | A wizard install finished with at least one failed task, a headless run failed, or a `doctor`/`repair` check still fails (also any fatal crash). |
-| `2`  | `CliUsageError` — an invalid flag value, `--adopt`/`--import-url` outside `apply`, or an unreadable state card; reads clean with no stack trace. |
+| `1`  | A wizard install finished with at least one failed task, a headless run failed (`CliRunError`, e.g. a failed `--import-url` fetch or an unwritable `-o`/`--export`), a `doctor`/`repair` check still fails, a `--restore` copy failed, or any fatal crash. |
+| `2`  | `CliUsageError` — an unknown or malformed flag, an invalid flag value, `--adopt`/`--import-url` with `generate` or no subcommand, config flags without a subcommand, or an unreadable state card; reads clean with no stack trace. |
 
 ### Persisted Run Data
 
@@ -588,9 +658,9 @@ tarball stays self-contained and nothing is written next to the binary:
 | Path                                                                                | Contents                                                                                                                                        |
 | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `$XDG_STATE_HOME` or `~/.local/state`/`shell-configurator/history.jsonl`            | Append-only ledger; one JSON `HistoryRecord` per run (`install`/`apply`/…), in file order = chronological order.                                |
-| `…/snapshots/<iso-timestamp>.json`                                                  | The versioned state card each run applied. The `snapshotId` field in the ledger is the rollback handle that `uninstall`/rollback resolves.      |
+| `…/snapshots/<iso-timestamp>.json`                                                  | The versioned state card each wizard install or headless `apply` applied; the id is the ISO timestamp with `:` replaced by `-`. The ledger's `snapshotId` points at it, and `--restore` reads the newest one to learn which shells the last run touched. |
 | `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/fonts/<id>.zip` + `<id>.sha256` | Font cache: the verified archive plus its pinned SHA-256 pin file. A cached archive is reused offline only while its bytes still match the pin. |
-| `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/starship.version`               | The starship version the last install/apply recorded (`recordStarshipVersion`). Feeds the doctor's `version-drift` check.                       |
+| `$XDG_CACHE_HOME` or `~/.cache`/`shell-configurator/starship.version`               | The starship version recorded by the last run that freshly installed Starship (`recordStarshipVersion`). Feeds the doctor's `version-drift` check. |
 
 ### State Card (`serializeState` / `parseState` in `src/services/state.ts`)
 
@@ -629,9 +699,12 @@ detection-based fields cleared) and re-detects per run.
 
 ### Backup/Restore
 
-`backupSharedConfig()` copies the existing shared config to `<dir>.bak-<timestamp>`
-before an adopt run overwrites it; `restoreConfigBackups()` copies the newest
-`.bak-*` files back over the shared and per-shell configs (`--restore`).
+`backupSharedConfig()` copies the existing shared config to
+`<file>.bak-<timestamp>` (reusing the newest backup when it is identical) inside
+the Config task: before per-shell configs shadow it, or before adopt mode points
+shells at it (an `--import-url` overwrite is backed up by `writeSharedConfig`
+itself). `restoreConfigBackups()` copies the newest `.bak-*` files back over the
+shared and per-shell configs (`--restore`).
 
 ---
 
@@ -645,18 +718,14 @@ before an adopt run overwrites it; `restoreConfigBackups()` copies the newest
    powerline generator wraps in separators); most also provide `settings`:
 
    ```typescript
-   {
-     id: 'lua',
-     label: 'Lua',
-     description: 'Lua version',
+   perl: {
+     label: 'Perl',
+     description: 'Perl version (shown in Perl projects)',
      defaultLeft: false,
      defaultRight: false,
-     previewSegment: (nf) => `${nf ? '🌙 ' : 'lua '}5.4.0`,
+     ...symbolModule(() => '🐪 ', '5.38'), // previewSegment + settings
      content: '$symbol$version',
-     settings: ({ hasNerdFont }) =>
-       `symbol   = "${hasNerdFont ? '🌙 ' : 'lua '}"
-        disabled = false`.trim(),
-   }
+   },
    ```
 2. **`src/config/palettes.ts`** — add a colour. `PaletteColorName` is keyed on
    `ConfigurableModuleId`, so every palette is a compile error until it picks a
@@ -668,7 +737,8 @@ before an adopt run overwrites it; `restoreConfigBackups()` copies the newest
 ### Adding a Preset
 
 **`src/config/presets.ts`** — add entry to `PRESETS` array with a `palette` and
-`powerline` setting (name a distinct palette so the preset renders differently):
+`powerline` setting (name a palette no other preset uses, adding one first if
+needed, so the preset renders differently):
 
 ```typescript
 {
@@ -678,12 +748,15 @@ before an adopt run overwrites it; `restoreConfigBackups()` copies the newest
   requiresNerdFont: false,
   leftModules: ['directory', 'git_branch', 'character'],
   rightModules: [],
-  palette: 'mono',
+  palette: 'monochrome', // a new palette; 'mono' already belongs to plain-text
   powerline: false,
 }
 ```
 
-No other files need changes. PresetScreen reads from the `PRESETS` array directly.
+PresetScreen reads from the `PRESETS` array directly. The golden test
+(`src/__tests__/generators/golden.test.ts`) covers every preset, so run
+`npx vitest run src/__tests__/generators/golden.test.ts -u` once to commit the
+new fixture(s) under `src/__tests__/golden/`.
 
 ### Adding a Shell
 
@@ -694,7 +767,11 @@ No other files need changes. PresetScreen reads from the `PRESETS` array directl
    on DoneScreen
 3. **`src/services/installer.ts`** — add package name mappings to
    `SHELL_PACKAGES` (per package manager) for auto-install support
-4. **`src/services/detector.ts`** — no change needed: `detectInstalledShellsAsync`
+4. **`src/generators/shellRc.ts`** — add the shell's `starship init` command to
+   `INIT_COMMAND`; an rc shell also needs a `configEnv` (export/unset syntax) in
+   `SHELLS`
+5. **`src/index.tsx`** — add it to the hard-coded `--shells` list in the `--help` text
+6. **`src/services/detector.ts`** — no change needed: `detectInstalledShellsAsync`
    iterates `SHELLS` and checks each `binary`
 
 ### Adding a Palette
@@ -707,6 +784,9 @@ No other files need changes. PresetScreen reads from the `PRESETS` array directl
 ### Adding a Character Symbol
 
 1. **`src/types.ts`** — add to `CharacterSymbol` union
-2. **`src/generators/starship.ts`** — add to `SYMBOLS`
-3. **`src/components/PromptPreview.tsx`** — add to `CHAR_SYMBOLS`
-4. **`src/screens/StyleScreen.tsx`** — add to `CHAR_OPTIONS` array
+2. **`src/config/promptSymbols.ts`** — add to `CHARACTER_SYMBOLS`, the single
+   table the generator and the preview both read
+3. **`src/screens/StyleScreen.tsx`** — add to `CHAR_OPTIONS` array
+4. **`src/services/headless.ts`** and **`src/services/state.ts`** — add to their
+   accepted-symbol lists, and to the `--character` line in the `--help` text
+   (`src/index.tsx`)
