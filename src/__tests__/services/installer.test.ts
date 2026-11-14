@@ -1002,33 +1002,52 @@ describe('plannedPathDir', () => {
 describe('plannedStarshipRemoval', () => {
   const scriptBinary = path.join(scriptInstallBinDir(), 'starship');
 
-  it('deletes the script install binary', () => {
+  /** Starship on PATH at `binary`, with each package manager's ownership answer. */
+  function starshipAt(binary: string, answers: Record<string, string | Error>) {
+    mockExistsSync.mockReturnValue(false);
+    mockExecFileSync.mockReturnValue(`${binary}\n`);
+    mockRunCapture.mockImplementation(async (cmd: string) => {
+      const answer = answers[cmd] ?? new Error(`${cmd}: not owned`);
+      if (answer instanceof Error) throw answer;
+      return { stdout: answer, stderr: '' };
+    });
+  }
+
+  it('deletes the script install binary', async () => {
     mockExistsSync.mockImplementation((p: string) => p === scriptBinary);
-    expect(plannedStarshipRemoval('apt')).toEqual({ kind: 'script', path: scriptBinary });
+    expect(await plannedStarshipRemoval('apt')).toEqual({ kind: 'script', path: scriptBinary });
   });
 
-  it('has nothing to remove when Starship is not installed', () => {
+  it('has nothing to remove when Starship is not installed', async () => {
     mockExistsSync.mockReturnValue(false);
     mockExecFileSync.mockImplementation(() => {
       throw new Error('not found');
     });
-    expect(plannedStarshipRemoval('pacman')).toEqual({ kind: 'absent' });
+    expect(await plannedStarshipRemoval('pacman')).toEqual({ kind: 'absent' });
   });
 
-  it('removes a package through the package manager, with sudo where it needs it', () => {
-    mockExistsSync.mockReturnValue(false);
-    mockExecFileSync.mockReturnValue('/usr/bin/starship\n');
+  it('removes a package the package manager owns, with sudo where it needs it', async () => {
+    starshipAt('/usr/bin/starship', {
+      pacman: 'starship\n',
+      apk: '/usr/bin/starship is owned by starship-1.27.0-r0\n',
+      brew: '/opt/homebrew/Cellar/starship/1.27.0/bin/starship\n',
+    });
     const getuid = vi.spyOn(process, 'getuid').mockReturnValue(1000);
     try {
-      expect(plannedStarshipRemoval('pacman')).toEqual({
+      expect(await plannedStarshipRemoval('pacman')).toEqual({
         kind: 'package',
         pm: 'pacman',
         command: ['sudo', 'pacman', '-R', '--noconfirm', 'starship'],
       });
-      expect(plannedStarshipRemoval('apk')).toMatchObject({
+      expect(mockRunCapture).toHaveBeenCalledWith(
+        'pacman',
+        ['-Qqo', '/usr/bin/starship'],
+        expect.anything()
+      );
+      expect(await plannedStarshipRemoval('apk')).toMatchObject({
         command: ['sudo', 'apk', 'del', 'starship'],
       });
-      expect(plannedStarshipRemoval('brew')).toMatchObject({
+      expect(await plannedStarshipRemoval('brew')).toMatchObject({
         command: ['brew', 'uninstall', 'starship'],
       });
     } finally {
@@ -1036,10 +1055,22 @@ describe('plannedStarshipRemoval', () => {
     }
   });
 
-  it('leaves a binary no package manager here shipped to whatever installed it', () => {
-    mockExistsSync.mockReturnValue(false);
-    mockExecFileSync.mockReturnValue('/usr/local/bin/starship\n');
-    expect(plannedStarshipRemoval('apt')).toEqual({
+  it.each([
+    ['brew', { brew: new Error('No such keg') }],
+    ['pacman', { pacman: new Error('No package owns /home/u/.cargo/bin/starship') }],
+    ['pacman', { pacman: 'some-other-package\n' }],
+    ['apk', { apk: 'ERROR: /home/u/.cargo/bin/starship: Could not find owner package\n' }],
+  ])('leaves a Starship %s does not own to whatever installed it', async (pm, answers) => {
+    starshipAt('/home/u/.cargo/bin/starship', answers);
+    expect(await plannedStarshipRemoval(pm as 'brew')).toEqual({
+      kind: 'manual',
+      path: '/home/u/.cargo/bin/starship',
+    });
+  });
+
+  it('leaves a binary no package manager here ships to whatever installed it', async () => {
+    starshipAt('/usr/local/bin/starship', {});
+    expect(await plannedStarshipRemoval('apt')).toEqual({
       kind: 'manual',
       path: '/usr/local/bin/starship',
     });

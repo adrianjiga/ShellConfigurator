@@ -65,7 +65,7 @@ export interface UninstallDeps {
   removeManagedRcBlocks: (shellId: ShellId) => RemovalResult;
   removeShellConfigFile: (shellId: ShellId) => RemovalResult;
   detectPackageManager: () => Promise<PackageManager>;
-  plannedStarshipRemoval: (pm: PackageManager) => StarshipRemoval;
+  plannedStarshipRemoval: (pm: PackageManager) => Promise<StarshipRemoval>;
   removeStarship: (plan: StarshipRemoval) => Promise<void>;
   forgetStarshipVersion: () => void;
   installedFontFiles: (fontId: string) => Promise<string[] | null>;
@@ -165,7 +165,7 @@ async function fontStep(fontId: string, deps: UninstallDeps): Promise<UninstallS
 }
 
 async function starshipStep(stillStarting: string[], deps: UninstallDeps): Promise<UninstallStep> {
-  const plan = deps.plannedStarshipRemoval(await deps.detectPackageManager());
+  const plan = await deps.plannedStarshipRemoval(await deps.detectPackageManager());
   if ((plan.kind === 'script' || plan.kind === 'package') && stillStarting.length > 0) {
     return {
       id: 'starship',
@@ -185,7 +185,7 @@ async function starshipStep(stillStarting: string[], deps: UninstallDeps): Promi
       return {
         id: 'starship',
         title: 'Starship',
-        detail: `${plan.path} was not installed by a package manager here; remove it with whatever installed it`,
+        detail: `${plan.path} is not from a package manager here; remove it with whatever installed it`,
       };
     case 'script':
       return {

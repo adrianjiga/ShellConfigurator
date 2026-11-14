@@ -456,6 +456,25 @@ export async function installNerdFont(
   return undefined;
 }
 
+/** Asks the package manager whether it owns the binary; a failing query means no. */
+const OWNS_STARSHIP: Partial<Record<PackageManager, (binary: string) => Promise<boolean>>> = {
+  pacman: async (binary) => /^starship$/m.test(await runCapture('pacman', ['-Qqo', binary])),
+  apk: async (binary) =>
+    /owned by starship-/.test(await runCapture('apk', ['info', '--who-owns', binary])),
+  brew: async () => {
+    await runCapture('brew', ['list', '--formula', 'starship']);
+    return true;
+  },
+};
+
+async function packageOwnsStarship(pm: PackageManager, binary: string): Promise<boolean> {
+  try {
+    return (await OWNS_STARSHIP[pm]?.(binary)) ?? false;
+  } catch {
+    return false;
+  }
+}
+
 const REMOVE_CMDS: Partial<Record<PackageManager, string[]>> = {
   pacman: ['pacman', '-R', '--noconfirm', 'starship'],
   brew: ['brew', 'uninstall', 'starship'],
@@ -470,16 +489,16 @@ export type StarshipRemoval =
 
 /**
  * How Starship would be removed: the script install's binary is deleted, a
- * package goes through the package manager that ships one, and a binary from
+ * package goes through the package manager that owns it, and a binary from
  * anywhere else is left for whatever installed it.
  */
-export function plannedStarshipRemoval(pm: PackageManager): StarshipRemoval {
+export async function plannedStarshipRemoval(pm: PackageManager): Promise<StarshipRemoval> {
   const scriptBinary = path.join(scriptInstallBinDir(), 'starship');
   if (fs.existsSync(scriptBinary)) return { kind: 'script', path: scriptBinary };
   const onPath = commandPath('starship');
   if (!onPath) return { kind: 'absent' };
   const remove = REMOVE_CMDS[pm];
-  if (!remove) return { kind: 'manual', path: onPath };
+  if (!remove || !(await packageOwnsStarship(pm, onPath))) return { kind: 'manual', path: onPath };
   return { kind: 'package', pm, command: pm === 'brew' ? remove : [...sudo(), ...remove] };
 }
 

@@ -22,7 +22,7 @@ function makeDeps(
     removeManagedRcBlocks: vi.fn(() => ({ removed: true, backedUpTo: '/h/.zshrc.bak-1' })),
     removeShellConfigFile: vi.fn(() => ({ removed: true, backedUpTo: '/h/zsh.toml.bak-1' })),
     detectPackageManager: vi.fn().mockResolvedValue('brew'),
-    plannedStarshipRemoval: vi.fn(() => ({
+    plannedStarshipRemoval: vi.fn(async () => ({
       kind: 'package' as const,
       pm: 'brew' as const,
       command: ['brew', 'uninstall', 'starship'],
@@ -117,9 +117,12 @@ describe('planUninstall', () => {
 
   it.each([
     [{ kind: 'absent' as const }, 'Starship is not installed'],
-    [{ kind: 'manual' as const, path: '/opt/starship' }, /\/opt\/starship was not installed/],
+    [
+      { kind: 'manual' as const, path: '/opt/starship' },
+      /\/opt\/starship is not from a package manager/,
+    ],
   ])('has nothing to run for Starship it cannot remove (%o)', async (plan, detail) => {
-    const deps = makeDeps([], [], { plannedStarshipRemoval: vi.fn(() => plan) });
+    const deps = makeDeps([], [], { plannedStarshipRemoval: vi.fn(async () => plan) });
     const [step] = await planUninstall({ starship: true }, deps);
     expect(step!.run).toBeUndefined();
     expect(step!.detail).toMatch(detail);
@@ -150,7 +153,7 @@ describe('runUninstall', () => {
 
   it('deletes a script install binary', async () => {
     const plan = { kind: 'script' as const, path: '/h/.local/bin/starship' };
-    const deps = makeDeps([], [], { plannedStarshipRemoval: vi.fn(() => plan) });
+    const deps = makeDeps([], [], { plannedStarshipRemoval: vi.fn(async () => plan) });
 
     const report = await runUninstall(await planUninstall({ starship: true }, deps));
 
@@ -209,7 +212,7 @@ describe('runUninstall', () => {
 
   it('only plans in a dry run', async () => {
     const deps = makeDeps(['zsh'], [], {
-      plannedStarshipRemoval: vi.fn(() => ({ kind: 'absent' as const })),
+      plannedStarshipRemoval: vi.fn(async () => ({ kind: 'absent' as const })),
     });
 
     const report = await runUninstall(await planUninstall({ starship: true }, deps), {

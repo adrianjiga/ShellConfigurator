@@ -712,7 +712,7 @@ describe('index uninstall command', () => {
         removeManagedRcBlocks: vi.fn(() => ({ removed: true })),
         removeShellConfigFile: vi.fn(() => ({ removed: true })),
         detectPackageManager: vi.fn().mockResolvedValue('brew'),
-        plannedStarshipRemoval: vi.fn(() => ({ kind: 'absent' as const })),
+        plannedStarshipRemoval: vi.fn(async () => ({ kind: 'absent' as const })),
         removeStarship: vi.fn(),
         forgetStarshipVersion: vi.fn(),
         installedFontFiles: vi.fn().mockResolvedValue([]),
