@@ -1,6 +1,6 @@
 import { zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { extractFontFiles } from '../../services/fontExtractor.ts';
+import { extractFontFiles, fontFileNames } from '../../services/fontExtractor.ts';
 
 /**
  * Drives the controlled worker. The happy-path tests run the real worker; the
@@ -227,5 +227,36 @@ describe('extractFontFiles', () => {
     workerControls.mode = 'reject';
 
     await expect(extractFontFiles(encode('bytes'))).rejects.toThrow('unknown error');
+  });
+});
+
+describe('fontFileNames', () => {
+  beforeEach(() => {
+    workerControls.mode = 'real';
+  });
+
+  it('lists the same names extractFontFiles writes', async () => {
+    const zip = zipBytes(
+      zipSync({
+        'fonts/A-Regular.ttf': encode('a'),
+        'other/A-Regular.ttf': encode('dup'),
+        'nested/B.OTF': encode('b'),
+        'dir/.ttf': encode('hidden'),
+        'README.md': encode('readme'),
+      })
+    );
+
+    const extracted = (await extractFontFiles(zip)).map((f) => f.name);
+
+    expect(fontFileNames(zip)).toEqual(extracted);
+    expect(fontFileNames(zip)).toEqual(['A-Regular.ttf', 'B.OTF']);
+  });
+
+  it('never inflates an entry, so corrupt compressed data does not matter', () => {
+    const zip = zipBytes(zipSync({ 'A.ttf': encode('x'.repeat(4096)) }));
+    const dataStart = 30 + 'A.ttf'.length;
+    zip.fill(0xff, dataStart, dataStart + 16);
+
+    expect(fontFileNames(zip)).toEqual(['A.ttf']);
   });
 });

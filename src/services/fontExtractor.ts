@@ -1,5 +1,7 @@
 import { createRequire } from 'node:module';
+import * as path from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { unzipSync } from 'fflate';
 
 const require = createRequire(import.meta.url);
 const FFLATE_ENTRY = require.resolve('fflate');
@@ -62,6 +64,26 @@ try {
   });
 }
 `;
+
+const FONT_FILE = /\.(ttf|otf|woff2?)$/i;
+
+/**
+ * The file names `extractFontFiles` would return, read from the zip's entry
+ * headers: the filter rejects every entry, so nothing is decompressed.
+ */
+export function fontFileNames(zipBytes: Uint8Array): string[] {
+  const names = new Set<string>();
+  unzipSync(zipBytes, {
+    filter: (file) => {
+      const base = path.basename(file.name);
+      if (FONT_FILE.test(file.name) && !base.startsWith('.') && !base.includes('\0')) {
+        names.add(base);
+      }
+      return false;
+    },
+  });
+  return [...names];
+}
 
 export interface ExtractLimits {
   maxEntryBytes: number;

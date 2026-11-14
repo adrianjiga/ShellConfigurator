@@ -13,7 +13,7 @@ import {
   runCaptureBoth,
   runCommand,
 } from './exec.ts';
-import { type ExtractedFontFile, extractFontFiles } from './fontExtractor.ts';
+import { type ExtractedFontFile, extractFontFiles, fontFileNames } from './fontExtractor.ts';
 import { homeDir, xdgBaseDir } from './paths.ts';
 
 // Package names per shell per package manager. Missing combos are intentional
@@ -515,8 +515,9 @@ export async function installedFontFiles(fontId: string): Promise<string[] | nul
   const cached = cachedFont(fontId);
   if (!cached) return null;
   const fontsDir = getNerdFontsDir();
-  const files = await extractFontFiles(cached.buffer);
-  return files.map((file) => path.join(fontsDir, file.name)).filter((f) => fs.existsSync(f));
+  return fontFileNames(cached.buffer)
+    .map((name) => path.join(fontsDir, name))
+    .filter((f) => fs.existsSync(f));
 }
 
 export async function removeFontFiles(files: string[]): Promise<void> {
