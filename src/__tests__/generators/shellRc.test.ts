@@ -408,7 +408,7 @@ describe('applyShellConfig', () => {
     applyShellConfig('zsh', { pointAtSharedConfig: true });
 
     expect(lastWrittenContent()).toBe(
-      `\n# Added by ShellConfigurator (shared config)\nexport PATH='/home/u/.local/bin':"$PATH"\neval "$(starship init zsh)"\n`
+      `# Added by ShellConfigurator (shared config)\nexport PATH='/home/u/.local/bin':"$PATH"\neval "$(starship init zsh)"\n`
     );
   });
 
@@ -602,6 +602,19 @@ describe('applyShellConfig', () => {
     expect(result.applied).toBe(false);
     expect(result.note).toBe('already configured');
     expect(fs.writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it('creates the rc when its folder exists but the file does not', () => {
+    const rcPath = getShell('zsh')!.rcFile!;
+    vi.mocked(fs.existsSync).mockImplementation((p) => String(p) !== rcPath);
+
+    const result = applyShellConfig('zsh');
+
+    expect(result.applied).toBe(true);
+    expect(fs.readFileSync).not.toHaveBeenCalledWith(rcPath, 'utf8');
+    expect(lastWrittenContent()).toBe(
+      `# Added by ShellConfigurator\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`
+    );
   });
 
   it('adds the missing STARSHIP_CONFIG line but not a duplicate init line', () => {

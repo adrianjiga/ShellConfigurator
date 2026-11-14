@@ -604,12 +604,17 @@ export function applyShellConfig(
 
   const marker = options.pointAtSharedConfig ? ADOPT_MARKER : BLOCK_MARKER;
   const inserted = initPresent ? insertBeforeInit(cleaned, shell, marker, lines) : null;
-  writeFileAtomic(rcPath, inserted ?? `${cleaned}\n${marker}\n${lines.join('\n')}\n`);
+  writeFileAtomic(rcPath, inserted ?? appendManagedBlock(cleaned, marker, lines));
 
   return {
     applied: true,
     note: pathLine ? `${options.ensurePathDir} added to PATH` : undefined,
   };
+}
+
+/** Appends a managed block at the end, after a blank line unless the file is empty. */
+function appendManagedBlock(content: string, marker: string, lines: string[]): string {
+  return `${content === '' ? '' : `${content}\n`}${marker}\n${lines.join('\n')}\n`;
 }
 
 /**
@@ -657,6 +662,6 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
 
   if (hasLine(existing, unsetLine)) return { applied: false, note: 'already configured' };
 
-  writeFileAtomic(rcPath, `${existing}\n${BLOCK_MARKER}\n${unsetLine}\n`);
+  writeFileAtomic(rcPath, appendManagedBlock(existing, BLOCK_MARKER, [unsetLine]));
   return { applied: true };
 }
