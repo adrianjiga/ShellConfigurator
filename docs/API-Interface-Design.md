@@ -552,6 +552,21 @@ function runRollback(
 // while a change of the run stays in place (left: true on that action).
 ```
 
+### debugInfo.ts
+
+```typescript
+function collectDebugInfo(version: string, deps?: DebugInfoDeps): Promise<DebugInfo>;
+// Read-only: versions, OS and distro (PRETTY_NAME), package manager, container,
+// terminal, locale, current shell, Starship (path, version, off-PATH dir,
+// recorded version, STARSHIP_CONFIG), each shell's install/rc/init/block/config
+// facts, the PATH entries (marking the one with starship), the last history
+// record (URL credentials, queries and fragments in its command hidden) and the
+// doctor report.
+
+function formatDebugInfo(info: DebugInfo): string;
+// The Markdown report; the home directory is shown as ~ (redactHome).
+```
+
 ### fontExtractor.ts
 
 ```typescript
@@ -665,7 +680,7 @@ function runInstallTasks(
 
 ## Headless CLI & Run Data
 
-The public flag surface in `src/index.tsx`/`src/services/args.ts`, in seven groups.
+The public flag surface in `src/index.tsx`/`src/services/args.ts`, in eight groups.
 
 ### Interactive
 
@@ -803,6 +818,20 @@ was before that run". The rollback is captured and recorded (`kind: 'rollback'`,
 `uninstall` (`--yes` off a terminal or with `--json`). A file it could not put
 back sets exit code `1`. Config flags, `--state` and `--fix` are usage errors,
 as are `--list` and `--run` outside `rollback`.
+
+### debug-info
+
+```
+shell-configurator debug-info [--json]
+```
+
+Prints a Markdown report of the setup for a bug report
+(`src/services/debugInfo.ts`): versions, detection, Starship, a table of the
+shells, the PATH entries and the full doctor report, plus the last recorded run.
+`--json` prints the same data as JSON. The home directory is shown as `~` in
+both, and URL credentials, queries and fragments are dropped from the recorded
+command. It reads only, so a failing doctor check does not change its exit
+code. Config flags, `--state`, `--fix` and `--dry-run` are usage errors.
 
 ### Exit Codes
 
