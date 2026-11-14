@@ -401,12 +401,6 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
   return { ...state, installedShells, packageManager, container, terminal };
 }
 
-/**
- * The full `apply` subcommand: headless run of the same install pipeline the
- * wizard drives. `--dry-run` prints the task plan and the TOML that would be
- * written without touching the system; a real run records itself in history.
- * `command` is the original invocation line stored for reproducibility.
- */
 /** The `apply --dry-run --json` report: the plan and the config a real run would write. */
 export function dryRunPlan(state: WizardState, tasks: InstallTask[]) {
   const shared = getSharedConfigPath();
@@ -423,6 +417,12 @@ export function dryRunPlan(state: WizardState, tasks: InstallTask[]) {
   };
 }
 
+/**
+ * The full `apply` subcommand: headless run of the same install pipeline the
+ * wizard drives. `--dry-run` prints the task plan and the TOML that would be
+ * written without touching the system; a real run records itself in history.
+ * `command` is the original invocation line stored for reproducibility.
+ */
 export async function runApply(flags: CliFlags, command?: string): Promise<void> {
   if (flags.json && !flags.dryRun) {
     throw new CliUsageError(
