@@ -512,3 +512,75 @@ describe('character block', () => {
     expect(parsed.character?.success_symbol).toBe('[λ](bold ok)');
   });
 });
+
+describe('palette coverage', () => {
+  const STYLE_WORDS = new Set([
+    'bold',
+    'italic',
+    'underline',
+    'dimmed',
+    'inverted',
+    'blink',
+    'hidden',
+    'strikethrough',
+    'none',
+    'prev_fg',
+    'prev_bg',
+  ]);
+  const ANSI = /^(bright-)?(black|red|green|yellow|blue|purple|cyan|white)$/;
+
+  function styleStrings(config: Record<string, unknown>): string[] {
+    const found: string[] = [];
+    const walk = (value: unknown, key: string) => {
+      if (typeof value === 'string') {
+        if (/style/.test(key)) found.push(value);
+        for (const match of value.matchAll(/\]\(([^)]*)\)/g)) {
+          if (!match[1]!.includes('$')) found.push(match[1]!);
+        }
+      } else if (value && typeof value === 'object' && key !== 'palettes') {
+        for (const [child, inner] of Object.entries(value)) walk(inner, child);
+      }
+    };
+    walk(config, '');
+    return found;
+  }
+
+  it('defines every colour a generated config names in the palette it emits', () => {
+    const everyModule = [...MODULES.map((m) => m.id), 'character'] as WizardState['leftModules'];
+    for (const preset of PRESETS) {
+      for (const palette of PALETTES) {
+        for (const powerline of [false, true]) {
+          for (const hasNerdFont of [false, true]) {
+            const state = {
+              ...DEFAULT_STATE,
+              preset: preset.id,
+              palette: palette.id,
+              powerline,
+              hasNerdFont,
+              leftModules: everyModule,
+            };
+            const config = toml.parse(generateToml(state)) as Record<string, unknown>;
+            const defined = (config.palettes as Record<string, Record<string, string>>)[
+              config.palette as string
+            ]!;
+            for (const style of styleStrings(config)) {
+              for (const token of style.split(/\s+/).filter(Boolean)) {
+                const colour = token.replace(/^(fg|bg):/, '');
+                const known =
+                  STYLE_WORDS.has(colour) ||
+                  ANSI.test(colour) ||
+                  /^#[0-9a-f]{6}$/i.test(colour) ||
+                  /^\d{1,3}$/.test(colour) ||
+                  colour in defined;
+                expect(
+                  known,
+                  `${preset.id}/${palette.id}/pl=${powerline}/nf=${hasNerdFont}: '${token}' in '${style}'`
+                ).toBe(true);
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+});
