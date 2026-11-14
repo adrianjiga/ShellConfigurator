@@ -133,7 +133,7 @@ export function assertUninstalled(homeDir, rcPath, shell, before) {
   assert.ok(!rc.includes('ShellConfigurator'), `uninstall left the banner in the rc:\n${rc}`);
   assert.ok(!rc.includes('starship'), `uninstall left Starship lines in the rc:\n${rc}`);
   assert.ok(!existsSync(configPath), `uninstall left ${configPath}`);
-  const summary = nodePath.join(process.env.XDG_CONFIG_HOME, 'starship', 'WHAT-CHANGED.md');
+  const summary = whatChangedPath();
   assert.ok(existsSync(summary), 'uninstall removed the WHAT-CHANGED.md of the last apply');
   const rcBackups = readdirSync(homeDir).filter((f) =>
     f.startsWith(`${nodePath.basename(rcPath)}.bak-`)
@@ -168,10 +168,16 @@ export function assertUninstalled(homeDir, rcPath, shell, before) {
     before.config,
     `rolling back the apply did not restore ${configPath}`
   );
-  assert.ok(
-    !existsSync(summary),
-    'rolling back the apply did not put back the missing WHAT-CHANGED.md from before it'
+  assert.equal(
+    readOrNull(summary),
+    before.summary,
+    'rolling back the apply did not put back the WHAT-CHANGED.md from before it'
   );
+}
+
+/** The WHAT-CHANGED.md path the CLI writes in this scratch home. */
+export function whatChangedPath() {
+  return nodePath.join(process.env.XDG_CONFIG_HOME, 'starship', 'WHAT-CHANGED.md');
 }
 
 /** The per-shell config path the CLI writes in this scratch home. */
@@ -221,7 +227,7 @@ t shell-configurator generate --character la`,
 
 /** Asserts a real apply wrote WHAT-CHANGED.md naming the rc it changed and the rollback that undoes it. */
 export function assertWhatChanged(out, rcPath) {
-  const summary = nodePath.join(process.env.XDG_CONFIG_HOME, 'starship', 'WHAT-CHANGED.md');
+  const summary = whatChangedPath();
   assert.ok(
     out.includes(`What changed, and how to undo it: ${summary}`),
     `apply did not point at the summary:\n${out}`
