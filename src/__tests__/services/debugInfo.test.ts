@@ -1,7 +1,21 @@
 import * as path from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const { mockReadFileSync, mockExistsSync } = vi.hoisted(() => ({
+  mockReadFileSync: vi.fn(),
+  mockExistsSync: vi.fn(),
+}));
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  mockReadFileSync.mockImplementation(actual.readFileSync);
+  mockExistsSync.mockImplementation(actual.existsSync);
+  return { ...actual, readFileSync: mockReadFileSync, existsSync: mockExistsSync };
+});
+
 import {
   collectDebugInfo,
+  DEFAULT_DEBUG_INFO_DEPS,
   type DebugInfoDeps,
   formatDebugInfo,
   redactHome,
@@ -160,5 +174,53 @@ describe('redactHome', () => {
 
   it('leaves text alone when home is the root directory', () => {
     expect(redactHome('/etc/shells', '/')).toBe('/etc/shells');
+  });
+});
+
+describe('DEFAULT_DEBUG_INFO_DEPS', () => {
+  const missing = () => {
+    throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+  };
+
+  afterEach(() => {
+    mockReadFileSync.mockReset();
+    mockExistsSync.mockReset();
+  });
+
+  it('reads the distro name from os-release, falling back to the second file', () => {
+    mockReadFileSync.mockImplementation((file: string) => {
+      if (file === '/etc/os-release') missing();
+      return 'NAME=Debian\nPRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n';
+    });
+    expect(DEFAULT_DEBUG_INFO_DEPS.distro()).toBe('Debian GNU/Linux 12 (bookworm)');
+  });
+
+  it('has no distro without an os-release file', () => {
+    mockReadFileSync.mockImplementation(missing);
+    expect(DEFAULT_DEBUG_INFO_DEPS.distro()).toBeNull();
+  });
+
+  it('reports no recorded version when the record cannot be read', () => {
+    mockReadFileSync.mockImplementation(() => {
+      throw Object.assign(new Error('EISDIR'), { code: 'EISDIR' });
+    });
+    expect(DEFAULT_DEBUG_INFO_DEPS.recordedStarshipVersion()).toBeNull();
+  });
+
+  it('reads the per-shell facts and PATH entries from disk', () => {
+    mockExistsSync.mockReturnValue(false);
+    mockReadFileSync.mockImplementation(missing);
+    expect(DEFAULT_DEBUG_INFO_DEPS.shellFacts('zsh')).toEqual({
+      startsStarship: false,
+      managedBlock: false,
+      config: false,
+    });
+    mockExistsSync.mockImplementation((p: string) => p === path.join('/opt/bin', 'starship'));
+    expect(DEFAULT_DEBUG_INFO_DEPS.hasStarshipIn('/opt/bin')).toBe(true);
+    expect(DEFAULT_DEBUG_INFO_DEPS.hasStarshipIn('/usr/bin')).toBe(false);
+  });
+
+  it('describes the OS with the platform and architecture', () => {
+    expect(DEFAULT_DEBUG_INFO_DEPS.os()).toContain(`(${process.platform}/${process.arch})`);
   });
 });
