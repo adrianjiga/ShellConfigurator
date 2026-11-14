@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CliUsageError } from '../../services/errors.ts';
 import { parseState, STATE_VERSION, type StateCard, serializeState } from '../../services/state.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';
 
@@ -53,6 +54,24 @@ describe('parseState', () => {
   it('round-trips a serialized card exactly', () => {
     const restored = parseState(serializeState(sampleState));
     expect(restored).toEqual(sampleState);
+  });
+
+  it('names the misspelled keys of a card instead of quietly dropping them', () => {
+    const card = JSON.parse(serializeState(sampleState)) as Record<string, Record<string, unknown>>;
+    card.wizard.powerLine = true;
+    card.wizard.pallete = 'gruvbox';
+
+    expect(() => parseState(JSON.stringify(card))).toThrow(
+      new CliUsageError("Invalid state card: unknown keys 'powerLine', 'pallete' in wizard")
+    );
+  });
+
+  it('names an unknown top-level key', () => {
+    const card = { ...JSON.parse(serializeState(sampleState)), wizzard: {} };
+
+    expect(() => parseState(JSON.stringify(card))).toThrow(
+      new CliUsageError("Invalid state card: unknown key 'wizzard' in the card")
+    );
   });
 
   it('rejects malformed JSON', () => {

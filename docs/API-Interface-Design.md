@@ -1095,7 +1095,9 @@ every snapshot use.
 ```
 
 `parseState` starts a parsed card from runtime defaults (`step: 'welcome'`,
-detection-based fields cleared) and re-detects per run.
+detection-based fields cleared) and re-detects per run. A key the card format does not
+have, at the top level or in `wizard`, is a `CliUsageError` that names it, so a
+misspelled `"pallete"` is never silently dropped.
 
 ### Backup/Restore
 
