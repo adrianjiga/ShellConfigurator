@@ -564,8 +564,10 @@ function writeWhatChangedSafely(run: WhatChangedRun): string | null;
 // After a wizard install or apply: writes ~/.config/starship/WHAT-CHANGED.md
 // (renderWhatChanged) listing the tasks and their outcome, the files the run
 // changed (created/modified/removed, from its manifest), each selected shell's
-// Starship lines and config, and the rollback/uninstall/doctor commands. Home is
-// shown as ~. Returns the path, or null when it could not write (never throws).
+// Starship lines and config (the shared starship.toml in adopt mode), and the
+// rollback/uninstall/doctor commands; with no manifest it says no changed files
+// were recorded. Home is shown as ~. The wizard skips it once the install
+// screen has unmounted. Returns the path, or null when it could not write (never throws).
 // Tests get a stub from setup.ts.
 
 function listEntries(kind: 'presets' | 'modules' | 'fonts'): ListEntry[];
@@ -781,7 +783,7 @@ shell-configurator --list-presets | --list-modules | --list-fonts [--json]
 
 Print the ids `--preset`, the module lists and `--font` accept, as aligned
 `id  label — description` lines, or as JSON. They run without a subcommand, one
-at a time.
+at a time, and only `--json` may go with them; any other flag is a usage error.
 
 ### doctor / repair (day-2 health)
 
