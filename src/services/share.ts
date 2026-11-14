@@ -39,7 +39,7 @@ export function renderShare(state: WizardState): string {
   const text = [
     `# Starship prompt: ${promptName(shared)}`,
     '',
-    `Made with [ShellConfigurator](${PROJECT_URL}).${glyphs ? ' Its icons need a [Nerd Font](https://www.nerdfonts.com/) in the terminal.' : ''}${home ? ' Your home folder is shown as `~`.' : ''}`,
+    `Made with [ShellConfigurator](${PROJECT_URL}).${glyphs ? ' Its icons need a [Nerd Font](https://www.nerdfonts.com/) in the terminal.' : ''}${home ? ' Your home folder is shown as `~`.' : ''}${shared.directorySubstitutions.length > 0 ? ' It includes your directory substitutions, so check those paths before posting.' : ''}`,
     '',
     '## starship.toml',
     '',

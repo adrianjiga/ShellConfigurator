@@ -65,6 +65,8 @@ describe('renderShare and the home folder', () => {
     expect(text).toContain('~/work/acme');
     expect(text).toContain('Your home folder is shown as `~`.');
     expect(renderShare(tokyo)).not.toContain('home folder');
+    expect(text).toContain('It includes your directory substitutions, so check those paths');
+    expect(renderShare(tokyo)).not.toContain('directory substitutions');
   });
 });
 
