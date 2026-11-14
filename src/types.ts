@@ -68,20 +68,7 @@ export interface InstallTask {
   note?: string;
 }
 
-export type WizardStep =
-  | 'welcome'
-  | 'fontcheck'
-  | 'font_select'
-  | 'preset'
-  | 'segments_left'
-  | 'segments_right'
-  | 'style'
-  | 'shells'
-  | 'review'
-  | 'installing'
-  | 'done';
-
-export const STEP_ORDER: WizardStep[] = [
+export const STEP_ORDER = [
   'welcome',
   'fontcheck',
   'font_select',
@@ -93,7 +80,9 @@ export const STEP_ORDER: WizardStep[] = [
   'review',
   'installing',
   'done',
-];
+] as const;
+
+export type WizardStep = (typeof STEP_ORDER)[number];
 
 export interface WizardState {
   step: WizardStep;
