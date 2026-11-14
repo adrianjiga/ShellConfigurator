@@ -98,7 +98,7 @@ export const PRESETS: PresetDef[] = [
   {
     id: 'tokyo-night',
     label: 'Tokyo Night',
-    description: 'Dark theme with blue and purple tones',
+    description: 'Nerd Font icons in deep blues and purples, runtimes on the right',
     requiresNerdFont: true,
     leftModules: CORE_MODULES,
     rightModules: ['nodejs', 'python', 'cmd_duration'],
