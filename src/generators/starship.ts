@@ -113,7 +113,6 @@ error_symbol   = ${tomlLiteral(`[${error}](bold err)`)}${vim}
 
   const settings = def.settings?.({
     hasNerdFont: state.hasNerdFont,
-    powerline,
     customFormat: powerline || bracketed,
     styleFor,
     directoryTruncationLength: state.directoryTruncationLength,

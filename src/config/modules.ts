@@ -18,7 +18,6 @@ export type PreviewSample = Pick<
 
 export interface ModuleTomlContext {
   hasNerdFont: boolean;
-  powerline: boolean;
   /** The generator writes this module's `format` itself (powerline or brackets). */
   customFormat: boolean;
   /** Starship `directory.truncation_length`; `0` shows the full path. */
