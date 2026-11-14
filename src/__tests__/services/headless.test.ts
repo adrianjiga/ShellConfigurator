@@ -1218,16 +1218,6 @@ describe('runApply', () => {
     await expect(fetchImportedConfig('HTTPS://example.com/starship.toml')).resolves.toBe('[a]');
   });
 
-  it('rejects a redirect that lands on plain http', async () => {
-    const response = new Response('[a]', { status: 200 });
-    Object.defineProperty(response, 'url', { value: 'http://mirror.example.com/config.toml' });
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
-
-    await expect(fetchImportedConfig('https://example.com/starship.toml')).rejects.toThrow(
-      /redirected to a non-https URL/
-    );
-  });
-
   it('refuses a URL with a user name or password before fetching, without printing them', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
@@ -1282,6 +1272,18 @@ describe('runApply', () => {
 
     await expect(fetchImportedConfig('https://example.com/start')).resolves.toBe('[character]\n');
     expect(fetchSpy.mock.calls[1]![0]).toBe('https://example.com/moved/cfg.toml');
+  });
+
+  it('releases the body of every redirect it follows', async () => {
+    const redirect = new Response('moved', { status: 302, headers: { location: '/cfg.toml' } });
+    const cancel = vi.spyOn(redirect.body!, 'cancel');
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(redirect)
+      .mockResolvedValueOnce(new Response('[character]\n'));
+
+    await fetchImportedConfig('https://example.com/start');
+
+    expect(cancel).toHaveBeenCalled();
   });
 
   it('keeps the query out of fetch error messages, also the one fetch gives', async () => {

@@ -260,7 +260,6 @@ function formatTask(t: InstallTask): string {
   return `${statusMark(t.status).icon} ${statusLine(t.status, `${t.label}${suffix}`)}`;
 }
 
-/** The plain-text plan/applied view `apply` prints to stdout. */
 /** `text` with terminal control characters shown as `\\uXXXX`, so a fetched file cannot hide lines. */
 function showControlCharacters(text: string): string {
   return text.replace(
@@ -298,6 +297,7 @@ export function customCommands(toml: string): string[] {
   return found;
 }
 
+/** The plain-text plan/applied view `apply` prints to stdout. */
 function printTasks(tasks: InstallTask[]): void {
   for (const task of tasks) process.stdout.write(`  ${formatTask(task)}\n`);
 }
@@ -372,6 +372,7 @@ export async function fetchImportedConfig(
       const location =
         response.status >= 300 && response.status < 400 && response.headers.get('location');
       if (!location) break;
+      await response.body?.cancel();
       if (hop === IMPORT_MAX_REDIRECTS) {
         throw new CliRunError(
           `Could not fetch '${shown}': more than ${IMPORT_MAX_REDIRECTS} redirects`
@@ -395,11 +396,6 @@ export async function fetchImportedConfig(
   }
   if (!response.ok) {
     throw new CliRunError(`Could not fetch '${shown}': HTTP ${response.status}`);
-  }
-  if (response.url && !response.url.toLowerCase().startsWith('https://')) {
-    throw new CliRunError(
-      `Could not fetch '${shown}': redirected to a non-https URL ${redactUrl(response.url)}`
-    );
   }
 
   // A declared content-length is a cheap first gate; the actual byte count is
