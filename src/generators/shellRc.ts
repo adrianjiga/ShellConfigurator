@@ -46,6 +46,23 @@ export function backupPath(filePath: string): string {
   return candidate;
 }
 
+/** Copies the file to a fresh backup when it exists; returns where it went. */
+export function backupIfExists(filePath: string): string | undefined {
+  if (!fs.existsSync(filePath)) return undefined;
+  const backup = backupPath(filePath);
+  fs.copyFileSync(filePath, backup);
+  return backup;
+}
+
+/** Writes a config file, creating its folder and backing up what it replaces. */
+function writeWithBackup(configPath: string, toml: string): WriteConfigResult {
+  const configDir = path.dirname(configPath);
+  if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+  const backedUpTo = backupIfExists(configPath);
+  writeFileAtomic(configPath, toml);
+  return { path: configPath, backedUpTo };
+}
+
 /** A name `backupPath` produced: an ISO stamp with `:`/`.` replaced, maybe a suffix. */
 const BACKUP_STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z(-\d+)?$/;
 
@@ -112,13 +129,11 @@ export function backupSharedConfig(): string | null {
   } catch {
     // Fall through to a fresh copy.
   }
-  const backup = backupPath(shared);
   try {
-    fs.copyFileSync(shared, backup);
+    return backupIfExists(shared) ?? null;
   } catch {
     return null;
   }
-  return backup;
 }
 
 export interface RestoredConfig {
@@ -332,21 +347,7 @@ export function manualSetupApplied(shell: ShellDef, pointAtSharedConfig = false)
  */
 export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigResult {
   const configPath = getShellConfigPath(shellId);
-  const configDir = path.dirname(configPath);
-
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
-  }
-
-  let backedUpTo: string | undefined;
-  if (fs.existsSync(configPath)) {
-    backedUpTo = backupPath(configPath);
-    fs.copyFileSync(configPath, backedUpTo);
-  }
-
-  writeFileAtomic(configPath, toml);
-
-  return { path: configPath, backedUpTo };
+  return writeWithBackup(configPath, toml);
 }
 
 /**
@@ -356,21 +357,7 @@ export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigRes
  */
 export function writeSharedConfig(toml: string): WriteConfigResult {
   const configPath = getSharedConfigPath();
-  const configDir = path.dirname(configPath);
-
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
-  }
-
-  let backedUpTo: string | undefined;
-  if (fs.existsSync(configPath)) {
-    backedUpTo = backupPath(configPath);
-    fs.copyFileSync(configPath, backedUpTo);
-  }
-
-  writeFileAtomic(configPath, toml);
-
-  return { path: configPath, backedUpTo };
+  return writeWithBackup(configPath, toml);
 }
 
 export const BLOCK_MARKER = '# Added by ShellConfigurator';

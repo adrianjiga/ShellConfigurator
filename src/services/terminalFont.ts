@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { backupPath } from '../generators/shellRc.ts';
+import { backupIfExists } from '../generators/shellRc.ts';
 import { assertNever, type TerminalId } from '../types.ts';
 import { configHome, homeDir } from './paths.ts';
 
@@ -244,13 +244,6 @@ function weztermConfigPath(): string {
 
 function resolveTerminalConfigPath(id: TerminalId): string {
   return configLookupPaths(id).find((p) => fs.existsSync(p)) ?? terminalConfigPath(id);
-}
-
-function backupIfExists(filePath: string): string | undefined {
-  if (!fs.existsSync(filePath)) return undefined;
-  const backup = backupPath(filePath);
-  fs.copyFileSync(filePath, backup);
-  return backup;
 }
 
 /**
