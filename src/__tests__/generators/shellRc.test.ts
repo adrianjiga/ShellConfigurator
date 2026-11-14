@@ -1005,7 +1005,7 @@ describe('resetSharedShellConfig', () => {
     expect(fs.renameSync).toHaveBeenCalled();
   });
 
-  it('keeps an adopt block and adds the unset guard as a block of its own', () => {
+  it('puts the unset guard above the init line of an adopt block', () => {
     const adopt = '# Added by ShellConfigurator (shared config)\neval "$(starship init bash)"\n';
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() => adopt);
@@ -1014,7 +1014,7 @@ describe('resetSharedShellConfig', () => {
 
     expect(result.applied).toBe(true);
     expect(lastWrittenContent()).toBe(
-      `${adopt}\n# Added by ShellConfigurator\nunset STARSHIP_CONFIG\n`
+      '# Added by ShellConfigurator (shared config)\nunset STARSHIP_CONFIG\neval "$(starship init bash)"\n'
     );
   });
 
@@ -1040,14 +1040,21 @@ describe('resetSharedShellConfig', () => {
     expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
-  it('leaves a shell wired to its own per-shell config by an earlier run alone', () => {
-    const original = `# Existing content\n# Added by ShellConfigurator\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`;
+  it('points a shell an earlier run wired per-shell back at the shared config', () => {
+    const original = `# Existing content\n# Added by ShellConfigurator\nexport PATH='/home/u/.local/bin':"$PATH"\nexport STARSHIP_CONFIG='${expectedConfigPath}'\neval "$(starship init zsh)"\n`;
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() => original);
 
-    const result = resetSharedShellConfig('zsh');
+    expect(resetSharedShellConfig('zsh')).toEqual({ applied: true });
+    const written = lastWrittenContent();
+    expect(written).not.toContain('export STARSHIP_CONFIG');
+    expect(written).toContain(`export PATH='/home/u/.local/bin':"$PATH"`);
+    expect(written.match(/starship init zsh/g)).toHaveLength(1);
+    expect(written.indexOf('unset STARSHIP_CONFIG')).toBeLessThan(written.indexOf('starship init'));
 
-    expect(result).toEqual({ applied: false, note: 'sets its own STARSHIP_CONFIG' });
+    vi.mocked(fs.writeFileSync).mockClear();
+    vi.mocked(fs.readFileSync).mockImplementation(() => written);
+    expect(resetSharedShellConfig('zsh')).toEqual({ applied: false, note: 'already configured' });
     expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
@@ -1067,17 +1074,16 @@ describe('resetSharedShellConfig', () => {
 
   it("drops a stale unset guard that would cancel the shell's own export", () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    const fishConfig = path.join(os.homedir(), '.config', 'starship', 'fish.toml');
     vi.mocked(fs.readFileSync).mockImplementation(
       () =>
-        `\n# Added by ShellConfigurator\nset -gx STARSHIP_CONFIG '${fishConfig}'\nstarship init fish | source\n\n# Added by ShellConfigurator\nset -e STARSHIP_CONFIG\n`
+        'set -gx STARSHIP_CONFIG ~/mine.toml\nstarship init fish | source\n\n# Added by ShellConfigurator\nset -e STARSHIP_CONFIG\n'
     );
 
     const result = resetSharedShellConfig('fish');
 
-    expect(result.applied).toBe(false);
+    expect(result).toEqual({ applied: false, note: 'sets its own STARSHIP_CONFIG' });
     const written = lastWrittenContent();
-    expect(written).toContain(`set -gx STARSHIP_CONFIG '${fishConfig}'`);
+    expect(written).toContain('set -gx STARSHIP_CONFIG ~/mine.toml');
     expect(written).toContain('starship init fish | source');
     expect(written).not.toContain('set -e STARSHIP_CONFIG');
   });

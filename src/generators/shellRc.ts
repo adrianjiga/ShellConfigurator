@@ -416,6 +416,7 @@ function removeShellConfiguratorBlocks(
 ): string {
   const lines = content.split('\n');
   const out: string[] = [];
+  let removed = false;
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
@@ -431,6 +432,7 @@ function removeShellConfiguratorBlocks(
         // Drop the stale block (and the blank line that follows it), keeping
         // note of its PATH line: without it starship may not be found at all.
         removedPathLines.push(...block.filter((l) => isPathLine(shell, l)).map((l) => l.trim()));
+        removed = true;
         i = j;
         if (i < lines.length && lines[i].trim() === '') i++;
         continue;
@@ -445,7 +447,7 @@ function removeShellConfiguratorBlocks(
       i++;
     }
   }
-  return out.join('\n');
+  return removed ? out.join('\n') : content;
 }
 
 export interface ApplyShellConfigOptions {
@@ -635,11 +637,11 @@ function setsStarshipConfig(shell: ShellDef, line: string): boolean {
 }
 
 /**
- * Guards a Starship-running shell that wasn't selected this run against a
- * STARSHIP_CONFIG leaked from a configured parent shell, by adding an unset
- * line. A shell whose rc already sets STARSHIP_CONFIG (the user's own export,
- * or the per-shell wiring of an earlier run) cannot inherit a leaked value, so
- * its wiring is left as it is. Idempotent.
+ * Points a Starship-running shell that wasn't selected this run back at the
+ * shared config: removes the per-shell block an earlier run wrote (keeping its
+ * PATH line and init), and adds an unset guard above the init line against a
+ * STARSHIP_CONFIG leaked from a configured parent shell. A shell whose rc sets
+ * STARSHIP_CONFIG itself keeps that export and gets no guard. Idempotent.
  */
 export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; note?: string } {
   const shell = getShell(shellId);
@@ -651,17 +653,35 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
 
   const existing = fs.existsSync(rcPath) ? fs.readFileSync(rcPath, 'utf8') : '';
   const unsetLine = starshipUnsetLine(shellId)!;
+  const carried: string[] = [];
 
-  if (existing.split('\n').some((line) => setsStarshipConfig(shell, line))) {
-    // A stale unset guard after the shell's own export would cancel it.
-    if (hasLine(existing, unsetLine)) {
-      writeFileAtomic(rcPath, removeShellConfiguratorBlocks(existing, shell, [unsetLine]));
-    }
-    return { applied: false, note: 'sets its own STARSHIP_CONFIG' };
+  let content = removeShellConfiguratorBlocks(existing, shell, [isConfigExport(shell)], carried);
+  const ownExport = content.split('\n').some((line) => setsStarshipConfig(shell, line));
+  // A stale unset guard after the shell's own export would cancel it.
+  if (ownExport && hasLine(content, unsetLine)) {
+    content = removeShellConfiguratorBlocks(content, shell, [unsetLine], carried);
   }
 
-  if (hasLine(existing, unsetLine)) return { applied: false, note: 'already configured' };
+  const initPresent =
+    hasStarshipInit(content, shellId) ||
+    (shell.id === 'fish' && fs.existsSync(fishInitFile(rcPath)));
+  const needsInit = !initPresent && hasStarshipInit(existing, shellId);
+  const lines = [
+    ...[...new Set(carried)].filter((line) => !hasLine(content, line)),
+    ...(!ownExport && !hasLine(content, unsetLine) ? [unsetLine] : []),
+  ];
+  const note = ownExport ? 'sets its own STARSHIP_CONFIG' : undefined;
 
-  writeFileAtomic(rcPath, appendManagedBlock(existing, BLOCK_MARKER, [unsetLine]));
-  return { applied: true };
+  if (lines.length === 0 && !needsInit) {
+    if (content !== existing) writeFileAtomic(rcPath, content);
+    return { applied: false, note: note ?? 'already configured' };
+  }
+
+  const inserted = initPresent ? insertBeforeInit(content, shell, BLOCK_MARKER, lines) : null;
+  writeFileAtomic(
+    rcPath,
+    inserted ??
+      appendManagedBlock(content, BLOCK_MARKER, needsInit ? [...lines, shell.initLine] : lines)
+  );
+  return note ? { applied: true, note } : { applied: true };
 }

@@ -212,15 +212,19 @@ await check('nushell manual command resolves to its own per-shell config', () =>
   );
 });
 
-await check('resetSharedShellConfig leaves a shell with its own per-shell wiring alone', () => {
+await check('resetSharedShellConfig points per-shell wiring back at the shared config', () => {
   const rcPath = nodePath.join(homeDir, '.bashrc');
   rmSync(rcPath, { force: true });
   applyShellConfig('bash');
-  const before = readFileSync(rcPath, 'utf8');
 
-  const result = resetSharedShellConfig('bash');
-  assert.equal(result.applied, false);
-  assert.equal(readFileSync(rcPath, 'utf8'), before, 'per-shell wiring was changed');
+  assert.equal(resetSharedShellConfig('bash').applied, true);
+  const content = readFileSync(rcPath, 'utf8');
+  assert.ok(!content.includes('export STARSHIP_CONFIG'), 'per-shell export survived');
+  assert.ok(content.includes('unset STARSHIP_CONFIG'), 'missing unset guard');
+  assert.equal(content.match(/starship init bash/g)?.length, 1, 'init line lost or doubled');
+
+  assert.equal(resetSharedShellConfig('bash').applied, false, 'reset is not idempotent');
+  assert.equal(readFileSync(rcPath, 'utf8'), content, 'second reset changed the rc');
 });
 
 await check('resetSharedShellConfig guards a shell that only inits starship', () => {
