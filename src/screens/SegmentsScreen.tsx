@@ -205,8 +205,15 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
       return;
     }
 
-    if (char === ' ') {
+    const searching = viewRef.current.filter !== '';
+    if (char === ' ' && !searching) {
       toggleRow();
+      return;
+    }
+
+    if (key.return && searching) {
+      toggleRow();
+      setFilter('');
       return;
     }
 
@@ -217,7 +224,7 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
 
     // Everything typed narrows the list; Backspace widens it again.
     const next = editedText(viewRef.current.filter, char, key);
-    if (next !== null) setFilter(next);
+    if (next !== null && next !== viewRef.current.filter) setFilter(next);
   });
 
   return (
@@ -289,13 +296,21 @@ export function SegmentsScreen({ state, side, onNext, onUpdate, onBack }: Segmen
       </Box>
 
       <NavHints
-        hints={[
-          { key: '↑↓', label: 'navigate' },
-          { key: 'Space', label: 'toggle' },
-          { key: 'Shift+↑↓', label: 'reorder' },
-          { key: 'Enter/Tab/→', label: 'next' },
-          { key: 'Esc/←', label: 'back' },
-        ]}
+        hints={
+          filter
+            ? [
+                { key: '↑↓', label: 'navigate' },
+                { key: 'Enter', label: 'toggle and clear the search' },
+                { key: 'Esc', label: 'clear the search' },
+              ]
+            : [
+                { key: '↑↓', label: 'navigate' },
+                { key: 'Space', label: 'toggle' },
+                { key: 'Shift+↑↓', label: 'reorder' },
+                { key: 'Enter/Tab/→', label: 'next' },
+                { key: 'Esc/←', label: 'back' },
+              ]
+        }
       />
     </WizardLayout>
   );

@@ -61,6 +61,26 @@ describe('FontCheckScreen', () => {
     });
   });
 
+  it('keeps the font picked before when asked for an install again', async () => {
+    const onNext = vi.fn();
+    const instance = render(
+      <FontCheckScreen
+        state={{ ...DEFAULT_STATE, nerdFontToInstall: { kind: 'install', id: 'FiraCode' } }}
+        onNext={onNext}
+        onBack={vi.fn()}
+      />
+    );
+    await flush();
+
+    instance.stdin.write('\r');
+    await flush();
+
+    expect(onNext).toHaveBeenCalledWith({
+      hasNerdFont: true,
+      nerdFontToInstall: { kind: 'install', id: 'FiraCode' },
+    });
+  });
+
   it('answers without a font and keeps text symbols', async () => {
     const { instance, onNext } = setup();
     await flush();

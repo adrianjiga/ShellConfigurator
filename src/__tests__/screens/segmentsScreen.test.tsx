@@ -328,11 +328,30 @@ describe('SegmentsScreen', () => {
     });
     await flush();
     await press(instance, 'g', 'i', 't');
-    await press(instance, ' ');
+    await press(instance, '\r');
     expect(onUpdate).toHaveBeenCalledWith({
       leftModules: ['directory', 'git_status', 'character'],
       rightModules: [],
     });
+    expect(instance.lastFrame()).toContain('type to search');
+  });
+
+  it('takes a space into the search instead of ticking a row', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+    await press(instance, ...'exit status');
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(instance.lastFrame()).toContain('exit status');
+    expect(instance.lastFrame()).toContain('Exit Status');
+  });
+
+  it('keeps the cursor where it is on Backspace with no search', async () => {
+    const { instance, onUpdate } = setup();
+    await flush();
+    await press(instance, DOWN, DOWN, BACKSPACE, ' ');
+    const { leftModules } = onUpdate.mock.calls.at(-1)![0];
+    expect(leftModules).toHaveLength(4);
+    expect(leftModules.slice(0, 2)).toEqual(['directory', 'git_branch']);
   });
 
   it('marks modules already on the left as unavailable on the right', async () => {

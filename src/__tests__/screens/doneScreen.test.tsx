@@ -66,7 +66,7 @@ describe('DoneScreen over real install results', () => {
     const row = rowFor(frame, 'Nushell');
 
     expect(row).not.toContain('✓');
-    expect(row).not.toContain('init line added');
+    expect(row).not.toContain('.zshrc updated');
     expect(frame.replace(/\s+/g, ' ')).toContain(getShell('nushell')!.manualNote);
     // The command the user has to run must be on screen, not just described.
     // Whitespace is dropped so the narrow test frame's wrapping does not matter.
@@ -103,7 +103,7 @@ describe('DoneScreen over real install results', () => {
     const row = rowFor(frame, 'Zsh');
 
     expect(row).toContain('already configured');
-    expect(row).not.toContain('init line added');
+    expect(row).not.toContain('.zshrc updated');
   });
 
   it('gives each shell its own status instead of one shared one', async () => {
@@ -118,7 +118,7 @@ describe('DoneScreen over real install results', () => {
     );
 
     expect(rowFor(frame, 'Zsh')).toContain('✓');
-    expect(rowFor(frame, 'Zsh')).toContain('init line added');
+    expect(rowFor(frame, 'Zsh')).toContain('.zshrc updated');
     expect(rowFor(frame, 'Fish')).toContain('✗');
     expect(frame).toContain('mkdir failed');
   });
@@ -165,7 +165,7 @@ describe('DoneScreen over real install results', () => {
     const frame = await runAndRender({ selectedShells: ['zsh'], installedShells: ['zsh'] });
 
     expect(frame).toContain('All done!');
-    expect(rowFor(frame, 'Zsh')).toContain('init line added');
+    expect(rowFor(frame, 'Zsh')).toContain('.zshrc updated');
   });
 
   it('points at the summary of what changed when one was written', () => {

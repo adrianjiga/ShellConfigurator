@@ -49,7 +49,13 @@ export function FontCheckScreen({ state, onNext, onBack }: FontCheckScreenProps)
         onNext({ hasNerdFont: true, nerdFontToInstall: NO_NERD_FONT });
         break;
       case 'install':
-        onNext({ hasNerdFont: true, nerdFontToInstall: { kind: 'select' } });
+        onNext({
+          hasNerdFont: true,
+          nerdFontToInstall:
+            state.nerdFontToInstall.kind === 'install'
+              ? state.nerdFontToInstall
+              : { kind: 'select' },
+        });
         break;
       case 'none':
         onNext({ hasNerdFont: false, nerdFontToInstall: NO_NERD_FONT });

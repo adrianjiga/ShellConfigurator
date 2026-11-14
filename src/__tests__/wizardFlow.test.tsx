@@ -194,12 +194,10 @@ describe('full wizard walkthrough', () => {
 
     await pressKeys(instance, [ENTER, ENTER, ENTER, ENTER]); // welcome → segments_right
     await type('node');
-    await pressKeys(instance, [SPACE]); // Node.js on the right
-    await pressEsc(instance.stdin); // clear the filter
+    await pressKeys(instance, [ENTER]); // Node.js on the right, filter cleared
     await pressEsc(instance.stdin); // back to segments_left
     await type('node');
-    await pressKeys(instance, [SPACE]); // Node.js on the left as well
-    await pressEsc(instance.stdin);
+    await pressKeys(instance, [ENTER]); // Node.js on the left as well
     await pressKeys(instance, [ENTER, ENTER, ENTER, SPACE, ENTER, ENTER]);
     for (let i = 0; i < 20 && mockWriteConfig.mock.calls.length === 0; i++) await flush();
 

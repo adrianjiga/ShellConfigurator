@@ -10,6 +10,8 @@ describe('editedText', () => {
 
   it('drops the last character on Backspace or Delete', () => {
     expect(editedText('node', '', { ...plain, backspace: true })).toBe('nod');
+    expect(editedText('dir 📁', '', { ...plain, backspace: true })).toBe('dir ');
+    expect(editedText('👩‍💻', '', { ...plain, backspace: true })).toBe('');
     expect(editedText('node', '', { ...plain, delete: true })).toBe('nod');
   });
 

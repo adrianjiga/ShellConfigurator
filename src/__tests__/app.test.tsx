@@ -121,5 +121,7 @@ describe('App Ctrl+C', () => {
     instance.stdin.write('\u0003');
     await flush();
     expect(mocks.exit).toHaveBeenCalled();
+    expect(process.exitCode).toBe(130);
+    process.exitCode = 0;
   });
 });

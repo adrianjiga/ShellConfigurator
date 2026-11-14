@@ -59,7 +59,10 @@ export function App({ dryRun = false, onInstallOutcome }: AppProps) {
   const { exit } = useApp();
   useInput(
     (char, key) => {
-      if (key.ctrl && char === 'c') exit();
+      if (key.ctrl && char === 'c') {
+        process.exitCode = 130;
+        exit();
+      }
     },
     { isActive: state.step !== 'installing' }
   );

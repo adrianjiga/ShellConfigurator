@@ -10,7 +10,10 @@ export function editedText(
   char: string,
   key: Pick<Key, 'backspace' | 'delete' | 'ctrl' | 'meta'>
 ): string | null {
-  if (key.backspace || key.delete) return current.slice(0, -1);
+  if (key.backspace || key.delete) {
+    const characters = [...new Intl.Segmenter().segment(current)];
+    return current.slice(0, characters.at(-1)?.index ?? 0);
+  }
   const text = char.replace(/[\r\n]/g, '');
   return text && !key.ctrl && !key.meta ? current + text : null;
 }

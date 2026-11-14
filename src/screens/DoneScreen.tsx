@@ -260,7 +260,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
                     )}
                     <Text color={uiColor('gray')}>
                       {rcTask?.status === 'done'
-                        ? `init line added to ${shell?.rcFile}`
+                        ? `${shell?.rcFile} updated`
                         : rcTask?.status === 'skipped'
                           ? shell?.rcFile
                             ? (rcNote ?? 'skipped')
@@ -366,8 +366,8 @@ export function DoneScreen({ state }: DoneScreenProps) {
                 </Text>
               )}
               <Text color={uiColor('gray')}>
-                Run <Text color={uiColor('cyan')}>starship print-config</Text> to view the generated
-                config.
+                After restarting, run <Text color={uiColor('cyan')}>starship print-config</Text> to
+                view the config the shell loads.
               </Text>
               <Text color={uiColor('gray')}>
                 Run <Text color={uiColor('cyan')}>shell-configurator doctor</Text> to check the
