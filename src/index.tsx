@@ -435,7 +435,8 @@ export async function runUninstallCommand(
   command: string,
   io: UninstallIo = DEFAULT_UNINSTALL_IO
 ): Promise<void> {
-  const unused = presentFlags(flags).filter((flag) => !acceptedFlags('uninstall').has(flag));
+  const accepted = acceptedFlags('uninstall');
+  const unused = presentFlags(flags).filter((flag) => !accepted.has(flag));
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with uninstall.`);
   }
@@ -507,7 +508,8 @@ export async function runRollbackCommand(
   command: string,
   io: PromptIo = DEFAULT_PROMPT_IO
 ): Promise<void> {
-  const unused = presentFlags(flags).filter((flag) => !acceptedFlags('rollback').has(flag));
+  const accepted = acceptedFlags('rollback');
+  const unused = presentFlags(flags).filter((flag) => !accepted.has(flag));
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with rollback.`);
   }
@@ -619,7 +621,7 @@ export async function runTimingsCommand(
       }
       config = active.path;
     } else {
-      source = { toml: '' };
+      source = { toml: '', path: active.path };
       config = `Starship's built-in default prompt, since ${active.reason}`;
     }
   }
@@ -637,7 +639,8 @@ export async function runTimingsCommand(
 }
 
 export function runShareCommand(flags: CliFlags): void {
-  const unused = presentFlags(flags).filter((flag) => !acceptedFlags('share').has(flag));
+  const accepted = acceptedFlags('share');
+  const unused = presentFlags(flags).filter((flag) => !accepted.has(flag));
   if (unused.length > 0) {
     throw new CliUsageError(`${unused.join(', ')} cannot be used with share.`);
   }

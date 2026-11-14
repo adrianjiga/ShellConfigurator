@@ -13,7 +13,6 @@ import {
   parseTimings,
   StarshipMissingError,
   StarshipTimedOutError,
-  stripAnsi,
   suggestFixes,
   timePrompt,
 } from '../../services/starshipProbe.ts';
@@ -77,14 +76,17 @@ describe('parseExplain', () => {
   });
 });
 
-describe('stripAnsi', () => {
-  it('drops colour, cursor and hyperlink escapes', () => {
+describe('escapes in Starship output', () => {
+  it('are dropped, hyperlinks included', () => {
     const BEL = String.fromCharCode(7);
-    expect(
-      stripAnsi(
-        `${ESC}[1;32m❯${ESC}[0m ${ESC}]8;;file:///tmp/p${ESC}\\p${ESC}]8;;${ESC}\\ ${ESC}]8;;https://x${BEL}x${ESC}]8;;${BEL}${ESC}[2K`
-      )
-    ).toBe('❯ p x');
+    const linked = ` Here's a breakdown of your prompt:
+ ${ESC}]8;;file:///tmp/p${ESC}\\${ESC}[1;36mp${ESC}[0m${ESC}]8;;${ESC}\\  -  The current working directory
+ ${ESC}]8;;https://x${BEL}x${ESC}]8;;${BEL}${ESC}[2K  -  A link
+`;
+    expect(parseExplain(linked)).toEqual([
+      { output: 'p', description: 'The current working directory' },
+      { output: 'x', description: 'A link' },
+    ]);
   });
 });
 
@@ -145,6 +147,18 @@ describe('suggestFixes', () => {
     const warnings = 'Executing command "/usr/bin/node" timed out.';
     const suggestions = suggestFixes([timing('git_status', 600)], warnings, '');
     expect(suggestions.map((s) => s.module)).toEqual([undefined, 'git_status']);
+  });
+
+  it('reads command_timeout after an array holding a multi-line string with a bracket', () => {
+    const warnings = 'Executing command "/usr/bin/node" timed out.';
+    const toml =
+      'palette_list = [\n  """\n  [ unclosed\n  """,\n  "{",\n]\ncommand_timeout = 1500 # [x\n';
+    expect(suggestFixes([], warnings, toml)[0].toml).toBe('command_timeout = 3000');
+  });
+
+  it('does not take a timed-out command with scan in its path for a folder scan', () => {
+    const warnings = 'Executing command "/usr/local/bin/scanimage" timed out.';
+    expect(suggestFixes([], warnings, '').map((s) => s.toml)).toEqual(['command_timeout = 1000']);
   });
 
   it('never suggests turning off the modules every prompt needs', () => {
@@ -320,9 +334,18 @@ describe('activeStarshipConfig', () => {
         { STARSHIP_CONFIG: '/gone.toml' },
         existing(shared(), getShellConfigPath('zsh'))
       )
-    ).toEqual({ kind: 'defaults', reason: '$STARSHIP_CONFIG (/gone.toml) does not exist' });
+    ).toEqual({
+      kind: 'defaults',
+      path: '/gone.toml',
+      reason: '$STARSHIP_CONFIG (/gone.toml) does not exist',
+    });
+    expect(activeStarshipConfig({ STARSHIP_CONFIG: ' ' }, existing(shared()))).toMatchObject({
+      kind: 'defaults',
+      path: ' ',
+    });
     expect(activeStarshipConfig({}, existing())).toEqual({
       kind: 'defaults',
+      path: shared(),
       reason: `${shared()} does not exist`,
     });
   });

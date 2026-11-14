@@ -13,10 +13,6 @@ import {
   withPreviewProject,
 } from './preview.ts';
 
-export function stripAnsi(text: string): string {
-  return stripVTControlCharacters(text);
-}
-
 export interface ModuleTiming {
   module: string;
   ms: number;
@@ -32,7 +28,7 @@ function parseDuration(text: string): number | null {
 }
 
 export function parseTimings(text: string): ModuleTiming[] {
-  return stripAnsi(text)
+  return stripVTControlCharacters(text)
     .split('\n')
     .flatMap((line) => {
       const match = /^\s*(\S+)\s+-\s+(\S+)\s+-\s+"(.*)"\s*$/.exec(line);
@@ -49,7 +45,7 @@ export interface Explanation {
 
 export function parseExplain(text: string): Explanation[] {
   const items: Explanation[] = [];
-  for (const line of stripAnsi(text).split('\n')) {
+  for (const line of stripVTControlCharacters(text).split('\n')) {
     const at = line.indexOf('  -  ');
     if (at === -1) {
       const last = items.at(-1);
@@ -110,28 +106,23 @@ const bracketBalance = (text: string) =>
   (text.match(/[[{]/g)?.length ?? 0) - (text.match(/[\]}]/g)?.length ?? 0);
 
 function topLevelNumber(toml: string, key: string): number | null {
-  let openString: string | null = null;
   let depth = 0;
-  for (const line of toml.split('\n')) {
-    if (openString) {
-      if (line.includes(openString)) openString = null;
-      continue;
-    }
+  for (const line of toml.replace(/"""[\s\S]*?"""|'''[\s\S]*?'''/g, '""').split('\n')) {
     const trimmed = line.trim();
+    const code = trimmed.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, '""').replace(/#.*$/, '');
     if (depth > 0) {
-      depth += bracketBalance(trimmed);
+      depth += bracketBalance(code);
       continue;
     }
-    if (trimmed.startsWith('[')) return null;
+    if (code.startsWith('[')) return null;
     const assignment = /^(?:"([^"]+)"|'([^']+)'|([\w-]+))\s*=\s*(.*)$/.exec(trimmed);
     if (!assignment) continue;
-    const value = assignment[4];
     if ((assignment[1] ?? assignment[2] ?? assignment[3]) === key) {
-      const number = /^(\d[\d_]*)\s*(?:#.*)?$/.exec(value);
+      const number = /^(\d[\d_]*)\s*(?:#.*)?$/.exec(assignment[4]);
       return number ? Number(number[1].replaceAll('_', '')) : null;
     }
-    openString = ['"""', "'''"].find((quote) => value.split(quote).length % 2 === 0) ?? null;
-    if (!openString && /^[[{]/.test(value)) depth = bracketBalance(value);
+    const value = code.slice(code.indexOf('=') + 1).trim();
+    if (/^[[{]/.test(value)) depth = bracketBalance(value);
   }
   return null;
 }
@@ -175,7 +166,7 @@ export function suggestFixes(
 ): Suggestion[] {
   const commandTimeout = topLevelNumber(toml, 'command_timeout') ?? DEFAULT_COMMAND_TIMEOUT_MS;
   const scanTimeout = topLevelNumber(toml, 'scan_timeout') ?? DEFAULT_SCAN_TIMEOUT_MS;
-  const plain = stripAnsi(warnings);
+  const plain = stripVTControlCharacters(warnings);
   const suggestions: Suggestion[] = [];
 
   const timedOut = [...plain.matchAll(/Executing command "([^"]+)" timed out/g)].map((m) =>
@@ -188,7 +179,7 @@ export function suggestFixes(
       toml: `command_timeout = ${Math.max(commandTimeout * 2, 1000)}`,
     });
   }
-  if (/scan\w*[^\n]*timed out/i.test(plain)) {
+  if (/Scanning current directory timed out/i.test(plain)) {
     suggestions.push({
       text: `Scanning this folder took longer than scan_timeout (${scanTimeout}ms), so modules that look for project files may be missing. Raise it at the top of the config.`,
       toml: `scan_timeout = ${Math.max(scanTimeout * 2, 100)}`,
@@ -246,7 +237,9 @@ export class StarshipMissingError extends Error {
   }
 }
 
-export type ActiveConfig = { kind: 'file'; path: string } | { kind: 'defaults'; reason: string };
+export type ActiveConfig =
+  | { kind: 'file'; path: string }
+  | { kind: 'defaults'; path: string; reason: string };
 
 /**
  * The config Starship loads in this environment, by its own rule:
@@ -257,14 +250,16 @@ export function activeStarshipConfig(
   env: NodeJS.ProcessEnv = process.env,
   exists: (file: string) => boolean = fs.existsSync
 ): ActiveConfig {
-  const configured = env.STARSHIP_CONFIG?.trim();
-  const path = configured || getSharedConfigPath();
+  const configured = env.STARSHIP_CONFIG;
+  const path = configured ?? getSharedConfigPath();
   if (exists(path)) return { kind: 'file', path };
   return {
     kind: 'defaults',
-    reason: configured
-      ? `$STARSHIP_CONFIG (${configured}) does not exist`
-      : `${path} does not exist`,
+    path,
+    reason:
+      configured !== undefined
+        ? `$STARSHIP_CONFIG (${configured}) does not exist`
+        : `${path} does not exist`,
   };
 }
 

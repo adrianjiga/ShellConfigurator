@@ -1348,10 +1348,13 @@ describe('index timings command', () => {
   it("times Starship's built-in default prompt when the config it would load is missing", async () => {
     vi.stubEnv('STARSHIP_CONFIG', '/no/such/starship.toml');
     try {
-      await runTimingsCommand(parseCliArgs(['timings']), deps());
+      const probe = deps();
+      probe.run.mockImplementationOnce(async () => ({ stdout: TIMINGS, stderr: '' }));
+      await runTimingsCommand(parseCliArgs(['timings']), probe);
       expect(output()).toContain(
         "(config: Starship's built-in default prompt, since $STARSHIP_CONFIG (/no/such/starship.toml) does not exist)"
       );
+      expect(probe.run).toHaveBeenCalledWith('timings', process.cwd(), '/no/such/starship.toml');
     } finally {
       vi.unstubAllEnvs();
     }
