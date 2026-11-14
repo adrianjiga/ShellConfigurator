@@ -81,6 +81,7 @@ describe('expandShellPath', () => {
 
   beforeEach(() => {
     vi.mocked(os.homedir).mockReturnValue('/real/home');
+    delete process.env.XDG_CONFIG_HOME;
   });
 
   it.each([
