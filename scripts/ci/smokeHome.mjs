@@ -118,10 +118,10 @@ export function assertRcWired(rcPath, shell) {
  * Runs a real `uninstall --yes` for one shell after an apply, then asserts the
  * rc lost every managed line, the per-shell config moved to a backup, a second
  * run finds nothing, a `rollback` brings both back, and a second `rollback`
- * undoes the apply too.
+ * puts both back to `before`, their content ahead of the apply.
  */
-export function assertUninstalled(homeDir, rcPath, shell) {
-  const configPath = nodePath.join(process.env.XDG_CONFIG_HOME, 'starship', `${shell}.toml`);
+export function assertUninstalled(homeDir, rcPath, shell, before) {
+  const configPath = shellConfigPath(shell);
   assert.ok(existsSync(configPath), `apply did not write ${configPath}`);
 
   const out = runCli(['uninstall', '--yes', '--shells', shell]);
@@ -156,9 +156,26 @@ export function assertUninstalled(homeDir, rcPath, shell) {
 
   const undoApply = runCli(['rollback', '--yes']);
   assert.ok(!undoApply.includes('FAILED'), `second rollback failed:\n${undoApply}`);
-  const rcAfter = existsSync(rcPath) ? readFileSync(rcPath, 'utf8') : '';
-  assert.ok(!rcAfter.includes('ShellConfigurator'), `rolling back the apply left:\n${rcAfter}`);
-  assert.ok(!existsSync(configPath), `rolling back the apply left ${configPath}`);
+  assert.equal(
+    readOrNull(rcPath),
+    before.rc,
+    `rolling back the apply did not restore the rc:\n${readOrNull(rcPath)}`
+  );
+  assert.equal(
+    readOrNull(configPath),
+    before.config,
+    `rolling back the apply did not restore ${configPath}`
+  );
+}
+
+/** The per-shell config path the CLI writes in this scratch home. */
+export function shellConfigPath(shell) {
+  return nodePath.join(process.env.XDG_CONFIG_HOME, 'starship', `${shell}.toml`);
+}
+
+/** A file's text, or null when it does not exist. */
+export function readOrNull(filePath) {
+  return existsSync(filePath) ? readFileSync(filePath, 'utf8') : null;
 }
 
 /** Runs the real `debug-info` and asserts the Markdown and JSON reports, with HOME hidden. */
