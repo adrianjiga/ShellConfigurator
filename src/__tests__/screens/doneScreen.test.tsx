@@ -233,6 +233,8 @@ describe('DoneScreen over real install results', () => {
 
     instance.stdin.write('r');
     await flush();
+    instance.stdin.write('y');
+    await flush();
 
     const frame = instance.lastFrame() ?? '';
     expect(mocks.exit).not.toHaveBeenCalled();
@@ -249,7 +251,11 @@ describe('DoneScreen over real install results', () => {
 
     instance.stdin.write('r');
     await flush();
+    instance.stdin.write('y');
+    await flush();
     instance.stdin.write('r');
+    await flush();
+    instance.stdin.write('y');
     await flush();
 
     expect(mocks.restoreConfigBackups).toHaveBeenCalledTimes(1);
@@ -282,6 +288,8 @@ describe('DoneScreen over real install results', () => {
 
     instance.stdin.write('r');
     await flush();
+    instance.stdin.write('y');
+    await flush();
 
     const frame = instance.lastFrame() ?? '';
     expect(frame).toContain('Restored configs from their newest backups:');
@@ -296,6 +304,8 @@ describe('DoneScreen over real install results', () => {
     await flush();
 
     instance.stdin.write('r');
+    await flush();
+    instance.stdin.write('y');
     await flush();
 
     expect(instance.lastFrame()).toContain('nothing to restore');
@@ -316,6 +326,8 @@ describe('DoneScreen over real install results', () => {
     await flush();
 
     instance.stdin.write('r');
+    await flush();
+    instance.stdin.write('y');
     await flush();
 
     expect(mocks.restoreConfigBackups).not.toHaveBeenCalled();
@@ -467,6 +479,8 @@ describe('DoneScreen restore failure', () => {
     );
     stdin.write('r');
     await flush();
+    stdin.write('y');
+    await flush();
     expect(lastFrame()).toContain('EACCES: permission denied');
   });
 });
@@ -503,7 +517,11 @@ describe('DoneScreen share', () => {
 
     instance.stdin.write('s');
     await flush();
+    instance.stdin.write('y');
+    await flush();
     instance.stdin.write('s');
+    await flush();
+    instance.stdin.write('y');
     await flush();
 
     expect(mocks.writeShareFile).toHaveBeenCalledOnce();
@@ -521,11 +539,15 @@ describe('DoneScreen share', () => {
     await flush();
     instance.stdin.write('s');
     await flush();
+    instance.stdin.write('y');
+    await flush();
     expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
       'Could not save the prompt: EACCES: permission denied Press s to try again.'
     );
 
     instance.stdin.write('s');
+    await flush();
+    instance.stdin.write('y');
     await flush();
     expect(mocks.writeShareFile).toHaveBeenCalledTimes(2);
     expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
@@ -539,6 +561,8 @@ describe('DoneScreen share', () => {
     instance.stdin.write('s');
     instance.stdin.write('s');
     await flush();
+    instance.stdin.write('y');
+    await flush();
     expect(mocks.writeShareFile).toHaveBeenCalledOnce();
   });
 
@@ -546,6 +570,8 @@ describe('DoneScreen share', () => {
     const instance = done({ keepExistingConfig: true });
     await flush();
     instance.stdin.write('s');
+    await flush();
+    instance.stdin.write('y');
     await flush();
     expect(instance.lastFrame()).not.toContain('save this prompt');
     expect(mocks.writeShareFile).not.toHaveBeenCalled();

@@ -342,7 +342,7 @@ In `--dry-run` mode the header reads "Dry run — no changes were made" and the 
 shows the same plan sections as Review (`TaskPlan` titled "Tasks that would run",
 plus `ConfigPlan`) and a hint to run without `--dry-run`.
 
-**Keys**: `Enter` / `Esc` / `Q` to exit; `r` runs a one-key undo — it copies the
+**Keys**: `Enter` / `Esc` / `Q` to exit; `r` runs an undo — it copies the
 newest `.bak-*` backups back over the shared and per-shell Starship configs (the
 same code path as the CLI's `--restore`) and prints what was restored. It does not
 undo rc-file edits or terminal font configs, runs at most once, and is disabled in
@@ -351,7 +351,9 @@ dry-run mode (no backups were made). `s` saves the prompt as Markdown to share
 next to an existing one; an exclusive create, so it never overwrites, and it gives
 up after 100 names) and shows where; it works in
 dry-run mode too, where the hint says it still writes the file, saves
-once (after a failure `s` tries again), and is not offered in adopt mode.
+once (after a failure `s` tries again), and is not offered in adopt mode. Both `r` and `s` first ask
+for `y`; any other key cancels the question without exiting, so typing a
+command into the finished screen changes nothing.
 
 ---
 
