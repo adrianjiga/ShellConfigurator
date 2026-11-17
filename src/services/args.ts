@@ -18,8 +18,7 @@ export type Subcommand =
   | 'rollback'
   | 'debug-info'
   | 'completions'
-  | 'list'
-  | 'timings';
+  | 'list';
 
 export const SUBCOMMANDS: readonly Subcommand[] = [
   'generate',
@@ -30,7 +29,6 @@ export const SUBCOMMANDS: readonly Subcommand[] = [
   'debug-info',
   'completions',
   'list',
-  'timings',
 ];
 
 export interface CliFlags {
@@ -66,6 +64,8 @@ export interface CliFlags {
   markdown?: boolean;
   /** Emit machine-readable output instead of the human report (--json). */
   json?: boolean;
+  /** Time the prompt's modules in the current folder after the check (--timings). */
+  timings?: boolean;
   /** Apply the repairs the doctor can perform (--fix). */
   fix?: boolean;
   /** Let doctor --fix also apply the fixes warnings carry (--include-warnings). */
@@ -133,6 +133,9 @@ const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> 
   '--fix': (r, v) => {
     r.fix = v;
   },
+  '--timings': (r, v) => {
+    r.timings = v;
+  },
   '--include-warnings': (r, v) => {
     r.includeWarnings = v;
   },
@@ -196,6 +199,7 @@ const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
 const RETIRED_SUBCOMMANDS: Record<string, string> = {
   repair: 'repair is gone: shell-configurator doctor --fix applies the same fixes.',
   share: 'share is gone: shell-configurator generate --markdown prints the same Markdown.',
+  timings: 'timings is gone: shell-configurator doctor --timings times the prompt in this folder.',
 };
 
 const RETIRED_FLAGS: Record<string, string> = {

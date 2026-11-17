@@ -85,12 +85,12 @@ import {
   routeCli,
   runCompletionsCommand,
   runDebugInfoCommand,
+  runDoctorCommand,
   runGlobalFlags,
   runHeadlessCommand,
   runMarkdownCommand,
   runRepairCommand,
   runRollbackCommand,
-  runTimingsCommand,
   runUninstallCommand,
   type UninstallIo,
 } from '../index.tsx';
@@ -1502,7 +1502,7 @@ describe('index list flags', () => {
   });
 });
 
-describe('index timings command', () => {
+describe('index doctor --timings', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
   const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
   const TIMINGS = ` Here are the timings of modules in your prompt (>=1ms or output):
@@ -1516,33 +1516,33 @@ describe('index timings command', () => {
       stderr: `config was ${fs.readFileSync(configPath, 'utf8').length} bytes`,
     })),
   });
+  const doctor = (args: string[], probe = deps()) =>
+    runDoctorCommand(parseCliArgs(['doctor', '--timings', ...args]), '', undefined, probe);
 
   beforeEach(() => {
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+    mockRunDoctor.mockResolvedValue({ ok: true, findings: [] });
+    mockFormatDoctorReport.mockReturnValue('HEALTHY\n');
   });
-  afterEach(() => stdoutWrite.mockRestore());
-
-  it('times a config built from the flags in the current folder, with suggestions', async () => {
-    const probe = deps();
-    await runTimingsCommand(parseCliArgs(['timings', '--preset', 'pure-prompt']), probe);
-
-    expect(probe.run).toHaveBeenCalledWith('timings', process.cwd(), expect.any(String));
-    expect(output()).toContain('(config: built from the flags)');
-    expect(output()).toMatch(/git_status\s+320ms {2}slow/);
-    expect(output()).toContain('Suggestions:');
-    expect(output()).toContain('git_status took 320ms');
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+    process.exitCode = 0;
   });
 
-  it('times the config Starship loads here when no flags are given', async () => {
+  it('times the config Starship loads here after the check, with suggestions', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-active-'));
     const config = path.join(dir, 'zsh.toml');
-    fs.writeFileSync(config, 'format = "$character"\n');
+    fs.writeFileSync(config, 'format = "$git_status$character"\n');
     vi.stubEnv('STARSHIP_CONFIG', config);
     try {
       const probe = deps();
-      await runTimingsCommand(parseCliArgs(['timings']), probe);
+      await doctor([], probe);
+      expect(output()).toMatch(/^HEALTHY\n/);
       expect(output()).toContain(`(config: ${config})`);
+      expect(output()).toMatch(/git_status\s+320ms {2}slow/);
+      expect(output()).toContain('git_status took 320ms');
       expect(probe.run).toHaveBeenCalledWith('timings', process.cwd(), config);
+      expect(process.exitCode ?? 0).toBe(0);
     } finally {
       vi.unstubAllEnvs();
       fs.rmSync(dir, { recursive: true, force: true });
@@ -1554,78 +1554,75 @@ describe('index timings command', () => {
     try {
       const probe = deps();
       probe.run.mockImplementationOnce(async () => ({ stdout: TIMINGS, stderr: '' }));
-      await runTimingsCommand(parseCliArgs(['timings']), probe);
+      await doctor([], probe);
       expect(output()).toContain(
         "(config: Starship's built-in default prompt, since $STARSHIP_CONFIG (/no/such/starship.toml) does not exist)"
       );
-      expect(probe.run).toHaveBeenCalledWith('timings', process.cwd(), '/no/such/starship.toml');
     } finally {
       vi.unstubAllEnvs();
     }
   });
 
-  it('times the file --config names, as JSON with --json', async () => {
+  it('times the file --config names, inside the doctor JSON with --json', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-timings-'));
     const config = path.join(dir, 'starship.toml');
     fs.writeFileSync(config, 'format = "$git_status$character"\n');
     try {
-      await runTimingsCommand(parseCliArgs(['timings', '--config', config, '--json']), deps());
-      expect(JSON.parse(output())).toMatchObject({ config, slowestMs: 320, slow: true });
+      await doctor(['--config', config, '--json']);
+      expect(JSON.parse(output())).toMatchObject({
+        ok: true,
+        timings: { config, slowestMs: 320, slow: true },
+      });
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
+  it('refuses a --config file it cannot read', async () => {
+    await expect(doctor(['--config', '/no/such/file'])).rejects.toThrow(
+      /Could not read '\/no\/such\/file'/
+    );
+  });
+
+  it('still prints the check, and fails, when Starship is not installed to time with', async () => {
+    await doctor([], deps(false));
+    expect(output()).toMatch(/^HEALTHY\n/);
+    expect(output()).toMatch(/Could not time the prompt: .*Starship is not installed/);
+    expect(process.exitCode).toBe(1);
+  });
+
   it.each([
-    [['--config', 'x', '--preset', 'pure-prompt'], /--config times an existing file, so --preset/],
-    [['--config', '/no/such/file'], /Could not read '\/no\/such\/file'/],
+    [['doctor', '--config', 'x'], '--config only applies to doctor --timings.'],
+    [['generate', '--timings'], '--timings only applies to doctor.'],
+    [['doctor', '--timings', '--fix'], '--timings cannot be used with --fix.'],
   ])('rejects %o', async (args, message) => {
-    await expect(runTimingsCommand(parseCliArgs(['timings', ...args]), deps())).rejects.toThrow(
-      message
+    await expect(runHeadlessCommand(parseCliArgs(args), '')).rejects.toThrow(message);
+  });
+
+  it('points the retired timings at doctor --timings', () => {
+    expect(() => parseCliArgs(['timings'])).toThrow(
+      'timings is gone: shell-configurator doctor --timings times the prompt in this folder.'
     );
   });
 
-  it.each([
-    [['--shells', 'zsh'], /--shells cannot be used with timings/],
-    [['--yes'], /--yes only applies to doctor --fix/],
-  ])('refuses %o before timing anything', async (args, message) => {
-    await expect(runHeadlessCommand(parseCliArgs(['timings', ...args]), '')).rejects.toThrow(
-      message
-    );
-  });
-
-  it('says Starship is needed when it is not installed', async () => {
-    await expect(
-      runTimingsCommand(parseCliArgs(['timings', '--preset', 'pure-prompt']), deps(false))
-    ).rejects.toThrow(/Starship is not installed/);
-  });
-
-  it('documents timings in the help text', () => {
+  it('documents --timings in the help text', () => {
     runGlobalFlags(parseCliArgs(['--help']));
-    expect(output()).toContain('shell-configurator timings');
+    expect(output()).toContain('--timings');
     expect(output()).toContain('--config <file>');
+    expect(output()).not.toContain('shell-configurator timings');
   });
 
-  it('refuses an adopt-mode card and points at the shared config instead', async () => {
+  it('refuses an adopt-mode card for --markdown and points at the shared config', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-adopt-'));
     const card = path.join(dir, 'card.json');
     fs.writeFileSync(card, serializeState({ ...DEFAULT_STATE, keepExistingConfig: true }));
     try {
-      await expect(
-        runTimingsCommand(parseCliArgs(['timings', '--state', card]), deps())
-      ).rejects.toThrow(/adopt-mode card keeps your own config.*--config .*starship\.toml/);
       expect(() =>
         runMarkdownCommand(parseCliArgs(['generate', '--markdown', '--state', card]))
       ).toThrow(/adopt-mode card keeps your own config, so there is no generated prompt to share/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  });
-
-  it('rejects --config outside timings', async () => {
-    await expect(
-      runHeadlessCommand(parseCliArgs(['generate', '--config', 'x']), '')
-    ).rejects.toThrow('--config only applies to timings.');
   });
 });
 

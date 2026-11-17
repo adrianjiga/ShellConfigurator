@@ -6,7 +6,6 @@ import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { getSharedConfigPath, ORIGINAL_SUFFIX, writeFileAtomic } from './generators/shellRc.ts';
-import { generateToml } from './generators/starship.ts';
 import type { CliFlags, Subcommand } from './services/args.ts';
 import { parseCliArgs, quoteArgv, SUBCOMMANDS } from './services/args.ts';
 import {
@@ -118,13 +117,12 @@ Usage:
   shell-configurator              start the wizard
   shell-configurator generate     render a starship.toml from flags (--markdown to share it)
   shell-configurator apply        run a full install headlessly
-  shell-configurator doctor       check the setup; --fix repairs what it finds
+  shell-configurator doctor       check the setup; --fix repairs it, --timings times the prompt
   shell-configurator uninstall    remove what the wizard set up
   shell-configurator rollback     put back the files the last run changed
   shell-configurator debug-info   print a report of the setup to attach to a bug report
   shell-configurator list <presets|modules|fonts>  list the ids the flags accept (--json for data)
   shell-configurator completions <bash|zsh|fish>   print a shell completion script
-  shell-configurator timings      time each prompt module here and suggest fixes for slow ones
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
@@ -177,6 +175,12 @@ doctor options (checks the setup; exits non-zero when a check fails):
                        terminal font); a warning may describe a choice you made on purpose
   -y, --yes            With --fix, go ahead without asking (required off a terminal)
   --dry-run            With --fix, print the fixes it would apply; change nothing
+  --timings            Also time each prompt module in the current folder and suggest
+                       fixes for slow ones: the config Starship loads here
+                       ($STARSHIP_CONFIG, else ~/.config/starship.toml, else its
+                       built-in default). Modules run in parallel, so the prompt is
+                       about as slow as its slowest one.
+  --config <file>      With --timings, time this starship.toml instead
   Without --state it checks the shells that were set up, not every installed one.
   rollback puts back the files --fix changed (not a reinstalled Starship or font).
 
@@ -202,15 +206,6 @@ rollback options (undoes the newest run that changed files; asks first):
 debug-info options (reads only; e.g. shell-configurator debug-info > issue.md):
   --json               Print the report data as JSON instead of Markdown
   Your home directory is shown as ~ so the report does not name you.
-
-timings options (changes no config; times the modules in the current folder):
-  Without flags it times the config Starship loads here: $STARSHIP_CONFIG, else
-  ~/.config/starship.toml, else Starship's built-in default prompt.
-  --config <file>      Time this starship.toml instead
-  --json               Print the timings and suggestions as JSON
-  The look flags (--preset, --palette, --font, --state, ...) time a config built
-  from them. Modules run in parallel, so the prompt is about as slow as its
-  slowest one.
 
 completions (install the script where your shell loads completions from):
   bash   shell-configurator completions bash > ~/.local/share/bash-completion/completions/shell-configurator
@@ -261,6 +256,7 @@ function presentFlags(flags: CliFlags): string[] {
     [flags.json, '--json'],
     [flags.markdown, '--markdown'],
     [flags.fix, '--fix'],
+    [flags.timings, '--timings'],
     [flags.includeWarnings, '--include-warnings'],
     [flags.yes, '--yes'],
     [flags.starship, '--starship'],
@@ -311,7 +307,8 @@ function warnIgnoredFlags(flags: CliFlags, subcommand: string): void {
 export async function runDoctorCommand(
   flags: CliFlags,
   command: string,
-  io: PromptIo = DEFAULT_PROMPT_IO
+  io: PromptIo = DEFAULT_PROMPT_IO,
+  probeDeps: ProbeDeps = DEFAULT_PROBE_DEPS
 ): Promise<void> {
   if (flags.fix) {
     await runRepairCommand(flags, command, io);
@@ -320,12 +317,27 @@ export async function runDoctorCommand(
   warnIgnoredFlags(flags, 'doctor');
   const state = flags.stateFile ? stateFromFlags(flags) : null;
   const report = await runDoctor(state);
+  let timings: PromptTimings | { error: string } | undefined;
+  if (flags.timings) {
+    try {
+      timings = await timeActivePrompt(flags.configFile, probeDeps);
+    } catch (err) {
+      if (err instanceof CliUsageError) throw err;
+      timings = { error: errorMessage(err) };
+    }
+  }
   if (flags.json) {
-    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    const data = timings ? { ...report, timings } : report;
+    process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
   } else {
     process.stdout.write(formatDoctorReport(report));
+    if (timings && 'error' in timings) {
+      process.stdout.write(`\nCould not time the prompt: ${timings.error}\n`);
+    } else if (timings) {
+      process.stdout.write(`\n${formatTimings(timings, timings.config)}`);
+    }
   }
-  if (!report.ok) process.exitCode = 1;
+  if (!report.ok || (timings && 'error' in timings)) process.exitCode = 1;
 }
 
 export async function runRepairCommand(
@@ -589,54 +601,32 @@ export async function runRollbackCommand(
   }
 }
 
-export async function runTimingsCommand(
-  flags: CliFlags,
+export interface PromptTimings extends TimingsReport {
+  config: string;
+}
+
+/** Times the config Starship loads in this folder, or `configFile`, module by module. */
+export async function timeActivePrompt(
+  configFile: string | undefined,
   deps: ProbeDeps = DEFAULT_PROBE_DEPS
-): Promise<void> {
-  const building = presentFlags(flags).filter((flag) => flag !== '--config' && flag !== '--json');
-  if (flags.configFile && building.length > 0) {
-    throw new CliUsageError(
-      `--config times an existing file, so ${building.join(', ')} cannot be used with it.`
-    );
-  }
+): Promise<PromptTimings> {
+  const active: ActiveConfig = configFile
+    ? { kind: 'file', path: configFile }
+    : activeStarshipConfig();
   let source: { toml: string; path?: string };
   let config: string;
-  if (building.length > 0) {
-    const state = stateFromFlags(flags);
-    if (state.keepExistingConfig) {
-      throw new CliUsageError(
-        `An adopt-mode card keeps your own config, so there is nothing to build; time it with --config ${getSharedConfigPath()}.`
-      );
+  if (active.kind === 'file') {
+    try {
+      source = { toml: readFileSync(active.path, 'utf8'), path: active.path };
+    } catch (err) {
+      throw new CliUsageError(`Could not read '${active.path}': ${errorMessage(err)}`);
     }
-    source = { toml: generateToml(state) };
-    config = 'built from the flags';
+    config = active.path;
   } else {
-    const active: ActiveConfig = flags.configFile
-      ? { kind: 'file', path: flags.configFile }
-      : activeStarshipConfig();
-    if (active.kind === 'file') {
-      try {
-        source = { toml: readFileSync(active.path, 'utf8'), path: active.path };
-      } catch (err) {
-        throw new CliUsageError(`Could not read '${active.path}': ${errorMessage(err)}`);
-      }
-      config = active.path;
-    } else {
-      source = { toml: '', path: active.path };
-      config = `Starship's built-in default prompt, since ${active.reason}`;
-    }
+    source = { toml: '', path: active.path };
+    config = `Starship's built-in default prompt, since ${active.reason}`;
   }
-  let report: TimingsReport;
-  try {
-    report = await timePrompt(source, process.cwd(), deps);
-  } catch (err) {
-    throw new CliRunError(errorMessage(err));
-  }
-  process.stdout.write(
-    flags.json
-      ? `${JSON.stringify({ config, ...report }, null, 2)}\n`
-      : formatTimings(report, config)
-  );
+  return { config, ...(await timePrompt(source, process.cwd(), deps)) };
 }
 
 const NOT_SHARED_FLAGS: Array<[keyof CliFlags, string]> = [
@@ -734,8 +724,15 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.starship && flags.subcommand !== 'uninstall') {
     throw new CliUsageError('--starship only applies to uninstall.');
   }
-  if (flags.configFile && flags.subcommand !== 'timings') {
-    throw new CliUsageError('--config only applies to timings.');
+  const timesPrompt = flags.subcommand === 'doctor' && flags.timings;
+  if (flags.timings && flags.subcommand !== 'doctor') {
+    throw new CliUsageError('--timings only applies to doctor.');
+  }
+  if (flags.configFile && !timesPrompt) {
+    throw new CliUsageError('--config only applies to doctor --timings.');
+  }
+  if (timesPrompt && flags.fix) {
+    throw new CliUsageError('--timings cannot be used with --fix.');
   }
   if ((flags.list || flags.runId) && flags.subcommand !== 'rollback') {
     throw new CliUsageError(`${flags.list ? '--list' : '--run'} only applies to rollback.`);
@@ -755,10 +752,6 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   }
   if (flags.subcommand === 'list') {
     runListCommand(flags);
-    return true;
-  }
-  if (flags.subcommand === 'timings') {
-    await runTimingsCommand(flags);
     return true;
   }
   if (flags.subcommand === 'uninstall') {

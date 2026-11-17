@@ -67,7 +67,8 @@ export const FLAGS = {
   uninstallFont: flag('--font', 'Also remove this Nerd Font', FONT_IDS),
   list: flag('--list', 'List the runs that changed files'),
   run: flag('--run', 'Roll back this run (an id from --list)', 'text'),
-  config: flag('--config', 'Time this starship.toml instead of the one Starship loads now', 'file'),
+  timings: flag('--timings', 'Also time each prompt module in this folder'),
+  config: flag('--config', 'With --timings, time this starship.toml instead', 'file'),
 } satisfies Record<string, FlagInfo>;
 
 export const GLOBAL_FLAGS: readonly FlagInfo[] = [FLAGS.help, FLAGS.version];
@@ -86,19 +87,6 @@ const CONFIG_FLAGS = [
   FLAGS.character,
   FLAGS.setDefault,
   FLAGS.skipStarship,
-  FLAGS.state,
-  FLAGS.import,
-];
-
-const LOOK_FLAGS = [
-  FLAGS.preset,
-  FLAGS.palette,
-  FLAGS.powerline,
-  FLAGS.noPowerline,
-  FLAGS.font,
-  FLAGS.hasNerdFont,
-  FLAGS.noNerdFont,
-  FLAGS.character,
   FLAGS.state,
   FLAGS.import,
 ];
@@ -139,6 +127,8 @@ export const SUBCOMMAND_INFO: Record<Subcommand, SubcommandInfo> = {
       FLAGS.includeWarnings,
       FLAGS.yes,
       FLAGS.dryRun,
+      FLAGS.timings,
+      FLAGS.config,
     ],
   },
   uninstall: {
@@ -162,9 +152,5 @@ export const SUBCOMMAND_INFO: Record<Subcommand, SubcommandInfo> = {
     description: 'List the presets, modules or fonts the flags accept',
     flags: [{ ...FLAGS.json, description: 'Print the list as JSON' }],
     argument: { values: LIST_KINDS, describe: (kind) => `list the ${kind}` },
-  },
-  timings: {
-    description: 'Time each prompt module here and suggest fixes for slow ones',
-    flags: [...LOOK_FLAGS, FLAGS.config, FLAGS.json],
   },
 };
