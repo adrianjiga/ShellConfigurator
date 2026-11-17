@@ -59,6 +59,7 @@ export const FLAGS = {
   adopt: flag('--adopt', 'Keep the existing shared starship.toml'),
   importUrl: flag('--import-url', 'Fetch a starship.toml over https and adopt it', 'text'),
   json: flag('--json', 'Print the report as JSON'),
+  markdown: flag('--markdown', 'Print the prompt as Markdown to share, with its card'),
   fix: flag('--fix', 'Apply the fixes for failing checks'),
   includeWarnings: flag('--include-warnings', 'Also apply the fixes warnings suggest'),
   yes: flag('--yes', 'Go ahead without asking', undefined, '-y'),
@@ -122,7 +123,7 @@ export type ListKind = (typeof LIST_KINDS)[number];
 export const SUBCOMMAND_INFO: Record<Subcommand, SubcommandInfo> = {
   generate: {
     description: 'Render a starship.toml from flags',
-    flags: [...CONFIG_FLAGS, FLAGS.output, FLAGS.export, FLAGS.dryRun],
+    flags: [...CONFIG_FLAGS, FLAGS.output, FLAGS.export, FLAGS.dryRun, FLAGS.markdown],
   },
   apply: {
     description: 'Run a full install headlessly',
@@ -165,9 +166,5 @@ export const SUBCOMMAND_INFO: Record<Subcommand, SubcommandInfo> = {
   timings: {
     description: 'Time each prompt module here and suggest fixes for slow ones',
     flags: [...LOOK_FLAGS, FLAGS.config, FLAGS.json],
-  },
-  share: {
-    description: 'Print the prompt as Markdown to share, with the card that rebuilds it',
-    flags: [...LOOK_FLAGS, { ...FLAGS.output, description: 'Write the Markdown to this file' }],
   },
 };

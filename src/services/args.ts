@@ -19,8 +19,7 @@ export type Subcommand =
   | 'debug-info'
   | 'completions'
   | 'list'
-  | 'timings'
-  | 'share';
+  | 'timings';
 
 export const SUBCOMMANDS: readonly Subcommand[] = [
   'generate',
@@ -32,7 +31,6 @@ export const SUBCOMMANDS: readonly Subcommand[] = [
   'completions',
   'list',
   'timings',
-  'share',
 ];
 
 export interface CliFlags {
@@ -64,6 +62,8 @@ export interface CliFlags {
   /** Write the versioned state card here (add -o to keep the TOML too) (--export). */
   exportFile?: string;
   dryRun?: boolean;
+  /** Print the prompt as Markdown to share, with the card that rebuilds it (--markdown). */
+  markdown?: boolean;
   /** Emit machine-readable output instead of the human report (--json). */
   json?: boolean;
   /** Apply the repairs the doctor can perform (--fix). */
@@ -126,6 +126,9 @@ const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> 
   },
   '--json': (r, v) => {
     r.json = v;
+  },
+  '--markdown': (r, v) => {
+    r.markdown = v;
   },
   '--fix': (r, v) => {
     r.fix = v;
@@ -192,6 +195,7 @@ const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
 
 const RETIRED_SUBCOMMANDS: Record<string, string> = {
   repair: 'repair is gone: shell-configurator doctor --fix applies the same fixes.',
+  share: 'share is gone: shell-configurator generate --markdown prints the same Markdown.',
 };
 
 const RETIRED_FLAGS: Record<string, string> = {

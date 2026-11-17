@@ -87,9 +87,9 @@ import {
   runDebugInfoCommand,
   runGlobalFlags,
   runHeadlessCommand,
+  runMarkdownCommand,
   runRepairCommand,
   runRollbackCommand,
-  runShareCommand,
   runTimingsCommand,
   runUninstallCommand,
   type UninstallIo,
@@ -1614,9 +1614,9 @@ describe('index timings command', () => {
       await expect(
         runTimingsCommand(parseCliArgs(['timings', '--state', card]), deps())
       ).rejects.toThrow(/adopt-mode card keeps your own config.*--config .*starship\.toml/);
-      expect(() => runShareCommand(parseCliArgs(['share', '--state', card]))).toThrow(
-        /adopt-mode card keeps your own config, so there is no generated prompt to share/
-      );
+      expect(() =>
+        runMarkdownCommand(parseCliArgs(['generate', '--markdown', '--state', card]))
+      ).toThrow(/adopt-mode card keeps your own config, so there is no generated prompt to share/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -1629,7 +1629,7 @@ describe('index timings command', () => {
   });
 });
 
-describe('index share command', () => {
+describe('index generate --markdown', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
   const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
   beforeEach(() => {
@@ -1637,8 +1637,11 @@ describe('index share command', () => {
   });
   afterEach(() => stdoutWrite.mockRestore());
 
-  it('prints the prompt the flags build as Markdown', () => {
-    runShareCommand(parseCliArgs(['share', '--preset', 'pure-prompt']));
+  it('prints the prompt the flags build as Markdown', async () => {
+    await runHeadlessCommand(
+      parseCliArgs(['generate', '--markdown', '--preset', 'pure-prompt']),
+      ''
+    );
     expect(output()).toMatch(/^# Starship prompt: Pure Prompt\n/);
     expect(output()).toContain('```toml');
   });
@@ -1647,7 +1650,7 @@ describe('index share command', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-share-cli-'));
     const file = path.join(dir, 'prompt.md');
     try {
-      runShareCommand(parseCliArgs(['share', '-o', file]));
+      runMarkdownCommand(parseCliArgs(['generate', '--markdown', '-o', file]));
       expect(fs.readFileSync(file, 'utf8')).toContain('## starship.toml');
       expect(output()).toBe(`Wrote ${file}\n`);
     } finally {
@@ -1656,14 +1659,30 @@ describe('index share command', () => {
   });
 
   it.each([
-    [['--shells', 'zsh'], /--shells cannot be used with share/],
-    [['--json'], /--json cannot be used with share/],
+    [['--shells', 'zsh'], /--shells cannot be used with generate --markdown/],
+    [['--export', 'card.json'], /--export cannot be used with generate --markdown/],
+    [['--json'], /--json cannot be used with generate/],
   ])('rejects %o', async (args, message) => {
-    await expect(runHeadlessCommand(parseCliArgs(['share', ...args]), '')).rejects.toThrow(message);
+    await expect(
+      runHeadlessCommand(parseCliArgs(['generate', '--markdown', ...args]), '')
+    ).rejects.toThrow(message);
   });
 
-  it('documents share in the help text', () => {
+  it('rejects --markdown outside generate', async () => {
+    await expect(
+      runHeadlessCommand(parseCliArgs(['apply', '--markdown', '--shells', 'zsh']), '')
+    ).rejects.toThrow('--markdown cannot be used with apply.');
+  });
+
+  it('points the retired share at generate --markdown', () => {
+    expect(() => parseCliArgs(['share'])).toThrow(
+      'share is gone: shell-configurator generate --markdown prints the same Markdown.'
+    );
+  });
+
+  it('documents --markdown in the help text', () => {
     runGlobalFlags(parseCliArgs(['--help']));
-    expect(output()).toContain('shell-configurator share');
+    expect(output()).toContain('--markdown');
+    expect(output()).not.toContain('shell-configurator share');
   });
 });

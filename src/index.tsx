@@ -116,7 +116,7 @@ Interactive terminal wizard for configuring Starship.
 
 Usage:
   shell-configurator              start the wizard
-  shell-configurator generate     render a starship.toml from flags
+  shell-configurator generate     render a starship.toml from flags (--markdown to share it)
   shell-configurator apply        run a full install headlessly
   shell-configurator doctor       check the setup; --fix repairs what it finds
   shell-configurator uninstall    remove what the wizard set up
@@ -125,7 +125,6 @@ Usage:
   shell-configurator list <presets|modules|fonts>  list the ids the flags accept (--json for data)
   shell-configurator completions <bash|zsh|fish>   print a shell completion script
   shell-configurator timings      time each prompt module here and suggest fixes for slow ones
-  shell-configurator share        print the prompt as Markdown to share, with the card that rebuilds it
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
@@ -153,6 +152,10 @@ generate options (the config — a versioned state card with --export):
   -o, --output <file>  Write the TOML here instead of stdout
   --export <file>      Write the state card here (add -o to keep the TOML too)
   --import, --state <file>  Start from a saved state card instead of flags
+  --markdown           Print the prompt as Markdown to share, with the card that
+                       rebuilds it (-o writes it to a file). The card has no shells
+                       or font install of this machine; whoever uses it adds
+                       --shells (and --font) to apply.
 
 apply options (a headless install from a state card):
   --state <file>       The state card describing the install (also: --import)
@@ -209,11 +212,6 @@ timings options (changes no config; times the modules in the current folder):
   from them. Modules run in parallel, so the prompt is about as slow as its
   slowest one.
 
-share options (takes the look flags, e.g. shell-configurator share --preset tokyo-night):
-  -o, --output <file>  Write the Markdown to this file instead of stdout
-  The card it prints has no shells or font install of this machine; whoever uses
-  it adds --shells (and --font) to apply.
-
 completions (install the script where your shell loads completions from):
   bash   shell-configurator completions bash > ~/.local/share/bash-completion/completions/shell-configurator
   zsh    shell-configurator completions zsh > "\${fpath[1]}/_shell-configurator"
@@ -261,6 +259,7 @@ function presentFlags(flags: CliFlags): string[] {
     [flags.stateFile, '--state'],
     [flags.dryRun, '--dry-run'],
     [flags.json, '--json'],
+    [flags.markdown, '--markdown'],
     [flags.fix, '--fix'],
     [flags.includeWarnings, '--include-warnings'],
     [flags.yes, '--yes'],
@@ -640,7 +639,21 @@ export async function runTimingsCommand(
   );
 }
 
-export function runShareCommand(flags: CliFlags): void {
+const NOT_SHARED_FLAGS: Array<[keyof CliFlags, string]> = [
+  ['shells', '--shells'],
+  ['setDefaultShell', '--set-default'],
+  ['skipStarship', '--skip-starship'],
+  ['exportFile', '--export'],
+  ['dryRun', '--dry-run'],
+];
+
+export function runMarkdownCommand(flags: CliFlags): void {
+  const refused = NOT_SHARED_FLAGS.filter(([key]) => flags[key]).map(([, name]) => name);
+  if (refused.length > 0) {
+    throw new CliUsageError(
+      `${refused.join(', ')} cannot be used with generate --markdown, which shares the look only.`
+    );
+  }
   const state = stateFromFlags(flags);
   if (state.keepExistingConfig) {
     throw new CliUsageError(
@@ -748,16 +761,13 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
     await runTimingsCommand(flags);
     return true;
   }
-  if (flags.subcommand === 'share') {
-    runShareCommand(flags);
-    return true;
-  }
   if (flags.subcommand === 'uninstall') {
     await runUninstallCommand(flags, command);
     return true;
   }
   if (flags.subcommand === 'generate') {
-    runGenerate(flags);
+    if (flags.markdown) runMarkdownCommand(flags);
+    else runGenerate(flags);
     return true;
   }
   if (flags.subcommand === 'apply') {
@@ -780,6 +790,7 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.stateFile) dropped.push('--state');
   if (flags.json) dropped.push('--json');
   if (flags.fix) dropped.push('--fix');
+  if (flags.markdown) dropped.push('--markdown');
   if (dropped.length > 0) {
     throw new CliUsageError(
       `${dropped.join(', ')} require a subcommand (${SUBCOMMANDS.join(', ')}).`
