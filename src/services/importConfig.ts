@@ -154,36 +154,50 @@ export function customCommands(toml: string): string[] {
     const escapedKey = /^[^=]*\\[uU]/.test(line) || /^\s*\[[^\]]*\\[uU]/.test(line);
     if (!header && !escapedKey && !key.test(line)) continue;
     found.push(line.trim());
-    const quote = /("""|''')/.exec(line)?.[1];
-    if (quote && line.split(quote).length === 2) {
-      while (++i < lines.length) {
-        found.push(lines[i]!.trim());
-        if (lines[i]!.includes(quote)) break;
-      }
-      continue;
-    }
-    if (header) continue;
-    let depth = openBrackets(line.slice(line.indexOf('=') + 1));
-    while (depth > 0 && ++i < lines.length) {
+    if (header || !line.includes('=')) continue;
+    let value = scanValue(line.slice(line.indexOf('=') + 1), { depth: 0, multiline: null });
+    while ((value.depth > 0 || value.multiline) && ++i < lines.length) {
       found.push(lines[i]!.trim());
-      depth += openBrackets(lines[i]!);
+      value = scanValue(lines[i]!, value);
     }
   }
   return found;
 }
 
-function openBrackets(text: string): number {
-  let depth = 0;
-  let quote: string | null = null;
-  for (let i = 0; i < text.length; i++) {
+interface ValueScan {
+  depth: number;
+  multiline: '"""' | "'''" | null;
+}
+
+function scanValue(text: string, from: ValueScan): ValueScan {
+  let { depth, multiline } = from;
+  let i = 0;
+  while (i < text.length) {
+    if (multiline) {
+      if (multiline === '"""' && text[i] === '\\') {
+        i += 2;
+      } else if (text.startsWith(multiline, i)) {
+        while (text[i] === multiline[0]) i++;
+        multiline = null;
+      } else {
+        i++;
+      }
+      continue;
+    }
     const c = text[i];
-    if (quote) {
-      if (c === '\\' && quote === '"') i++;
-      else if (c === quote) quote = null;
-    } else if (c === '"' || c === "'") quote = c;
-    else if (c === '#') break;
-    else if (c === '[') depth++;
-    else if (c === ']') depth--;
+    if (c === '#') break;
+    if (text.startsWith('"""', i) || text.startsWith("'''", i)) {
+      multiline = text.slice(i, i + 3) as '"""' | "'''";
+      i += 3;
+    } else if (c === '"' || c === "'") {
+      i++;
+      while (i < text.length && text[i] !== c) i += c === '"' && text[i] === '\\' ? 2 : 1;
+      i++;
+    } else {
+      if (c === '[') depth++;
+      else if (c === ']') depth--;
+      i++;
+    }
   }
-  return depth;
+  return { depth, multiline };
 }
