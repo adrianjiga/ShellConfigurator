@@ -2,10 +2,15 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getShell } from '../config/shells.ts';
 import { homeDir } from '../services/paths.ts';
-import { assertWritable, keepOriginal, readTextToRewrite, writeFileAtomic } from './fileWrite.ts';
+import {
+  assertWritable,
+  keepOriginal,
+  type RemovalResult,
+  readTextToRewrite,
+  writeFileAtomic,
+} from './fileWrite.ts';
 import { FS_RC_IO, type RcIo, reachableSome, sourcedFiles } from './rcInit.ts';
 import { appendManagedBlock, hasLine, keepLineEndings } from './rcLines.ts';
-import type { RemovalResult } from './shellRc.ts';
 
 const BASH_LOGIN_FILES = ['.bash_profile', '.bash_login', '.profile'];
 

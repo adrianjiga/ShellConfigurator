@@ -11,6 +11,11 @@ export function assertWritable(filePath: string): void {
   if (fs.existsSync(filePath)) fs.accessSync(filePath, fs.constants.W_OK);
 }
 
+export interface RemovalResult {
+  removed: boolean;
+  note?: string;
+}
+
 export const ORIGINAL_SUFFIX = '.pre-shell-configurator';
 
 export interface KeepOriginalOptions {
