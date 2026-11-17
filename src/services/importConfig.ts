@@ -140,8 +140,8 @@ export async function fetchImportedConfig(
 /**
  * Every line of `toml` that may set a command Starship runs on every prompt: a
  * `command`, `when` or `shell` key in any form (dotted, quoted, inline table),
- * a `custom` table header, and the rest of a multi-line string such a key
- * starts.
+ * a `custom` table header, and the rest of a multi-line string or array such
+ * a key starts.
  */
 export function customCommands(toml: string): string[] {
   const lines = toml.split(/\r?\n/);
@@ -160,7 +160,30 @@ export function customCommands(toml: string): string[] {
         found.push(lines[i]!.trim());
         if (lines[i]!.includes(quote)) break;
       }
+      continue;
+    }
+    if (header) continue;
+    let depth = openBrackets(line.slice(line.indexOf('=') + 1));
+    while (depth > 0 && ++i < lines.length) {
+      found.push(lines[i]!.trim());
+      depth += openBrackets(lines[i]!);
     }
   }
   return found;
+}
+
+function openBrackets(text: string): number {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quote) {
+      if (c === '\\' && quote === '"') i++;
+      else if (c === quote) quote = null;
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === '#') break;
+    else if (c === '[') depth++;
+    else if (c === ']') depth--;
+  }
+  return depth;
 }
