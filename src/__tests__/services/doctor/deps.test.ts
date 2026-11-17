@@ -2,7 +2,14 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../../services/exec.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../services/exec.ts')>()),
+  runCapture: vi.fn(),
+}));
+
 import { DEFAULT_DOCTOR_DEPS } from '../../../services/doctor/deps.ts';
+import { runCapture } from '../../../services/exec.ts';
 import { stubPlatform } from '../../helpers/platform.ts';
 
 describe('DEFAULT_DOCTOR_DEPS', () => {
@@ -56,5 +63,35 @@ describe('DEFAULT_DOCTOR_DEPS.hasNerdFonts', () => {
     add('JetBrainsMonoNerdFont-Regular.ttf');
     expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('FiraCode')).toBe(false);
     expect(DEFAULT_DOCTOR_DEPS.hasNerdFonts('JetBrainsMono')).toBe(true);
+  });
+});
+
+describe('DEFAULT_DOCTOR_DEPS.hasBundledNerdFonts', () => {
+  afterEach(() => vi.mocked(runCapture).mockReset());
+
+  it('counts Ghostty as drawing Nerd Font symbols itself, without asking it', async () => {
+    await expect(DEFAULT_DOCTOR_DEPS.hasBundledNerdFonts('ghostty')).resolves.toBe(true);
+    expect(runCapture).not.toHaveBeenCalled();
+  });
+
+  it('counts no other terminal but kitty', async () => {
+    await expect(DEFAULT_DOCTOR_DEPS.hasBundledNerdFonts('alacritty')).resolves.toBe(false);
+    expect(runCapture).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['kitty 0.36.0 created by Kovid Goyal', true],
+    ['kitty 1.0.0', true],
+    ['kitty 0.35.2', false],
+    ['kitty, version unknown', false],
+  ])('reads kitty --version %o as %s', async (output, bundled) => {
+    vi.mocked(runCapture).mockResolvedValueOnce(output);
+    await expect(DEFAULT_DOCTOR_DEPS.hasBundledNerdFonts('kitty')).resolves.toBe(bundled);
+    expect(runCapture).toHaveBeenCalledWith('kitty', ['--version']);
+  });
+
+  it('counts kitty as not bundling them when kitty --version fails', async () => {
+    vi.mocked(runCapture).mockRejectedValueOnce(new Error('not found'));
+    await expect(DEFAULT_DOCTOR_DEPS.hasBundledNerdFonts('kitty')).resolves.toBe(false);
   });
 });

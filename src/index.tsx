@@ -64,7 +64,7 @@ export function assertWizardTerminal(
   );
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const { handled, flags } = await routeCli(process.argv.slice(2));
   if (handled) return;
   assertWizardTerminal();
