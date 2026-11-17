@@ -208,19 +208,30 @@ export function assertShare(homeDir) {
   );
 }
 
-/** Asserts `timings` times the config a real apply wrote, as JSON. */
+/**
+ * Asserts `doctor --timings` times the config a real apply wrote, as JSON. A
+ * failing health check in the container exits 1 too, so only the timings count.
+ */
 export function assertTimings(configPath) {
-  const report = JSON.parse(runCli(['timings', '--json', '--config', configPath]));
-  assert.equal(
-    report.config,
-    configPath,
-    `timings timed the wrong config:\n${JSON.stringify(report)}`
-  );
+  const args = ['doctor', '--timings', '--json', '--config', configPath];
+  let out;
+  try {
+    out = execFileSync(process.execPath, [entry, ...args], { encoding: 'utf8' });
+  } catch (err) {
+    if (err.status !== 1)
+      throw new Error(
+        `shell-configurator ${args.join(' ')} exited ${err.status}:\n${err.stdout ?? ''}${err.stderr ?? ''}`
+      );
+    out = err.stdout;
+  }
+  const timings = JSON.parse(out).timings;
+  assert.equal(timings?.config, configPath, `doctor --timings timed the wrong config:\n${out}`);
   assert.ok(
-    Array.isArray(report.modules) && report.modules.some((timing) => timing.module === 'character'),
-    `timings reported no character module:\n${JSON.stringify(report)}`
+    Array.isArray(timings.modules) &&
+      timings.modules.some((timing) => timing.module === 'character'),
+    `doctor --timings reported no character module:\n${out}`
   );
-  assert.equal(typeof report.slowestMs, 'number', 'timings reported no slowest module');
+  assert.equal(typeof timings.slowestMs, 'number', 'doctor --timings reported no slowest module');
 }
 
 /** The WHAT-CHANGED.md path the CLI writes in this scratch home. */
