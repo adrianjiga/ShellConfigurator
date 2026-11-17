@@ -75,7 +75,13 @@ import type { PromptIo } from '../../../cli/prompt.ts';
 import { runGlobalFlags, runHeadlessCommand } from '../../../cli/route.ts';
 import { parseCliArgs } from '../../../services/args.ts';
 import { appendHistory } from '../../../services/history.ts';
-import { beginRunCapture, finishRunCapture, runDir } from '../../../services/runCapture.ts';
+import {
+  beginRunCapture,
+  CapturedRunError,
+  captureRun,
+  finishRunCapture,
+  runDir,
+} from '../../../services/runCapture.ts';
 import { restoreEnv } from '../../helpers/env.ts';
 
 let scratchHome: string;
@@ -165,6 +171,26 @@ describe('index rollback command', () => {
       runId: null,
       rollbackOf: second,
       partial: false,
+    });
+  });
+
+  it('still records a rollback that throws partway, as partial', async () => {
+    fs.writeFileSync(rc(), 'zero');
+    const runId = recordedRun('install', 'one');
+    vi.mocked(captureRun).mockRejectedValueOnce(
+      new CapturedRunError('run-9', new Error('disk gone'))
+    );
+
+    await expect(
+      runRollbackCommand(parseCliArgs(['rollback', '--yes']), 'rollback --yes', io())
+    ).rejects.toThrow('disk gone');
+    expect(mockRecordRun).toHaveBeenCalledWith({
+      kind: 'rollback',
+      command: 'rollback --yes',
+      exitCode: 1,
+      runId: 'run-9',
+      rollbackOf: runId,
+      partial: true,
     });
   });
 

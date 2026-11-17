@@ -6,10 +6,12 @@ import {
   formatRollbackReport,
   formatRollbackRuns,
   planRollback,
+  type RollbackReport,
   rollbackRunsWithManifests,
   runRollback,
 } from '../../services/rollback.ts';
 import {
+  CapturedRunError,
   captureRun,
   interruptedRunCount,
   recoverInterruptedRuns,
@@ -84,17 +86,32 @@ export async function runRollbackCommand(
     if (!proceed) return;
   }
 
-  const { result: report, runId } = changes
-    ? await captureRun(
-        manifest.files.map((file) => file.path),
-        async () => runRollback(target.runId, steps),
-        {
-          rewritable: manifest.files.filter((file) => file.rewritable).map((file) => file.path),
-          record: { kind: 'rollback', command, rollbackOf: target.runId },
-          recovered: true,
-        }
-      )
-    : { result: runRollback(target.runId, steps, { dryRun }), runId: null };
+  let captured: { result: RollbackReport; runId: string | null };
+  try {
+    captured = changes
+      ? await captureRun(
+          manifest.files.map((file) => file.path),
+          async () => runRollback(target.runId, steps),
+          {
+            rewritable: manifest.files.filter((file) => file.rewritable).map((file) => file.path),
+            record: { kind: 'rollback', command, rollbackOf: target.runId },
+            recovered: true,
+          }
+        )
+      : { result: runRollback(target.runId, steps, { dryRun }), runId: null };
+  } catch (err) {
+    if (!(err instanceof CapturedRunError)) throw err;
+    recordRunSafely({
+      kind: 'rollback',
+      command,
+      exitCode: 1,
+      runId: err.runId,
+      rollbackOf: target.runId,
+      partial: true,
+    });
+    throw err.cause;
+  }
+  const { result: report, runId } = captured;
   const alreadyBack = !changes && !dryRun && report.complete && !target.rolledBack;
   process.stdout.write(
     flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatRollbackReport(report)

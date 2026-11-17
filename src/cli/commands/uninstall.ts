@@ -2,7 +2,7 @@ import { ORIGINAL_SUFFIX } from '../../generators/fileWrite.ts';
 import type { CliFlags } from '../../services/args.ts';
 import { CliUsageError } from '../../services/errors.ts';
 import { recordRunSafely } from '../../services/history.ts';
-import { captureRun, trackedFiles } from '../../services/runCapture.ts';
+import { CapturedRunError, captureRun, trackedFiles } from '../../services/runCapture.ts';
 import { validateFlagValues } from '../../services/stateFlags.ts';
 import {
   DEFAULT_UNINSTALL_DEPS,
@@ -10,6 +10,7 @@ import {
   planUninstall,
   runUninstall,
   type UninstallDeps,
+  type UninstallReport,
 } from '../../services/uninstall.ts';
 import type { ShellId } from '../../types.ts';
 import { confirmChanges, DEFAULT_PROMPT_IO, type PromptIo } from '../prompt.ts';
@@ -56,17 +57,21 @@ export async function runUninstallCommand(
     if (!proceed) return;
   }
 
-  const {
-    result: report,
-    runId,
-    uncaptured,
-  } = changes
-    ? await captureRun(
-        trackedFiles(),
-        (notCapturing) => runUninstall(steps, { keepConfigs: notCapturing }),
-        { record: { kind: 'uninstall', command } }
-      )
-    : { result: await runUninstall(steps, { dryRun }), runId: null, uncaptured: false };
+  let captured: { result: UninstallReport; runId: string | null; uncaptured: boolean };
+  try {
+    captured = changes
+      ? await captureRun(
+          trackedFiles(),
+          (notCapturing) => runUninstall(steps, { keepConfigs: notCapturing }),
+          { record: { kind: 'uninstall', command } }
+        )
+      : { result: await runUninstall(steps, { dryRun }), runId: null, uncaptured: false };
+  } catch (err) {
+    if (!(err instanceof CapturedRunError)) throw err;
+    recordRunSafely({ kind: 'uninstall', command, exitCode: 1, runId: err.runId });
+    throw err.cause;
+  }
+  const { result: report, runId, uncaptured } = captured;
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {

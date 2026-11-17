@@ -74,7 +74,7 @@ import { runUninstallCommand, type UninstallIo } from '../../../cli/commands/uni
 import { runGlobalFlags, runHeadlessCommand } from '../../../cli/route.ts';
 import { parseCliArgs } from '../../../services/args.ts';
 import { CliUsageError } from '../../../services/errors.ts';
-import { captureRun } from '../../../services/runCapture.ts';
+import { CapturedRunError, captureRun } from '../../../services/runCapture.ts';
 import type { UninstallDeps } from '../../../services/uninstall.ts';
 import type { ShellId } from '../../../types.ts';
 
@@ -169,6 +169,22 @@ describe('index uninstall command', () => {
       command: 'uninstall',
       exitCode: 0,
       runId: 'run-9',
+    });
+  });
+
+  it('still records an uninstall that throws partway, so rollback can undo it', async () => {
+    vi.mocked(captureRun).mockRejectedValueOnce(
+      new CapturedRunError('run-7', new Error('rc vanished'))
+    );
+
+    await expect(
+      runUninstallCommand(parseCliArgs(['uninstall', '--yes']), 'uninstall --yes', fakeIo())
+    ).rejects.toThrow('rc vanished');
+    expect(mockRecordRun).toHaveBeenCalledWith({
+      kind: 'uninstall',
+      command: 'uninstall --yes',
+      exitCode: 1,
+      runId: 'run-7',
     });
   });
 
