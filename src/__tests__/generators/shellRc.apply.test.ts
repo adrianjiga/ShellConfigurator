@@ -20,21 +20,12 @@ vi.mock('fs', () => ({
   rmSync: vi.fn(),
 }));
 
-function expectBefore(text: string, first: string, second: string): void {
-  expect(text.indexOf(first)).toBeGreaterThanOrEqual(0);
-  expect(text.indexOf(second)).toBeGreaterThan(text.indexOf(first));
-}
-
-/** The content of the module's last atomic write (the temp-file write). */
-function lastWrittenContent(): string {
-  return vi.mocked(fs.writeFileSync).mock.calls.at(-1)?.[1] as string;
-}
-
 import * as fs from 'node:fs';
 import { getShell, posixShellQuote } from '../../config/shells.ts';
 import { applyShellConfig } from '../../generators/shellRc.ts';
 import { hasBinary } from '../helpers/binaries.ts';
 import { stubPlatform } from '../helpers/platform.ts';
+import { expectBefore, lastWrittenContent } from '../helpers/rcWrites.ts';
 
 const expectedConfigPath = path.join(os.homedir(), '.config', 'starship', 'zsh.toml');
 const ownBin = posixShellQuote(path.join(os.homedir(), '.local', 'bin'));
