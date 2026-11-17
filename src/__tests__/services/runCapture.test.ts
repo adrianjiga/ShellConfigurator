@@ -181,7 +181,9 @@ describe('captureRun', () => {
   });
 
   it('has no id when the run changed nothing', async () => {
-    expect((await captureRun([file('rc')], async () => 'x')).runId).toBeNull();
+    const { result, runId } = await captureRun([file('rc')], async (uncaptured) => uncaptured);
+    expect(result).toBe(false);
+    expect(runId).toBeNull();
   });
 
   it('rejects with the runId of what the run had changed when it threw', async () => {
@@ -214,9 +216,11 @@ describe('captureRun', () => {
     fs.mkdirSync(path.dirname(runsDir()), { recursive: true });
     fs.writeFileSync(runsDir(), 'not a folder');
 
-    const { result, runId } = await captureRun([file('rc')], async () => 'ran');
+    const { result, runId } = await captureRun([file('rc')], async (uncaptured) =>
+      uncaptured ? 'ran uncaptured' : 'ran'
+    );
 
-    expect(result).toBe('ran');
+    expect(result).toBe('ran uncaptured');
     expect(runId).toBeNull();
   });
 });

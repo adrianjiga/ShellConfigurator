@@ -354,7 +354,7 @@ export function recoverInterruptedRuns(isAlive: IsAlive = processAlive): string[
  */
 export async function captureRun<T>(
   files: string[],
-  run: () => Promise<T>,
+  run: (uncaptured: boolean) => Promise<T>,
   options: CaptureOptions = {}
 ): Promise<{ result: T; runId: string | null }> {
   if (!options.recovered) recoverInterruptedRuns();
@@ -366,7 +366,7 @@ export async function captureRun<T>(
   }
   let result: T;
   try {
-    result = await run();
+    result = await run(capture === null);
   } catch (err) {
     throw new CapturedRunError(capture ? finishSafely(capture, options, err) : null, err);
   }

@@ -283,10 +283,14 @@ export async function planUninstall(
   return steps;
 }
 
-/** Runs the plan; a failed step does not stop the rest. With `dryRun` nothing runs. */
+/**
+ * Runs the plan; a failed step does not stop the rest. With `dryRun` nothing
+ * runs. With `keepConfigs` (a run rollback could not record) per-shell configs
+ * stay, since nothing could bring them back.
+ */
 export async function runUninstall(
   steps: UninstallStep[],
-  options: { dryRun?: boolean } = {}
+  options: { dryRun?: boolean; keepConfigs?: boolean } = {}
 ): Promise<UninstallReport> {
   const actions: UninstallAction[] = [];
   for (const { id, title, detail, run, after } of steps) {
@@ -302,6 +306,13 @@ export async function runUninstall(
       actions.push({ id, title, status: 'skipped', detail });
     } else if (options.dryRun) {
       actions.push({ id, title, status: 'planned', detail });
+    } else if (options.keepConfigs && id.startsWith('config_')) {
+      actions.push({
+        id,
+        title,
+        status: 'skipped',
+        detail: 'left in place: rollback could not record this run, so nothing could bring it back',
+      });
     } else {
       try {
         const { status = 'removed', ...outcome } = await run();

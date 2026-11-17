@@ -850,7 +850,7 @@ describe('runApply', () => {
     vi.mocked(captureRun).mockImplementationOnce(async (captured, run, options) => {
       expect(captured).toEqual([...trackedFiles(), whatChangedPath()]);
       expect(options?.rewritable).toEqual([whatChangedPath()]);
-      const result = await run();
+      const result = await run(false);
       options?.onChanged?.('run-3', files, undefined);
       return { result, runId: 'run-3' };
     });
@@ -900,7 +900,7 @@ describe('runApply', () => {
     );
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run, options) => {
       try {
-        return { result: await run(), runId: 'run-4' };
+        return { result: await run(false), runId: 'run-4' };
       } catch (err) {
         options?.onChanged?.('run-4', [], err);
         throw new CapturedRunError('run-4', err);
@@ -924,7 +924,7 @@ describe('runApply', () => {
   it('prints where the summary of what changed was written', async () => {
     mockRunInstallTasks.mockResolvedValue(doneTasks as never);
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run, options) => {
-      const result = await run();
+      const result = await run(false);
       options?.onChanged?.('run-5', [], undefined);
       return { result, runId: 'run-5' };
     });

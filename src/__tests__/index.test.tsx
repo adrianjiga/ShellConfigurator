@@ -621,7 +621,7 @@ describe('index headless routing', () => {
 
     it('applies the fixes inside a captured run, records it and points at rollback', async () => {
       vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
-        result: await run(),
+        result: await run(false),
         runId: 'run-7',
       }));
       const ask = io();
@@ -824,7 +824,7 @@ describe('index uninstall command', () => {
 
   it('removes everything once confirmed, records the run and points at rollback', async () => {
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
-      result: await run(),
+      result: await run(false),
       runId: 'run-9',
     }));
     const io = fakeIo();
@@ -846,7 +846,7 @@ describe('index uninstall command', () => {
 
   it('says rollback cannot bring back a removed Starship or font', async () => {
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
-      result: await run(),
+      result: await run(false),
       runId: 'run-9',
     }));
     const io = fakeIo(
@@ -869,6 +869,20 @@ describe('index uninstall command', () => {
     expect(output()).toContain(
       'Rollback only puts files back: reinstall Hack and Starship with shell-configurator apply or doctor --fix.'
     );
+  });
+
+  it('keeps the per-shell configs when the run could not be captured', async () => {
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
+      result: await run(true),
+      runId: null,
+    }));
+    const io = fakeIo();
+
+    await runUninstallCommand(parseCliArgs(['uninstall', '--yes']), 'uninstall --yes', io);
+
+    expect(io.deps.removeManagedRcBlocks).toHaveBeenCalledWith('zsh');
+    expect(io.deps.removeShellConfigFile).not.toHaveBeenCalled();
+    expect(output()).toContain('left in place: rollback could not record this run');
   });
 
   it('says rollback cannot undo a run that could not be captured, and where the originals are', async () => {

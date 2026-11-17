@@ -472,9 +472,11 @@ export async function runUninstallCommand(
   }
 
   const { result: report, runId } = changes
-    ? await captureRun(trackedFiles(), () => runUninstall(steps), {
-        record: { kind: 'uninstall', command },
-      })
+    ? await captureRun(
+        trackedFiles(),
+        (uncaptured) => runUninstall(steps, { keepConfigs: uncaptured }),
+        { record: { kind: 'uninstall', command } }
+      )
     : { result: await runUninstall(steps, { dryRun }), runId: null };
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

@@ -178,6 +178,20 @@ describe('runUninstall', () => {
     expect(deps.forgetStarshipVersion).toHaveBeenCalled();
   });
 
+  it('keeps the per-shell configs when the run cannot be recorded for rollback', async () => {
+    const deps = makeDeps(['zsh'], ['zsh']);
+
+    const report = await runUninstall(await planUninstall({}, deps), { keepConfigs: true });
+
+    expect(deps.removeManagedRcBlocks).toHaveBeenCalledWith('zsh');
+    expect(deps.removeShellConfigFile).not.toHaveBeenCalled();
+    expect(report.actions.find((a) => a.id === 'config_zsh')).toMatchObject({
+      status: 'skipped',
+      detail: 'left in place: rollback could not record this run, so nothing could bring it back',
+    });
+    expect(report.ok).toBe(true);
+  });
+
   it('deletes a script install binary', async () => {
     const plan = { kind: 'script' as const, path: '/h/.local/bin/starship' };
     const deps = makeDeps([], [], { plannedStarshipRemoval: vi.fn(async () => plan) });
