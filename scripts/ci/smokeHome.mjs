@@ -286,14 +286,14 @@ export function assertWhatChanged(out, rcPath) {
   );
 }
 
-/** Runs the list flags and `apply --dry-run --json` for real and parses what they print. */
+/** Runs `list` and `apply --dry-run --json` for real and parses what they print. */
 export function assertScriptingSurface() {
-  const presets = JSON.parse(runCli(['--list-presets', '--json']));
+  const presets = JSON.parse(runCli(['list', 'presets', '--json']));
   assert.ok(
     presets.some((preset) => preset.id === 'tokyo-night'),
-    '--list-presets --json has no tokyo-night'
+    'list presets --json has no tokyo-night'
   );
-  assert.match(runCli(['--list-fonts']), /^JetBrainsMono\s+JetBrains Mono$/m, '--list-fonts text');
+  assert.match(runCli(['list', 'fonts']), /^JetBrainsMono\s+JetBrains Mono$/m, 'list fonts text');
 
   const bashrc = nodePath.join(process.env.HOME, '.bashrc');
   const bashrcBefore = existsSync(bashrc) ? readFileSync(bashrc, 'utf8') : null;
