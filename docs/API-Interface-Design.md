@@ -930,7 +930,8 @@ shell-configurator doctor [--state <file>] [--json] --timings [--config <file>]
 UTF-8 locale, the `starship init` line and `STARSHIP_CONFIG` export in each
 shell rc (or the shared config in adopt mode), that the configs load under the
 real `starship print-config`, that a Nerd Font is installed, and that it is
-selected in the detected terminal (`src/services/doctor.ts`). With `--state`
+selected in the detected terminal (`src/services/doctor.ts`, checks in
+`src/services/doctor/`). With `--state`
 it checks the card's shells and wiring mode (`keepExistingConfig`); without
 one it checks the installed shells that were set up — the last recorded run
 chose them, or they start Starship or carry a ShellConfigurator block — and

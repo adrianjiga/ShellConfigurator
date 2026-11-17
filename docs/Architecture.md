@@ -302,7 +302,8 @@ src/
     ├── installTasks.ts        Install task orchestration (buildTaskList, runInstallTasks)
     ├── fontExtractor.ts       Worker that decompresses font archives (with size caps)
     ├── terminalFont.ts        Wires a detected terminal's config to a Nerd Font family
-    ├── doctor.ts              Day-2 health check (read-only) with pass/warn/fail findings
+    ├── doctor.ts              Day-2 health check (read-only): runDoctor and the report
+    ├── doctor/                Its checks: starshipChecks, shellChecks, fontChecks; deps.ts, types.ts
     ├── repair.ts              Applies doctor fixes (doctor --fix), then re-runs the doctor
     ├── uninstall.ts           Plans and runs the teardown (rc lines, configs, font, Starship)
     ├── runCapture.ts          Copies the files a run may change and keeps a manifest of what it changed
