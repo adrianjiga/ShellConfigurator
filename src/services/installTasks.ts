@@ -54,7 +54,6 @@ export interface InstallTaskDeps {
   writeShellConfig: (toml: string, shellId: ShellId) => WriteConfigResult;
   /** Writes the shared starship.toml in adopt mode (e.g. an --import-url fetch). */
   writeSharedConfig: (toml: string) => WriteConfigResult;
-  /** Snapshots the shared starship.toml before per-shell configs shadow it. Null when none exists. */
   sharedConfigExists: () => boolean;
   applyShellConfig: (
     shellId: ShellId,
