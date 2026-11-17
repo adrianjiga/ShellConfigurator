@@ -4,13 +4,9 @@ import { generateToml } from '../generators/starship.ts';
 import type { PackageManager, ShellId, TerminalId, WizardState } from '../types.ts';
 import { recordStarshipVersion } from './cache.ts';
 import { detectPackageManagerAsync } from './detector.ts';
-import {
-  type DoctorFix,
-  type DoctorReport,
-  formatDoctorReport,
-  runDoctor,
-  shellPointsAtShared,
-} from './doctor.ts';
+import { shellPointsAtShared } from './doctor/shellChecks.ts';
+import type { DoctorFix, DoctorReport } from './doctor/types.ts';
+import { formatDoctorReport, runDoctor } from './doctor.ts';
 import { errorMessage } from './errors.ts';
 import {
   fontLabel,

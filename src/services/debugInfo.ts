@@ -14,7 +14,8 @@ import {
   detectTerminalAsync,
   findStarshipAsync,
 } from './detector.ts';
-import { type DoctorReport, formatDoctorReport, runDoctor } from './doctor.ts';
+import type { DoctorReport } from './doctor/types.ts';
+import { formatDoctorReport, runDoctor } from './doctor.ts';
 import { commandPath } from './exec.ts';
 import { type HistoryRecord, readHistory } from './history.ts';
 import { redactPersonal, redactUrls } from './redact.ts';
