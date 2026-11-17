@@ -1,6 +1,6 @@
 {
   "name": "shell-configurator",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "Interactive terminal wizard for configuring Starship prompt",
   "keywords": [
     "starship",
