@@ -324,6 +324,20 @@ describe('runInstallTasks', () => {
     expect(results.find((t) => t.id === 'config')?.status).toBe('done');
   });
 
+  it('notes a per-shell config whose original could not be kept, and still writes it', async () => {
+    const deps = fakeDeps({
+      writeShellConfig: vi.fn(() => ({
+        path: '/home/u/.config/starship/zsh.toml',
+        note: 'could not keep its original as zsh.toml.pre-shell-configurator (ENOSPC)',
+      })),
+    });
+    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
+
+    const config = results.find((t) => t.id === 'config');
+    expect(config?.status).toBe('done');
+    expect(config?.note).toContain('zsh: could not keep its original');
+  });
+
   it('adopt mode keeps the shared config instead of writing per-shell files', async () => {
     const deps = fakeDeps();
     const results = await runInstallTasks(

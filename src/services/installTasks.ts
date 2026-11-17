@@ -466,8 +466,9 @@ export async function runInstallTasks(
       // present or fetched via --import-url) stays the prompt every shell reads.
       const notes: string[] = [];
       if (state.sharedConfigToml != null) {
-        deps.writeSharedConfig(state.sharedConfigToml);
+        const written = deps.writeSharedConfig(state.sharedConfigToml);
         notes.push('wrote the imported config');
+        if (written.note) notes.push(written.note);
       } else if (!deps.sharedConfigExists()) {
         notes.push(`no shared config at ${getSharedConfigPath()} — Starship will use its defaults`);
       } else {
@@ -486,8 +487,9 @@ export async function runInstallTasks(
     const writeErrors: string[] = [];
     for (const shellId of state.selectedShells) {
       try {
-        deps.writeShellConfig(toml, shellId);
+        const written = deps.writeShellConfig(toml, shellId);
         configWritten.add(shellId);
+        if (written?.note) notes.push(`${shellId}: ${written.note}`);
       } catch (err) {
         writeErrors.push(`${shellId}: ${errorMessage(err)}`);
       }

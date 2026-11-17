@@ -336,9 +336,9 @@ export function wireTerminalFont(
   }
 
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  keepOriginal(filePath);
+  const note = keepOriginal(filePath);
   writeFileAtomic(filePath, updated);
-  return { applied: true, path: filePath };
+  return { applied: true, path: filePath, ...(note ? { note } : {}) };
 }
 
 /** The font family a terminal is configured to use, or null when unset/unknown. */

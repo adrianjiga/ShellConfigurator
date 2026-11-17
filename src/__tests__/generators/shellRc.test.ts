@@ -1188,14 +1188,41 @@ describe('keepOriginal', () => {
     expect(fs.copyFileSync).not.toHaveBeenCalled();
   });
 
-  it('refuses a read-only file before copying it', () => {
+  it('copies nothing from a read-only file, and says so instead of throwing', () => {
     vi.mocked(fs.existsSync).mockImplementation((p) => p === rc);
     vi.mocked(fs.accessSync).mockImplementation(() => {
       throw new Error('EACCES');
     });
 
-    expect(() => keepOriginal(rc)).toThrow('EACCES');
+    expect(keepOriginal(rc)).toBe(
+      'could not keep its original as .zshrc.pre-shell-configurator (EACCES)'
+    );
     expect(fs.copyFileSync).not.toHaveBeenCalled();
+  });
+
+  it('still wires the shell, with a note, when the original cannot be copied', () => {
+    const zshrc = getShell('zsh')!.rcFile!;
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === zshrc);
+    vi.mocked(fs.readFileSync).mockReturnValue('alias ll=ls\n');
+    vi.mocked(fs.copyFileSync).mockImplementation(() => {
+      throw new Error('ENOSPC: no space left on device');
+    });
+
+    const result = applyShellConfig('zsh');
+
+    expect(result.applied).toBe(true);
+    expect(result.note).toContain('could not keep its original as .zshrc.pre-shell-configurator');
+    expect(fs.renameSync).toHaveBeenCalledWith(expect.stringContaining('.tmp'), zshrc);
+  });
+
+  it('treats a copy another run made first as kept', () => {
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === rc);
+    vi.mocked(fs.readFileSync).mockReturnValue('alias ll=ls\n');
+    vi.mocked(fs.copyFileSync).mockImplementation(() => {
+      throw Object.assign(new Error('EEXIST'), { code: 'EEXIST' });
+    });
+
+    expect(keepOriginal(rc)).toBeNull();
   });
 });
 
