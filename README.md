@@ -57,7 +57,7 @@ shell-configurator uninstall         # remove the setup (asks first)
 
 On top of that, the first time ShellConfigurator changes one of your own files
 (an rc file, your terminal config), it keeps the original beside it as
-`<file>.pre-shell-configurator`, and never touches that copy again. After a
+`<file>.pre-shell-configurator`, and never overwrites that copy. After a
 run, `~/.config/starship/WHAT-CHANGED.md` lists every file it changed.
 
 ## Commands

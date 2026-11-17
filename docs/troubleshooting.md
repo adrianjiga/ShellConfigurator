@@ -271,7 +271,7 @@ time ShellConfigurator changed one of your own files (an rc, the Bash login
 file, the shared `~/.config/starship.toml`, a terminal config, a per-shell
 config you wrote yourself), it kept a copy
 of it as `<file>.pre-shell-configurator`; that copy stays, and is never
-overwritten. Older versions left `.bak-*` copies instead; they are not touched, so
+overwritten (rolling back the run that made it removes it again). Older versions left `.bak-*` copies instead; they are not touched, so
 delete them once you no longer need them. Add `--starship`
 to remove Starship too, and `--font <id>` to remove a Nerd Font it installed.
 
@@ -299,9 +299,10 @@ to remove Starship too, and `--font <id>` to remove a Nerd Font it installed.
   a broken symlink), so the config it points at was kept. Fix the rc and run
   uninstall again.
 - **Changed your mind**: run `shell-configurator rollback`, as the report says.
-  If the run could not be recorded, the report says rollback cannot undo it;
-  the `.pre-shell-configurator` copies beside your files still hold their
-  content from before ShellConfigurator first changed them.
+  If the run could not be recorded, the report says rollback cannot undo it,
+  and the per-shell configs were left in place for that reason; the
+  `.pre-shell-configurator` copies beside your files still hold their content
+  from before ShellConfigurator first changed them.
 
 ---
 

@@ -51,10 +51,11 @@ export function requireScratchHome() {
 const entry = nodePath.resolve('dist/index.js');
 
 /** Runs the built CLI; a failure carries the CLI's own output so CI shows why. */
-export function runCli(args) {
+export function runCli(args, { okStatuses = [0] } = {}) {
   try {
     return execFileSync(process.execPath, [entry, ...args], { encoding: 'utf8' });
   } catch (err) {
+    if (okStatuses.includes(err.status)) return err.stdout;
     throw new Error(
       `shell-configurator ${args.join(' ')} exited ${err.status}:\n${err.stdout ?? ''}${err.stderr ?? ''}`
     );
@@ -213,17 +214,9 @@ export function assertShare(homeDir) {
  * failing health check in the container exits 1 too, so only the timings count.
  */
 export function assertTimings(configPath) {
-  const args = ['doctor', '--timings', '--json', '--config', configPath];
-  let out;
-  try {
-    out = execFileSync(process.execPath, [entry, ...args], { encoding: 'utf8' });
-  } catch (err) {
-    if (err.status !== 1)
-      throw new Error(
-        `shell-configurator ${args.join(' ')} exited ${err.status}:\n${err.stdout ?? ''}${err.stderr ?? ''}`
-      );
-    out = err.stdout;
-  }
+  const out = runCli(['doctor', '--timings', '--json', '--config', configPath], {
+    okStatuses: [0, 1],
+  });
   const timings = JSON.parse(out).timings;
   assert.equal(timings?.config, configPath, `doctor --timings timed the wrong config:\n${out}`);
   assert.ok(

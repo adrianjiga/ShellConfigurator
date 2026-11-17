@@ -1538,6 +1538,7 @@ describe('index doctor --timings', () => {
 
   beforeEach(() => {
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+    mockRunDoctor.mockClear();
     mockRunDoctor.mockResolvedValue({ ok: true, findings: [] });
     mockFormatDoctorReport.mockReturnValue('HEALTHY\n');
   });
@@ -1595,10 +1596,11 @@ describe('index doctor --timings', () => {
     }
   });
 
-  it('refuses a --config file it cannot read', async () => {
+  it('refuses a --config file it cannot read before running any check', async () => {
     await expect(doctor(['--config', '/no/such/file'])).rejects.toThrow(
       /Could not read '\/no\/such\/file'/
     );
+    expect(mockRunDoctor).not.toHaveBeenCalled();
   });
 
   it('still prints the check, and fails, when Starship is not installed to time with', async () => {

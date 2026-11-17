@@ -316,16 +316,11 @@ export async function runDoctorCommand(
   }
   warnIgnoredFlags(flags, 'doctor');
   const state = flags.stateFile ? stateFromFlags(flags) : null;
-  const report = await runDoctor(state);
-  let timings: PromptTimings | { error: string } | undefined;
-  if (flags.timings) {
-    try {
-      timings = await timeActivePrompt(flags.configFile, probeDeps);
-    } catch (err) {
-      if (err instanceof CliUsageError) throw err;
-      timings = { error: errorMessage(err) };
-    }
-  }
+  const source = flags.timings ? timingSource(flags.configFile) : null;
+  const [report, timings] = await Promise.all([
+    runDoctor(state),
+    source ? timeSource(source, probeDeps) : undefined,
+  ]);
   if (flags.json) {
     const data = timings ? { ...report, timings } : report;
     process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
@@ -608,10 +603,13 @@ export interface PromptTimings extends TimingsReport {
 }
 
 /** Times the config Starship loads in this folder, or `configFile`, module by module. */
-export async function timeActivePrompt(
-  configFile: string | undefined,
-  deps: ProbeDeps = DEFAULT_PROBE_DEPS
-): Promise<PromptTimings> {
+interface TimingSource {
+  source: { toml: string; path?: string };
+  config: string;
+}
+
+/** The config Starship loads in this folder, or `configFile`; a file it cannot read is a usage error. */
+function timingSource(configFile: string | undefined): TimingSource {
   const active: ActiveConfig = configFile
     ? { kind: 'file', path: configFile }
     : activeStarshipConfig();
@@ -628,7 +626,18 @@ export async function timeActivePrompt(
     source = { toml: '', path: active.path };
     config = `Starship's built-in default prompt, since ${active.reason}`;
   }
-  return { config, ...(await timePrompt(source, process.cwd(), deps)) };
+  return { source, config };
+}
+
+async function timeSource(
+  { source, config }: TimingSource,
+  deps: ProbeDeps
+): Promise<PromptTimings | { error: string }> {
+  try {
+    return { config, ...(await timePrompt(source, process.cwd(), deps)) };
+  } catch (err) {
+    return { error: errorMessage(err) };
+  }
 }
 
 const NOT_SHARED_FLAGS: Array<[keyof CliFlags, string]> = [
