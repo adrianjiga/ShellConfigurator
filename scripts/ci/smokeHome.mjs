@@ -182,9 +182,16 @@ export function assertUninstalled(homeDir, rcPath, shell, before) {
   );
 }
 
-/** Asserts `share` prints Markdown whose card rebuilds exactly the TOML it shows. */
+/** Asserts `generate --markdown` prints Markdown whose card rebuilds exactly the TOML it shows. */
 export function assertShare(homeDir) {
-  const text = runCli(['share', '--preset', 'tokyo-night', '--character', 'lambda']);
+  const text = runCli([
+    'generate',
+    '--markdown',
+    '--preset',
+    'tokyo-night',
+    '--character',
+    'lambda',
+  ]);
   const block = (lang) => new RegExp(`\`\`\`${lang}\n([\\s\\S]*?)\n\`\`\``).exec(text)?.[1];
   const toml = block('toml');
   const card = block('json');
