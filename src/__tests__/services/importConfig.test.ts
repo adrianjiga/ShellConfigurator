@@ -245,6 +245,23 @@ describe('runApply --import-url', () => {
     );
   });
 
+  it('refuses a redirect to a URL with a user name or password, without printing them', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: { location: 'https://user:t0ken@example.com/cfg.toml' },
+      })
+    );
+
+    const err = await fetchImportedConfig('https://example.com/start').catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(CliRunError);
+    expect((err as Error).message).toBe(
+      "Could not fetch 'https://example.com/start': redirected to a URL with a user name or password (https://example.com/cfg.toml), which --import-url does not send."
+    );
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+
   it('follows https redirects to the config', async () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
