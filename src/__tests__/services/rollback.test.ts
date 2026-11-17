@@ -86,6 +86,40 @@ describe('planRollback / runRollback', () => {
     expect(read('rc.pre-shell-configurator')).toBe('mine\n');
   });
 
+  it('keeps the original copy while the file it belongs to is left as it is', async () => {
+    fs.writeFileSync(file('rc'), 'mine\n');
+    const manifest = await capturedRun(['rc', 'rc.pre-shell-configurator'], () => {
+      keepOriginal(file('rc'));
+      fs.appendFileSync(file('rc'), '# Added by ShellConfigurator\n');
+    });
+    fs.appendFileSync(file('rc'), 'alias ll=ls\n');
+
+    const report = runRollback(manifest.runId, planRollback(manifest));
+
+    expect(report.complete).toBe(false);
+    expect(read('rc')).toContain('alias ll=ls');
+    expect(read('rc.pre-shell-configurator')).toBe('mine\n');
+    expect(report.actions.find((a) => a.path === file('rc.pre-shell-configurator'))).toMatchObject({
+      status: 'skipped',
+      left: true,
+      detail: 'kept: rc is not back as it was, so this copy still holds its original',
+    });
+  });
+
+  it('keeps the copy when its file changes between the plan and the rollback', async () => {
+    fs.writeFileSync(file('rc'), 'mine\n');
+    const manifest = await capturedRun(['rc', 'rc.pre-shell-configurator'], () => {
+      keepOriginal(file('rc'));
+      fs.appendFileSync(file('rc'), '# Added by ShellConfigurator\n');
+    });
+    const steps = planRollback(manifest);
+    fs.appendFileSync(file('rc'), 'alias ll=ls\n');
+
+    runRollback(manifest.runId, steps);
+
+    expect(read('rc.pre-shell-configurator')).toBe('mine\n');
+  });
+
   it('captures the original copy of every file a run may change', () => {
     const rc = getShell('zsh')!.rcFile!;
     expect(trackedFiles()).toContain(rc);

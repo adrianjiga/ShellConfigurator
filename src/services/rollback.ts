@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { statusLine } from '../config/status.ts';
-import { writeFileAtomic } from '../generators/shellRc.ts';
+import { ORIGINAL_SUFFIX, writeFileAtomic } from '../generators/shellRc.ts';
 import { errorMessage } from './errors.ts';
 import { type HistoryKind, type HistoryRecord, readHistory } from './history.ts';
 import { redactUrls } from './redact.ts';
@@ -117,6 +117,10 @@ const CHANGED_SINCE = 'changed since that run, so it is left as it is';
  * first. A file already back to its earlier content needs nothing.
  */
 export function planRollback(manifest: RunManifest): RollbackStep[] {
+  return keepCopiesOfFilesLeft(manifest, planFiles(manifest));
+}
+
+function planFiles(manifest: RunManifest): RollbackStep[] {
   return manifest.files.map((file) => {
     if (file.after === UNREADABLE_AFTER) {
       return {
@@ -175,6 +179,38 @@ export function planRollback(manifest: RunManifest): RollbackStep[] {
         if (file.mode !== undefined) fs.chmodSync(file.path, file.mode);
         return { status: 'restored', detail: 'put back its content from before that run' };
       },
+    };
+  });
+}
+
+/**
+ * A `.pre-shell-configurator` copy the run made is deleted only once the file
+ * it holds the original of is back as it was before the run; while that file
+ * is left as it is, the copy is the only record of its original.
+ */
+function keepCopiesOfFilesLeft(manifest: RunManifest, steps: RollbackStep[]): RollbackStep[] {
+  const files = new Map(manifest.files.map((file) => [file.path, file]));
+  const stepOf = new Map(steps.map((step) => [step.path, step]));
+  return steps.map((step) => {
+    const file = files.get(step.path);
+    if (!file || file.before !== null || !step.run || !step.path.endsWith(ORIGINAL_SUFFIX)) {
+      return step;
+    }
+    const sourcePath = step.path.slice(0, -ORIGINAL_SUFFIX.length);
+    const source = files.get(sourcePath);
+    const kept = `kept: ${path.basename(sourcePath)} is not back as it was, so this copy still holds its original`;
+    if (!source) return step;
+    if (stepOf.get(sourcePath)?.left) return { path: step.path, detail: kept, left: true };
+    const sourceBack = () => {
+      const saved = source.before
+        ? path.join(runDir(manifest.runId), 'files', source.before)
+        : null;
+      return hashOf(sourcePath) === (saved ? hashOf(saved) : null);
+    };
+    const remove = step.run;
+    return {
+      ...step,
+      run: () => (sourceBack() ? remove() : { status: 'skipped', detail: kept, left: true }),
     };
   });
 }
