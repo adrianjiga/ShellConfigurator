@@ -74,10 +74,10 @@ export function keepOriginal(filePath: string, options: KeepOriginalOptions = {}
   const original = originalCopyPath(filePath);
   try {
     if (!fs.existsSync(filePath) || fs.existsSync(original)) return null;
-    assertWritable(filePath);
     const content = fs.readFileSync(filePath, 'utf8');
     if (content.includes(BLOCK_MARKER)) return null;
     if (options.toolOwned && content.includes(GENERATED_MARKER)) return null;
+    assertWritable(filePath);
     fs.copyFileSync(filePath, original, fs.constants.COPYFILE_EXCL);
     return null;
   } catch (err) {
@@ -699,11 +699,9 @@ export function applyShellConfig(
   ensureRcDir(rcPath);
   const existing = fs.existsSync(rcPath) ? readTextToRewrite(rcPath) : '';
   const { content, ...planned } = appliedRcContent(shellId, existing, options)!;
-  let result: { applied: boolean; note?: string } = planned;
-  if (content !== existing) {
-    result = withNote(result, keepOriginal(rcPath));
-    writeFileAtomic(rcPath, content);
-  }
+  const copyNote = content === existing ? null : keepOriginal(rcPath);
+  if (content !== existing) writeFileAtomic(rcPath, content);
+  const result = withNote<{ applied: boolean; note?: string }>(planned, copyNote);
   if (shellId !== 'bash') return result;
   let loginNote: string;
   try {
@@ -713,12 +711,10 @@ export function applyShellConfig(
     if (login.note) loginNote = `${loginNote}, but ${login.note}`;
   } catch (err) {
     loginNote = `could not make ${path.basename(bashLoginFile())} load .bashrc (${errorMessage(err)}), so macOS terminals may not show the prompt`;
-    if (!result.applied) return { applied: false, note: loginNote };
+    if (!result.applied) return withNote({ applied: false, note: loginNote }, copyNote);
   }
-  return {
-    applied: true,
-    note: result.applied && result.note ? `${result.note}; ${loginNote}` : loginNote,
-  };
+  const rcNote = result.applied ? result.note : (copyNote ?? undefined);
+  return { applied: true, note: rcNote ? `${rcNote}; ${loginNote}` : loginNote };
 }
 
 export function bashLoginBlockFiles(io: RcIo = FS_RC_IO): string[] {

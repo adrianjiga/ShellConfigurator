@@ -40,7 +40,8 @@ Keep the surface small, for simplicity and focus:
   holds a ShellConfigurator block, or a per-shell config the tool generated,
   is not an original and gets no copy. A copy that cannot be made is a note on
   the step, never a reason to fail it. The copies are captured with their
-  files, so rolling back the run that made one deletes it.
+  files, so rolling back the run that made one deletes it once its file is
+  back as it was.
 - `repair` is retired in favour of `doctor --fix`.
 - `share` becomes `generate --markdown`.
 - `timings` becomes `doctor --timings` (with `--config` to time another file).

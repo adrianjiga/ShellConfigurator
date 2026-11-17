@@ -412,7 +412,11 @@ export async function runInstallTasks(
       if (result.applied) {
         return {
           status: 'done',
-          patch: { note: result.note ?? `set font in ${result.path}` },
+          patch: {
+            note: result.note
+              ? `set font in ${result.path}; ${result.note}`
+              : `set font in ${result.path}`,
+          },
         };
       }
       return { status: 'skipped', patch: { note: result.note ?? 'nothing to change' } };

@@ -271,7 +271,8 @@ time ShellConfigurator changed one of your own files (an rc, the Bash login
 file, the shared `~/.config/starship.toml`, a terminal config, a per-shell
 config you wrote yourself), it kept a copy
 of it as `<file>.pre-shell-configurator`; that copy stays, and is never
-overwritten (rolling back the run that made it removes it again). Older versions left `.bak-*` copies instead; they are not touched, so
+overwritten (rolling back the run that made it removes it again, once your
+file is back as it was). Older versions left `.bak-*` copies instead; they are not touched, so
 delete them once you no longer need them. Add `--starship`
 to remove Starship too, and `--font <id>` to remove a Nerd Font it installed.
 

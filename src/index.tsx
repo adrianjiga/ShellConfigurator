@@ -247,7 +247,7 @@ function presentConfigFlags(flags: CliFlags): string[] {
   return present;
 }
 
-/** Every flag on the command line except the help, version and list flags, by the name shown to the user. */
+/** Every flag on the command line except the help and version flags, by the name shown to the user. */
 function presentFlags(flags: CliFlags): string[] {
   const present = presentConfigFlags(flags);
   const others: Array<[unknown, string]> = [
@@ -606,7 +606,6 @@ export interface PromptTimings extends TimingsReport {
   config: string;
 }
 
-/** Times the config Starship loads in this folder, or `configFile`, module by module. */
 interface TimingSource {
   source: { toml: string; path?: string };
   config: string;

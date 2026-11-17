@@ -324,6 +324,29 @@ describe('runInstallTasks', () => {
     expect(results.find((t) => t.id === 'config')?.status).toBe('done');
   });
 
+  it('keeps saying where the font was set when the terminal config could not be copied first', async () => {
+    const deps = fakeDeps({
+      wireTerminalFont: vi.fn(() => ({
+        applied: true,
+        path: '/home/u/.config/kitty/kitty.conf',
+        note: 'could not keep its original as kitty.conf.pre-shell-configurator (ENOSPC)',
+      })),
+    });
+    const results = await runInstallTasks(
+      state({
+        selectedShells: ['zsh'],
+        nerdFontToInstall: { kind: 'install' as const, id: 'Hack' },
+        terminal: 'kitty',
+      }),
+      deps,
+      vi.fn()
+    );
+
+    expect(results.find((t) => t.id === 'terminal')?.note).toBe(
+      'set font in /home/u/.config/kitty/kitty.conf; could not keep its original as kitty.conf.pre-shell-configurator (ENOSPC)'
+    );
+  });
+
   it('notes a per-shell config whose original could not be kept, and still writes it', async () => {
     const deps = fakeDeps({
       writeShellConfig: vi.fn(() => ({

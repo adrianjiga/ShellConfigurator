@@ -1150,7 +1150,8 @@ while a generated one is not. It is best-effort: a copy that cannot be made
 (a read-only file, a full disk) becomes a note on the step, never a failure. No
 `.bak-*` files are written; `rollback` is the way back (ADR 0006). The copies
 are captured like the files they belong to, so rolling back the run that made a
-copy deletes it, and undoing your first apply leaves nothing behind. Copies from
+copy deletes it once its file is back as it was (while that file is left as it
+is, the copy stays), and undoing your first apply leaves nothing behind. Copies from
 runs that stand outlive a pruned run or a deleted state folder, which is why an
 uninstall whose capture failed names them; such an uninstall also leaves the
 per-shell configs in place, since nothing could bring them back.

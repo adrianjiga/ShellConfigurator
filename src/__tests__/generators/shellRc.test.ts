@@ -1203,6 +1203,7 @@ describe('keepOriginal', () => {
 
   it('copies nothing from a read-only file, and says so instead of throwing', () => {
     vi.mocked(fs.existsSync).mockImplementation((p) => p === rc);
+    vi.mocked(fs.readFileSync).mockReturnValue('alias ll=ls\n');
     vi.mocked(fs.accessSync).mockImplementation(() => {
       throw new Error('EACCES');
     });
@@ -1248,6 +1249,16 @@ describe('keepOriginal', () => {
     } finally {
       restore();
     }
+  });
+
+  it('says nothing about a read-only file that needs no copy anyway', () => {
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === rc);
+    vi.mocked(fs.readFileSync).mockReturnValue('# Added by ShellConfigurator\n');
+    vi.mocked(fs.accessSync).mockImplementation(() => {
+      throw new Error('EACCES');
+    });
+
+    expect(keepOriginal(rc)).toBeNull();
   });
 
   it('treats a copy another run made first as kept', () => {
