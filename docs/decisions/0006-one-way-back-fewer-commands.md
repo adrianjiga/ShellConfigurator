@@ -55,5 +55,8 @@ else.
   newest 50 are kept) or a deleted state folder.
 - Users' config folders no longer collect a `.bak-*` file per run. Old ones
   left by earlier versions are not touched.
+- Timing a preset before applying it (`timings --preset …`) was dropped with
+  the move to `doctor --timings`, which times the config Starship loads in the
+  current folder or the file `--config` names.
 - Six top-level commands remain (`generate`, `apply`, `doctor`, `uninstall`,
   `rollback`, `list`), plus `debug-info` and `completions`.
