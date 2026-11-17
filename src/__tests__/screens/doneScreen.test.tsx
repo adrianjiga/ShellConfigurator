@@ -11,7 +11,6 @@ import { flush } from '../helpers/wait.ts';
 
 const mocks = vi.hoisted(() => ({
   exit: vi.fn(),
-  restoreConfigBackups: vi.fn().mockReturnValue([]),
   writeShareFile: vi.fn(() => '/work/starship-prompt.md'),
 }));
 
@@ -20,11 +19,6 @@ vi.mock('../../services/share.ts', () => ({ writeShareFile: mocks.writeShareFile
 vi.mock('ink', async (importOriginal) => {
   const ink = await importOriginal<typeof import('ink')>();
   return { ...ink, useApp: () => ({ exit: mocks.exit }) };
-});
-
-vi.mock('../../generators/shellRc.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../generators/shellRc.ts')>();
-  return { ...actual, restoreConfigBackups: mocks.restoreConfigBackups };
 });
 
 afterEach(() => {
@@ -212,53 +206,25 @@ describe('DoneScreen over real install results', () => {
     expect(mocks.exit).toHaveBeenCalledTimes(1);
   });
 
-  it('restores the newest backups and lists them with r', async () => {
-    mocks.restoreConfigBackups.mockReturnValue({
-      restored: [
-        {
-          what: 'zsh',
-          restoredTo: '/home/u/.config/starship/zsh.toml',
-          restoredFrom: '/home/u/.config/starship/zsh.toml.bak-x',
-        },
-        {
-          what: 'shared',
-          restoredTo: '/home/u/.config/starship.toml',
-          restoredFrom: '/home/u/.config/starship.toml.bak-x',
-        },
-      ],
-      failed: [],
-    });
-    const instance = render(<DoneScreen state={DEFAULT_STATE} />);
+  it('points a recorded run at rollback, and offers no restore key', async () => {
+    const instance = render(<DoneScreen state={{ ...DEFAULT_STATE, runId: 'run-1' }} />);
     await flush();
 
     instance.stdin.write('r');
     await flush();
-    instance.stdin.write('y');
-    await flush();
 
-    const frame = instance.lastFrame() ?? '';
+    const frame = (instance.lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(frame).toContain(
+      'To undo this run, rc lines included, run shell-configurator rollback.'
+    );
+    expect(frame).not.toContain('Press r');
+    expect(frame).not.toContain('backups');
     expect(mocks.exit).not.toHaveBeenCalled();
-    expect(mocks.restoreConfigBackups).toHaveBeenCalledTimes(1);
-    expect(frame).toContain('Restored configs from their newest backups:');
-    expect(frame).toContain('zsh: /home/u/.config/starship/zsh.toml (from');
-    expect(frame).toContain('shared: /home/u/.config/starship.toml (from');
   });
 
-  it('restores only once when r is pressed again', async () => {
-    mocks.restoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
-    const instance = render(<DoneScreen state={DEFAULT_STATE} />);
-    await flush();
-
-    instance.stdin.write('r');
-    await flush();
-    instance.stdin.write('y');
-    await flush();
-    instance.stdin.write('r');
-    await flush();
-    instance.stdin.write('y');
-    await flush();
-
-    expect(mocks.restoreConfigBackups).toHaveBeenCalledTimes(1);
+  it('says nothing about rollback when the run was not recorded', () => {
+    const { lastFrame } = render(<DoneScreen state={DEFAULT_STATE} />);
+    expect(lastFrame()).not.toContain('rollback');
   });
 
   it('tells a run that skipped Starship how to install it before re-running', () => {
@@ -268,71 +234,6 @@ describe('DoneScreen over real install results', () => {
     const text = (lastFrame() ?? '').replace(/\s+/g, ' ');
     expect(text).toContain('Starship is not installed, so shell init lines were not added');
     expect(text).toContain('curl -sS https://starship.rs/install.sh | sh');
-  });
-
-  it('lists restore failures instead of hiding them', async () => {
-    mocks.restoreConfigBackups.mockReturnValue({
-      restored: [
-        {
-          what: 'shared',
-          restoredTo: '/home/u/.config/starship.toml',
-          restoredFrom: '/home/u/.config/starship.toml.bak-x',
-        },
-      ],
-      failed: [
-        { what: 'zsh', restoredFrom: '/home/u/.config/starship/zsh.toml.bak-x', error: 'EACCES' },
-      ],
-    });
-    const instance = render(<DoneScreen state={DEFAULT_STATE} />);
-    await flush();
-
-    instance.stdin.write('r');
-    await flush();
-    instance.stdin.write('y');
-    await flush();
-
-    const frame = instance.lastFrame() ?? '';
-    expect(frame).toContain('Restored configs from their newest backups:');
-    expect(frame).toContain('shared: /home/u/.config/starship.toml (from');
-    expect(frame).toContain('zsh: could not restore');
-    expect(frame).toContain('EACCES');
-  });
-
-  it('reports when there are no backups to restore with r', async () => {
-    mocks.restoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
-    const instance = render(<DoneScreen state={DEFAULT_STATE} />);
-    await flush();
-
-    instance.stdin.write('r');
-    await flush();
-    instance.stdin.write('y');
-    await flush();
-
-    expect(instance.lastFrame()).toContain('nothing to restore');
-  });
-
-  it('never restores backups from a dry-run session with r', async () => {
-    mocks.restoreConfigBackups.mockReturnValue({
-      restored: [
-        {
-          what: 'shared',
-          restoredTo: '/home/u/.config/starship.toml',
-          restoredFrom: '/home/u/.config/starship.toml.bak-x',
-        },
-      ],
-      failed: [],
-    });
-    const instance = render(<DoneScreen state={{ ...DEFAULT_STATE, dryRun: true }} />);
-    await flush();
-
-    instance.stdin.write('r');
-    await flush();
-    instance.stdin.write('y');
-    await flush();
-
-    expect(mocks.restoreConfigBackups).not.toHaveBeenCalled();
-    expect(instance.lastFrame()).not.toContain('Restored configs');
-    expect(instance.lastFrame()).not.toContain('Press r');
   });
 });
 
@@ -460,28 +361,6 @@ describe('DoneScreen font reminder', () => {
       />
     );
     expect((lastFrame() ?? '').replace(/\s+/g, ' ')).toContain('CaskaydiaCove Nerd Font');
-  });
-});
-
-describe('DoneScreen restore failure', () => {
-  it('shows a restore that throws instead of crashing', async () => {
-    mocks.restoreConfigBackups.mockImplementationOnce(() => {
-      throw new Error('EACCES: permission denied');
-    });
-    const { stdin, lastFrame } = render(
-      <DoneScreen
-        state={{
-          ...DEFAULT_STATE,
-          selectedShells: ['zsh'],
-          installResults: [{ id: 'config', label: 'Write config files', status: 'done' }],
-        }}
-      />
-    );
-    stdin.write('r');
-    await flush();
-    stdin.write('y');
-    await flush();
-    expect(lastFrame()).toContain('EACCES: permission denied');
   });
 });
 

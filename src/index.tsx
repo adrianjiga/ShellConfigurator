@@ -6,11 +6,7 @@ import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { posixShellQuote } from './config/shells.ts';
-import {
-  getSharedConfigPath,
-  restoreConfigBackups,
-  writeFileAtomic,
-} from './generators/shellRc.ts';
+import { getSharedConfigPath, writeFileAtomic } from './generators/shellRc.ts';
 import { generateToml } from './generators/starship.ts';
 import type { CliFlags, Subcommand } from './services/args.ts';
 import { parseCliArgs, quoteArgv, SUBCOMMANDS } from './services/args.ts';
@@ -25,7 +21,7 @@ import {
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
 import { CliRunError, CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
-import { lastRunShells, recordRunSafely } from './services/history.ts';
+import { recordRunSafely } from './services/history.ts';
 import { formatListing, listEntries } from './services/listings.ts';
 import { redactPersonal } from './services/redact.ts';
 import {
@@ -128,7 +124,6 @@ Usage:
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
-  shell-configurator --restore    restore configs from their newest backup
   shell-configurator --list-presets | --list-modules | --list-fonts [--json]
                                   list the ids those flags accept
 
@@ -138,9 +133,6 @@ Options:
   -d, --dry-run       Install nothing; print what would happen (generate still
                      writes -o/--export files)
   --no-install        Alias for --dry-run
-  --restore           Copy the newest .bak-* snapshot back over the shared and
-                     per-shell configs created by earlier wizard runs; rc files
-                     stay as they are (shell-configurator rollback undoes a run)
 
   Flags may appear before or after the subcommand (e.g. "--dry-run generate"
   works like "generate --dry-run"); when a flag is repeated the last one wins.
@@ -232,32 +224,6 @@ completions (install the script where your shell loads completions from):
 `);
 }
 
-/** Restore the shared and per-shell configs from their newest backups. */
-export function runRestore(): void {
-  const { restored, failed } = restoreConfigBackups(lastRunShells() ?? undefined);
-  if (restored.length === 0 && failed.length === 0) {
-    process.stdout.write('Nothing to restore — no ShellConfigurator backups found.\n');
-    return;
-  }
-  if (restored.length > 0) {
-    process.stdout.write('Restored configs from their newest backups:\n');
-    for (const r of restored) {
-      const saved = r.previousSavedTo ? `; previous saved to ${r.previousSavedTo}` : '';
-      process.stdout.write(`  ${r.what}: ${r.restoredTo} (from ${r.restoredFrom}${saved})\n`);
-    }
-    process.stdout.write(
-      'Shell rc files are unchanged, so each shell still reads its own config. To undo a whole run, use shell-configurator rollback.\n'
-    );
-  }
-  if (failed.length > 0) {
-    process.stderr.write('Could not restore some configs:\n');
-    for (const f of failed) {
-      process.stderr.write(`  ${f.what} (from ${f.restoredFrom}): ${f.error}\n`);
-    }
-    process.exitCode = 1;
-  }
-}
-
 export function runGlobalFlags(flags: CliFlags): boolean {
   if (flags.help) {
     printHelp();
@@ -292,21 +258,6 @@ export function runGlobalFlags(flags: CliFlags): boolean {
     );
     return true;
   }
-  if (flags.restore) {
-    if (flags.subcommand) {
-      throw new CliUsageError(
-        `--restore cannot be combined with the ${flags.subcommand} subcommand; ` +
-          'run it on its own.'
-      );
-    }
-    if (flags.dryRun) {
-      throw new CliUsageError(
-        '--restore rewrites config files from their backups; it cannot run in a dry run.'
-      );
-    }
-    runRestore();
-    return true;
-  }
   return false;
 }
 
@@ -337,7 +288,6 @@ function presentFlags(flags: CliFlags): string[] {
   const others: Array<[unknown, string]> = [
     [flags.stateFile, '--state'],
     [flags.dryRun, '--dry-run'],
-    [flags.restore, '--restore'],
     [flags.json, '--json'],
     [flags.fix, '--fix'],
     [flags.includeWarnings, '--include-warnings'],

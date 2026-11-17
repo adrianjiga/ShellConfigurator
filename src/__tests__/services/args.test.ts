@@ -8,7 +8,6 @@ describe('parseCliArgs', () => {
     expect(f.preset).toBeUndefined();
     expect(f.help).toBe(false);
     expect(f.version).toBe(false);
-    expect(f.restore).toBe(false);
     expect(f.dryRun).toBeUndefined();
   });
 
@@ -78,7 +77,6 @@ describe('parseCliArgs', () => {
       ['-h', 'help', true],
       ['--version', 'version', true],
       ['-v', 'version', true],
-      ['--restore', 'restore', true],
       ['--dry-run', 'dryRun', true],
       ['-d', 'dryRun', true],
       ['--no-install', 'dryRun', true],

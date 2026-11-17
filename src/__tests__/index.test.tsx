@@ -18,10 +18,6 @@ vi.mock('../app.tsx', () => ({
   App: () => null,
 }));
 
-const { mockRestoreConfigBackups } = vi.hoisted(() => ({
-  mockRestoreConfigBackups: vi.fn(),
-}));
-
 const { mockRecordRun } = vi.hoisted(() => ({
   mockRecordRun: vi.fn(),
 }));
@@ -35,16 +31,6 @@ vi.mock('../services/detector.ts', async () => {
     detectPackageManagerAsync: vi.fn().mockResolvedValue('apt'),
     detectTerminalAsync: vi.fn().mockResolvedValue(null),
     detectContainerAsync: vi.fn().mockResolvedValue(false),
-  };
-});
-
-vi.mock('../generators/shellRc.ts', async () => {
-  const actual = await vi.importActual<typeof import('../generators/shellRc.ts')>(
-    '../generators/shellRc.ts'
-  );
-  return {
-    ...actual,
-    restoreConfigBackups: mockRestoreConfigBackups,
   };
 });
 
@@ -114,7 +100,7 @@ import { parseCliArgs } from '../services/args.ts';
 import { completionScript } from '../services/completions.ts';
 import type { DebugInfoDeps } from '../services/debugInfo.ts';
 import { CliRunError, CliUsageError } from '../services/errors.ts';
-import { appendHistory, writeSnapshot } from '../services/history.ts';
+import { appendHistory } from '../services/history.ts';
 import { formatListing, listEntries } from '../services/listings.ts';
 import { homeDir } from '../services/paths.ts';
 import {
@@ -184,7 +170,7 @@ describe('index CLI handling', () => {
   it('lists every accepted flag in the help text', () => {
     runGlobalFlags(parseCliArgs(['--help']));
     const help = String(stdoutWrite.mock.calls[0]?.[0]);
-    expect(help).toContain('--restore           Copy');
+    expect(help).not.toContain('--restore');
     expect(help).toContain('-o, --output <file>');
     expect(help).toContain('--import, --state <file>');
     expect(help).toContain('--shells is');
@@ -196,113 +182,21 @@ describe('index CLI handling', () => {
   });
 });
 
-describe('index restore flag', () => {
-  let stdoutWrite: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
-    mockRestoreConfigBackups.mockReset();
-  });
-
-  afterEach(() => {
-    stdoutWrite.mockRestore();
-  });
-
-  it('prints the restored configs for --restore', () => {
-    const backup = '/home/u/.config/starship.toml.bak-2026-09-09T09-30-00-000Z';
-    const backup2 = '/home/u/.config/starship/zsh.toml.bak-2026-09-08T10-00-00-000Z';
-    mockRestoreConfigBackups.mockReturnValue({
-      restored: [
-        { what: 'shared', restoredTo: '/home/u/.config/starship.toml', restoredFrom: backup },
-        { what: 'zsh', restoredTo: '/home/u/.config/starship/zsh.toml', restoredFrom: backup2 },
-      ],
-      failed: [],
-    });
-
-    const snapshotId = writeSnapshot({ ...DEFAULT_STATE, selectedShells: ['fish', 'zsh'] });
-    appendHistory({ version: 1, timestamp: new Date().toISOString(), kind: 'apply', snapshotId });
-
-    expect(runGlobalFlags(parseCliArgs(['--restore']))).toBe(true);
-
-    expect(mockRestoreConfigBackups).toHaveBeenCalledWith(['fish', 'zsh']);
-    expect(stdoutWrite).toHaveBeenCalledWith(
-      expect.stringContaining('shared: /home/u/.config/starship.toml')
-    );
-    expect(stdoutWrite).toHaveBeenCalledWith(
-      expect.stringContaining('zsh: /home/u/.config/starship/zsh.toml')
-    );
-  });
-
-  it('reports partial restore failures instead of claiming success', () => {
-    const backup = '/home/u/.config/starship/zsh.toml.bak-2026-09-08T10-00-00-000Z';
-    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
-    const savedExitCode = process.exitCode;
-    mockRestoreConfigBackups.mockReturnValue({
-      restored: [
-        { what: 'shared', restoredTo: '/home/u/.config/starship.toml', restoredFrom: backup },
-      ],
-      failed: [{ what: 'zsh' as const, restoredFrom: backup, error: 'EACCES: permission denied' }],
-    });
-
-    try {
-      expect(runGlobalFlags(parseCliArgs(['--restore']))).toBe(true);
-
-      expect(stdoutWrite).toHaveBeenCalledWith(
-        expect.stringContaining('shared: /home/u/.config/starship.toml')
-      );
-      expect(stderrWrite).toHaveBeenCalledWith(
-        expect.stringContaining('Could not restore some configs')
-      );
-      expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('EACCES'));
-      expect(process.exitCode).toBe(1);
-    } finally {
-      stderrWrite.mockRestore();
-      process.exitCode = savedExitCode;
-    }
-  });
-
-  it('points --undo at rollback instead of restoring only the configs', () => {
+describe('index retired flags', () => {
+  it('points --undo at rollback', () => {
     expect(() => parseCliArgs(['--undo'])).toThrow(
       new CliUsageError(
-        '--undo is gone: shell-configurator rollback undoes the last run, rc lines included. --restore still copies the newest config backups back.'
+        '--undo is gone: shell-configurator rollback undoes the last run, rc lines included.'
       )
     );
-    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
   });
 
-  it('reports when there is nothing to restore', () => {
-    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
-
-    runGlobalFlags(parseCliArgs(['--restore']));
-
-    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Nothing to restore'));
-  });
-
-  it('prefers --version over --restore regardless of argv order', () => {
-    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
-
-    expect(runGlobalFlags(parseCliArgs(['--restore', '--version']))).toBe(true);
-    expect(runGlobalFlags(parseCliArgs(['--version', '--restore']))).toBe(true);
-    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
-    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringMatching(/^\d+\.\d+\.\d+\n$/));
-  });
-
-  it('refuses --restore in a dry run instead of restoring', () => {
-    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
-
-    expect(() => runGlobalFlags(parseCliArgs(['--dry-run', '--restore']))).toThrow(
-      /cannot run in a dry run/
+  it('points --restore at rollback', () => {
+    expect(() => parseCliArgs(['--restore'])).toThrow(
+      new CliUsageError(
+        '--restore is gone, and so are the .bak files it copied back: shell-configurator rollback undoes the last run, rc lines included.'
+      )
     );
-    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
-  });
-
-  it('refuses --restore alongside a subcommand', () => {
-    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
-
-    expect(() =>
-      runGlobalFlags(parseCliArgs(['generate', '--preset', 'pure-prompt', '--restore']))
-    ).toThrow(/cannot be combined with the generate subcommand/);
-    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
   });
 });
 
@@ -1093,7 +987,6 @@ describe('index uninstall command', () => {
     [['--state', 'card.json'], /--state cannot be used with uninstall/],
     [['--fix'], /--fix cannot be used with uninstall/],
     [['--include-warnings'], /--include-warnings only applies to repair/],
-    [['--restore'], /--restore cannot be used with uninstall/],
   ])('refuses %o before running', async (args, message) => {
     await expect(
       runHeadlessCommand(parseCliArgs(['uninstall', ...args]), 'uninstall')
@@ -1437,7 +1330,6 @@ describe('index rollback command', () => {
     [['--state', 'card.json'], /--state cannot be used with rollback/],
     [['--fix'], /--fix cannot be used with rollback/],
     [['--include-warnings'], /--include-warnings only applies to repair/],
-    [['--restore'], /--restore cannot be used with rollback/],
   ])('rejects %o', async (args, message) => {
     await expect(
       runHeadlessCommand(parseCliArgs(['rollback', ...args]), 'rollback')

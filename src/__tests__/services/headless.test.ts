@@ -85,7 +85,6 @@ const flags = (partial: Partial<CliFlags>): CliFlags => ({
   subcommand: 'generate',
   help: false,
   version: false,
-  restore: false,
   ...partial,
 });
 

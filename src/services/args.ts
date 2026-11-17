@@ -84,7 +84,6 @@ export interface CliFlags {
   listFonts?: boolean;
   help: boolean;
   version: boolean;
-  restore: boolean;
 }
 
 const SHORT_FLAGS: Record<string, string> = {
@@ -102,9 +101,6 @@ const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> 
   },
   '--version': (r, v) => {
     r.version = v;
-  },
-  '--restore': (r, v) => {
-    r.restore = v;
   },
   '--dry-run': (r, v) => {
     r.dryRun = v;
@@ -206,9 +202,10 @@ const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
 };
 
 const RETIRED_FLAGS: Record<string, string> = {
-  '--undo':
-    '--undo is gone: shell-configurator rollback undoes the last run, rc lines included. ' +
-    '--restore still copies the newest config backups back.',
+  '--undo': '--undo is gone: shell-configurator rollback undoes the last run, rc lines included.',
+  '--restore':
+    '--restore is gone, and so are the .bak files it copied back: ' +
+    'shell-configurator rollback undoes the last run, rc lines included.',
 };
 
 export const KNOWN_FLAGS = {
@@ -279,7 +276,6 @@ export function parseCliArgs(argv: string[]): CliFlags {
     subcommand: null,
     help: false,
     version: false,
-    restore: false,
   };
 
   let subcommandSeen = false;
