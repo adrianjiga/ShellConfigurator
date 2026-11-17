@@ -292,7 +292,7 @@ src/
 │   └── toml.ts                TOML escaping helpers
 └── services/
     ├── args.ts                Hand-rolled, dependency-free CLI flag parser
-    ├── headless.ts            generate/apply implementation (routing is runHeadlessCommand in cli/route.ts)
+    ├── headless.ts            apply implementation (routing is runHeadlessCommand in cli/route.ts)
     ├── stateFlags.ts          Flags or a --state card → WizardState (stateFromFlags, validateFlagValues)
     ├── importConfig.ts        Bounded --import-url fetch (https only, size and time limits)
     ├── applyReport.ts         What apply prints: the dry-run plan (dryRunPlan), task lines, file diffs

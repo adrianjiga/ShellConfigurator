@@ -1,8 +1,8 @@
 import { type CliFlags, parseCliArgs, quoteArgv, SUBCOMMANDS } from '../services/args.ts';
 import { CliUsageError } from '../services/errors.ts';
-import { runApply, runGenerate } from '../services/headless.ts';
+import { runApply } from '../services/headless.ts';
 import { runDoctorCommand } from './commands/doctor.ts';
-import { runMarkdownCommand } from './commands/generate.ts';
+import { runGenerateCommand } from './commands/generate.ts';
 import { runCompletionsCommand, runDebugInfoCommand, runListCommand } from './commands/info.ts';
 import { runRollbackCommand } from './commands/rollback.ts';
 import { runUninstallCommand } from './commands/uninstall.ts';
@@ -88,8 +88,7 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
     return true;
   }
   if (flags.subcommand === 'generate') {
-    if (flags.markdown) runMarkdownCommand(flags);
-    else runGenerate(flags);
+    runGenerateCommand(flags);
     return true;
   }
   if (flags.subcommand === 'apply') {
