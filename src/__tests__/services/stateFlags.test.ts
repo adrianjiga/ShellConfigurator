@@ -3,64 +3,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
-const {
-  mockDetectInstalledShells,
-  mockDetectPackageManager,
-  mockDetectContainer,
-  mockDetectTerminal,
-  mockFindStarship,
-  mockRunInstallTasks,
-  mockRecordRun,
-} = vi.hoisted(() => ({
-  mockFindStarship: vi.fn(
-    async (): Promise<{ installed: boolean; pathDir?: string }> => ({
-      installed: false,
-    })
-  ),
-  mockDetectInstalledShells: vi.fn(),
-  mockDetectPackageManager: vi.fn(),
-  mockDetectContainer: vi.fn(),
-  mockDetectTerminal: vi.fn(),
-  mockRunInstallTasks: vi.fn(),
-  mockRecordRun: vi.fn(),
-}));
-
-vi.mock('../../services/detector.ts', async () => {
-  const actual = await vi.importActual<typeof import('../../services/detector.ts')>(
-    '../../services/detector.ts'
-  );
-  return {
-    ...actual,
-    detectInstalledShellsAsync: mockDetectInstalledShells,
-    detectPackageManagerAsync: mockDetectPackageManager,
-    detectContainerAsync: mockDetectContainer,
-    detectTerminalAsync: mockDetectTerminal,
-    findStarshipAsync: mockFindStarship,
-  };
-});
-
-vi.mock('../../services/installTasks.ts', async () => {
-  const actual = await vi.importActual<typeof import('../../services/installTasks.ts')>(
-    '../../services/installTasks.ts'
-  );
-  return {
-    ...actual,
-    runInstallTasks: mockRunInstallTasks,
-  };
-});
-
-vi.mock('../../services/history.ts', async () => {
-  const actual = await vi.importActual<typeof import('../../services/history.ts')>(
-    '../../services/history.ts'
-  );
-  return {
-    ...actual,
-    recordRun: mockRecordRun,
-    recordRunSafely: (options: Parameters<typeof actual.recordRun>[0]) =>
-      actual.recordRunSafely(options, mockRecordRun),
-  };
-});
-
 import type { ModuleId } from '../../config/modules.ts';
 import type { CliFlags } from '../../services/args.ts';
 import { CliUsageError } from '../../services/errors.ts';

@@ -13,10 +13,6 @@ vi.mock('ink', async () => {
   };
 });
 
-vi.mock('../../../app.tsx', () => ({
-  App: () => null,
-}));
-
 const { mockRecordRun } = vi.hoisted(() => ({
   mockRecordRun: vi.fn(),
 }));
