@@ -201,9 +201,9 @@ export function ReviewScreen({ state, onNext, onBack }: ReviewScreenProps) {
 
         {sharedConfigShadowed && (
           <Text color={uiColor('yellow')}>
-            Your {getSharedConfigPath()} stays on disk (and is backed up), but these shells will
-            read their own configs instead. To keep using it, run shell-configurator apply --adopt
-            --shells {state.selectedShells.join(',')}.
+            Your {getSharedConfigPath()} stays on disk, untouched, but these shells will read their
+            own configs instead. To keep using it, run shell-configurator apply --adopt --shells{' '}
+            {state.selectedShells.join(',')}.
           </Text>
         )}
 
