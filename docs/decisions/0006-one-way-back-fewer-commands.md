@@ -30,9 +30,14 @@ tool solves.
 
 Keep the surface small, for simplicity and focus:
 
-- `rollback` is the only way back. No `.bak-*` files are written, `uninstall`
-  deletes a per-shell config instead of renaming it, and `--restore` is retired
-  with a message that points at `rollback`.
+- `rollback` is the only undo command. `--restore` and the Done screen's
+  restore key are retired, with a message that points at `rollback`.
+- No `.bak-*` files are written, and `uninstall` deletes a per-shell config
+  instead of renaming it. In their place each user file (rc files, the Bash
+  login file, the shared `starship.toml`, terminal configs) gets one
+  `<file>.pre-shell-configurator` copy the first time the tool changes it,
+  never overwritten. A file that already holds a ShellConfigurator block is
+  not an original and gets no copy; generated per-shell configs never get one.
 - `repair` is retired in favour of `doctor --fix`.
 - `share` becomes `generate --markdown`.
 - `timings` becomes `doctor --timings` (with `--config` to time another file).
@@ -45,8 +50,10 @@ else.
 ## Consequences
 
 - Capture stays best-effort: a run whose capture fails still runs, but it
-  cannot be rolled back, and nothing else can undo it. The report says so.
-- Users' config folders no longer collect `.bak-*` files. Old ones left by
-  earlier versions are not touched.
+  cannot be rolled back. The report says so and names the
+  `.pre-shell-configurator` copies, which also outlive a pruned run (only the
+  newest 50 are kept) or a deleted state folder.
+- Users' config folders no longer collect a `.bak-*` file per run. Old ones
+  left by earlier versions are not touched.
 - Six top-level commands remain (`generate`, `apply`, `doctor`, `uninstall`,
   `rollback`, `list`), plus `debug-info` and `completions`.
