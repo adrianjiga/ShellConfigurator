@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 import { parse } from '@iarna/toml';
 import { assertRcWired, die, requireScratchHome } from './ci/smokeHome.mjs';
@@ -19,11 +19,11 @@ const { PRESETS } = await import('../dist/config/presets.js');
 const { getShell, getShellBinary } = await import('../dist/config/shells.js');
 const {
   applyShellConfig,
-  backupSharedConfig,
   getSharedConfigPath,
   getShellConfigPath,
+  ORIGINAL_SUFFIX,
   resetSharedShellConfig,
-  restoreConfigBackups,
+  writeSharedConfig,
   writeShellConfig,
 } = await import('../dist/generators/shellRc.js');
 const { generateToml } = await import('../dist/generators/starship.js');
@@ -317,7 +317,7 @@ await check('getMissingStarshipPathDir flags ~/.local/bin when starship is unrea
   }
 });
 
-await check('writeShellConfig backs up and restoreConfigBackups restores', () => {
+await check('config writes keep the original once and no .bak files', () => {
   const configBaseDir = process.env.XDG_CONFIG_HOME;
   const configDir = nodePath.join(configBaseDir, 'starship');
   rmSync(configBaseDir, { recursive: true, force: true });
@@ -325,32 +325,24 @@ await check('writeShellConfig backs up and restoreConfigBackups restores', () =>
 
   const bashCfg = getShellConfigPath('bash');
   writeFileSync(bashCfg, '# v1\n');
-  const written = writeShellConfig('# v2\n', 'bash');
-  assert.ok(written.backedUpTo, 'expected a backup of the pre-existing per-shell config');
+  writeShellConfig('# v2\n', 'bash');
   assert.equal(readFileSync(bashCfg, 'utf8'), '# v2\n');
 
-  const fresh = writeShellConfig('# fresh\n', 'zsh');
-  assert.equal(fresh.backedUpTo, undefined);
-
   const shared = getSharedConfigPath();
+  const original = `${shared}${ORIGINAL_SUFFIX}`;
+  rmSync(original, { force: true });
   writeFileSync(shared, '# shared-v1\n');
-  const backup = backupSharedConfig();
-  assert.ok(backup, 'expected a shared-config backup');
-  writeFileSync(shared, '# shared-v2\n');
+  writeSharedConfig('# shared-v2\n');
+  writeSharedConfig('# shared-v3\n');
+  assert.equal(readFileSync(original, 'utf8'), '# shared-v1\n', 'the original was not kept once');
+  assert.equal(readFileSync(shared, 'utf8'), '# shared-v3\n');
 
-  const { restored, failed } = restoreConfigBackups();
-  assert.deepEqual(failed, [], 'some backups failed to restore');
-  assert.ok(
-    restored.some((r) => r.what === 'bash'),
-    'no per-shell config restored'
-  );
-  assert.ok(
-    restored.some((r) => r.what === 'shared'),
-    'no shared config restored'
-  );
-  assert.equal(readFileSync(bashCfg, 'utf8'), '# v1\n', 'per-shell config not restored');
-  assert.equal(readFileSync(shared, 'utf8'), '# shared-v1\n', 'shared config not restored');
+  for (const dir of [configDir, nodePath.dirname(shared)]) {
+    const stray = readdirSync(dir).filter((f) => f.includes('.bak-'));
+    assert.deepEqual(stray, [], `.bak files written in ${dir}`);
+  }
 
+  rmSync(original, { force: true });
   rmSync(configBaseDir, { recursive: true, force: true });
 });
 

@@ -118,7 +118,8 @@ export function assertRcWired(rcPath, shell) {
 
 /**
  * Runs a real `uninstall --yes` for one shell after an apply, then asserts the
- * rc lost every managed line, the per-shell config moved to a backup, a second
+ * rc lost every managed line, the per-shell config is gone, the rc's content
+ * from before the apply stays as its `.pre-shell-configurator` copy, a second
  * run finds nothing, a `rollback` brings both back, and a second `rollback`
  * puts both back to `before`, their content ahead of the apply.
  */
@@ -137,10 +138,14 @@ export function assertUninstalled(homeDir, rcPath, shell, before) {
   assert.ok(!existsSync(configPath), `uninstall left ${configPath}`);
   const summary = whatChangedPath();
   assert.ok(existsSync(summary), 'uninstall removed the WHAT-CHANGED.md of the last apply');
-  const rcBackups = readdirSync(homeDir).filter((f) =>
-    f.startsWith(`${nodePath.basename(rcPath)}.bak-`)
-  );
-  assert.ok(rcBackups.length > 0, 'uninstall did not back up the rc');
+  if (before.rc !== null && !before.rc.includes('ShellConfigurator')) {
+    assert.equal(
+      readOrNull(`${rcPath}.pre-shell-configurator`),
+      before.rc,
+      'the rc has no .pre-shell-configurator copy of its content before the apply'
+    );
+  }
+  assert.ok(!readdirSync(homeDir).some((f) => f.includes('.bak-')), 'a .bak- file was written');
 
   const again = runCli(['uninstall', '--yes', '--shells', shell]);
   assert.ok(!again.includes('REMOVED'), `a second uninstall removed something:\n${again}`);
