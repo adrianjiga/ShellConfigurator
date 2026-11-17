@@ -154,8 +154,8 @@ export function customCommands(toml: string): string[] {
     const escapedKey = /^[^=]*\\[uU]/.test(line) || /^\s*\[[^\]]*\\[uU]/.test(line);
     if (!header && !escapedKey && !key.test(line)) continue;
     found.push(line.trim());
-    if (header || !line.includes('=')) continue;
-    let value = scanValue(line.slice(line.indexOf('=') + 1), { depth: 0, multiline: null });
+    if (header) continue;
+    let value = scanValue(line, { depth: 0, multiline: null });
     while ((value.depth > 0 || value.multiline) && ++i < lines.length) {
       found.push(lines[i]!.trim());
       value = scanValue(lines[i]!, value);
