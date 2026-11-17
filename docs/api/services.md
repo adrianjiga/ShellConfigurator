@@ -137,8 +137,8 @@ function captureRun<T>(
 // can hold back what nothing could bring back. runId is null then, and when the
 // run changed nothing. Each run gets its own folder (created exclusively), and
 // each file's mode is kept so a restore gets it back. A throwing run rejects
-// with a CapturedRunError carrying its runId, which apply and the wizard still
-// record. A capture that fails partway removes its folder; a file the run left
+// with a CapturedRunError carrying its runId, which apply, the wizard,
+// doctor --fix, uninstall and rollback (as partial) still record. A capture that fails partway removes its folder; a file the run left
 // unreadable is kept with after: 'unreadable' (UNREADABLE_AFTER); only the
 // newest 50 run folders are kept (pruneRuns, KEPT_RUNS). Tests get a stub from
 // setup.ts. onChanged runs once the run is over and changed files (also after a
