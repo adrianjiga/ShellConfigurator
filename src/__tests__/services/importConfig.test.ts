@@ -400,6 +400,21 @@ describe('runApply --import-url', () => {
     await expect(fetchImportedConfig('https://example.com/reset')).rejects.toThrow(/ECONNRESET/);
   });
 
+  it('keeps a token out of the message when reading the body fails', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new Error('socket hang up at https://example.com/cfg?token=s3cret'));
+      },
+    });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(body, { status: 200 }));
+
+    const err = await fetchImportedConfig('https://example.com/cfg').catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(CliRunError);
+    expect((err as Error).message).toContain('socket hang up at https://example.com/cfg');
+    expect((err as Error).message).not.toContain('s3cret');
+  });
+
   it('passes a timeout signal to fetch so a hung request aborts', async () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')

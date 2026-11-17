@@ -115,7 +115,7 @@ export async function fetchImportedConfig(
       if (err instanceof DOMException && err.name === 'TimeoutError') {
         throw new CliRunError(`Could not fetch '${shown}': request timed out after ${timeoutMs}ms`);
       }
-      throw new CliRunError(`Could not fetch '${shown}': ${errorMessage(err)}`);
+      throw new CliRunError(`Could not fetch '${shown}': ${redactUrlText(errorMessage(err))}`);
     } finally {
       reader.releaseLock();
     }
