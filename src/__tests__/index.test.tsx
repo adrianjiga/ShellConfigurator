@@ -192,7 +192,7 @@ describe('index retired flags', () => {
   it('points --restore at rollback', () => {
     expect(() => parseCliArgs(['--restore'])).toThrow(
       new CliUsageError(
-        '--restore is gone, and so are the .bak files it copied back: shell-configurator rollback undoes the last run, rc lines included.'
+        '--restore is gone: shell-configurator rollback undoes the last run, rc lines included. .bak-* copies from older versions stay where they are; copy one back by hand if you need it.'
       )
     );
   });

@@ -208,8 +208,8 @@ const RETIRED_FLAGS: Record<string, string> = {
   '--list-fonts': '--list-fonts is gone: run shell-configurator list fonts.',
   '--undo': '--undo is gone: shell-configurator rollback undoes the last run, rc lines included.',
   '--restore':
-    '--restore is gone, and so are the .bak files it copied back: ' +
-    'shell-configurator rollback undoes the last run, rc lines included.',
+    '--restore is gone: shell-configurator rollback undoes the last run, rc lines included. ' +
+    '.bak-* copies from older versions stay where they are; copy one back by hand if you need it.',
 };
 
 export const KNOWN_FLAGS = {
