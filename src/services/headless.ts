@@ -1,7 +1,4 @@
-import * as path from 'node:path';
 import { PRESETS } from '../config/presets.ts';
-import { writeFileAtomic } from '../generators/fileWrite.ts';
-import { generateToml } from '../generators/starship.ts';
 import type { InstallTask, WizardState } from '../types.ts';
 import {
   dryRunPlan,
@@ -20,7 +17,7 @@ import {
   detectTerminalAsync,
   findStarshipAsync,
 } from './detector.ts';
-import { CliRunError, CliUsageError, errorMessage } from './errors.ts';
+import { CliUsageError, errorMessage } from './errors.ts';
 import { recordRunSafely } from './history.ts';
 import { customCommands, fetchImportedConfig } from './importConfig.ts';
 import { NERD_FONTS } from './installer.ts';
@@ -32,53 +29,8 @@ import {
   runInstallTasks,
 } from './installTasks.ts';
 import { CapturedRunError, captureRun, trackedFiles } from './runCapture.ts';
-import { serializeState } from './state.ts';
 import { stateFromFlags } from './stateFlags.ts';
 import { whatChangedPath, writeWhatChangedSafely } from './whatChanged.ts';
-
-/** The full `generate` subcommand: TOML (or a state card) from flags. */
-export function runGenerate(flags: CliFlags): void {
-  if (flags.adopt || flags.importUrl) {
-    throw new CliUsageError('--adopt and --import-url are only valid with the apply subcommand.');
-  }
-  const state = stateFromFlags(flags);
-  if (state.keepExistingConfig) {
-    throw new CliUsageError(
-      'generate has nothing to write for an adopt-mode card; use apply, or drop keepExistingConfig.'
-    );
-  }
-  const toml = generateToml(state);
-
-  if (
-    flags.outputFile &&
-    flags.exportFile &&
-    path.resolve(flags.outputFile) === path.resolve(flags.exportFile)
-  ) {
-    throw new CliUsageError(
-      `Refusing to write the TOML and the state card to the same file: ${flags.outputFile}`
-    );
-  }
-
-  if (flags.exportFile) {
-    try {
-      writeFileAtomic(flags.exportFile, serializeState(state));
-    } catch (err) {
-      throw new CliRunError(
-        `Could not write state card to '${flags.exportFile}': ${errorMessage(err)}`
-      );
-    }
-  }
-
-  if (flags.outputFile) {
-    try {
-      writeFileAtomic(flags.outputFile, toml);
-    } catch (err) {
-      throw new CliRunError(`Could not write TOML to '${flags.outputFile}': ${errorMessage(err)}`);
-    }
-  } else if (!flags.exportFile) {
-    process.stdout.write(toml);
-  }
-}
 
 /**
  * Fills the runtime fields `apply` needs that `stateFromFlags` leaves defaulted:
