@@ -1,20 +1,15 @@
-import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { MODULES } from '../config/modules.ts';
-import { PALETTES } from '../config/palettes.ts';
-import { PRESETS, powerlineDroppedReason } from '../config/presets.ts';
-import { getShell, SHELLS, type ShellDef, setupCommand } from '../config/shells.ts';
-import { statusLine, statusMark } from '../config/status.ts';
-import { getSharedConfigPath, getShellConfigPath } from '../generators/configPaths.ts';
-import { ORIGINAL_SUFFIX, writeFileAtomic } from '../generators/fileWrite.ts';
+import { PRESETS } from '../config/presets.ts';
+import { writeFileAtomic } from '../generators/fileWrite.ts';
 import { generateToml } from '../generators/starship.ts';
+import type { InstallTask, WizardState } from '../types.ts';
 import {
-  type CharacterSymbol,
-  DEFAULT_STATE,
-  type InstallTask,
-  type ShellId,
-  type WizardState,
-} from '../types.ts';
+  dryRunPlan,
+  printChanges,
+  printManualSetup,
+  printTasks,
+  showControlCharacters,
+} from './applyReport.ts';
 import type { CliFlags } from './args.ts';
 import { cancelOnSignals, signalExitCode } from './cancel.ts';
 import {
@@ -26,191 +21,20 @@ import {
   findStarshipAsync,
 } from './detector.ts';
 import { CliRunError, CliUsageError, errorMessage } from './errors.ts';
-import { type FileChange, plannedFileChanges } from './fileDiff.ts';
 import { recordRunSafely } from './history.ts';
-import { NERD_FONTS, plannedPathDir } from './installer.ts';
+import { fetchImportedConfig } from './importConfig.ts';
+import { NERD_FONTS } from './installer.ts';
 import {
   buildTaskList,
-  configIfFontFails,
   DEFAULT_INSTALL_TASK_DEPS,
   FONT_FALLBACK_NOTE,
   plannedResetShells,
   runInstallTasks,
-  TASK_IDS,
 } from './installTasks.ts';
-import { redactUrl, redactUrlText } from './redact.ts';
 import { CapturedRunError, captureRun, trackedFiles } from './runCapture.ts';
-import { parseState, serializeState } from './state.ts';
+import { serializeState } from './state.ts';
+import { stateFromFlags } from './stateFlags.ts';
 import { whatChangedPath, writeWhatChangedSafely } from './whatChanged.ts';
-
-const SHELL_IDS = new Set<string>(SHELLS.map((s) => s.id));
-const MODULE_IDS = new Set<string>([...MODULES.map((m) => m.id), 'character']);
-const PRESET_IDS = PRESETS.map((p) => p.id);
-const PALETTE_IDS: string[] = PALETTES.map((p) => p.id);
-const CHARACTER_SYMBOLS: readonly CharacterSymbol[] = ['arrow', 'lambda', 'dollar'];
-const FONT_IDS = new Set<string>(NERD_FONTS.map((f) => f.id));
-
-function unknown(what: string, value: string, valid: readonly string[]): CliUsageError {
-  return new CliUsageError(`Unknown ${what}: '${value}' (expected one of: ${valid.join(', ')})`);
-}
-
-/**
- * Fail-fast validation of the public flag surface (D2). Every value that can
- * reach the generator must be one it understands: a typo'd `--preset`,
- * `--palette`, `--character`, `--set-default`, `--shells` or `--font` must
- * error before any install work, not crash deep in the generator with a
- * confusing TypeError or silently change the result.
- */
-export function validateFlagValues(flags: CliFlags): void {
-  if (flags.shells) {
-    for (const shell of flags.shells) {
-      if (!SHELL_IDS.has(shell)) throw unknown('shell id (--shells)', shell, [...SHELL_IDS]);
-    }
-  }
-  if (flags.preset && !PRESET_IDS.includes(flags.preset)) {
-    throw unknown('preset (--preset)', flags.preset, PRESET_IDS);
-  }
-  if (flags.palette && !PALETTE_IDS.includes(flags.palette)) {
-    throw unknown('palette (--palette)', flags.palette, PALETTE_IDS);
-  }
-  if (
-    flags.characterSymbol &&
-    !CHARACTER_SYMBOLS.includes(flags.characterSymbol as CharacterSymbol)
-  ) {
-    throw unknown('character symbol (--character)', flags.characterSymbol, [...CHARACTER_SYMBOLS]);
-  }
-  if (flags.setDefaultShell && !SHELL_IDS.has(flags.setDefaultShell)) {
-    throw unknown('shell id (--set-default)', flags.setDefaultShell, [...SHELL_IDS]);
-  }
-  if (flags.font && flags.font !== 'none' && !FONT_IDS.has(flags.font)) {
-    throw unknown('Nerd Font (--font)', flags.font, ['none', ...FONT_IDS]);
-  }
-}
-
-/**
- * Same fail-fast discipline for the merged flags-and-card state: the card parser
- * checks each value on its own, but only the merged state shows an unknown font
- * id, a default shell that is not being configured, or a font left to the picker.
- */
-function assertValidState(state: WizardState): void {
-  if (state.preset !== null && !PRESET_IDS.includes(state.preset)) {
-    throw unknown('preset', state.preset, PRESET_IDS);
-  }
-  if (!PALETTE_IDS.includes(state.palette)) {
-    throw unknown('palette', state.palette, PALETTE_IDS);
-  }
-  if (!CHARACTER_SYMBOLS.includes(state.characterSymbol)) {
-    throw unknown('character symbol', state.characterSymbol, [...CHARACTER_SYMBOLS]);
-  }
-  for (const moduleId of [...state.leftModules, ...state.rightModules]) {
-    if (!MODULE_IDS.has(moduleId)) throw unknown('module', moduleId, [...MODULE_IDS]);
-  }
-  if (state.setDefaultShell !== null && !SHELL_IDS.has(state.setDefaultShell)) {
-    throw unknown('shell id (--set-default)', state.setDefaultShell, [...SHELL_IDS]);
-  }
-  for (const shell of state.selectedShells) {
-    if (!SHELL_IDS.has(shell)) throw unknown('shell id', shell, [...SHELL_IDS]);
-  }
-  if (state.setDefaultShell !== null && !state.selectedShells.includes(state.setDefaultShell)) {
-    throw new CliUsageError(
-      `Cannot set '${state.setDefaultShell}' as the default shell: it is not one of the ` +
-        `shells being configured (${state.selectedShells.join(', ') || 'none'}).`
-    );
-  }
-  const font = state.nerdFontToInstall;
-  if (font.kind === 'install' && !FONT_IDS.has(font.id)) {
-    throw unknown('Nerd Font', font.id, [...FONT_IDS]);
-  }
-  if (font.kind === 'select') {
-    throw new CliUsageError(
-      'The state card defers the font choice to the interactive picker; pass --font <id> or --font none instead.'
-    );
-  }
-}
-
-/**
- * Builds a WizardState from CLI flags (and optionally a state card), reusing the
- * exact decisions the wizard makes:
- *
- * - a `--preset` seeds left/right modules, palette and powerline, exactly like
- *   choosing it on the Preset screen;
- * - every explicit flag then overrides the card/preset value;
- * - runtime fields (package manager, installed shells, step) stay at their
- *   defaults — `apply` fills those via detection before running.
- */
-export function stateFromFlags(flags: CliFlags): WizardState {
-  validateFlagValues(flags);
-  let state: WizardState;
-  if (flags.stateFile) {
-    let json: string;
-    try {
-      json = fs.readFileSync(flags.stateFile, 'utf8');
-    } catch (err) {
-      throw new CliUsageError(
-        `Could not read state card '${flags.stateFile}': ${errorMessage(err)}`
-      );
-    }
-    state = parseState(json);
-  } else {
-    state = { ...DEFAULT_STATE };
-  }
-
-  if (flags.preset) {
-    const preset = PRESETS.find((p) => p.id === flags.preset)!;
-    state = {
-      ...state,
-      preset: preset.id,
-      leftModules: [...preset.leftModules],
-      rightModules: [...preset.rightModules],
-      palette: preset.palette,
-      powerline: preset.powerline,
-    };
-    // A preset that needs Nerd Font glyphs implies the machine renders them —
-    // the wizard only offers those presets to users who already have a font.
-    // An explicit --has-nerd-font / --no-nerd-font (or a later --font) still wins.
-    if (flags.hasNerdFont === undefined && !flags.stateFile) {
-      state = { ...state, hasNerdFont: preset.requiresNerdFont };
-    }
-  }
-
-  if (flags.palette) state = { ...state, palette: flags.palette as WizardState['palette'] };
-  if (flags.powerline !== undefined) state = { ...state, powerline: flags.powerline };
-  if (flags.shells) {
-    const shells = [...new Set(flags.shells)] as ShellId[];
-    state = { ...state, selectedShells: shells };
-  }
-  if (flags.characterSymbol) {
-    state = { ...state, characterSymbol: flags.characterSymbol as CharacterSymbol };
-  }
-  if (flags.setDefaultShell) {
-    state = { ...state, setDefaultShell: flags.setDefaultShell as ShellId };
-  }
-  if (flags.skipStarship) state = { ...state, skipStarshipInstall: true };
-  if (flags.hasNerdFont !== undefined) state = { ...state, hasNerdFont: flags.hasNerdFont };
-  if (flags.adopt) state = { ...state, keepExistingConfig: true };
-
-  if (flags.font) {
-    state = {
-      ...state,
-      nerdFontToInstall:
-        flags.font === 'none' ? { kind: 'none' } : { kind: 'install', id: flags.font },
-    };
-    // Choosing a concrete font implies the machine will render its glyphs; an
-    // explicit --has-nerd-font / --no-nerd-font still wins.
-    if (flags.hasNerdFont === undefined) {
-      state = { ...state, hasNerdFont: flags.font !== 'none' };
-    }
-  }
-
-  assertValidState(state);
-  const droppedPowerline = powerlineDroppedReason(state);
-  if (droppedPowerline) {
-    process.stderr.write(
-      `shell-configurator: warning: ${droppedPowerline}; a plain prompt will be generated.\n`
-    );
-  }
-  return state;
-}
 
 /** The full `generate` subcommand: TOML (or a state card) from flags. */
 export function runGenerate(flags: CliFlags): void {
@@ -256,20 +80,6 @@ export function runGenerate(flags: CliFlags): void {
   }
 }
 
-function formatTask(t: InstallTask): string {
-  const suffix = t.error ? ` — ${t.error}` : t.note ? ` (${t.note})` : '';
-  return `${statusMark(t.status).icon} ${statusLine(t.status, `${t.label}${suffix}`)}`;
-}
-
-/** `text` with terminal control characters shown as `\\uXXXX`, so a fetched file cannot hide lines. */
-function showControlCharacters(text: string): string {
-  return text.replace(
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: these are what it escapes.
-    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g,
-    (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`
-  );
-}
-
 /**
  * Every line of `toml` that may set a command Starship runs on every prompt: a
  * `command`, `when` or `shell` key in any form (dotted, quoted, inline table),
@@ -296,153 +106,6 @@ export function customCommands(toml: string): string[] {
     }
   }
   return found;
-}
-
-/** The plain-text plan/applied view `apply` prints to stdout. */
-function printTasks(tasks: InstallTask[]): void {
-  for (const task of tasks) process.stdout.write(`  ${formatTask(task)}\n`);
-}
-
-/** The setup command of each selected shell that is set up by hand. */
-function printManualSetup(state: WizardState): void {
-  const manual = state.selectedShells
-    .map((id) => getShell(id))
-    .filter((shell): shell is ShellDef => Boolean(shell && !shell.rcFile));
-  for (const shell of manual) {
-    process.stdout.write(
-      `\n${shell.label} is set up by hand. ${shell.manualNote ?? ''}\n  ${setupCommand(shell, state.keepExistingConfig)}\n`
-    );
-  }
-}
-
-/** Cap on how long an --import-url fetch may hang before it is aborted. */
-const IMPORT_FETCH_TIMEOUT_MS = 10_000;
-
-const IMPORT_MAX_REDIRECTS = 5;
-
-/** Cap on how large an --import-url config may be. Starship configs are KBs. */
-const IMPORT_FETCH_MAX_BYTES = 1_000_000;
-
-export interface FetchConfigOptions {
-  /** Abort the request after this many ms. Loose, for tests to shrink the wait. */
-  timeoutMs?: number;
-  /** Reject when the response exceeds this many bytes. */
-  maxBytes?: number;
-}
-
-/**
- * Fetches a starship.toml from a gist/URL (`--import-url`) and folds it into
- * adopt mode: the downloaded content becomes the shared config every wired
- * shell reads, so the wizard never regenerates. Fails loud on a bad scheme,
- * an HTTP error, or an empty body. The fetch is bounded: a hung connection is
- * aborted after a timeout, and an oversized response (declared or actual) is
- * rejected so a broken or malicious URL cannot hold the run hostage or flood
- * memory.
- */
-export async function fetchImportedConfig(
-  url: string,
-  options: FetchConfigOptions = {}
-): Promise<string> {
-  const shown = redactUrl(url);
-  const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(url)?.[1]?.toLowerCase();
-  if (scheme !== 'http' && scheme !== 'https') {
-    throw new CliUsageError(`--import-url expects an http(s) URL, got '${shown}'`);
-  }
-  if (scheme !== 'https') {
-    throw new CliUsageError(
-      `--import-url requires an https URL, got '${shown}' — the downloaded config runs ` +
-        'commands on every prompt, so it must not travel over plain http.'
-    );
-  }
-  if (/^https:\/\/[^/?#]*@/i.test(url)) {
-    throw new CliUsageError(
-      `--import-url cannot send a user name or password ('${shown}'); ` +
-        'use a URL that needs none, such as a raw gist link.'
-    );
-  }
-
-  const timeoutMs = options.timeoutMs ?? IMPORT_FETCH_TIMEOUT_MS;
-  const maxBytes = options.maxBytes ?? IMPORT_FETCH_MAX_BYTES;
-
-  let response: Response;
-  try {
-    const signal = AbortSignal.timeout(timeoutMs);
-    let current = url;
-    for (let hop = 0; ; hop++) {
-      response = await fetch(current, { signal, redirect: 'manual' });
-      const location =
-        response.status >= 300 && response.status < 400 && response.headers.get('location');
-      if (!location) break;
-      await response.body?.cancel();
-      if (hop === IMPORT_MAX_REDIRECTS) {
-        throw new CliRunError(
-          `Could not fetch '${shown}': more than ${IMPORT_MAX_REDIRECTS} redirects`
-        );
-      }
-      const next = new URL(location, current);
-      if (next.protocol !== 'https:') {
-        throw new CliRunError(
-          `Could not fetch '${shown}': redirected to a non-https URL ${redactUrl(next.href)}`
-        );
-      }
-      current = next.href;
-    }
-  } catch (err) {
-    if (err instanceof CliRunError) throw err;
-    // AbortSignal.timeout rejects with a TimeoutError DOMException on timeout.
-    if (err instanceof DOMException && err.name === 'TimeoutError') {
-      throw new CliRunError(`Could not fetch '${shown}': request timed out after ${timeoutMs}ms`);
-    }
-    throw new CliRunError(`Could not fetch '${shown}': ${redactUrlText(errorMessage(err))}`);
-  }
-  if (!response.ok) {
-    throw new CliRunError(`Could not fetch '${shown}': HTTP ${response.status}`);
-  }
-
-  // A declared content-length is a cheap first gate; the actual byte count is
-  // the real check, so a lying or chunked server cannot sneak past.
-  const declaredSize = Number(response.headers.get('content-length') ?? '0');
-  if (declaredSize > maxBytes) {
-    throw new CliRunError(
-      `Could not fetch '${shown}': server reports ${declaredSize} bytes, ` +
-        `above the ${maxBytes} byte limit.`
-    );
-  }
-
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  const reader = response.body?.getReader();
-  if (reader) {
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        total += value.byteLength;
-        if (total > maxBytes) {
-          await reader.cancel();
-          throw new CliRunError(`Could not fetch '${shown}': config exceeds ${maxBytes} bytes`);
-        }
-        chunks.push(value);
-      }
-    } catch (err) {
-      if (err instanceof CliRunError) throw err;
-      if (err instanceof DOMException && err.name === 'TimeoutError') {
-        throw new CliRunError(`Could not fetch '${shown}': request timed out after ${timeoutMs}ms`);
-      }
-      throw new CliRunError(`Could not fetch '${shown}': ${errorMessage(err)}`);
-    } finally {
-      reader.releaseLock();
-    }
-  }
-
-  const content = Buffer.concat(chunks).toString('utf8');
-  if (content.trim().length === 0) {
-    throw new CliRunError(`'${shown}' returned no config content`);
-  }
-  if (content.trimStart().startsWith('<')) {
-    throw new CliRunError(`'${shown}' returned HTML, not a TOML config — use the raw file URL.`);
-  }
-  return content;
 }
 
 /**
@@ -496,85 +159,11 @@ async function prepareApplyState(flags: CliFlags): Promise<WizardState> {
   return { ...state, installedShells, packageManager, container, terminal, remoteSession };
 }
 
-export type DryRunConfig =
-  | { kind: 'per-shell'; toml: string; tomlIfFontFails?: string }
-  | { kind: 'imported'; path: string; toml: string }
-  | { kind: 'kept'; path: string; exists: boolean };
-
-export interface DryRunPlan {
-  dryRun: true;
-  shells: ShellId[];
-  installStarship: boolean;
-  tasks: InstallTask[];
-  config: DryRunConfig;
-  changes: FileChange[];
-}
-
-export function dryRunPlan(
-  state: WizardState,
-  tasks: InstallTask[],
-  resetShells: readonly ShellId[],
-  starshipInstalled = false
-): DryRunPlan {
-  const shared = getSharedConfigPath();
-  const pathDir = state.skipStarshipInstall ? null : plannedPathDir(state.packageManager);
-  return {
-    dryRun: true,
-    shells: state.selectedShells,
-    installStarship: !state.skipStarshipInstall && !starshipInstalled,
-    tasks,
-    config: state.keepExistingConfig
-      ? state.sharedConfigToml != null
-        ? { kind: 'imported', path: shared, toml: state.sharedConfigToml }
-        : { kind: 'kept', path: shared, exists: fs.existsSync(shared) }
-      : perShellConfig(state),
-    changes: plannedFileChanges(state, resetShells, pathDir),
-  };
-}
-
-function perShellConfig(state: WizardState): DryRunConfig {
-  const toml = generateToml(state);
-  const tomlIfFontFails = configIfFontFails(state);
-  return tomlIfFontFails
-    ? { kind: 'per-shell', toml, tomlIfFontFails }
-    : { kind: 'per-shell', toml };
-}
-
 function interruptedTasks(tasks: InstallTask[], error: unknown): InstallTask[] {
   return tasks.map((task) =>
     task.status === 'pending' || task.status === 'running'
       ? { ...task, status: 'failed', error: errorMessage(error) }
       : task
-  );
-}
-
-function printChanges(plan: DryRunPlan): void {
-  const shownAbove = new Set(
-    plan.config.kind === 'per-shell'
-      ? plan.shells.map((shellId) => getShellConfigPath(shellId))
-      : plan.config.kind === 'imported'
-        ? [plan.config.path]
-        : []
-  );
-  const terminalNote = plan.tasks.some((task) => task.id === TASK_IDS.terminal)
-    ? "Its terminal font step edits the terminal's own config, which is not shown here.\n"
-    : '';
-  if (plan.changes.length === 0) {
-    process.stdout.write(`\nNo config or rc file on disk would change.\n${terminalNote}`);
-    return;
-  }
-  process.stdout.write('\nChanges to config and rc files on disk:\n');
-  for (const change of plan.changes) {
-    if (change.status === 'unreadable') {
-      process.stdout.write(`\ncannot read ${change.path}: ${change.error}\n`);
-    } else if (change.status === 'create' && shownAbove.has(change.path)) {
-      process.stdout.write(`\ncreate ${change.path}: the config shown above\n`);
-    } else {
-      process.stdout.write(`\n${showControlCharacters(change.diff)}`);
-    }
-  }
-  process.stdout.write(
-    `\nA real run also keeps a copy of a file it changes for the first time as <file>${ORIGINAL_SUFFIX}, and writes WHAT-CHANGED.md.\n${terminalNote}`
   );
 }
 

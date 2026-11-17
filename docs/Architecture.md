@@ -289,7 +289,10 @@ src/
 │   └── toml.ts                TOML escaping helpers
 └── services/
     ├── args.ts                Hand-rolled, dependency-free CLI flag parser
-    ├── headless.ts            generate/apply implementation + bounded --import-url fetch (routing is runHeadlessCommand in index.tsx)
+    ├── headless.ts            generate/apply implementation (routing is runHeadlessCommand in index.tsx)
+    ├── stateFlags.ts          Flags or a --state card → WizardState (stateFromFlags, validateFlagValues)
+    ├── importConfig.ts        Bounded --import-url fetch (https only, size and time limits)
+    ├── applyReport.ts         What apply prints: the dry-run plan (dryRunPlan), task lines, file diffs
     ├── fileDiff.ts            Unified diff + plannedFileChanges: the configs and rc files a run would write, diffed against disk
     ├── preview.ts             Live preview: scratch-dir `starship prompt` + static fallback; starshipEnv
     ├── starshipProbe.ts       starship timings / explain: parsers, fix suggestions, timePrompt (doctor --timings), explainPromptAsync

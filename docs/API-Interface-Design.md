@@ -1247,7 +1247,7 @@ new fixture(s) under `src/__tests__/golden/`.
 2. **`src/config/promptSymbols.ts`** — add to `CHARACTER_SYMBOLS`, the single
    table the generator and the preview both read
 3. **`src/screens/StyleScreen.tsx`** — add to `CHAR_OPTIONS` array
-4. **`src/services/headless.ts`** and **`src/services/state.ts`** — add to their
+4. **`src/services/stateFlags.ts`** and **`src/services/state.ts`** — add to their
    accepted-symbol lists, and to the `--character` line in the `--help` text
    (`src/index.tsx`)
 5. **`src/services/cliSurface.ts`** — add to the value list of `FLAGS.character`,
