@@ -243,24 +243,35 @@ describe('an rc that is not UTF-8 text', () => {
 });
 
 describe('writing configs and rc files', () => {
-  const backups = (dir: string, name: string) =>
-    fs.readdirSync(dir).filter((file) => file.startsWith(`${name}.bak-`));
+  const copies = (dir: string) =>
+    fs.readdirSync(dir).filter((file) => file.includes('.bak-') || file.includes('.pre-'));
 
-  it('backs a config up only when a write replaces different content', () => {
+  it('keeps no copy of a generated per-shell config it rewrites', () => {
     const config = getShellConfigPath('zsh');
     writeShellConfig('a\n', 'zsh');
     writeShellConfig('b\n', 'zsh');
-    writeShellConfig('b\n', 'zsh');
-    expect(backups(path.dirname(config), 'zsh.toml')).toHaveLength(1);
+    expect(copies(path.dirname(config))).toEqual([]);
   });
 
-  it('leaves no backup behind for a read-only config it refuses to write', () => {
-    const config = getShellConfigPath('zsh');
-    writeShellConfig('a\n', 'zsh');
-    fs.chmodSync(config, 0o444);
+  it('keeps the rc as it was before the first change, once', () => {
+    const zshrc = path.join(home, '.zshrc');
+    fs.writeFileSync(zshrc, 'alias ll=ls\n');
 
-    expect(() => writeShellConfig('b\n', 'zsh')).toThrow();
-    expect(backups(path.dirname(config), 'zsh.toml')).toHaveLength(0);
+    applyShellConfig('zsh');
+    resetSharedShellConfig('zsh');
+    applyShellConfig('zsh');
+
+    expect(fs.readFileSync(`${zshrc}.pre-shell-configurator`, 'utf8')).toBe('alias ll=ls\n');
+    expect(copies(home)).toEqual(['.zshrc.pre-shell-configurator']);
+  });
+
+  it('keeps no copy of a read-only rc it refuses to write', () => {
+    const zshrc = path.join(home, '.zshrc');
+    fs.writeFileSync(zshrc, 'alias ll=ls\n');
+    fs.chmodSync(zshrc, 0o444);
+
+    expect(() => applyShellConfig('zsh')).toThrow();
+    expect(copies(home)).toEqual([]);
   });
 
   it('leaves a read-only config that already holds the content alone', () => {

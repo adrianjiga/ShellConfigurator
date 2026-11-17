@@ -2,7 +2,7 @@ import { isUtf8 } from 'node:buffer';
 import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getShell, isShellId, posixShellQuote, rcQuote, type ShellDef } from '../config/shells.ts';
+import { getShell, posixShellQuote, rcQuote, type ShellDef } from '../config/shells.ts';
 import { errorMessage } from '../services/errors.ts';
 import { configHome, expandShellPath, homeDir, scriptInstallBinDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
@@ -10,8 +10,6 @@ import type { ShellId } from '../types.ts';
 export interface WriteConfigResult {
   /** Where the config was actually written. */
   path: string;
-  /** Set when an existing config was copied aside first. */
-  backedUpTo?: string;
 }
 
 /**
@@ -24,69 +22,45 @@ export function getShellConfigPath(shellId: ShellId): string {
 
 /**
  * The shared config, ~/.config/starship.toml: per-shell configs shadow it, and
- * only an adopt run with an imported config writes it. Copied aside before an
- * install so it can be restored (see backupSharedConfig / restoreConfigBackups).
+ * only an adopt run with an imported config writes it.
  */
 export function getSharedConfigPath(): string {
   // Starship's own default ignores XDG_CONFIG_HOME.
   return path.join(homeDir(), '.config', 'starship.toml');
 }
 
-export function backupStamp(): string {
-  return new Date().toISOString().replace(/[:.]/g, '-');
-}
-
-/**
- * A fresh `<file>.bak-<stamp>` path. A second backup in the same millisecond
- * gets a `-2`, `-3`… suffix instead of overwriting the first.
- */
-export function backupPath(filePath: string): string {
-  const base = `${filePath}.bak-${backupStamp()}`;
-  let candidate = base;
-  for (let n = 2; n < 100 && fs.existsSync(candidate); n++) candidate = `${base}-${n}`;
-  return candidate;
-}
-
-/** Copies the file to a fresh backup when it exists; returns where it went. */
-export function backupIfExists(filePath: string): string | undefined {
-  if (!fs.existsSync(filePath)) return undefined;
-  const backup = backupPath(filePath);
-  fs.copyFileSync(filePath, backup);
-  return backup;
-}
-
-/** Writes a config file, creating its folder and backing up what it replaces. */
-function writeWithBackup(configPath: string, toml: string): WriteConfigResult {
+/** Writes a config file, creating its folder. */
+function writeConfigFile(configPath: string, toml: string): WriteConfigResult {
   const configDir = path.dirname(configPath);
   if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
   const current = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
-  if (current === toml) return { path: configPath };
-  let backedUpTo: string | undefined;
-  if (current !== null) {
-    assertWritable(configPath);
-    backedUpTo = sameBackup(configPath, current) ?? backupIfExists(configPath);
-  }
-  writeFileAtomic(configPath, toml);
-  return { path: configPath, ...(backedUpTo ? { backedUpTo } : {}) };
+  if (current !== toml) writeFileAtomic(configPath, toml);
+  return { path: configPath };
 }
 
-/** Refuses a file that cannot be written before anything is backed up for it. */
+/** Refuses a file that cannot be written before anything is changed for it. */
 function assertWritable(filePath: string): void {
   if (fs.existsSync(filePath)) fs.accessSync(filePath, fs.constants.W_OK);
 }
 
-/** The newest backup of `filePath` when it already holds `content`. */
-function sameBackup(filePath: string, content: string): string | undefined {
-  try {
-    const previous = newestBackup(path.dirname(filePath), path.basename(filePath));
-    return previous && fs.readFileSync(previous, 'utf8') === content ? previous : undefined;
-  } catch {
-    return undefined;
-  }
+export const ORIGINAL_SUFFIX = '.pre-shell-configurator';
+
+export function originalCopyPath(filePath: string): string {
+  return `${filePath}${ORIGINAL_SUFFIX}`;
 }
 
-/** A name `backupPath` produced: an ISO stamp with `:`/`.` replaced, maybe a suffix. */
-const BACKUP_STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z(-\d+)?$/;
+/**
+ * Copies a file to `<file>.pre-shell-configurator` the first time this tool is
+ * about to change it, and never again: a copy already there, or a file that
+ * already holds one of this tool's blocks, is not the original.
+ */
+export function keepOriginal(filePath: string): void {
+  const original = originalCopyPath(filePath);
+  if (!fs.existsSync(filePath) || fs.existsSync(original)) return;
+  assertWritable(filePath);
+  if (fs.readFileSync(filePath, 'utf8').includes('# Added by ShellConfigurator')) return;
+  fs.copyFileSync(filePath, original, fs.constants.COPYFILE_EXCL);
+}
 
 /**
  * Where a write to `filePath` must land, and the mode it must keep. A symlink
@@ -144,133 +118,6 @@ export function writeFileAtomic(
     }
     throw err;
   }
-}
-
-/**
- * Snapshots the shared starship.toml before per-shell configs shadow it. Returns
- * the backup path, or null when there is no shared config to protect. Best-effort:
- * a copy failure returns null rather than throwing, so a backup problem can never
- * block the install.
- */
-export function backupSharedConfig(): string | null {
-  const shared = getSharedConfigPath();
-  if (!fs.existsSync(shared)) return null;
-  try {
-    const previous = newestBackup(path.dirname(shared), path.basename(shared));
-    if (previous && fs.readFileSync(previous).equals(fs.readFileSync(shared))) return previous;
-  } catch {
-    // Fall through to a fresh copy.
-  }
-  try {
-    return backupIfExists(shared) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-export interface RestoredConfig {
-  /** 'shared' for starship.toml, otherwise the shell id. */
-  what: 'shared' | ShellId;
-  restoredTo: string;
-  restoredFrom: string;
-  /** Where the file it replaced was saved, so a restore can itself be undone. */
-  previousSavedTo?: string;
-}
-
-export interface RestoreFailure {
-  what: 'shared' | ShellId;
-  restoredFrom: string;
-  error: string;
-}
-
-export interface RestoreOutcome {
-  restored: RestoredConfig[];
-  failed: RestoreFailure[];
-}
-
-/** Newest *.bak-* entry for `prefix` inside `dir`, by ISO-stamped file name. */
-function newestBackup(dir: string, prefix: string): string | null {
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(dir);
-  } catch {
-    return null;
-  }
-  const marker = `${prefix}.bak-`;
-  const candidates = entries
-    .filter((e) => e.startsWith(marker) && BACKUP_STAMP.test(e.slice(marker.length)))
-    .sort((a, b) => {
-      const [stampA, nA = '1'] = a.slice(marker.length).split(/Z-?/);
-      const [stampB, nB = '1'] = b.slice(marker.length).split(/Z-?/);
-      return stampA === stampB ? Number(nA || 1) - Number(nB || 1) : stampA < stampB ? -1 : 1;
-    });
-  const newest = candidates[candidates.length - 1];
-  return newest ? path.join(dir, newest) : null;
-}
-
-function restoreOne(
-  what: 'shared' | ShellId,
-  target: string,
-  backup: string,
-  outcome: RestoreOutcome
-): void {
-  try {
-    let previousSavedTo: string | undefined;
-    if (fs.existsSync(target)) {
-      previousSavedTo = `${target}.pre-restore-${backupStamp()}`;
-      fs.copyFileSync(target, previousSavedTo);
-    }
-    fs.copyFileSync(backup, target);
-    outcome.restored.push({
-      what,
-      restoredTo: target,
-      restoredFrom: backup,
-      ...(previousSavedTo ? { previousSavedTo } : {}),
-    });
-  } catch (err) {
-    outcome.failed.push({
-      what,
-      restoredFrom: backup,
-      error: errorMessage(err),
-    });
-  }
-}
-
-/**
- * Copies the newest .bak-* snapshot back over the live config for the shared
- * config and every per-shell config that has one (only `onlyShells`, when the
- * shells the last run touched are known). Backups are kept, not deleted.
- * A config that fails to copy is reported in `failed` and does not stop the
- * rest; an empty outcome means nothing to restore.
- */
-export function restoreConfigBackups(onlyShells?: readonly ShellId[]): RestoreOutcome {
-  const base = configHome();
-  const outcome: RestoreOutcome = { restored: [], failed: [] };
-
-  const shared = getSharedConfigPath();
-  const newestShared = newestBackup(path.dirname(shared), path.basename(shared));
-  if (newestShared) restoreOne('shared', shared, newestShared, outcome);
-
-  const shellsDir = path.join(base, 'starship');
-  if (fs.existsSync(shellsDir)) {
-    let entries: string[];
-    try {
-      entries = fs.readdirSync(shellsDir);
-    } catch {
-      entries = [];
-    }
-    const shells = new Set(
-      entries.map((e) => /^(.+)\.toml\.bak-.*$/.exec(e)?.[1]).filter(isShellId)
-    );
-    for (const shellId of shells) {
-      if (onlyShells && !onlyShells.includes(shellId)) continue;
-      const backup = newestBackup(shellsDir, `${shellId}.toml`);
-      if (!backup) continue;
-      restoreOne(shellId, getShellConfigPath(shellId), backup, outcome);
-    }
-  }
-
-  return outcome;
 }
 
 const INIT_COMMAND: Record<ShellId, string> = {
@@ -461,7 +308,7 @@ export function manualSetupApplied(shell: ShellDef, pointAtSharedConfig = false)
  */
 export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigResult {
   const configPath = getShellConfigPath(shellId);
-  return writeWithBackup(configPath, toml);
+  return writeConfigFile(configPath, toml);
 }
 
 /**
@@ -471,7 +318,8 @@ export function writeShellConfig(toml: string, shellId: ShellId): WriteConfigRes
  */
 export function writeSharedConfig(toml: string): WriteConfigResult {
   const configPath = getSharedConfigPath();
-  return writeWithBackup(configPath, toml);
+  keepOriginal(configPath);
+  return writeConfigFile(configPath, toml);
 }
 
 export const BLOCK_MARKER = '# Added by ShellConfigurator';
@@ -797,6 +645,7 @@ function ensureBashLogin(): string | null {
   const existing = fs.existsSync(file) ? readTextToRewrite(file) : '';
   const content = bashLoginContent(existing);
   if (content === existing) return null;
+  keepOriginal(file);
   writeFileAtomic(file, content);
   return file;
 }
@@ -822,7 +671,10 @@ export function applyShellConfig(
   ensureRcDir(rcPath);
   const existing = fs.existsSync(rcPath) ? readTextToRewrite(rcPath) : '';
   const { content, ...result } = appliedRcContent(shellId, existing, options)!;
-  if (content !== existing) writeFileAtomic(rcPath, content);
+  if (content !== existing) {
+    keepOriginal(rcPath);
+    writeFileAtomic(rcPath, content);
+  }
   if (shellId !== 'bash') return result;
   let loginNote: string;
   try {
@@ -859,12 +711,10 @@ export function removeBashLoginBlock(file: string): RemovalResult {
   lines.splice(start, end - start);
   const content = lines.join('\n');
   if (content.trim() !== '') assertWritable(file);
-  const backedUpTo = backupIfExists(file);
   if (content.trim() === '') fs.rmSync(file);
   else writeFileAtomic(file, content);
   return {
     removed: true,
-    ...(backedUpTo ? { backedUpTo } : {}),
     ...(content.trim() === '' ? { note: 'it held nothing else, so it is gone' } : {}),
   };
 }
@@ -997,7 +847,10 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
   ensureRcDir(rcPath);
   const existing = fs.existsSync(rcPath) ? readTextToRewrite(rcPath) : '';
   const { content, ...result } = resetRcContent(shellId, existing)!;
-  if (content !== existing) writeFileAtomic(rcPath, content);
+  if (content !== existing) {
+    keepOriginal(rcPath);
+    writeFileAtomic(rcPath, content);
+  }
   return result;
 }
 
@@ -1095,13 +948,11 @@ export function startsStarship(
 
 export interface RemovalResult {
   removed: boolean;
-  backedUpTo?: string;
   note?: string;
 }
 
 /**
- * Removes every ShellConfigurator block from the shell's rc file, after backing
- * it up. A PATH line a block carried stays when the user's own init line (or
+ * Removes every ShellConfigurator block from the shell's rc file. A PATH line a block carried stays when the user's own init line (or
  * fish's conf.d init) still needs it to find Starship.
  */
 export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
@@ -1136,7 +987,6 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
   }
 
   assertWritable(rcPath);
-  const backedUpTo = backupIfExists(rcPath);
   writeFileAtomic(rcPath, keepLineEndings(existing, lines.join('\n')));
   const notes = [
     ...(ownInit ? ['your own Starship init line stays'] : []),
@@ -1151,16 +1001,14 @@ export function removeManagedRcBlocks(shellId: ShellId): RemovalResult {
   ];
   return {
     removed: true,
-    ...(backedUpTo ? { backedUpTo } : {}),
     ...(notes.length > 0 ? { note: notes.join('; ') } : {}),
   };
 }
 
-/** Moves a shell's per-shell config aside to a backup. */
+/** Deletes a shell's per-shell config. */
 export function removeShellConfigFile(shellId: ShellId): RemovalResult {
   const configPath = getShellConfigPath(shellId);
   if (!fs.existsSync(configPath)) return { removed: false, note: `${configPath} does not exist` };
-  const backedUpTo = backupPath(configPath);
-  fs.renameSync(configPath, backedUpTo);
-  return { removed: true, backedUpTo };
+  fs.rmSync(configPath);
+  return { removed: true };
 }

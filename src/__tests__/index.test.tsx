@@ -74,8 +74,6 @@ vi.mock('../services/repair.ts', () => ({
 }));
 
 import { render } from 'ink';
-import { getShell } from '../config/shells.ts';
-import { getShellConfigPath } from '../generators/shellRc.ts';
 import {
   applyInstallOutcomeExitCode,
   assertWizardTerminal,
@@ -841,10 +839,7 @@ describe('index uninstall command', () => {
       result: await run(),
       runId: 'run-9',
     }));
-    const io = fakeIo(
-      {},
-      { removeManagedRcBlocks: vi.fn(() => ({ removed: true, backedUpTo: '/h/.zshrc.bak-1' })) }
-    );
+    const io = fakeIo();
 
     await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);
 
@@ -852,7 +847,7 @@ describe('index uninstall command', () => {
     expect(io.deps.removeShellConfigFile).toHaveBeenCalledWith('zsh');
     expect(output()).toContain('REMOVED Zsh config');
     expect(output()).toContain('Undo it with: shell-configurator rollback');
-    expect(output()).not.toContain('  cp ');
+    expect(output()).not.toContain('could not be recorded');
     expect(mockRecordRun).toHaveBeenCalledWith({
       kind: 'uninstall',
       command: 'uninstall',
@@ -888,21 +883,14 @@ describe('index uninstall command', () => {
     );
   });
 
-  it('prints the copy-back commands when the run could not be captured', async () => {
-    const io = fakeIo(
-      {},
-      {
-        removeManagedRcBlocks: vi.fn(() => ({ removed: true, backedUpTo: '/h/.zshrc.bak-1' })),
-        removeShellConfigFile: vi.fn(() => ({ removed: true, backedUpTo: "/h/it's.toml.bak-1" })),
-      }
-    );
+  it('says rollback cannot undo a run that could not be captured, and where the originals are', async () => {
+    const io = fakeIo();
 
     await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);
 
-    expect(output()).toContain('To undo, copy the backups back:');
-    expect(output()).toContain(`  cp '/h/.zshrc.bak-1' '${getShell('zsh')!.rcFile}'`);
-    expect(output()).toContain(`  cp '/h/it'\\''s.toml.bak-1' '${getShellConfigPath('zsh')}'`);
-    expect(output()).not.toContain('rollback');
+    expect(output()).toContain('This run could not be recorded, so rollback cannot undo it.');
+    expect(output()).toContain('<file>.pre-shell-configurator');
+    expect(output()).not.toContain('Undo it with');
   });
 
   it('goes ahead without asking under --yes', async () => {

@@ -16,7 +16,6 @@ export function fakeDeps(overrides: Partial<InstallTaskDeps> = {}): InstallTaskD
     generateToml: vi.fn(() => 'format = "$character"'),
     writeShellConfig: vi.fn(() => ({ path: '/home/u/.config/starship/zsh.toml' })),
     writeSharedConfig: vi.fn(() => ({ path: '/home/u/.config/starship.toml' })),
-    backupSharedConfig: vi.fn(() => null),
     sharedConfigExists: vi.fn(() => true),
     applyShellConfig: vi.fn(() => ({ applied: true })),
     resetSharedShellConfig: vi.fn(() => ({ applied: false })),

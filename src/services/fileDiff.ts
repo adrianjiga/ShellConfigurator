@@ -161,7 +161,7 @@ function change(filePath: string, next: (existing: string) => string, io: RcIo):
  * The config and rc files a run with `state` would write, diffed against what
  * is on disk now, using the same planners as the real writers. `pathDir` is the
  * directory the rc lines would add to PATH. Files that would stay as they are
- * are left out. Backups, WHAT-CHANGED.md, fonts, the Starship binary and
+ * are left out. `.pre-shell-configurator` copies, WHAT-CHANGED.md, fonts, the Starship binary and
  * terminal configs are not covered.
  */
 export function plannedFileChanges(

@@ -93,7 +93,9 @@ describe('wireTerminalFont', () => {
 
     const result = wireTerminalFont('kitty', 'FiraCode Nerd Font');
     expect(result.applied).toBe(true);
-    expect(result.backedUpTo).toBeDefined();
+    expect(read('kitty/kitty.conf.pre-shell-configurator')).toBe(
+      'font_size 12\nfont_family Hack Nerd Font\n'
+    );
     expect(read('kitty/kitty.conf')).toBe('font_size 12\nfont_family FiraCode Nerd Font\n');
 
     const again = wireTerminalFont('kitty', 'FiraCode Nerd Font');

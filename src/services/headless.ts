@@ -5,7 +5,12 @@ import { PALETTES } from '../config/palettes.ts';
 import { PRESETS, powerlineDroppedReason } from '../config/presets.ts';
 import { getShell, SHELLS, type ShellDef, setupCommand } from '../config/shells.ts';
 import { statusLine, statusMark } from '../config/status.ts';
-import { getSharedConfigPath, getShellConfigPath, writeFileAtomic } from '../generators/shellRc.ts';
+import {
+  getSharedConfigPath,
+  getShellConfigPath,
+  ORIGINAL_SUFFIX,
+  writeFileAtomic,
+} from '../generators/shellRc.ts';
 import { generateToml } from '../generators/starship.ts';
 import {
   type CharacterSymbol,
@@ -573,7 +578,7 @@ function printChanges(plan: DryRunPlan): void {
     }
   }
   process.stdout.write(
-    `\nA real run also saves a backup of each config it replaces and writes WHAT-CHANGED.md.\n${terminalNote}`
+    `\nA real run also keeps each file's content from before ShellConfigurator first changed it as <file>${ORIGINAL_SUFFIX}, and writes WHAT-CHANGED.md.\n${terminalNote}`
   );
 }
 

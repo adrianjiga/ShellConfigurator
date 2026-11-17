@@ -3,7 +3,6 @@ import { getShell } from '../config/shells.ts';
 import {
   type ApplyShellConfigOptions,
   applyShellConfig,
-  backupSharedConfig,
   getSharedConfigPath,
   getShellConfigPath,
   keepsOwnConfig,
@@ -56,7 +55,6 @@ export interface InstallTaskDeps {
   /** Writes the shared starship.toml in adopt mode (e.g. an --import-url fetch). */
   writeSharedConfig: (toml: string) => WriteConfigResult;
   /** Snapshots the shared starship.toml before per-shell configs shadow it. Null when none exists. */
-  backupSharedConfig: () => string | null;
   sharedConfigExists: () => boolean;
   applyShellConfig: (
     shellId: ShellId,
@@ -84,7 +82,6 @@ export const DEFAULT_INSTALL_TASK_DEPS: InstallTaskDeps = {
   generateToml,
   writeShellConfig,
   writeSharedConfig,
-  backupSharedConfig,
   sharedConfigExists: () => fs.existsSync(getSharedConfigPath()),
   applyShellConfig,
   resetSharedShellConfig,
@@ -457,16 +454,6 @@ export async function runInstallTasks(
     });
   }
 
-  /** Best-effort backup of the shared config; a failure must not stop the config step. */
-  function snapshotSharedConfig(notes: string[]) {
-    try {
-      const sharedBackup = deps.backupSharedConfig();
-      if (sharedBackup) notes.push(`shared config saved to ${sharedBackup}`);
-    } catch {
-      // The config step goes on with whatever protection exists.
-    }
-  }
-
   // --- Config: write per-shell starship configs, or adopt an existing one ---
   const configWritten = new Set<ShellId>();
   const configStatus = await runTask(TASK_IDS.config, async () => {
@@ -479,17 +466,11 @@ export async function runInstallTasks(
       // present or fetched via --import-url) stays the prompt every shell reads.
       const notes: string[] = [];
       if (state.sharedConfigToml != null) {
-        const written = deps.writeSharedConfig(state.sharedConfigToml);
-        notes.push(
-          written.backedUpTo
-            ? `shared config saved to ${written.backedUpTo}`
-            : 'wrote the imported config'
-        );
+        deps.writeSharedConfig(state.sharedConfigToml);
+        notes.push('wrote the imported config');
       } else if (!deps.sharedConfigExists()) {
         notes.push(`no shared config at ${getSharedConfigPath()} — Starship will use its defaults`);
       } else {
-        // Point at what is already there; snapshot it so a re-run can restore it.
-        snapshotSharedConfig(notes);
         notes.push('keeping the existing config untouched');
       }
       return { status: 'done', patch: { note: notes.join('; ') } };
@@ -502,19 +483,11 @@ export async function runInstallTasks(
     const toml = deps.generateToml(configState);
 
     const notes: string[] = [];
-
-    // Snapshot the shared starship.toml before per-shell configs shadow it, so a
-    // re-run can restore the pre-wizard prompt.
-    snapshotSharedConfig(notes);
-
     const writeErrors: string[] = [];
     for (const shellId of state.selectedShells) {
       try {
-        const written = deps.writeShellConfig(toml, shellId);
+        deps.writeShellConfig(toml, shellId);
         configWritten.add(shellId);
-        if (written?.backedUpTo) {
-          notes.push(`${shellId}: previous config saved to ${written.backedUpTo}`);
-        }
       } catch (err) {
         writeErrors.push(`${shellId}: ${errorMessage(err)}`);
       }
