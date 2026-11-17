@@ -9,6 +9,7 @@ import {
   assertWritable,
   type KeepOriginalOptions,
   keepOriginal,
+  type RemovalResult,
   readTextToRewrite,
   withNote,
   writeFileAtomic,
@@ -139,11 +140,6 @@ export function resetSharedShellConfig(shellId: ShellId): { applied: boolean; no
   const note = keepOriginal(rcPath);
   writeFileAtomic(rcPath, content);
   return withNote(result, note);
-}
-
-export interface RemovalResult {
-  removed: boolean;
-  note?: string;
 }
 
 /**

@@ -4,12 +4,9 @@ import { getShell, SHELLS, type ShellDef } from '../config/shells.ts';
 import { statusLine } from '../config/status.ts';
 import { bashLoginBlockFiles, removeBashLoginBlock } from '../generators/bashLogin.ts';
 import { getShellConfigPath } from '../generators/configPaths.ts';
+import type { RemovalResult } from '../generators/fileWrite.ts';
 import { hasManagedRcBlock, startsStarship } from '../generators/rcInit.ts';
-import {
-  type RemovalResult,
-  removeManagedRcBlocks,
-  removeShellConfigFile,
-} from '../generators/shellRc.ts';
+import { removeManagedRcBlocks, removeShellConfigFile } from '../generators/shellRc.ts';
 import type { PackageManager, ShellId, TerminalId } from '../types.ts';
 import { forgetStarshipVersion } from './cache.ts';
 import { detectPackageManagerAsync } from './detector.ts';
