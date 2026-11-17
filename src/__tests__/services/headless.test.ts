@@ -85,7 +85,6 @@ const flags = (partial: Partial<CliFlags>): CliFlags => ({
   subcommand: 'generate',
   help: false,
   version: false,
-  restore: false,
   ...partial,
 });
 
@@ -691,7 +690,7 @@ describe('runApply', () => {
       );
       expect(text).not.toContain('--- /dev/null');
       expect(text).toContain(
-        'saves a backup of each config it replaces and writes WHAT-CHANGED.md'
+        'for the first time as <file>.pre-shell-configurator, and writes WHAT-CHANGED.md'
       );
       expect(text).toContain(`--- ${bashrc}\n+++ ${bashrc}\n@@ -1,1 +1,`);
       expect(text).toContain(' alias ll="ls -l"\n+\n+# Added by ShellConfigurator\n');
@@ -851,9 +850,9 @@ describe('runApply', () => {
     vi.mocked(captureRun).mockImplementationOnce(async (captured, run, options) => {
       expect(captured).toEqual([...trackedFiles(), whatChangedPath()]);
       expect(options?.rewritable).toEqual([whatChangedPath()]);
-      const result = await run();
+      const result = await run(false);
       options?.onChanged?.('run-3', files, undefined);
-      return { result, runId: 'run-3' };
+      return { result, runId: 'run-3', uncaptured: false };
     });
     await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }), 'apply --shells zsh');
 
@@ -901,7 +900,7 @@ describe('runApply', () => {
     );
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run, options) => {
       try {
-        return { result: await run(), runId: 'run-4' };
+        return { result: await run(false), runId: 'run-4', uncaptured: false };
       } catch (err) {
         options?.onChanged?.('run-4', [], err);
         throw new CapturedRunError('run-4', err);
@@ -925,9 +924,9 @@ describe('runApply', () => {
   it('prints where the summary of what changed was written', async () => {
     mockRunInstallTasks.mockResolvedValue(doneTasks as never);
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run, options) => {
-      const result = await run();
+      const result = await run(false);
       options?.onChanged?.('run-5', [], undefined);
-      return { result, runId: 'run-5' };
+      return { result, runId: 'run-5', uncaptured: false };
     });
     vi.mocked(writeWhatChangedSafely).mockReturnValueOnce('/h/.config/starship/WHAT-CHANGED.md');
 

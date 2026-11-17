@@ -21,8 +21,8 @@ function makeDeps(
     bashLoginBlockFiles: vi.fn(() => []),
     removeBashLoginBlock: vi.fn(() => ({ removed: true })),
     startsStarship: vi.fn(() => false),
-    removeManagedRcBlocks: vi.fn(() => ({ removed: true, backedUpTo: '/h/.zshrc.bak-1' })),
-    removeShellConfigFile: vi.fn(() => ({ removed: true, backedUpTo: '/h/zsh.toml.bak-1' })),
+    removeManagedRcBlocks: vi.fn(() => ({ removed: true })),
+    removeShellConfigFile: vi.fn(() => ({ removed: true })),
     detectPackageManager: vi.fn().mockResolvedValue('brew'),
     plannedStarshipRemoval: vi.fn(async () => ({
       kind: 'package' as const,
@@ -66,7 +66,7 @@ describe('planUninstall', () => {
     });
   });
 
-  it('leaves a hand-set-up shell to the user but still moves its config aside', async () => {
+  it('leaves a hand-set-up shell to the user but still deletes its config', async () => {
     const steps = await planUninstall({}, makeDeps([], ['nushell']));
     expect(ids(steps)).toEqual(['rc_nushell', 'config_nushell']);
     expect(steps[0]!.run).toBeUndefined();
@@ -169,23 +169,27 @@ describe('runUninstall', () => {
 
     expect(report.ok).toBe(true);
     expect(report.actions.map((a) => [a.id, a.status, a.detail])).toEqual([
-      [
-        'rc_zsh',
-        'removed',
-        `removed the lines from ${getShell('zsh')!.rcFile}; backup: /h/.zshrc.bak-1`,
-      ],
-      ['config_zsh', 'removed', `removed ${getShellConfigPath('zsh')}; backup: /h/zsh.toml.bak-1`],
+      ['rc_zsh', 'removed', `removed the lines from ${getShell('zsh')!.rcFile}`],
+      ['config_zsh', 'removed', `removed ${getShellConfigPath('zsh')}`],
       ['font', 'removed', 'deleted 2 font files'],
       ['starship', 'removed', 'removed the brew package'],
     ]);
-    expect(report.actions.map((a) => a.backup)).toEqual([
-      { file: getShell('zsh')!.rcFile, backup: '/h/.zshrc.bak-1' },
-      { file: getShellConfigPath('zsh'), backup: '/h/zsh.toml.bak-1' },
-      undefined,
-      undefined,
-    ]);
     expect(deps.removeFontFiles).toHaveBeenCalledWith(['/f/A.ttf', '/f/B.ttf']);
     expect(deps.forgetStarshipVersion).toHaveBeenCalled();
+  });
+
+  it('keeps the per-shell configs when the run cannot be recorded for rollback', async () => {
+    const deps = makeDeps(['zsh'], ['zsh']);
+
+    const report = await runUninstall(await planUninstall({}, deps), { keepConfigs: true });
+
+    expect(deps.removeManagedRcBlocks).toHaveBeenCalledWith('zsh');
+    expect(deps.removeShellConfigFile).not.toHaveBeenCalled();
+    expect(report.actions.find((a) => a.id === 'config_zsh')).toMatchObject({
+      status: 'skipped',
+      detail: 'left in place: rollback could not record this run, so nothing could bring it back',
+    });
+    expect(report.ok).toBe(true);
   });
 
   it('deletes a script install binary', async () => {

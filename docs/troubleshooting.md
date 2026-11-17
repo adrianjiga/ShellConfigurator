@@ -23,7 +23,7 @@ If you still need to file a bug, attach the setup report:
 shells, PATH and these doctor findings as Markdown, with your home directory
 shown as `~`. Read it before posting.
 
-`doctor --fix` (or `repair`) applies the fix each failing check carries and
+`doctor --fix` applies the fix each failing check carries and
 re-runs the checks: it re-adds the init line, rewrites a per-shell config,
 reinstalls Starship via the detected package manager, or reinstalls the font
 (from cache when a verified copy is there, otherwise by downloading it). It
@@ -48,8 +48,8 @@ with the package manager that installed it, or with
 
 ## The prompt is slow
 
-Run `shell-configurator timings` in a folder where the prompt feels slow. It
-times the config Starship loads in that shell (`$STARSHIP_CONFIG` when it is
+Run `shell-configurator doctor --timings` in a folder where the prompt feels
+slow. After the usual checks it times the config Starship loads in that shell (`$STARSHIP_CONFIG` when it is
 set, else `~/.config/starship.toml`); `--config <file>` times another one.
 It lists each module's time, slowest first, and suggests what to change: a
 higher `command_timeout` when a tool timed out (its module then shows nothing),
@@ -57,8 +57,8 @@ a higher `scan_timeout` when scanning the folder timed out, and for a slow modul
 the line that turns it off. A slow `git_status` in a large repo usually gets
 faster with `git config core.fsmonitor true`. Starship runs modules in parallel,
 so the prompt is about as slow as its slowest module. If Starship takes longer
-than 30 seconds, `timings` stops and says so; in a large repo that is almost
-always `git_status`.
+than 30 seconds, it prints `Could not time the prompt: …` and exits 1; in a
+large repo that is almost always `git_status`.
 
 ## Nerd Font characters show as boxes or question marks
 
@@ -74,7 +74,7 @@ you instead. This only runs on a real machine: it is skipped inside a
 container and whenever a CI or dev-container variable such as `CI` or
 `CODESPACES` is set.
 
-If the boxes persist, `shell-configurator repair --state <card> --include-warnings`
+If the boxes persist, `shell-configurator doctor --fix --state <card> --include-warnings`
 (re)wires the terminal font. The terminal-font check is a warning, so plain
 `doctor --fix` leaves it alone, and the fix only exists when the state card
 names a font.
@@ -201,7 +201,7 @@ Terminal and iTerm start Bash as a login shell, which reads `~/.bash_profile`
 sets up Bash on macOS, it adds a line that loads `~/.bashrc` to the first of
 those files that exists, or creates `~/.bash_profile`. The line only runs in
 Bash, since `sh` and other login shells read `~/.profile` too. `doctor` fails
-Bash when that line is missing, and `repair` adds it. `uninstall` takes it back
+Bash when that line is missing, and `doctor --fix` adds it. `uninstall` takes it back
 out, and deletes a login file that held nothing else.
 
 ---
@@ -266,8 +266,14 @@ to find the correct package.
 `shell-configurator uninstall --dry-run` lists what would go;
 `shell-configurator uninstall` shows the same plan and asks before removing it.
 It strips every `# Added by ShellConfigurator` block from the bash, zsh and fish
-rc files (each rc is backed up to `<rc>.bak-<timestamp>` first) and moves the
-per-shell configs in `~/.config/starship/` to `.bak-*` backups. Add `--starship`
+rc files and deletes the per-shell configs in `~/.config/starship/`. The first
+time ShellConfigurator changed one of your own files (an rc, the Bash login
+file, the shared `~/.config/starship.toml`, a terminal config, a per-shell
+config you wrote yourself), it kept a copy
+of it as `<file>.pre-shell-configurator`; that copy stays, and is never
+overwritten (rolling back the run that made it removes it again, once your
+file is back as it was). Older versions left `.bak-*` copies instead; they are not touched, so
+delete them once you no longer need them. Add `--starship`
 to remove Starship too, and `--font <id>` to remove a Nerd Font it installed.
 
 - **The prompt still shows after uninstall**: your rc has its own
@@ -294,8 +300,10 @@ to remove Starship too, and `--font <id>` to remove a Nerd Font it installed.
   a broken symlink), so the config it points at was kept. Fix the rc and run
   uninstall again.
 - **Changed your mind**: run `shell-configurator rollback`, as the report says.
-  If the run could not be recorded, the report lists `cp` commands that copy
-  each backup back instead.
+  If the run could not be recorded, the report says rollback cannot undo it,
+  and the per-shell configs were left in place for that reason; the
+  `.pre-shell-configurator` copies beside your files still hold their content
+  from before ShellConfigurator first changed them.
 
 ---
 
@@ -307,7 +315,7 @@ what ran, which files it changed, and the commands that undo it. A later
 --list` shows the runs that still stand. Rolling an install or `apply` back puts
 the summary from before it back.
 
-Every wizard install, `apply`, `repair` and `uninstall` keeps a copy of the rc
+Every wizard install, `apply`, `doctor --fix` and `uninstall` keeps a copy of the rc
 files, per-shell configs, shared config and terminal configs it changes. A run
 that was killed partway (Ctrl+C twice, a closed terminal window, a `kill`)
 shows up as "interrupted" the next time ShellConfigurator runs, and rolls back
@@ -342,5 +350,5 @@ off a terminal). Run it again to undo the run before; `--run <id>` picks one.
   --font <id> --starship` for those.
 - **"starship: command not found" after rolling back an uninstall**: the
   uninstall removed Starship (`--starship`), and rollback put back the rc lines
-  that start it but cannot reinstall the binary. Run `shell-configurator repair`
+  that start it but cannot reinstall the binary. Run `shell-configurator doctor --fix`
   (or `apply`) to install it again.

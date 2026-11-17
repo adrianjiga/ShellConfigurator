@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { backupIfExists, writeFileAtomic } from '../generators/shellRc.ts';
+import { keepOriginal, writeFileAtomic } from '../generators/shellRc.ts';
 import { assertNever, type TerminalId } from '../types.ts';
 import { configHome, homeDir } from './paths.ts';
 
@@ -17,7 +17,6 @@ export const TERMINAL_LABELS: Record<TerminalId, string> = {
 export interface TerminalFontResult {
   applied: boolean;
   path?: string;
-  backedUpTo?: string;
   note?: string;
 }
 
@@ -337,12 +336,9 @@ export function wireTerminalFont(
   }
 
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  // A read-only config (e.g. a Nix-managed link) would fail the write below;
-  // checking first keeps it from collecting a backup on every run.
-  if (fs.existsSync(filePath)) fs.accessSync(filePath, fs.constants.W_OK);
-  const backedUpTo = backupIfExists(filePath);
+  const note = keepOriginal(filePath);
   writeFileAtomic(filePath, updated);
-  return { applied: true, path: filePath, backedUpTo };
+  return { applied: true, path: filePath, ...(note ? { note } : {}) };
 }
 
 /** The font family a terminal is configured to use, or null when unset/unknown. */

@@ -14,25 +14,21 @@ export type Subcommand =
   | 'generate'
   | 'apply'
   | 'doctor'
-  | 'repair'
   | 'uninstall'
   | 'rollback'
   | 'debug-info'
   | 'completions'
-  | 'timings'
-  | 'share';
+  | 'list';
 
 export const SUBCOMMANDS: readonly Subcommand[] = [
   'generate',
   'apply',
   'doctor',
-  'repair',
   'uninstall',
   'rollback',
   'debug-info',
   'completions',
-  'timings',
-  'share',
+  'list',
 ];
 
 export interface CliFlags {
@@ -64,11 +60,15 @@ export interface CliFlags {
   /** Write the versioned state card here (add -o to keep the TOML too) (--export). */
   exportFile?: string;
   dryRun?: boolean;
+  /** Print the prompt as Markdown to share, with the card that rebuilds it (--markdown). */
+  markdown?: boolean;
   /** Emit machine-readable output instead of the human report (--json). */
   json?: boolean;
+  /** Time the prompt's modules in the current folder after the check (--timings). */
+  timings?: boolean;
   /** Apply the repairs the doctor can perform (--fix). */
   fix?: boolean;
-  /** Let repair also apply the fixes warnings carry (--include-warnings). */
+  /** Let doctor --fix also apply the fixes warnings carry (--include-warnings). */
   includeWarnings?: boolean;
   /** Let uninstall go ahead without asking (--yes). */
   yes?: boolean;
@@ -78,13 +78,10 @@ export interface CliFlags {
   list?: boolean;
   /** The run rollback undoes, instead of the newest (--run). */
   runId?: string;
-  completionShell?: string;
-  listPresets?: boolean;
-  listModules?: boolean;
-  listFonts?: boolean;
+  /** The positional argument of completions (a shell) or list (what to list). */
+  argument?: string;
   help: boolean;
   version: boolean;
-  restore: boolean;
 }
 
 const SHORT_FLAGS: Record<string, string> = {
@@ -102,9 +99,6 @@ const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> 
   },
   '--version': (r, v) => {
     r.version = v;
-  },
-  '--restore': (r, v) => {
-    r.restore = v;
   },
   '--dry-run': (r, v) => {
     r.dryRun = v;
@@ -133,8 +127,14 @@ const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> 
   '--json': (r, v) => {
     r.json = v;
   },
+  '--markdown': (r, v) => {
+    r.markdown = v;
+  },
   '--fix': (r, v) => {
     r.fix = v;
+  },
+  '--timings': (r, v) => {
+    r.timings = v;
   },
   '--include-warnings': (r, v) => {
     r.includeWarnings = v;
@@ -147,15 +147,6 @@ const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> 
   },
   '--list': (r, v) => {
     r.list = v;
-  },
-  '--list-presets': (r, v) => {
-    r.listPresets = v;
-  },
-  '--list-modules': (r, v) => {
-    r.listModules = v;
-  },
-  '--list-fonts': (r, v) => {
-    r.listFonts = v;
   },
 };
 
@@ -205,10 +196,20 @@ const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
   },
 };
 
+const RETIRED_SUBCOMMANDS: Record<string, string> = {
+  repair: 'repair is gone: shell-configurator doctor --fix applies the same fixes.',
+  share: 'share is gone: shell-configurator generate --markdown prints the same Markdown.',
+  timings: 'timings is gone: shell-configurator doctor --timings times the prompt in this folder.',
+};
+
 const RETIRED_FLAGS: Record<string, string> = {
-  '--undo':
-    '--undo is gone: shell-configurator rollback undoes the last run, rc lines included. ' +
-    '--restore still copies the newest config backups back.',
+  '--list-presets': '--list-presets is gone: run shell-configurator list presets.',
+  '--list-modules': '--list-modules is gone: run shell-configurator list modules.',
+  '--list-fonts': '--list-fonts is gone: run shell-configurator list fonts.',
+  '--undo': '--undo is gone: shell-configurator rollback undoes the last run, rc lines included.',
+  '--restore':
+    '--restore is gone: shell-configurator rollback undoes the last run, rc lines included. ' +
+    '.bak-* copies from older versions stay where they are; copy one back by hand if you need it.',
 };
 
 export const KNOWN_FLAGS = {
@@ -216,6 +217,11 @@ export const KNOWN_FLAGS = {
   value: Object.keys(VALUE_FLAGS),
   short: { ...SHORT_FLAGS },
 } as const;
+
+/** A table entry under `key`, never an inherited property such as `constructor`. */
+function own<T>(table: Record<string, T>, key: string): T | undefined {
+  return Object.hasOwn(table, key) ? table[key] : undefined;
+}
 
 const SHORT_BOOLEAN_FLAGS = new Set(
   Object.entries(SHORT_FLAGS)
@@ -279,19 +285,21 @@ export function parseCliArgs(argv: string[]): CliFlags {
     subcommand: null,
     help: false,
     version: false,
-    restore: false,
   };
 
   let subcommandSeen = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const token = splitToken(arg);
-    const flag = SHORT_FLAGS[token.name] ?? token.name;
+    const flag = own(SHORT_FLAGS, token.name) ?? token.name;
 
     if (!flag.startsWith('-')) {
       if (subcommandSeen) {
-        if (result.subcommand === 'completions' && result.completionShell === undefined) {
-          result.completionShell = arg;
+        if (
+          (result.subcommand === 'completions' || result.subcommand === 'list') &&
+          result.argument === undefined
+        ) {
+          result.argument = arg;
           continue;
         }
         throw new CliUsageError(`Unexpected argument '${arg}'`);
@@ -301,7 +309,10 @@ export function parseCliArgs(argv: string[]): CliFlags {
         subcommandSeen = true;
         continue;
       }
-      throw new CliUsageError(`Unknown command '${arg}' (available: ${SUBCOMMANDS.join(', ')})`);
+      throw new CliUsageError(
+        own(RETIRED_SUBCOMMANDS, arg) ??
+          `Unknown command '${arg}' (available: ${SUBCOMMANDS.join(', ')})`
+      );
     }
 
     if (token.inlineValue === undefined && /^-[^-]{2,}$/.test(token.name)) {
@@ -314,7 +325,7 @@ export function parseCliArgs(argv: string[]): CliFlags {
       }
     }
 
-    const booleanFlag = BOOLEAN_FLAGS[flag];
+    const booleanFlag = own(BOOLEAN_FLAGS, flag);
     if (booleanFlag !== undefined) {
       if (token.inlineValue === undefined) {
         booleanFlag(result, true);
@@ -329,9 +340,9 @@ export function parseCliArgs(argv: string[]): CliFlags {
     }
 
     // Value flags — the inline `=` value, else the next token.
-    const valueFlag = VALUE_FLAGS[flag];
+    const valueFlag = own(VALUE_FLAGS, flag);
     if (valueFlag === undefined) {
-      throw new CliUsageError(RETIRED_FLAGS[flag] ?? `Unknown flag '${flag}'`);
+      throw new CliUsageError(own(RETIRED_FLAGS, flag) ?? `Unknown flag '${flag}'`);
     }
     const value = token.inlineValue ?? argv[i + 1];
 

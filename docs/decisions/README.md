@@ -15,3 +15,7 @@ change can weigh the original trade-off before unpicking it.
 - [0005-verify-and-sandbox-fonts](0005-verify-and-sandbox-fonts.md) — check the
   SHA-256 of font downloads against the release metadata and decompress in an
   isolated worker.
+- [0006-one-way-back-fewer-commands](0006-one-way-back-fewer-commands.md) —
+  `rollback` is the only undo (no `.bak-*` files or `--restore`), and `repair`,
+  `share`, `timings` and the `--list-*` flags fold into `doctor`, `generate`
+  and `list`.

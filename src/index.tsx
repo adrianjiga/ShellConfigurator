@@ -5,16 +5,16 @@ import { fileURLToPath } from 'node:url';
 import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
-import { posixShellQuote } from './config/shells.ts';
-import {
-  getSharedConfigPath,
-  restoreConfigBackups,
-  writeFileAtomic,
-} from './generators/shellRc.ts';
-import { generateToml } from './generators/starship.ts';
+import { getSharedConfigPath, ORIGINAL_SUFFIX, writeFileAtomic } from './generators/shellRc.ts';
 import type { CliFlags, Subcommand } from './services/args.ts';
 import { parseCliArgs, quoteArgv, SUBCOMMANDS } from './services/args.ts';
-import { COMPLETION_SHELLS, type CompletionShell, SUBCOMMAND_INFO } from './services/cliSurface.ts';
+import {
+  COMPLETION_SHELLS,
+  type CompletionShell,
+  LIST_KINDS,
+  type ListKind,
+  SUBCOMMAND_INFO,
+} from './services/cliSurface.ts';
 import { completionScript } from './services/completions.ts';
 import {
   collectDebugInfo,
@@ -25,7 +25,7 @@ import {
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
 import { CliRunError, CliUsageError, errorMessage } from './services/errors.ts';
 import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
-import { lastRunShells, recordRunSafely } from './services/history.ts';
+import { recordRunSafely } from './services/history.ts';
 import { formatListing, listEntries } from './services/listings.ts';
 import { redactPersonal } from './services/redact.ts';
 import {
@@ -115,22 +115,17 @@ Interactive terminal wizard for configuring Starship.
 
 Usage:
   shell-configurator              start the wizard
-  shell-configurator generate     render a starship.toml from flags
+  shell-configurator generate     render a starship.toml from flags (--markdown to share it)
   shell-configurator apply        run a full install headlessly
-  shell-configurator doctor       check an existing setup and report problems
-  shell-configurator repair       fix the problems doctor finds
+  shell-configurator doctor       check the setup; --fix repairs it, --timings times the prompt
   shell-configurator uninstall    remove what the wizard set up
   shell-configurator rollback     put back the files the last run changed
   shell-configurator debug-info   print a report of the setup to attach to a bug report
+  shell-configurator list <presets|modules|fonts>  list the ids the flags accept (--json for data)
   shell-configurator completions <bash|zsh|fish>   print a shell completion script
-  shell-configurator timings      time each prompt module here and suggest fixes for slow ones
-  shell-configurator share        print the prompt as Markdown to share, with the card that rebuilds it
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
-  shell-configurator --restore    restore configs from their newest backup
-  shell-configurator --list-presets | --list-modules | --list-fonts [--json]
-                                  list the ids those flags accept
 
 Options:
   -h, --help          Show this help and exit
@@ -138,9 +133,6 @@ Options:
   -d, --dry-run       Install nothing; print what would happen (generate still
                      writes -o/--export files)
   --no-install        Alias for --dry-run
-  --restore           Copy the newest .bak-* snapshot back over the shared and
-                     per-shell configs created by earlier wizard runs; rc files
-                     stay as they are (shell-configurator rollback undoes a run)
 
   Flags may appear before or after the subcommand (e.g. "--dry-run generate"
   works like "generate --dry-run"); when a flag is repeated the last one wins.
@@ -158,6 +150,10 @@ generate options (the config — a versioned state card with --export):
   -o, --output <file>  Write the TOML here instead of stdout
   --export <file>      Write the state card here (add -o to keep the TOML too)
   --import, --state <file>  Start from a saved state card instead of flags
+  --markdown           Print the prompt as Markdown to share, with the card that
+                       rebuilds it (-o writes it to a file). The card has no shells
+                       or font install of this machine; whoever uses it adds
+                       --shells (and --font) to apply.
 
 apply options (a headless install from a state card):
   --state <file>       The state card describing the install (also: --import)
@@ -173,20 +169,20 @@ apply options (a headless install from a state card):
 doctor options (checks the setup; exits non-zero when a check fails):
   --state <file>       Check the setup described by a saved state card
   --json               Print the report as JSON instead of the text summary
-  --fix                Apply the repairs for failing checks, then re-check (like 'repair')
-  --include-warnings   With --fix, also apply the repairs warnings suggest
+  --fix                Apply the fixes for failing checks after asking, then re-check;
+                       exits non-zero when one still fails
+  --include-warnings   With --fix, also apply the fixes warnings suggest (e.g. the
+                       terminal font); a warning may describe a choice you made on purpose
   -y, --yes            With --fix, go ahead without asking (required off a terminal)
   --dry-run            With --fix, print the fixes it would apply; change nothing
+  --timings            Also time each prompt module in the current folder and suggest
+                       fixes for slow ones: the config Starship loads here
+                       ($STARSHIP_CONFIG, else ~/.config/starship.toml, else its
+                       built-in default). Modules run in parallel, so the prompt is
+                       about as slow as its slowest one.
+  --config <file>      With --timings, time this starship.toml instead
   Without --state it checks the shells that were set up, not every installed one.
-
-repair options (fixes the failing checks; asks first; exits non-zero when one still fails):
-  --state <file>       Repair the setup described by a saved state card
-  -y, --yes            Go ahead without asking (required off a terminal)
-  --dry-run            Print the fixes it would apply; change nothing
-  --include-warnings   Also apply the fixes warnings suggest (e.g. the terminal font);
-                       a warning may describe a choice you made on purpose
-  --json               Print the report as JSON instead of the text summary
-  rollback puts back the files it changed (not a reinstalled Starship or font).
+  rollback puts back the files --fix changed (not a reinstalled Starship or font).
 
 uninstall options (removes the Starship setup; asks before changing anything):
   --shells <id,...>    Only these shells (default: every shell it set up)
@@ -195,8 +191,8 @@ uninstall options (removes the Starship setup; asks before changing anything):
   -y, --yes            Go ahead without asking (required off a terminal)
   --dry-run            Print what it would remove; change nothing
   --json               Print the report as JSON instead of the text summary
-  rc files and configs are backed up first, and rollback puts them back (not a
-  removed Starship or font). Starship stays while any shell would still start it.
+  rollback puts the files back (not a removed Starship or font). Starship stays
+  while any shell would still start it.
 
 rollback options (undoes the newest run that changed files; asks first):
   --list               Show the runs that changed files, newest first
@@ -211,51 +207,11 @@ debug-info options (reads only; e.g. shell-configurator debug-info > issue.md):
   --json               Print the report data as JSON instead of Markdown
   Your home directory is shown as ~ so the report does not name you.
 
-timings options (changes no config; times the modules in the current folder):
-  Without flags it times the config Starship loads here: $STARSHIP_CONFIG, else
-  ~/.config/starship.toml, else Starship's built-in default prompt.
-  --config <file>      Time this starship.toml instead
-  --json               Print the timings and suggestions as JSON
-  The look flags (--preset, --palette, --font, --state, ...) time a config built
-  from them. Modules run in parallel, so the prompt is about as slow as its
-  slowest one.
-
-share options (takes the look flags, e.g. shell-configurator share --preset tokyo-night):
-  -o, --output <file>  Write the Markdown to this file instead of stdout
-  The card it prints has no shells or font install of this machine; whoever uses
-  it adds --shells (and --font) to apply.
-
 completions (install the script where your shell loads completions from):
   bash   shell-configurator completions bash > ~/.local/share/bash-completion/completions/shell-configurator
   zsh    shell-configurator completions zsh > "\${fpath[1]}/_shell-configurator"
   fish   shell-configurator completions fish > ~/.config/fish/completions/shell-configurator.fish
 `);
-}
-
-/** Restore the shared and per-shell configs from their newest backups. */
-export function runRestore(): void {
-  const { restored, failed } = restoreConfigBackups(lastRunShells() ?? undefined);
-  if (restored.length === 0 && failed.length === 0) {
-    process.stdout.write('Nothing to restore — no ShellConfigurator backups found.\n');
-    return;
-  }
-  if (restored.length > 0) {
-    process.stdout.write('Restored configs from their newest backups:\n');
-    for (const r of restored) {
-      const saved = r.previousSavedTo ? `; previous saved to ${r.previousSavedTo}` : '';
-      process.stdout.write(`  ${r.what}: ${r.restoredTo} (from ${r.restoredFrom}${saved})\n`);
-    }
-    process.stdout.write(
-      'Shell rc files are unchanged, so each shell still reads its own config. To undo a whole run, use shell-configurator rollback.\n'
-    );
-  }
-  if (failed.length > 0) {
-    process.stderr.write('Could not restore some configs:\n');
-    for (const f of failed) {
-      process.stderr.write(`  ${f.what} (from ${f.restoredFrom}): ${f.error}\n`);
-    }
-    process.exitCode = 1;
-  }
 }
 
 export function runGlobalFlags(flags: CliFlags): boolean {
@@ -265,46 +221,6 @@ export function runGlobalFlags(flags: CliFlags): boolean {
   }
   if (flags.version) {
     process.stdout.write(`${VERSION}\n`);
-    return true;
-  }
-  const lists = (
-    [
-      ['--list-presets', 'presets', flags.listPresets],
-      ['--list-modules', 'modules', flags.listModules],
-      ['--list-fonts', 'fonts', flags.listFonts],
-    ] as const
-  ).filter(([, , asked]) => asked);
-  if (lists.length > 0) {
-    const names = lists.map(([name]) => name).join(', ');
-    if (flags.subcommand) {
-      throw new CliUsageError(
-        `${names} cannot be combined with the ${flags.subcommand} subcommand.`
-      );
-    }
-    if (lists.length > 1) throw new CliUsageError(`Pass one of ${names} at a time.`);
-    const unused = presentFlags(flags).filter((name) => name !== '--json');
-    if (unused.length > 0) {
-      throw new CliUsageError(`${unused.join(', ')} cannot be used with ${names}.`);
-    }
-    const entries = listEntries(lists[0]![1]);
-    process.stdout.write(
-      flags.json ? `${JSON.stringify(entries, null, 2)}\n` : formatListing(entries)
-    );
-    return true;
-  }
-  if (flags.restore) {
-    if (flags.subcommand) {
-      throw new CliUsageError(
-        `--restore cannot be combined with the ${flags.subcommand} subcommand; ` +
-          'run it on its own.'
-      );
-    }
-    if (flags.dryRun) {
-      throw new CliUsageError(
-        '--restore rewrites config files from their backups; it cannot run in a dry run.'
-      );
-    }
-    runRestore();
     return true;
   }
   return false;
@@ -331,15 +247,16 @@ function presentConfigFlags(flags: CliFlags): string[] {
   return present;
 }
 
-/** Every flag on the command line except the help, version and list flags, by the name shown to the user. */
+/** Every flag on the command line except the help and version flags, by the name shown to the user. */
 function presentFlags(flags: CliFlags): string[] {
   const present = presentConfigFlags(flags);
   const others: Array<[unknown, string]> = [
     [flags.stateFile, '--state'],
     [flags.dryRun, '--dry-run'],
-    [flags.restore, '--restore'],
     [flags.json, '--json'],
+    [flags.markdown, '--markdown'],
     [flags.fix, '--fix'],
+    [flags.timings, '--timings'],
     [flags.includeWarnings, '--include-warnings'],
     [flags.yes, '--yes'],
     [flags.starship, '--starship'],
@@ -360,7 +277,7 @@ const NOT_STATE_FLAGS = new Set(['--import-url', '--output', '--export']);
 function refuseUnusedFlags(flags: CliFlags, subcommand: Subcommand): void {
   const accepted = acceptedFlags(subcommand);
   const layered =
-    subcommand === 'doctor' || subcommand === 'repair'
+    subcommand === 'doctor'
       ? presentConfigFlags(flags).filter((flag) => !NOT_STATE_FLAGS.has(flag))
       : [];
   const unused = presentFlags(flags).filter(
@@ -385,12 +302,13 @@ function warnIgnoredFlags(flags: CliFlags, subcommand: string): void {
  * Runs the read-only health check. A failing check sets the process exit code
  * (so CI and scripts can gate on it) but never throws — the report is the
  * output. `--json` swaps the human summary for the report object, and `--fix`
- * upgrades the run into a repair.
+ * applies the fixes it finds.
  */
 export async function runDoctorCommand(
   flags: CliFlags,
   command: string,
-  io: PromptIo = DEFAULT_PROMPT_IO
+  io: PromptIo = DEFAULT_PROMPT_IO,
+  probeDeps: ProbeDeps = DEFAULT_PROBE_DEPS
 ): Promise<void> {
   if (flags.fix) {
     await runRepairCommand(flags, command, io);
@@ -398,13 +316,23 @@ export async function runDoctorCommand(
   }
   warnIgnoredFlags(flags, 'doctor');
   const state = flags.stateFile ? stateFromFlags(flags) : null;
-  const report = await runDoctor(state);
+  const source = flags.timings ? timingSource(flags.configFile) : null;
+  const [report, timings] = await Promise.all([
+    runDoctor(state),
+    source ? timeSource(source, probeDeps) : undefined,
+  ]);
   if (flags.json) {
-    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    const data = timings ? { ...report, timings } : report;
+    process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
   } else {
     process.stdout.write(formatDoctorReport(report));
+    if (timings && 'error' in timings) {
+      process.stdout.write(`\nCould not time the prompt: ${timings.error}\n`);
+    } else if (timings) {
+      process.stdout.write(`\n${formatTimings(timings, timings.config)}`);
+    }
   }
-  if (!report.ok) process.exitCode = 1;
+  if (!report.ok || (timings && 'error' in timings)) process.exitCode = 1;
 }
 
 export async function runRepairCommand(
@@ -413,7 +341,7 @@ export async function runRepairCommand(
   io: PromptIo = DEFAULT_PROMPT_IO,
   deps: RepairDeps = DEFAULT_REPAIR_DEPS
 ): Promise<void> {
-  warnIgnoredFlags(flags, 'repair');
+  warnIgnoredFlags(flags, 'doctor --fix');
   const state = flags.stateFile ? stateFromFlags(flags) : null;
   const options = { includeWarnings: flags.includeWarnings };
   const plan = await runRepair(state, deps, { ...options, dryRun: true });
@@ -422,7 +350,7 @@ export async function runRepairCommand(
     const proceed = await confirmChanges(
       flags,
       io,
-      'repair changes files and may install software',
+      'doctor --fix changes files and may install software',
       () => formatRepairReport(plan),
       '\nApply these fixes? [y/N] '
     );
@@ -538,16 +466,21 @@ export async function runUninstallCommand(
     if (!proceed) return;
   }
 
-  const { result: report, runId } = changes
-    ? await captureRun(trackedFiles(), () => runUninstall(steps), {
-        record: { kind: 'uninstall', command },
-      })
-    : { result: await runUninstall(steps, { dryRun }), runId: null };
+  const {
+    result: report,
+    runId,
+    uncaptured,
+  } = changes
+    ? await captureRun(
+        trackedFiles(),
+        (notCapturing) => runUninstall(steps, { keepConfigs: notCapturing }),
+        { record: { kind: 'uninstall', command } }
+      )
+    : { result: await runUninstall(steps, { dryRun }), runId: null, uncaptured: false };
   if (flags.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {
     process.stdout.write(formatUninstallReport(report));
-    const backups = report.actions.flatMap((a) => (a.backup ? [a.backup] : []));
     const deleted = report.actions
       .filter((a) => (a.id === 'starship' || a.id === 'font') && a.status === 'removed')
       .map((a) => a.title);
@@ -555,14 +488,13 @@ export async function runUninstallCommand(
       process.stdout.write('\nUndo it with: shell-configurator rollback\n');
       if (deleted.length > 0) {
         process.stdout.write(
-          `Rollback only puts files back: reinstall ${deleted.join(' and ')} with shell-configurator apply or repair.\n`
+          `Rollback only puts files back: reinstall ${deleted.join(' and ')} with shell-configurator apply or doctor --fix.\n`
         );
       }
-    } else if (backups.length > 0) {
-      process.stdout.write('\nTo undo, copy the backups back:\n');
-      for (const { file, backup } of backups) {
-        process.stdout.write(`  cp ${posixShellQuote(backup)} ${posixShellQuote(file)}\n`);
-      }
+    } else if (uncaptured) {
+      process.stdout.write(
+        `\nThis run could not be recorded, so rollback cannot undo it. A file ShellConfigurator first changed while it held none of its lines has its content from then beside it as <file>${ORIGINAL_SUFFIX}; that copy predates any later edit.\n`
+      );
     }
   }
   if (!report.ok) process.exitCode = 1;
@@ -670,57 +602,62 @@ export async function runRollbackCommand(
   }
 }
 
-export async function runTimingsCommand(
-  flags: CliFlags,
-  deps: ProbeDeps = DEFAULT_PROBE_DEPS
-): Promise<void> {
-  const building = presentFlags(flags).filter((flag) => flag !== '--config' && flag !== '--json');
-  if (flags.configFile && building.length > 0) {
-    throw new CliUsageError(
-      `--config times an existing file, so ${building.join(', ')} cannot be used with it.`
-    );
-  }
-  let source: { toml: string; path?: string };
-  let config: string;
-  if (building.length > 0) {
-    const state = stateFromFlags(flags);
-    if (state.keepExistingConfig) {
-      throw new CliUsageError(
-        `An adopt-mode card keeps your own config, so there is nothing to build; time it with --config ${getSharedConfigPath()}.`
-      );
-    }
-    source = { toml: generateToml(state) };
-    config = 'built from the flags';
-  } else {
-    const active: ActiveConfig = flags.configFile
-      ? { kind: 'file', path: flags.configFile }
-      : activeStarshipConfig();
-    if (active.kind === 'file') {
-      try {
-        source = { toml: readFileSync(active.path, 'utf8'), path: active.path };
-      } catch (err) {
-        throw new CliUsageError(`Could not read '${active.path}': ${errorMessage(err)}`);
-      }
-      config = active.path;
-    } else {
-      source = { toml: '', path: active.path };
-      config = `Starship's built-in default prompt, since ${active.reason}`;
-    }
-  }
-  let report: TimingsReport;
-  try {
-    report = await timePrompt(source, process.cwd(), deps);
-  } catch (err) {
-    throw new CliRunError(errorMessage(err));
-  }
-  process.stdout.write(
-    flags.json
-      ? `${JSON.stringify({ config, ...report }, null, 2)}\n`
-      : formatTimings(report, config)
-  );
+export interface PromptTimings extends TimingsReport {
+  config: string;
 }
 
-export function runShareCommand(flags: CliFlags): void {
+interface TimingSource {
+  source: { toml: string; path?: string };
+  config: string;
+}
+
+/** The config Starship loads in this folder, or `configFile`; a file it cannot read is a usage error. */
+function timingSource(configFile: string | undefined): TimingSource {
+  const active: ActiveConfig = configFile
+    ? { kind: 'file', path: configFile }
+    : activeStarshipConfig();
+  let source: { toml: string; path?: string };
+  let config: string;
+  if (active.kind === 'file') {
+    try {
+      source = { toml: readFileSync(active.path, 'utf8'), path: active.path };
+    } catch (err) {
+      throw new CliUsageError(`Could not read '${active.path}': ${errorMessage(err)}`);
+    }
+    config = active.path;
+  } else {
+    source = { toml: '', path: active.path };
+    config = `Starship's built-in default prompt, since ${active.reason}`;
+  }
+  return { source, config };
+}
+
+async function timeSource(
+  { source, config }: TimingSource,
+  deps: ProbeDeps
+): Promise<PromptTimings | { error: string }> {
+  try {
+    return { config, ...(await timePrompt(source, process.cwd(), deps)) };
+  } catch (err) {
+    return { error: errorMessage(err) };
+  }
+}
+
+const NOT_SHARED_FLAGS: Array<[keyof CliFlags, string]> = [
+  ['shells', '--shells'],
+  ['setDefaultShell', '--set-default'],
+  ['skipStarship', '--skip-starship'],
+  ['exportFile', '--export'],
+  ['dryRun', '--dry-run'],
+];
+
+export function runMarkdownCommand(flags: CliFlags): void {
+  const refused = NOT_SHARED_FLAGS.filter(([key]) => flags[key]).map(([, name]) => name);
+  if (refused.length > 0) {
+    throw new CliUsageError(
+      `${refused.join(', ')} cannot be used with generate --markdown, which shares the look only.`
+    );
+  }
   const state = stateFromFlags(flags);
   if (state.keepExistingConfig) {
     throw new CliUsageError(
@@ -740,8 +677,23 @@ export function runShareCommand(flags: CliFlags): void {
   process.stdout.write(`Wrote ${flags.outputFile}\n`);
 }
 
+export function runListCommand(flags: CliFlags): void {
+  const kind = flags.argument;
+  if (!LIST_KINDS.includes(kind as ListKind)) {
+    throw new CliUsageError(
+      kind
+        ? `Cannot list '${kind}' (available: ${LIST_KINDS.join(', ')}).`
+        : `list needs what to list: ${LIST_KINDS.join(', ')}.`
+    );
+  }
+  const entries = listEntries(kind as ListKind);
+  process.stdout.write(
+    flags.json ? `${JSON.stringify(entries, null, 2)}\n` : formatListing(entries)
+  );
+}
+
 export function runCompletionsCommand(flags: CliFlags): void {
-  const shell = flags.completionShell;
+  const shell = flags.argument;
   if (!COMPLETION_SHELLS.includes(shell as CompletionShell)) {
     throw new CliUsageError(
       shell
@@ -771,9 +723,9 @@ export async function runDebugInfoCommand(
  * reproducibility.
  */
 export async function runHeadlessCommand(flags: CliFlags, command: string): Promise<boolean> {
-  const repairs = flags.subcommand === 'repair' || (flags.subcommand === 'doctor' && flags.fix);
+  const repairs = flags.subcommand === 'doctor' && flags.fix;
   if (flags.includeWarnings && !repairs) {
-    throw new CliUsageError('--include-warnings only applies to repair (or doctor --fix).');
+    throw new CliUsageError('--include-warnings only applies to doctor --fix.');
   }
   if (
     flags.yes &&
@@ -781,13 +733,28 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
     flags.subcommand !== 'uninstall' &&
     flags.subcommand !== 'rollback'
   ) {
-    throw new CliUsageError('--yes only applies to repair, doctor --fix, uninstall and rollback.');
+    throw new CliUsageError('--yes only applies to doctor --fix, uninstall and rollback.');
   }
   if (flags.starship && flags.subcommand !== 'uninstall') {
     throw new CliUsageError('--starship only applies to uninstall.');
   }
-  if (flags.configFile && flags.subcommand !== 'timings') {
-    throw new CliUsageError('--config only applies to timings.');
+  const timesPrompt = flags.subcommand === 'doctor' && flags.timings;
+  if (flags.timings && flags.subcommand !== 'doctor') {
+    throw new CliUsageError('--timings only applies to doctor.');
+  }
+  if (flags.configFile && !timesPrompt) {
+    throw new CliUsageError('--config only applies to doctor --timings.');
+  }
+  if (timesPrompt && flags.fix) {
+    throw new CliUsageError('--timings cannot be used with --fix.');
+  }
+  if (timesPrompt) {
+    const building = [...(flags.stateFile ? ['--state'] : []), ...presentConfigFlags(flags)];
+    if (building.length > 0) {
+      throw new CliUsageError(
+        `--timings times the config Starship loads here (or --config <file>), so ${building.join(', ')} cannot be used with it.`
+      );
+    }
   }
   if ((flags.list || flags.runId) && flags.subcommand !== 'rollback') {
     throw new CliUsageError(`${flags.list ? '--list' : '--run'} only applies to rollback.`);
@@ -805,12 +772,8 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
     runCompletionsCommand(flags);
     return true;
   }
-  if (flags.subcommand === 'timings') {
-    await runTimingsCommand(flags);
-    return true;
-  }
-  if (flags.subcommand === 'share') {
-    runShareCommand(flags);
+  if (flags.subcommand === 'list') {
+    runListCommand(flags);
     return true;
   }
   if (flags.subcommand === 'uninstall') {
@@ -818,7 +781,8 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
     return true;
   }
   if (flags.subcommand === 'generate') {
-    runGenerate(flags);
+    if (flags.markdown) runMarkdownCommand(flags);
+    else runGenerate(flags);
     return true;
   }
   if (flags.subcommand === 'apply') {
@@ -827,10 +791,6 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   }
   if (flags.subcommand === 'doctor') {
     await runDoctorCommand(flags, command);
-    return true;
-  }
-  if (flags.subcommand === 'repair') {
-    await runRepairCommand(flags, command);
     return true;
   }
   // No subcommand: the interactive wizard runs next — silently dropping
@@ -845,6 +805,7 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (flags.stateFile) dropped.push('--state');
   if (flags.json) dropped.push('--json');
   if (flags.fix) dropped.push('--fix');
+  if (flags.markdown) dropped.push('--markdown');
   if (dropped.length > 0) {
     throw new CliUsageError(
       `${dropped.join(', ')} require a subcommand (${SUBCOMMANDS.join(', ')}).`

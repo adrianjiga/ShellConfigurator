@@ -30,15 +30,8 @@ import { readTerminalFontFamily, TERMINAL_LABELS } from './terminalFont.ts';
 
 export type UninstallStatus = 'removed' | 'skipped' | 'failed' | 'planned';
 
-/** A file a step changed, and the backup that holds its previous content. */
-export interface UninstallBackup {
-  file: string;
-  backup: string;
-}
-
 export interface StepOutcome {
   detail: string;
-  backup?: UninstallBackup;
   /** Set when the step found, as it ran, that it had to leave things alone. */
   status?: 'skipped';
 }
@@ -58,7 +51,6 @@ export interface UninstallAction {
   title: string;
   status: UninstallStatus;
   detail: string;
-  backup?: UninstallBackup;
 }
 
 export interface UninstallReport {
@@ -111,13 +103,11 @@ export const DEFAULT_UNINSTALL_DEPS: UninstallDeps = {
   terminalFontFamily: readTerminalFontFamily,
 };
 
-function describeRemoval(result: RemovalResult, what: string, file: string): StepOutcome {
+function describeRemoval(result: RemovalResult, what: string): StepOutcome {
   const parts = [result.removed ? `removed ${what}` : (result.note ?? `left ${what} alone`)];
-  if (result.removed && result.backedUpTo) parts.push(`backup: ${result.backedUpTo}`);
   if (result.removed && result.note) parts.push(result.note);
   const detail = parts.join('; ');
-  if (!result.removed) return { detail, status: 'skipped' };
-  return result.backedUpTo ? { detail, backup: { file, backup: result.backedUpTo } } : { detail };
+  return result.removed ? { detail } : { detail, status: 'skipped' };
 }
 
 /** What a shell has on disk, read once per plan. */
@@ -140,7 +130,7 @@ function shellSteps(facts: ShellFacts, explicit: boolean, deps: UninstallDeps): 
         title: `${shell.label} rc`,
         detail: `remove the ShellConfigurator lines from ${rc}`,
         run: async () =>
-          describeRemoval(deps.removeManagedRcBlocks(shellId), `the lines from ${rc}`, rc),
+          describeRemoval(deps.removeManagedRcBlocks(shellId), `the lines from ${rc}`),
       });
     } else if (explicit) {
       steps.push({
@@ -163,8 +153,8 @@ function shellSteps(facts: ShellFacts, explicit: boolean, deps: UninstallDeps): 
     steps.push({
       id: `config_${shellId}`,
       title: `${shell.label} config`,
-      detail: `move ${config} aside to a backup`,
-      run: async () => describeRemoval(deps.removeShellConfigFile(shellId), config, config),
+      detail: `delete ${config}`,
+      run: async () => describeRemoval(deps.removeShellConfigFile(shellId), config),
       ...(shell.rcFile && facts.managedRc ? { after: [`rc_${shellId}`] } : {}),
     });
   }
@@ -278,8 +268,7 @@ export async function planUninstall(
         id: `login_${path.basename(file)}`,
         title: 'Bash login file',
         detail: `remove the line that loads ~/.bashrc from ${file}`,
-        run: async () =>
-          describeRemoval(deps.removeBashLoginBlock(file), `that line from ${file}`, file),
+        run: async () => describeRemoval(deps.removeBashLoginBlock(file), `that line from ${file}`),
       });
     }
   }
@@ -294,10 +283,14 @@ export async function planUninstall(
   return steps;
 }
 
-/** Runs the plan; a failed step does not stop the rest. With `dryRun` nothing runs. */
+/**
+ * Runs the plan; a failed step does not stop the rest. With `dryRun` nothing
+ * runs. With `keepConfigs` (a run rollback could not record) per-shell configs
+ * stay, since nothing could bring them back.
+ */
 export async function runUninstall(
   steps: UninstallStep[],
-  options: { dryRun?: boolean } = {}
+  options: { dryRun?: boolean; keepConfigs?: boolean } = {}
 ): Promise<UninstallReport> {
   const actions: UninstallAction[] = [];
   for (const { id, title, detail, run, after } of steps) {
@@ -313,6 +306,13 @@ export async function runUninstall(
       actions.push({ id, title, status: 'skipped', detail });
     } else if (options.dryRun) {
       actions.push({ id, title, status: 'planned', detail });
+    } else if (options.keepConfigs && id.startsWith('config_')) {
+      actions.push({
+        id,
+        title,
+        status: 'skipped',
+        detail: 'left in place: rollback could not record this run, so nothing could bring it back',
+      });
     } else {
       try {
         const { status = 'removed', ...outcome } = await run();

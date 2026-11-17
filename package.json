@@ -1,7 +1,27 @@
 {
   "name": "shell-configurator",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "Interactive terminal wizard for configuring Starship prompt",
+  "keywords": [
+    "starship",
+    "starship-prompt",
+    "prompt",
+    "shell-prompt",
+    "terminal",
+    "shell",
+    "zsh",
+    "bash",
+    "fish",
+    "nushell",
+    "powershell",
+    "nerd-fonts",
+    "dotfiles",
+    "setup",
+    "wizard",
+    "cli",
+    "tui",
+    "ink"
+  ],
   "license": "MIT",
   "type": "module",
   "bin": {

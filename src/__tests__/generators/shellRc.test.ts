@@ -1,6 +1,6 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('fs', () => ({
   constants: { W_OK: 2 },
@@ -37,18 +37,15 @@ import { getShell, posixShellQuote } from '../../config/shells.ts';
 import {
   appliedRcContent,
   applyShellConfig,
-  backupPath,
-  backupSharedConfig,
-  getSharedConfigPath,
   getShellConfigPath,
   hasManagedRcBlock,
   hasStarshipInit,
   initReachable,
+  keepOriginal,
   removeManagedRcBlocks,
   removeShellConfigFile,
   resetRcContent,
   resetSharedShellConfig,
-  restoreConfigBackups,
   shellsWithStarshipInit,
   sourcedFiles,
   starshipConfigLine,
@@ -179,26 +176,13 @@ describe('writeShellConfig', () => {
     expect(result.path).toBe(expected);
   });
 
-  it('backs up an existing per-shell config before overwriting it', () => {
+  it('overwrites an existing per-shell config without copying it aside', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
 
-    const result = writeShellConfig('new content', 'zsh');
-
-    expect(result.backedUpTo).toMatch(/zsh\.toml\.bak-/);
-    expect(fs.copyFileSync).toHaveBeenCalledWith(expectedConfigPath, result.backedUpTo);
-    // The backup must be taken before the overwrite, not after.
-    const copyOrder = vi.mocked(fs.copyFileSync).mock.invocationCallOrder[0] ?? 0;
-    const writeOrder = vi.mocked(fs.writeFileSync).mock.invocationCallOrder[0] ?? 0;
-    expect(copyOrder).toBeLessThan(writeOrder);
-  });
-
-  it('does not back up when there is no existing config', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(false);
-
-    const result = writeShellConfig('', 'zsh');
+    writeShellConfig('new content', 'zsh');
 
     expect(fs.copyFileSync).not.toHaveBeenCalled();
-    expect(result.backedUpTo).toBeUndefined();
+    expect(fs.renameSync).toHaveBeenCalledWith(expect.stringContaining('.tmp'), expectedConfigPath);
   });
 
   it('creates the per-shell config directory when it does not exist', () => {
@@ -248,24 +232,38 @@ describe('writeSharedConfig', () => {
     expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(sharedPath), { recursive: true });
   });
 
-  it('backs up an existing shared config before overwriting it', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
+  const originalPath = `${sharedPath}.pre-shell-configurator`;
 
-    const result = writeSharedConfig('# imported');
+  it('keeps an existing shared config as its original before the first overwrite', () => {
+    vi.mocked(fs.existsSync).mockImplementation((p) => p !== originalPath);
+    vi.mocked(fs.readFileSync).mockReturnValue('# mine\n');
 
-    expect(result.backedUpTo).toContain(sharedPath);
-    expect(fs.copyFileSync).toHaveBeenCalledWith(sharedPath, expect.stringContaining(sharedPath));
+    writeSharedConfig('# imported');
+
+    expect(fs.copyFileSync).toHaveBeenCalledWith(
+      sharedPath,
+      originalPath,
+      fs.constants.COPYFILE_EXCL
+    );
     const copyOrder = vi.mocked(fs.copyFileSync).mock.invocationCallOrder[0]!;
     const writeOrder = vi.mocked(fs.writeFileSync).mock.invocationCallOrder[0]!;
     expect(copyOrder).toBeLessThan(writeOrder);
   });
 
-  it('does not back up when there is no existing shared config', () => {
+  it('leaves an original that is already there alone', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue('# mine\n');
+
+    writeSharedConfig('# imported');
+
+    expect(fs.copyFileSync).not.toHaveBeenCalled();
+  });
+
+  it('keeps no original when there is no shared config yet', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
 
-    const result = writeSharedConfig('# imported');
+    writeSharedConfig('# imported');
 
-    expect(result.backedUpTo).toBeUndefined();
     expect(fs.copyFileSync).not.toHaveBeenCalled();
   });
 });
@@ -1157,247 +1155,125 @@ describe('resetSharedShellConfig', () => {
   });
 });
 
-describe('backupSharedConfig', () => {
-  const savedEnv = { ...process.env };
-  afterEach(() => {
-    restoreEnv(savedEnv);
-    vi.resetAllMocks();
+describe('keepOriginal', () => {
+  const rc = '/home/u/.zshrc';
+  const original = `${rc}.pre-shell-configurator`;
+
+  beforeEach(() => vi.resetAllMocks());
+
+  it('copies a file the first time it is changed', () => {
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === rc);
+    vi.mocked(fs.readFileSync).mockReturnValue('alias ll=ls\n');
+
+    keepOriginal(rc);
+
+    expect(fs.copyFileSync).toHaveBeenCalledWith(rc, original, fs.constants.COPYFILE_EXCL);
   });
 
-  it('returns null when there is no shared config to protect', () => {
+  it('never replaces a copy that is already there', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+
+    keepOriginal(rc);
+
+    expect(fs.copyFileSync).not.toHaveBeenCalled();
+  });
+
+  it('keeps nothing for a missing file or one that already holds a ShellConfigurator block', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
+    keepOriginal(rc);
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === rc);
+    vi.mocked(fs.readFileSync).mockReturnValue('# Added by ShellConfigurator\n');
+    keepOriginal(rc);
 
-    expect(backupSharedConfig()).toBeNull();
     expect(fs.copyFileSync).not.toHaveBeenCalled();
   });
 
-  it('snapshots the shared config to a stamped backup path', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readdirSync).mockReturnValue([] as unknown as ReturnType<typeof fs.readdirSync>);
-
-    const backup = backupSharedConfig();
-
-    expect(backup).toMatch(/starship\.toml\.bak-/);
-    expect(fs.copyFileSync).toHaveBeenCalledWith(getSharedConfigPath(), backup);
-  });
-
-  it('reuses the newest backup instead of copying an unchanged shared config again', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readdirSync).mockReturnValue([
-      'starship.toml.bak-2026-01-01T00-00-00-000Z',
-    ] as unknown as ReturnType<typeof fs.readdirSync>);
-    vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('format = "$all"\n'));
-
-    const backup = backupSharedConfig();
-
-    expect(backup).toBe(
-      path.join(path.dirname(getSharedConfigPath()), 'starship.toml.bak-2026-01-01T00-00-00-000Z')
+  it('copies a file with the generated header, unless it is a config only this tool writes', () => {
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === rc);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      '# Generated by ShellConfigurator\nformat = "$all"\n'
     );
+
+    keepOriginal(rc, { toolOwned: true });
     expect(fs.copyFileSync).not.toHaveBeenCalled();
+
+    keepOriginal(rc);
+    expect(fs.copyFileSync).toHaveBeenCalledWith(rc, original, fs.constants.COPYFILE_EXCL);
   });
 
-  it('makes a fresh backup once the shared config has changed', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readdirSync).mockReturnValue([
-      'starship.toml.bak-2026-01-01T00-00-00-000Z',
-    ] as unknown as ReturnType<typeof fs.readdirSync>);
-    vi.mocked(fs.readFileSync)
-      .mockReturnValueOnce(Buffer.from('old\n'))
-      .mockReturnValueOnce(Buffer.from('new\n'));
-
-    const backup = backupSharedConfig();
-
-    expect(backup).not.toContain('2026-01-01');
-    expect(fs.copyFileSync).toHaveBeenCalledWith(getSharedConfigPath(), backup);
-  });
-
-  it('ignores XDG_CONFIG_HOME for the shared config, as Starship does', () => {
-    process.env.XDG_CONFIG_HOME = '/home/u/.dotfiles/config';
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readdirSync).mockReturnValue([] as unknown as ReturnType<typeof fs.readdirSync>);
-
-    const backup = backupSharedConfig();
-
-    expect(backup?.startsWith(path.join(os.homedir(), '.config', 'starship.toml.bak-'))).toBe(true);
-  });
-
-  it('is best-effort — returns null when the copy fails', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readdirSync).mockReturnValue([] as unknown as ReturnType<typeof fs.readdirSync>);
-    vi.mocked(fs.copyFileSync).mockImplementation(() => {
+  it('copies nothing from a read-only file, and says so instead of throwing', () => {
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === rc);
+    vi.mocked(fs.readFileSync).mockReturnValue('alias ll=ls\n');
+    vi.mocked(fs.accessSync).mockImplementation(() => {
       throw new Error('EACCES');
     });
 
-    expect(backupSharedConfig()).toBeNull();
-  });
-});
-
-describe('restoreConfigBackups', () => {
-  const base = path.join(os.homedir(), '.config');
-  const shellsDir = path.join(base, 'starship');
-  const savedEnv = { ...process.env };
-  // readdirSync has buffer/Dirent overloads; the module only reads string
-  // paths, so pin the mock to the simple signature.
-  const readdirSyncMock = fs.readdirSync as unknown as Mock<(dir: string) => string[]>;
-
-  afterEach(() => {
-    restoreEnv(savedEnv);
-    vi.resetAllMocks();
-  });
-
-  it('returns nothing when no backups exist', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(false);
-    readdirSyncMock.mockReturnValue([]);
-
-    expect(restoreConfigBackups()).toEqual({ restored: [], failed: [] });
+    expect(keepOriginal(rc)).toBe(
+      'could not keep its original as .zshrc.pre-shell-configurator (EACCES)'
+    );
     expect(fs.copyFileSync).not.toHaveBeenCalled();
   });
 
-  it('restores the newest shared backup over the live config', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(false);
-    readdirSyncMock.mockImplementation((dir) => {
-      if (dir === base) {
-        return [
-          'starship.toml.bak-2026-09-08T10-00-00-000Z',
-          'starship.toml.bak-2026-09-09T09-30-00-000Z',
-        ];
-      }
-      return [];
+  it('still wires the shell, with a note, when the original cannot be copied', () => {
+    const zshrc = getShell('zsh')!.rcFile!;
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === zshrc);
+    vi.mocked(fs.readFileSync).mockReturnValue('alias ll=ls\n');
+    vi.mocked(fs.copyFileSync).mockImplementation(() => {
+      throw new Error('ENOSPC: no space left on device');
     });
 
-    const { restored, failed } = restoreConfigBackups();
+    const result = applyShellConfig('zsh');
 
-    expect(failed).toEqual([]);
-    expect(restored).toHaveLength(1);
-    expect(restored[0]?.what).toBe('shared');
-    expect(restored[0]?.restoredTo).toBe(getSharedConfigPath());
-    expect(restored[0]?.restoredFrom).toContain('2026-09-09T09-30-00-000Z');
-    expect(fs.copyFileSync).toHaveBeenCalledWith(restored[0]?.restoredFrom, getSharedConfigPath());
+    expect(result.applied).toBe(true);
+    expect(result.note).toContain('could not keep its original as .zshrc.pre-shell-configurator');
+    expect(fs.renameSync).toHaveBeenCalledWith(expect.stringContaining('.tmp'), zshrc);
   });
 
-  it('ignores hand-made .bak files and orders same-millisecond backups by suffix', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(false);
-    readdirSyncMock.mockImplementation((dir) =>
-      dir === base
-        ? [
-            'starship.toml.bak-old',
-            'starship.toml.bak-2026-09-09T09-30-00-000Z',
-            'starship.toml.bak-2026-09-09T09-30-00-000Z-2',
-            'starship.toml.bak-2026-09-08T10-00-00-000Z',
-          ]
-        : []
-    );
+  it('says so when the Bash login file it changes on macOS cannot be copied first', () => {
+    const restore = stubPlatform('darwin');
+    try {
+      const bashrc = getShell('bash')!.rcFile!;
+      const profile = path.join(os.homedir(), '.bash_profile');
+      vi.mocked(fs.existsSync).mockImplementation((p) => p === bashrc || p === profile);
+      vi.mocked(fs.readFileSync).mockReturnValue('alias ll=ls\n');
+      vi.mocked(fs.copyFileSync).mockImplementation(() => {
+        throw new Error('ENOSPC: no space left on device');
+      });
 
-    const { restored } = restoreConfigBackups();
+      const result = applyShellConfig('bash');
 
-    expect(restored[0]?.restoredFrom).toBe(
-      path.join(base, 'starship.toml.bak-2026-09-09T09-30-00-000Z-2')
-    );
+      expect(result.applied).toBe(true);
+      expect(result.note).toContain(
+        '.bash_profile now loads .bashrc, but could not keep its original as .bash_profile.pre-shell-configurator'
+      );
+    } finally {
+      restore();
+    }
   });
 
-  it('saves the live file before restoring over it', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    readdirSyncMock.mockImplementation((dir) =>
-      dir === base ? ['starship.toml.bak-2026-09-09T09-30-00-000Z'] : []
-    );
-
-    const { restored } = restoreConfigBackups();
-
-    const saved = restored[0]?.previousSavedTo;
-    expect(saved).toMatch(/starship\.toml\.pre-restore-/);
-    const calls = vi.mocked(fs.copyFileSync).mock.calls;
-    expect(calls[0]).toEqual([getSharedConfigPath(), saved]);
-    expect(calls[1]).toEqual([restored[0]?.restoredFrom, getSharedConfigPath()]);
-  });
-
-  it('only restores the shells it is told the last run touched', () => {
-    readdirSyncMock.mockImplementation((dir) =>
-      dir === shellsDir
-        ? ['zsh.toml.bak-2026-09-09T09-30-00-000Z', 'bash.toml.bak-2026-09-09T09-31-00-000Z']
-        : []
-    );
-    vi.mocked(fs.existsSync).mockImplementation((p) => p === shellsDir);
-
-    const { restored } = restoreConfigBackups(['bash']);
-
-    expect(restored.map((r) => r.what)).toEqual(['bash']);
-  });
-
-  it('restores the newest backup for every per-shell config that has one', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    readdirSyncMock.mockImplementation((dir) => {
-      if (dir === shellsDir) {
-        return [
-          'zsh.toml.bak-2026-09-08T10-00-00-000Z',
-          'zsh.toml.bak-2026-09-09T09-30-00-000Z',
-          'bash.toml.bak-2026-09-09T09-31-00-000Z',
-        ];
-      }
-      return [];
+  it('says nothing about a read-only file that needs no copy anyway', () => {
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === rc);
+    vi.mocked(fs.readFileSync).mockReturnValue('# Added by ShellConfigurator\n');
+    vi.mocked(fs.accessSync).mockImplementation(() => {
+      throw new Error('EACCES');
     });
 
-    const { restored, failed } = restoreConfigBackups();
-
-    expect(failed).toEqual([]);
-    expect(restored.map((r) => r.what).sort()).toEqual(['bash', 'zsh']);
-    const zsh = restored.find((r) => r.what === 'zsh');
-    expect(zsh?.restoredFrom).toContain('2026-09-09T09-30-00-000Z');
-    expect(zsh?.restoredTo).toBe(getShellConfigPath('zsh'));
-    // Each live file is saved aside, then the backup copied over it.
-    expect(fs.copyFileSync).toHaveBeenCalledTimes(4);
+    expect(keepOriginal(rc)).toBeNull();
   });
 
-  it('reports a failing copy and still restores the rest', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    readdirSyncMock.mockImplementation((dir) => {
-      if (dir === shellsDir) {
-        return ['zsh.toml.bak-2026-09-09T09-30-00-000Z', 'bash.toml.bak-2026-09-09T09-31-00-000Z'];
-      }
-      return [];
-    });
-    const copyFileSyncMock = fs.copyFileSync as unknown as Mock<
-      (src: string, dest: string) => void
-    >;
-    copyFileSyncMock.mockImplementation((_src: string, dest: string) => {
-      if (dest === getShellConfigPath('zsh')) throw new Error('EACCES: permission denied');
+  it('treats a copy another run made first as kept', () => {
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === rc);
+    vi.mocked(fs.readFileSync).mockReturnValue('alias ll=ls\n');
+    vi.mocked(fs.copyFileSync).mockImplementation(() => {
+      throw Object.assign(new Error('EEXIST'), { code: 'EEXIST' });
     });
 
-    const { restored, failed } = restoreConfigBackups();
-
-    expect(restored.map((r) => r.what)).toEqual(['bash']);
-    expect(failed).toHaveLength(1);
-    expect(failed[0]?.what).toBe('zsh');
-    expect(failed[0]?.restoredFrom).toContain('zsh.toml.bak-2026-09-09T09-30-00-000Z');
-    expect(failed[0]?.error).toContain('EACCES');
-  });
-
-  it('ignores files that are not config backups and unknown shell ids', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    readdirSyncMock.mockImplementation((dir) => {
-      if (dir === shellsDir) {
-        return ['notes.toml.bak-1', 'notashell.toml.bak-2026-09-09T00-00-00-000Z', 'README.md'];
-      }
-      return [];
-    });
-
-    expect(restoreConfigBackups()).toEqual({ restored: [], failed: [] });
-    expect(fs.copyFileSync).not.toHaveBeenCalled();
-  });
-});
-
-describe('backupPath', () => {
-  afterEach(() => vi.resetAllMocks());
-
-  it('adds a suffix instead of reusing a backup name taken in the same millisecond', () => {
-    vi.mocked(fs.existsSync).mockReturnValueOnce(true).mockReturnValueOnce(false);
-
-    expect(backupPath('/home/u/.zshrc')).toMatch(/\.zshrc\.bak-[\dT-]+Z-2$/);
+    expect(keepOriginal(rc)).toBeNull();
   });
 });
 
 describe('removing ShellConfigurator lines', () => {
   const bashrc = getShell('bash')!.rcFile!;
-  const backups = /\.bak-/;
 
   function rcHolds(content: string): void {
     vi.mocked(fs.existsSync).mockImplementation((p) => p === bashrc);
@@ -1433,7 +1309,7 @@ describe('removing ShellConfigurator lines', () => {
     ).toBe(false);
   });
 
-  it('restores the rc a fresh install appended to, after backing it up', () => {
+  it('restores the rc a fresh install appended to, without copying it aside', () => {
     rcHolds(
       `alias ll=ls\n\n# Added by ShellConfigurator\nexport STARSHIP_CONFIG='/h/.config/starship/bash.toml'\neval "$(starship init bash)"\n`
     );
@@ -1441,8 +1317,7 @@ describe('removing ShellConfigurator lines', () => {
     const result = removeManagedRcBlocks('bash');
 
     expect(result.removed).toBe(true);
-    expect(result.backedUpTo).toMatch(backups);
-    expect(fs.copyFileSync).toHaveBeenCalledWith(bashrc, result.backedUpTo);
+    expect(fs.copyFileSync).not.toHaveBeenCalled();
     expect(lastWrittenContent()).toBe('alias ll=ls\n');
     expect(result.note).toBeUndefined();
   });
@@ -1555,21 +1430,37 @@ describe('removing ShellConfigurator lines', () => {
     expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
-  it('moves the per-shell config aside to a backup', () => {
+  it('deletes a generated per-shell config without keeping a copy', () => {
     const config = getShellConfigPath('zsh');
     vi.mocked(fs.existsSync).mockImplementation((p) => p === config);
+    vi.mocked(fs.readFileSync).mockReturnValue('# Generated by ShellConfigurator\n');
 
-    const result = removeShellConfigFile('zsh');
+    expect(removeShellConfigFile('zsh')).toEqual({ removed: true });
+    expect(fs.copyFileSync).not.toHaveBeenCalled();
+    expect(fs.rmSync).toHaveBeenCalledWith(config);
+  });
 
-    expect(result.removed).toBe(true);
-    expect(result.backedUpTo?.startsWith(`${config}.bak-`)).toBe(true);
-    expect(fs.renameSync).toHaveBeenCalledWith(config, result.backedUpTo);
+  it('keeps the original of a hand-written per-shell config before deleting it', () => {
+    const config = getShellConfigPath('zsh');
+    vi.mocked(fs.existsSync).mockImplementation((p) => p === config);
+    vi.mocked(fs.readFileSync).mockReturnValue('format = "$all"\n');
+
+    removeShellConfigFile('zsh');
+
+    expect(fs.copyFileSync).toHaveBeenCalledWith(
+      config,
+      `${config}.pre-shell-configurator`,
+      fs.constants.COPYFILE_EXCL
+    );
+    const copyOrder = vi.mocked(fs.copyFileSync).mock.invocationCallOrder[0]!;
+    const removeOrder = vi.mocked(fs.rmSync).mock.invocationCallOrder[0]!;
+    expect(copyOrder).toBeLessThan(removeOrder);
   });
 
   it('leaves a missing per-shell config alone', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     expect(removeShellConfigFile('zsh').removed).toBe(false);
-    expect(fs.renameSync).not.toHaveBeenCalled();
+    expect(fs.rmSync).not.toHaveBeenCalled();
   });
 });
 

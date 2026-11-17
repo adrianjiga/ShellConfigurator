@@ -51,10 +51,11 @@ export function requireScratchHome() {
 const entry = nodePath.resolve('dist/index.js');
 
 /** Runs the built CLI; a failure carries the CLI's own output so CI shows why. */
-export function runCli(args) {
+export function runCli(args, { okStatuses = [0] } = {}) {
   try {
     return execFileSync(process.execPath, [entry, ...args], { encoding: 'utf8' });
   } catch (err) {
+    if (okStatuses.includes(err.status)) return err.stdout;
     throw new Error(
       `shell-configurator ${args.join(' ')} exited ${err.status}:\n${err.stdout ?? ''}${err.stderr ?? ''}`
     );
@@ -118,7 +119,8 @@ export function assertRcWired(rcPath, shell) {
 
 /**
  * Runs a real `uninstall --yes` for one shell after an apply, then asserts the
- * rc lost every managed line, the per-shell config moved to a backup, a second
+ * rc lost every managed line, the per-shell config is gone, the rc's content
+ * from before the apply stays as its `.pre-shell-configurator` copy, a second
  * run finds nothing, a `rollback` brings both back, and a second `rollback`
  * puts both back to `before`, their content ahead of the apply.
  */
@@ -137,10 +139,14 @@ export function assertUninstalled(homeDir, rcPath, shell, before) {
   assert.ok(!existsSync(configPath), `uninstall left ${configPath}`);
   const summary = whatChangedPath();
   assert.ok(existsSync(summary), 'uninstall removed the WHAT-CHANGED.md of the last apply');
-  const rcBackups = readdirSync(homeDir).filter((f) =>
-    f.startsWith(`${nodePath.basename(rcPath)}.bak-`)
-  );
-  assert.ok(rcBackups.length > 0, 'uninstall did not back up the rc');
+  if (before.rc !== null && !before.rc.includes('ShellConfigurator')) {
+    assert.equal(
+      readOrNull(`${rcPath}.pre-shell-configurator`),
+      before.rc,
+      'the rc has no .pre-shell-configurator copy of its content before the apply'
+    );
+  }
+  assert.ok(!readdirSync(homeDir).some((f) => f.includes('.bak-')), 'a .bak- file was written');
 
   const again = runCli(['uninstall', '--yes', '--shells', shell]);
   assert.ok(!again.includes('REMOVED'), `a second uninstall removed something:\n${again}`);
@@ -177,9 +183,16 @@ export function assertUninstalled(homeDir, rcPath, shell, before) {
   );
 }
 
-/** Asserts `share` prints Markdown whose card rebuilds exactly the TOML it shows. */
+/** Asserts `generate --markdown` prints Markdown whose card rebuilds exactly the TOML it shows. */
 export function assertShare(homeDir) {
-  const text = runCli(['share', '--preset', 'tokyo-night', '--character', 'lambda']);
+  const text = runCli([
+    'generate',
+    '--markdown',
+    '--preset',
+    'tokyo-night',
+    '--character',
+    'lambda',
+  ]);
   const block = (lang) => new RegExp(`\`\`\`${lang}\n([\\s\\S]*?)\n\`\`\``).exec(text)?.[1];
   const toml = block('toml');
   const card = block('json');
@@ -196,19 +209,22 @@ export function assertShare(homeDir) {
   );
 }
 
-/** Asserts `timings` times the config a real apply wrote, as JSON. */
+/**
+ * Asserts `doctor --timings` times the config a real apply wrote, as JSON. A
+ * failing health check in the container exits 1 too, so only the timings count.
+ */
 export function assertTimings(configPath) {
-  const report = JSON.parse(runCli(['timings', '--json', '--config', configPath]));
-  assert.equal(
-    report.config,
-    configPath,
-    `timings timed the wrong config:\n${JSON.stringify(report)}`
-  );
+  const out = runCli(['doctor', '--timings', '--json', '--config', configPath], {
+    okStatuses: [0, 1],
+  });
+  const timings = JSON.parse(out).timings;
+  assert.equal(timings?.config, configPath, `doctor --timings timed the wrong config:\n${out}`);
   assert.ok(
-    Array.isArray(report.modules) && report.modules.some((timing) => timing.module === 'character'),
-    `timings reported no character module:\n${JSON.stringify(report)}`
+    Array.isArray(timings.modules) &&
+      timings.modules.some((timing) => timing.module === 'character'),
+    `doctor --timings reported no character module:\n${out}`
   );
-  assert.equal(typeof report.slowestMs, 'number', 'timings reported no slowest module');
+  assert.equal(typeof timings.slowestMs, 'number', 'doctor --timings reported no slowest module');
 }
 
 /** The WHAT-CHANGED.md path the CLI writes in this scratch home. */
@@ -281,14 +297,14 @@ export function assertWhatChanged(out, rcPath) {
   );
 }
 
-/** Runs the list flags and `apply --dry-run --json` for real and parses what they print. */
+/** Runs `list` and `apply --dry-run --json` for real and parses what they print. */
 export function assertScriptingSurface() {
-  const presets = JSON.parse(runCli(['--list-presets', '--json']));
+  const presets = JSON.parse(runCli(['list', 'presets', '--json']));
   assert.ok(
     presets.some((preset) => preset.id === 'tokyo-night'),
-    '--list-presets --json has no tokyo-night'
+    'list presets --json has no tokyo-night'
   );
-  assert.match(runCli(['--list-fonts']), /^JetBrainsMono\s+JetBrains Mono$/m, '--list-fonts text');
+  assert.match(runCli(['list', 'fonts']), /^JetBrainsMono\s+JetBrains Mono$/m, 'list fonts text');
 
   const bashrc = nodePath.join(process.env.HOME, '.bashrc');
   const bashrcBefore = existsSync(bashrc) ? readFileSync(bashrc, 'utf8') : null;

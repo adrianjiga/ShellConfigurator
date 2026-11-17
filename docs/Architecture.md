@@ -3,11 +3,13 @@
 ## Entry Point
 
 `src/index.tsx` first parses the argv (`parseCliArgs` in `src/services/args.ts`).
-Global flags (`--help`/`--version`/`--restore`) and the headless subcommands
-(`generate`/`apply`/`doctor`/`repair`/`uninstall`/`rollback`/`debug-info`/`completions`/`timings`/`share`, routed via `runHeadlessCommand`) exit
+Global flags (`--help`/`--version`) and the headless subcommands
+(`generate`/`apply`/`doctor`/`uninstall`/`rollback`/`list`/`debug-info`/`completions`, routed via `runHeadlessCommand`) exit
 before Ink ever renders. An unknown or malformed flag is a `CliUsageError` that
 stops the run, and so is a known flag the chosen subcommand does not take
-(`refuseUnusedFlags` in `src/index.tsx`).
+(`refuseUnusedFlags` in `src/index.tsx`), or a retired command or flag
+(`repair`, `share`, `timings`, `--restore`, `--list-*`), whose message names
+its replacement.
 Only when no subcommand consumed the args does the app render the root `App`
 component using Ink's renderer. Ink is a React-based framework for building interactive CLI
 applications — it translates a React component tree into terminal output.
@@ -274,25 +276,25 @@ src/
 │   ├── ShellScreen.tsx        Shell toggle list + default shell
 │   ├── ReviewScreen.tsx       Pre-install confirmation (plan + config + files to write + rc diffs)
 │   ├── InstallingScreen.tsx   Renders install progress (runs installTasks service)
-│   └── DoneScreen.tsx         Summary, exit, one-key undo (`r` restores backups)
+│   └── DoneScreen.tsx         Summary, exit, `s` to save the prompt as Markdown, rollback hint
 ├── generators/
 │   ├── starship.ts            TOML config generation
-│   ├── shellRc.ts             RC file planning (appliedRcContent/resetRcContent) and writing + per-shell/shared config output, backups, restore and removal
+│   ├── shellRc.ts             RC file planning (appliedRcContent/resetRcContent) and writing + per-shell/shared config output, keepOriginal (.pre-shell-configurator copies) and removal
 │   └── toml.ts                TOML escaping helpers
 └── services/
     ├── args.ts                Hand-rolled, dependency-free CLI flag parser
     ├── headless.ts            generate/apply implementation + bounded --import-url fetch (routing is runHeadlessCommand in index.tsx)
     ├── fileDiff.ts            Unified diff + plannedFileChanges: the configs and rc files a run would write, diffed against disk
     ├── preview.ts             Live preview: scratch-dir `starship prompt` + static fallback; starshipEnv
-    ├── starshipProbe.ts       starship timings / explain: parsers, fix suggestions, timePrompt, explainPromptAsync
-    ├── share.ts               Markdown to share a prompt: its TOML and a card that rebuilds it
+    ├── starshipProbe.ts       starship timings / explain: parsers, fix suggestions, timePrompt (doctor --timings), explainPromptAsync
+    ├── share.ts               Markdown to share a prompt (generate --markdown): its TOML and a card that rebuilds it
     ├── detector.ts            Async system detection (PM, shells, Starship, terminal, container)
     ├── installer.ts           Install commands (Starship, fonts, shells, chsh) and Starship/font removal
     ├── installTasks.ts        Install task orchestration (buildTaskList, runInstallTasks)
     ├── fontExtractor.ts       Worker that decompresses font archives (with size caps)
     ├── terminalFont.ts        Wires a detected terminal's config to a Nerd Font family
     ├── doctor.ts              Day-2 health check (read-only) with pass/warn/fail findings
-    ├── repair.ts              Applies doctor fixes, then re-runs the doctor
+    ├── repair.ts              Applies doctor fixes (doctor --fix), then re-runs the doctor
     ├── uninstall.ts           Plans and runs the teardown (rc lines, configs, font, Starship)
     ├── runCapture.ts          Copies the files a run may change and keeps a manifest of what it changed
     ├── rollback.ts            Puts a captured run's files back (skipping files changed since)
@@ -300,7 +302,7 @@ src/
     ├── cliSurface.ts          Description of every subcommand and flag, for completions
     ├── completions.ts         Generates the bash/zsh/fish completion scripts
     ├── whatChanged.ts         Writes the WHAT-CHANGED.md summary of an install or apply as part of that run
-    ├── listings.ts            The preset/module/font lists behind --list-presets etc.
+    ├── listings.ts            The preset/module/font lists behind `list <presets|modules|fonts>`
     ├── state.ts               State card serialization (serializeState / parseState)
     ├── history.ts             history.jsonl ledger + snapshot writes
     ├── cache.ts               Font archive cache (pin + sha256) + recorded starship version

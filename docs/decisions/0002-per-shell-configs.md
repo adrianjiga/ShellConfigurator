@@ -1,6 +1,7 @@
 # 0002 — Write one `starship.toml` per selected shell
 
-**Status**: Accepted (amended by **0002A — adopt-existing-config**, below)
+**Status**: Accepted (amended by **0002A — adopt-existing-config**, below; the
+`--restore` and backup notes are superseded by **0006**)
 
 ## Context
 
@@ -38,7 +39,9 @@ plus `starship init` line to that shell's rc file.
 - The shared path is backed up best-effort inside the single Config task, which
   runs after the Starship, font and shell installs and before the per-shell rc
   tasks, so `--restore` can offer a way back for the config that previously stood
-  as the default.
+  as the default. _(Superseded by 0006: no backups are made and `--restore` is
+  retired; the shared config gets one `.pre-shell-configurator` copy instead,
+  and `rollback` is the way back.)_
 - The installer has one Config task that writes every selected shell's file and
   one rc task per selected shell. The review screen shows the generated TOML
   once, under each chosen shell's config path, followed by each shell's rc
@@ -70,7 +73,8 @@ takes the adopt branch:
   If a config was fetched (`sharedConfigToml`, runtime-only), it is written to
   the shared path with `writeSharedConfig`, backing up anything already there;
   otherwise the existing file is left untouched and snapshotted via
-  `backupSharedConfig`.
+  `backupSharedConfig`. _(Superseded by 0006: `writeSharedConfig` keeps one
+  `.pre-shell-configurator` copy instead, and an untouched file is not copied.)_
 - The RC tasks run `applyShellConfig` with `pointAtSharedConfig: true`: they
   still add the `starship init` line, but no `STARSHIP_CONFIG` export, so every
   shell reads the shared file by Starship's default.
@@ -89,7 +93,8 @@ existing file as-is.
   user chose it, and nothing is regenerated.
 - `STARSHIP_CONFIG` is not exported for adopt-configured shells, so re-runs must
   recognise the adopt marker as a ShellConfigurator block. `--restore` only
-  copies config backups back and never touches rc files.
+  copies config backups back and never touches rc files. _(Superseded by 0006:
+  `--restore` is retired; `rollback` puts back a whole run, rc files included.)_
 - `--import-url` is folded into adopt mode rather than parsed back into
   `WizardState` (regenerating a shared file from a hand-written TOML would be a
   lossy round-trip).

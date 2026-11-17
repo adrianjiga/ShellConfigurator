@@ -324,41 +324,41 @@ describe('runInstallTasks', () => {
     expect(results.find((t) => t.id === 'config')?.status).toBe('done');
   });
 
-  it('reports the backup path when an existing per-shell config was replaced', async () => {
+  it('keeps saying where the font was set when the terminal config could not be copied first', async () => {
+    const deps = fakeDeps({
+      wireTerminalFont: vi.fn(() => ({
+        applied: true,
+        path: '/home/u/.config/kitty/kitty.conf',
+        note: 'could not keep its original as kitty.conf.pre-shell-configurator (ENOSPC)',
+      })),
+    });
+    const results = await runInstallTasks(
+      state({
+        selectedShells: ['zsh'],
+        nerdFontToInstall: { kind: 'install' as const, id: 'Hack' },
+        terminal: 'kitty',
+      }),
+      deps,
+      vi.fn()
+    );
+
+    expect(results.find((t) => t.id === 'terminal')?.note).toBe(
+      'set font in /home/u/.config/kitty/kitty.conf; could not keep its original as kitty.conf.pre-shell-configurator (ENOSPC)'
+    );
+  });
+
+  it('notes a per-shell config whose original could not be kept, and still writes it', async () => {
     const deps = fakeDeps({
       writeShellConfig: vi.fn(() => ({
         path: '/home/u/.config/starship/zsh.toml',
-        backedUpTo: '/home/u/.config/starship/zsh.toml.bak-2026',
+        note: 'could not keep its original as zsh.toml.pre-shell-configurator (ENOSPC)',
       })),
-    });
-    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
-
-    expect(results.find((t) => t.id === 'config')?.note).toContain('zsh.toml.bak-2026');
-  });
-
-  it('backs up the shared config and reports it in the config note', async () => {
-    const deps = fakeDeps({
-      backupSharedConfig: vi.fn(() => '/home/u/.config/starship.toml.bak-2026'),
-    });
-    const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
-
-    expect(deps.backupSharedConfig).toHaveBeenCalled();
-    expect(results.find((t) => t.id === 'config')?.note).toContain('shared config saved to');
-    expect(results.find((t) => t.id === 'config')?.note).toContain('starship.toml.bak-2026');
-  });
-
-  it('keeps the config write going when the shared backup fails', async () => {
-    const deps = fakeDeps({
-      backupSharedConfig: vi.fn(() => {
-        throw new Error('EACCES');
-      }),
     });
     const results = await runInstallTasks(state({ selectedShells: ['zsh'] }), deps, vi.fn());
 
     const config = results.find((t) => t.id === 'config');
     expect(config?.status).toBe('done');
-    expect(config?.note ?? '').not.toContain('shared config saved to');
-    expect(deps.writeShellConfig).toHaveBeenCalled();
+    expect(config?.note).toContain('zsh: could not keep its original');
   });
 
   it('adopt mode keeps the shared config instead of writing per-shell files', async () => {
@@ -373,7 +373,6 @@ describe('runInstallTasks', () => {
     expect(config?.label).toBe('Keep existing Starship config');
     expect(config?.status).toBe('done');
     expect(config?.note).toContain('keeping the existing config untouched');
-    expect(deps.backupSharedConfig).toHaveBeenCalled();
     expect(deps.generateToml).not.toHaveBeenCalled();
     expect(deps.writeShellConfig).not.toHaveBeenCalled();
     expect(deps.writeSharedConfig).not.toHaveBeenCalled();
@@ -391,7 +390,6 @@ describe('runInstallTasks', () => {
     expect(config?.status).toBe('done');
     expect(config?.note).toContain('Starship will use its defaults');
     expect(config?.note).not.toContain('keeping the existing config untouched');
-    expect(deps.backupSharedConfig).not.toHaveBeenCalled();
   });
 
   it('adopt mode wires shells to the shared config without a STARSHIP_CONFIG export', async () => {
@@ -428,22 +426,6 @@ describe('runInstallTasks', () => {
     expect(deps.writeShellConfig).not.toHaveBeenCalled();
     expect(deps.generateToml).not.toHaveBeenCalled();
     expect(results.find((t) => t.id === 'config')?.status).toBe('done');
-  });
-
-  it('adopt mode reports when an imported config replaced an existing one', async () => {
-    const deps = fakeDeps({
-      writeSharedConfig: vi.fn(() => ({
-        path: '/home/u/.config/starship.toml',
-        backedUpTo: '/home/u/.config/starship.toml.bak-2026',
-      })),
-    });
-    const results = await runInstallTasks(
-      state({ keepExistingConfig: true, sharedConfigToml: '# import', selectedShells: ['zsh'] }),
-      deps,
-      vi.fn()
-    );
-
-    expect(results.find((t) => t.id === 'config')?.note).toContain('starship.toml.bak-2026');
   });
 
   it('verifies each written config through the real starship binary', async () => {

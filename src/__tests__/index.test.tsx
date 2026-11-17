@@ -18,10 +18,6 @@ vi.mock('../app.tsx', () => ({
   App: () => null,
 }));
 
-const { mockRestoreConfigBackups } = vi.hoisted(() => ({
-  mockRestoreConfigBackups: vi.fn(),
-}));
-
 const { mockRecordRun } = vi.hoisted(() => ({
   mockRecordRun: vi.fn(),
 }));
@@ -35,16 +31,6 @@ vi.mock('../services/detector.ts', async () => {
     detectPackageManagerAsync: vi.fn().mockResolvedValue('apt'),
     detectTerminalAsync: vi.fn().mockResolvedValue(null),
     detectContainerAsync: vi.fn().mockResolvedValue(false),
-  };
-});
-
-vi.mock('../generators/shellRc.ts', async () => {
-  const actual = await vi.importActual<typeof import('../generators/shellRc.ts')>(
-    '../generators/shellRc.ts'
-  );
-  return {
-    ...actual,
-    restoreConfigBackups: mockRestoreConfigBackups,
   };
 });
 
@@ -88,8 +74,6 @@ vi.mock('../services/repair.ts', () => ({
 }));
 
 import { render } from 'ink';
-import { getShell } from '../config/shells.ts';
-import { getShellConfigPath } from '../generators/shellRc.ts';
 import {
   applyInstallOutcomeExitCode,
   assertWizardTerminal,
@@ -101,12 +85,12 @@ import {
   routeCli,
   runCompletionsCommand,
   runDebugInfoCommand,
+  runDoctorCommand,
   runGlobalFlags,
   runHeadlessCommand,
+  runMarkdownCommand,
   runRepairCommand,
   runRollbackCommand,
-  runShareCommand,
-  runTimingsCommand,
   runUninstallCommand,
   type UninstallIo,
 } from '../index.tsx';
@@ -114,7 +98,7 @@ import { parseCliArgs } from '../services/args.ts';
 import { completionScript } from '../services/completions.ts';
 import type { DebugInfoDeps } from '../services/debugInfo.ts';
 import { CliRunError, CliUsageError } from '../services/errors.ts';
-import { appendHistory, writeSnapshot } from '../services/history.ts';
+import { appendHistory } from '../services/history.ts';
 import { formatListing, listEntries } from '../services/listings.ts';
 import { homeDir } from '../services/paths.ts';
 import {
@@ -184,7 +168,7 @@ describe('index CLI handling', () => {
   it('lists every accepted flag in the help text', () => {
     runGlobalFlags(parseCliArgs(['--help']));
     const help = String(stdoutWrite.mock.calls[0]?.[0]);
-    expect(help).toContain('--restore           Copy');
+    expect(help).not.toContain('--restore');
     expect(help).toContain('-o, --output <file>');
     expect(help).toContain('--import, --state <file>');
     expect(help).toContain('--shells is');
@@ -196,113 +180,21 @@ describe('index CLI handling', () => {
   });
 });
 
-describe('index restore flag', () => {
-  let stdoutWrite: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
-    mockRestoreConfigBackups.mockReset();
-  });
-
-  afterEach(() => {
-    stdoutWrite.mockRestore();
-  });
-
-  it('prints the restored configs for --restore', () => {
-    const backup = '/home/u/.config/starship.toml.bak-2026-09-09T09-30-00-000Z';
-    const backup2 = '/home/u/.config/starship/zsh.toml.bak-2026-09-08T10-00-00-000Z';
-    mockRestoreConfigBackups.mockReturnValue({
-      restored: [
-        { what: 'shared', restoredTo: '/home/u/.config/starship.toml', restoredFrom: backup },
-        { what: 'zsh', restoredTo: '/home/u/.config/starship/zsh.toml', restoredFrom: backup2 },
-      ],
-      failed: [],
-    });
-
-    const snapshotId = writeSnapshot({ ...DEFAULT_STATE, selectedShells: ['fish', 'zsh'] });
-    appendHistory({ version: 1, timestamp: new Date().toISOString(), kind: 'apply', snapshotId });
-
-    expect(runGlobalFlags(parseCliArgs(['--restore']))).toBe(true);
-
-    expect(mockRestoreConfigBackups).toHaveBeenCalledWith(['fish', 'zsh']);
-    expect(stdoutWrite).toHaveBeenCalledWith(
-      expect.stringContaining('shared: /home/u/.config/starship.toml')
-    );
-    expect(stdoutWrite).toHaveBeenCalledWith(
-      expect.stringContaining('zsh: /home/u/.config/starship/zsh.toml')
-    );
-  });
-
-  it('reports partial restore failures instead of claiming success', () => {
-    const backup = '/home/u/.config/starship/zsh.toml.bak-2026-09-08T10-00-00-000Z';
-    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
-    const savedExitCode = process.exitCode;
-    mockRestoreConfigBackups.mockReturnValue({
-      restored: [
-        { what: 'shared', restoredTo: '/home/u/.config/starship.toml', restoredFrom: backup },
-      ],
-      failed: [{ what: 'zsh' as const, restoredFrom: backup, error: 'EACCES: permission denied' }],
-    });
-
-    try {
-      expect(runGlobalFlags(parseCliArgs(['--restore']))).toBe(true);
-
-      expect(stdoutWrite).toHaveBeenCalledWith(
-        expect.stringContaining('shared: /home/u/.config/starship.toml')
-      );
-      expect(stderrWrite).toHaveBeenCalledWith(
-        expect.stringContaining('Could not restore some configs')
-      );
-      expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('EACCES'));
-      expect(process.exitCode).toBe(1);
-    } finally {
-      stderrWrite.mockRestore();
-      process.exitCode = savedExitCode;
-    }
-  });
-
-  it('points --undo at rollback instead of restoring only the configs', () => {
+describe('index retired flags', () => {
+  it('points --undo at rollback', () => {
     expect(() => parseCliArgs(['--undo'])).toThrow(
       new CliUsageError(
-        '--undo is gone: shell-configurator rollback undoes the last run, rc lines included. --restore still copies the newest config backups back.'
+        '--undo is gone: shell-configurator rollback undoes the last run, rc lines included.'
       )
     );
-    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
   });
 
-  it('reports when there is nothing to restore', () => {
-    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
-
-    runGlobalFlags(parseCliArgs(['--restore']));
-
-    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringContaining('Nothing to restore'));
-  });
-
-  it('prefers --version over --restore regardless of argv order', () => {
-    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
-
-    expect(runGlobalFlags(parseCliArgs(['--restore', '--version']))).toBe(true);
-    expect(runGlobalFlags(parseCliArgs(['--version', '--restore']))).toBe(true);
-    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
-    expect(stdoutWrite).toHaveBeenCalledWith(expect.stringMatching(/^\d+\.\d+\.\d+\n$/));
-  });
-
-  it('refuses --restore in a dry run instead of restoring', () => {
-    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
-
-    expect(() => runGlobalFlags(parseCliArgs(['--dry-run', '--restore']))).toThrow(
-      /cannot run in a dry run/
+  it('points --restore at rollback', () => {
+    expect(() => parseCliArgs(['--restore'])).toThrow(
+      new CliUsageError(
+        '--restore is gone: shell-configurator rollback undoes the last run, rc lines included. .bak-* copies from older versions stay where they are; copy one back by hand if you need it.'
+      )
     );
-    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
-  });
-
-  it('refuses --restore alongside a subcommand', () => {
-    mockRestoreConfigBackups.mockReturnValue({ restored: [], failed: [] });
-
-    expect(() =>
-      runGlobalFlags(parseCliArgs(['generate', '--preset', 'pure-prompt', '--restore']))
-    ).toThrow(/cannot be combined with the generate subcommand/);
-    expect(mockRestoreConfigBackups).not.toHaveBeenCalled();
   });
 });
 
@@ -533,15 +425,15 @@ describe('index headless routing', () => {
     stderrWrite.mockRestore();
   });
 
-  it('warns when repair gets config flags without --state', async () => {
+  it('warns when doctor --fix gets config flags without --state', async () => {
     mockRunRepair.mockResolvedValue({ ok: true, actions: [] });
     mockFormatRepairReport.mockReturnValue('REPAIRED\n');
     const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
 
-    await route(['repair', '--font', 'none']);
+    await route(['doctor', '--fix', '--font', 'none']);
 
     expect(stderrWrite).toHaveBeenCalledWith(
-      expect.stringContaining('--font is ignored by repair without --state')
+      expect.stringContaining('--font is ignored by doctor --fix without --state')
     );
     stderrWrite.mockRestore();
   });
@@ -556,7 +448,7 @@ describe('index headless routing', () => {
     expect(mockFormatDoctorReport).not.toHaveBeenCalled();
   });
 
-  it('checks doctor and repair against a --state card', async () => {
+  it('checks and fixes against a --state card', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-index-'));
     try {
       const card = path.join(dir, 'card.json');
@@ -567,7 +459,7 @@ describe('index headless routing', () => {
       mockFormatRepairReport.mockReturnValue('REPAIRED\n');
 
       await route(['doctor', '--state', card]);
-      await route(['repair', '--state', card]);
+      await route(['doctor', '--fix', '--state', card]);
 
       expect(mockRunDoctor.mock.calls[0]![0]).toMatchObject({ selectedShells: ['fish'] });
       expect(mockRunRepair.mock.calls[0]![0]).toMatchObject({ selectedShells: ['fish'] });
@@ -580,7 +472,7 @@ describe('index headless routing', () => {
     const report = { ok: true, actions: [], dryRun: false };
     mockRunRepair.mockResolvedValue(report);
 
-    await route(['repair', '--json']);
+    await route(['doctor', '--fix', '--json']);
 
     expect(stdoutWrite).toHaveBeenCalledWith(`${JSON.stringify(report, null, 2)}\n`);
     expect(mockFormatRepairReport).not.toHaveBeenCalled();
@@ -596,11 +488,11 @@ describe('index headless routing', () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it('runs repair and prints the repair report', async () => {
+  it('runs doctor --fix and prints the repair report', async () => {
     mockRunRepair.mockResolvedValue({ ok: true, actions: [] });
     mockFormatRepairReport.mockReturnValue('REPAIRED\n');
 
-    const routed = await route(['repair']);
+    const routed = await route(['doctor', '--fix']);
 
     expect(routed).toBe(true);
     expect(mockRunRepair).toHaveBeenCalledOnce();
@@ -613,26 +505,11 @@ describe('index headless routing', () => {
     expect(mockRunDoctor).not.toHaveBeenCalled();
   });
 
-  it('upgrades doctor --fix into a repair', async () => {
-    mockRunRepair.mockResolvedValue({ ok: true, actions: [] });
-    mockFormatRepairReport.mockReturnValue('REPAIRED\n');
-
-    const routed = await route(['doctor', '--fix']);
-
-    expect(routed).toBe(true);
-    expect(mockRunRepair).toHaveBeenCalledWith(
-      null,
-      {},
-      { includeWarnings: undefined, dryRun: true }
-    );
-    expect(mockRunDoctor).not.toHaveBeenCalled();
-  });
-
   it('passes --dry-run through to repair so nothing is applied', async () => {
     mockRunRepair.mockResolvedValue({ ok: true, actions: [], dryRun: true });
     mockFormatRepairReport.mockReturnValue('PLANNED\n');
 
-    const routed = await route(['repair', '--dry-run']);
+    const routed = await route(['doctor', '--fix', '--dry-run']);
 
     expect(routed).toBe(true);
     expect(mockRunRepair).toHaveBeenCalledOnce();
@@ -644,22 +521,21 @@ describe('index headless routing', () => {
     expect(stdoutWrite).toHaveBeenCalledWith('PLANNED\n');
   });
 
-  it('passes --include-warnings through to repair and doctor --fix', async () => {
+  it('passes --include-warnings through to doctor --fix', async () => {
     mockRunRepair.mockResolvedValue({ ok: true, actions: [], dryRun: false });
     mockFormatRepairReport.mockReturnValue('');
 
-    await route(['repair', '--include-warnings']);
     await route(['doctor', '--fix', '--include-warnings']);
 
     for (const call of mockRunRepair.mock.calls) {
       expect(call[2]).toMatchObject({ includeWarnings: true });
     }
-    expect(mockRunRepair).toHaveBeenCalledTimes(2);
+    expect(mockRunRepair).toHaveBeenCalledOnce();
   });
 
-  it('rejects --include-warnings outside a repair', async () => {
+  it('rejects --include-warnings without --fix', async () => {
     await expect(route(['doctor', '--include-warnings'])).rejects.toThrow(
-      '--include-warnings only applies to repair'
+      '--include-warnings only applies to doctor --fix'
     );
   });
 
@@ -667,7 +543,7 @@ describe('index headless routing', () => {
     mockRunRepair.mockResolvedValue({ ok: true, actions: [], dryRun: true });
     mockFormatRepairReport.mockImplementation((report) => `REPORT ${report.dryRun}\n`);
 
-    await route(['repair']);
+    await route(['doctor', '--fix']);
 
     expect(stdoutWrite).toHaveBeenCalledWith('REPORT false\n');
   });
@@ -677,7 +553,7 @@ describe('index headless routing', () => {
     mockRunRepair.mockResolvedValue({ ok: false, actions: [] });
     mockFormatRepairReport.mockReturnValue('STILL BROKEN\n');
 
-    await route(['repair']);
+    await route(['doctor', '--fix']);
 
     expect(process.exitCode).toBe(1);
   });
@@ -707,7 +583,7 @@ describe('index headless routing', () => {
     it('shows the plan and changes nothing when the user says no', async () => {
       const ask = io({ confirm: vi.fn().mockResolvedValue(false) });
 
-      await runRepairCommand(parseCliArgs(['repair']), 'repair', ask);
+      await runRepairCommand(parseCliArgs(['doctor', '--fix']), 'doctor --fix', ask);
 
       expect(ask.confirm).toHaveBeenCalled();
       expect(output()).toContain('REPORT true');
@@ -718,8 +594,12 @@ describe('index headless routing', () => {
 
     it('refuses off a terminal without --yes', async () => {
       await expect(
-        runRepairCommand(parseCliArgs(['repair']), 'repair', io({ isTerminal: () => false }))
-      ).rejects.toThrow('repair changes files and may install software; pass --yes');
+        runRepairCommand(
+          parseCliArgs(['doctor', '--fix']),
+          'doctor --fix',
+          io({ isTerminal: () => false })
+        )
+      ).rejects.toThrow('doctor --fix changes files and may install software; pass --yes');
       expect(mockRunRepair).toHaveBeenCalledOnce();
     });
 
@@ -729,11 +609,11 @@ describe('index headless routing', () => {
       );
 
       await expect(
-        runRepairCommand(parseCliArgs(['repair', '--yes']), 'repair --yes', io())
+        runRepairCommand(parseCliArgs(['doctor', '--fix', '--yes']), 'doctor --fix --yes', io())
       ).rejects.toThrow('starship install broke');
       expect(mockRecordRun).toHaveBeenCalledWith({
         kind: 'repair',
-        command: 'repair --yes',
+        command: 'doctor --fix --yes',
         exitCode: 1,
         runId: 'run-3',
       });
@@ -741,12 +621,13 @@ describe('index headless routing', () => {
 
     it('applies the fixes inside a captured run, records it and points at rollback', async () => {
       vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
-        result: await run(),
+        result: await run(false),
         runId: 'run-7',
+        uncaptured: false,
       }));
       const ask = io();
 
-      await runRepairCommand(parseCliArgs(['repair', '--yes']), 'repair --yes', ask);
+      await runRepairCommand(parseCliArgs(['doctor', '--fix', '--yes']), 'doctor --fix --yes', ask);
 
       expect(ask.confirm).not.toHaveBeenCalled();
       expect(captureRun).toHaveBeenCalled();
@@ -762,7 +643,7 @@ describe('index headless routing', () => {
       expect(output()).toContain('Undo it with: shell-configurator rollback');
       expect(mockRecordRun).toHaveBeenCalledWith({
         kind: 'repair',
-        command: 'repair --yes',
+        command: 'doctor --fix --yes',
         exitCode: 0,
         runId: 'run-7',
       });
@@ -944,13 +825,11 @@ describe('index uninstall command', () => {
 
   it('removes everything once confirmed, records the run and points at rollback', async () => {
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
-      result: await run(),
+      result: await run(false),
       runId: 'run-9',
+      uncaptured: false,
     }));
-    const io = fakeIo(
-      {},
-      { removeManagedRcBlocks: vi.fn(() => ({ removed: true, backedUpTo: '/h/.zshrc.bak-1' })) }
-    );
+    const io = fakeIo();
 
     await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);
 
@@ -958,7 +837,7 @@ describe('index uninstall command', () => {
     expect(io.deps.removeShellConfigFile).toHaveBeenCalledWith('zsh');
     expect(output()).toContain('REMOVED Zsh config');
     expect(output()).toContain('Undo it with: shell-configurator rollback');
-    expect(output()).not.toContain('  cp ');
+    expect(output()).not.toContain('could not be recorded');
     expect(mockRecordRun).toHaveBeenCalledWith({
       kind: 'uninstall',
       command: 'uninstall',
@@ -969,8 +848,9 @@ describe('index uninstall command', () => {
 
   it('says rollback cannot bring back a removed Starship or font', async () => {
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
-      result: await run(),
+      result: await run(false),
       runId: 'run-9',
+      uncaptured: false,
     }));
     const io = fakeIo(
       {},
@@ -990,25 +870,83 @@ describe('index uninstall command', () => {
     );
 
     expect(output()).toContain(
-      'Rollback only puts files back: reinstall Hack and Starship with shell-configurator apply or repair.'
+      'Rollback only puts files back: reinstall Hack and Starship with shell-configurator apply or doctor --fix.'
     );
   });
 
-  it('prints the copy-back commands when the run could not be captured', async () => {
+  it('warns when the run could not be recorded after it ran, too', async () => {
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
+      result: await run(false),
+      runId: null,
+      uncaptured: true,
+    }));
+    const io = fakeIo();
+
+    await runUninstallCommand(parseCliArgs(['uninstall', '--yes']), 'uninstall --yes', io);
+
+    expect(io.deps.removeShellConfigFile).toHaveBeenCalledWith('zsh');
+    expect(output()).toContain('This run could not be recorded, so rollback cannot undo it.');
+  });
+
+  it('does not claim the recording failed when the run changed no file it tracks', async () => {
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
+      result: await run(false),
+      runId: null,
+      uncaptured: false,
+    }));
     const io = fakeIo(
       {},
       {
-        removeManagedRcBlocks: vi.fn(() => ({ removed: true, backedUpTo: '/h/.zshrc.bak-1' })),
-        removeShellConfigFile: vi.fn(() => ({ removed: true, backedUpTo: "/h/it's.toml.bak-1" })),
+        hasManagedRcBlock: vi.fn(() => false),
+        hasShellConfig: vi.fn(() => false),
+        plannedStarshipRemoval: vi.fn(async () => ({
+          kind: 'script' as const,
+          path: '/h/.local/bin/starship',
+        })),
       }
     );
 
+    await runUninstallCommand(
+      parseCliArgs(['uninstall', '--starship', '--yes']),
+      'uninstall --starship --yes',
+      io
+    );
+
+    expect(io.deps.removeStarship).toHaveBeenCalled();
+    expect(output()).not.toContain('could not be recorded');
+  });
+
+  it('keeps the per-shell configs when the run could not be captured', async () => {
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
+      result: await run(true),
+      runId: null,
+      uncaptured: true,
+    }));
+    const io = fakeIo();
+
+    await runUninstallCommand(parseCliArgs(['uninstall', '--yes']), 'uninstall --yes', io);
+
+    expect(io.deps.removeManagedRcBlocks).toHaveBeenCalledWith('zsh');
+    expect(io.deps.removeShellConfigFile).not.toHaveBeenCalled();
+    expect(output()).toContain('left in place: rollback could not record this run');
+  });
+
+  it('says rollback cannot undo a run that could not be captured, and where the originals are', async () => {
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
+      result: await run(true),
+      runId: null,
+      uncaptured: true,
+    }));
+    const io = fakeIo();
+
     await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);
 
-    expect(output()).toContain('To undo, copy the backups back:');
-    expect(output()).toContain(`  cp '/h/.zshrc.bak-1' '${getShell('zsh')!.rcFile}'`);
-    expect(output()).toContain(`  cp '/h/it'\\''s.toml.bak-1' '${getShellConfigPath('zsh')}'`);
-    expect(output()).not.toContain('rollback');
+    expect(output()).toContain('This run could not be recorded, so rollback cannot undo it.');
+    expect(output()).toContain(
+      'has its content from then beside it as <file>.pre-shell-configurator'
+    );
+    expect(output()).toContain('that copy predates any later edit');
+    expect(output()).not.toContain('Undo it with');
   });
 
   it('goes ahead without asking under --yes', async () => {
@@ -1092,8 +1030,7 @@ describe('index uninstall command', () => {
     [['--preset', 'pure-prompt'], /--preset cannot be used with uninstall/],
     [['--state', 'card.json'], /--state cannot be used with uninstall/],
     [['--fix'], /--fix cannot be used with uninstall/],
-    [['--include-warnings'], /--include-warnings only applies to repair/],
-    [['--restore'], /--restore cannot be used with uninstall/],
+    [['--include-warnings'], /--include-warnings only applies to doctor --fix/],
   ])('refuses %o before running', async (args, message) => {
     await expect(
       runHeadlessCommand(parseCliArgs(['uninstall', ...args]), 'uninstall')
@@ -1125,7 +1062,7 @@ describe('index uninstall command', () => {
 
   it('rejects --yes and --starship outside uninstall', async () => {
     await expect(runHeadlessCommand(parseCliArgs(['doctor', '--yes']), '')).rejects.toThrow(
-      '--yes only applies to repair, doctor --fix, uninstall and rollback.'
+      '--yes only applies to doctor --fix, uninstall and rollback.'
     );
     await expect(runHeadlessCommand(parseCliArgs(['doctor', '--starship']), '')).rejects.toThrow(
       '--starship only applies to uninstall.'
@@ -1436,8 +1373,7 @@ describe('index rollback command', () => {
     [['--preset', 'pure-prompt'], /--preset cannot be used with rollback/],
     [['--state', 'card.json'], /--state cannot be used with rollback/],
     [['--fix'], /--fix cannot be used with rollback/],
-    [['--include-warnings'], /--include-warnings only applies to repair/],
-    [['--restore'], /--restore cannot be used with rollback/],
+    [['--include-warnings'], /--include-warnings only applies to doctor --fix/],
   ])('rejects %o', async (args, message) => {
     await expect(
       runHeadlessCommand(parseCliArgs(['rollback', ...args]), 'rollback')
@@ -1570,7 +1506,7 @@ describe('index completions command', () => {
         '--starship',
         '--list',
       ],
-      /--include-warnings only applies to repair/,
+      /--include-warnings only applies to doctor --fix/,
     ],
   ])('rejects %o', async (args, message) => {
     await expect(runHeadlessCommand(parseCliArgs(args), '')).rejects.toThrow(message);
@@ -1596,49 +1532,45 @@ describe('index list flags', () => {
 
   const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
 
-  it.each([
-    ['--list-presets', 'presets'],
-    ['--list-modules', 'modules'],
-    ['--list-fonts', 'fonts'],
-  ] as const)('%s prints the %s', (flag, kind) => {
-    expect(runGlobalFlags(parseCliArgs([flag]))).toBe(true);
+  it.each(['presets', 'modules', 'fonts'] as const)('list %s prints the %s', async (kind) => {
+    expect((await routeCli(['list', kind])).handled).toBe(true);
     expect(output()).toBe(formatListing(listEntries(kind)));
   });
 
-  it('prints the data as JSON with --json', () => {
-    runGlobalFlags(parseCliArgs(['--list-fonts', '--json']));
+  it('prints the data as JSON with --json', async () => {
+    await routeCli(['list', 'fonts', '--json']);
     expect(JSON.parse(output())).toEqual(listEntries('fonts'));
   });
 
-  it('runs before the subcommand check, so --json needs no subcommand', async () => {
-    expect((await routeCli(['--list-presets', '--json'])).handled).toBe(true);
-  });
-
-  it('rejects any other flag next to a list flag, except --json', () => {
-    expect(() =>
-      runGlobalFlags(
-        parseCliArgs(['--list-presets', '--shells', 'bash', '--dry-run', '--state', 'x'])
-      )
-    ).toThrow('--shells, --state, --dry-run cannot be used with --list-presets.');
-    expect(runGlobalFlags(parseCliArgs(['--list-presets', '--json']))).toBe(true);
-  });
-
-  it('rejects a list flag with a subcommand, or two at once', () => {
-    expect(() => runGlobalFlags(parseCliArgs(['apply', '--list-presets']))).toThrow(
-      '--list-presets cannot be combined with the apply subcommand.'
-    );
-    expect(() => runGlobalFlags(parseCliArgs(['--list-presets', '--list-fonts']))).toThrow(
-      'Pass one of --list-presets, --list-fonts at a time.'
+  it('rejects any other flag than --json', async () => {
+    await expect(routeCli(['list', 'presets', '--shells', 'bash', '--dry-run'])).rejects.toThrow(
+      '--shells, --dry-run cannot be used with list.'
     );
   });
 
-  it('documents the list flags in the help text', () => {
+  it('needs to know what to list, from a fixed set', async () => {
+    await expect(routeCli(['list'])).rejects.toThrow(
+      'list needs what to list: presets, modules, fonts.'
+    );
+    await expect(routeCli(['list', 'shells'])).rejects.toThrow(
+      "Cannot list 'shells' (available: presets, modules, fonts)."
+    );
+  });
+
+  it('points the retired list flags at list', () => {
+    expect(() => parseCliArgs(['--list-presets'])).toThrow(
+      '--list-presets is gone: run shell-configurator list presets.'
+    );
+  });
+
+  it('documents list in the help text', () => {
     runGlobalFlags(parseCliArgs(['--help']));
-    expect(output()).toContain('--list-presets | --list-modules | --list-fonts [--json]');
+    expect(output()).toContain('shell-configurator list <presets|modules|fonts>');
+    expect(output()).not.toContain('--list-presets');
   });
 });
 
-describe('index timings command', () => {
+describe('index doctor --timings', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
   const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
   const TIMINGS = ` Here are the timings of modules in your prompt (>=1ms or output):
@@ -1652,33 +1584,34 @@ describe('index timings command', () => {
       stderr: `config was ${fs.readFileSync(configPath, 'utf8').length} bytes`,
     })),
   });
+  const doctor = (args: string[], probe = deps()) =>
+    runDoctorCommand(parseCliArgs(['doctor', '--timings', ...args]), '', undefined, probe);
 
   beforeEach(() => {
     stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as never);
+    mockRunDoctor.mockClear();
+    mockRunDoctor.mockResolvedValue({ ok: true, findings: [] });
+    mockFormatDoctorReport.mockReturnValue('HEALTHY\n');
   });
-  afterEach(() => stdoutWrite.mockRestore());
-
-  it('times a config built from the flags in the current folder, with suggestions', async () => {
-    const probe = deps();
-    await runTimingsCommand(parseCliArgs(['timings', '--preset', 'pure-prompt']), probe);
-
-    expect(probe.run).toHaveBeenCalledWith('timings', process.cwd(), expect.any(String));
-    expect(output()).toContain('(config: built from the flags)');
-    expect(output()).toMatch(/git_status\s+320ms {2}slow/);
-    expect(output()).toContain('Suggestions:');
-    expect(output()).toContain('git_status took 320ms');
+  afterEach(() => {
+    stdoutWrite.mockRestore();
+    process.exitCode = 0;
   });
 
-  it('times the config Starship loads here when no flags are given', async () => {
+  it('times the config Starship loads here after the check, with suggestions', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-active-'));
     const config = path.join(dir, 'zsh.toml');
-    fs.writeFileSync(config, 'format = "$character"\n');
+    fs.writeFileSync(config, 'format = "$git_status$character"\n');
     vi.stubEnv('STARSHIP_CONFIG', config);
     try {
       const probe = deps();
-      await runTimingsCommand(parseCliArgs(['timings']), probe);
+      await doctor([], probe);
+      expect(output()).toMatch(/^HEALTHY\n/);
       expect(output()).toContain(`(config: ${config})`);
+      expect(output()).toMatch(/git_status\s+320ms {2}slow/);
+      expect(output()).toContain('git_status took 320ms');
       expect(probe.run).toHaveBeenCalledWith('timings', process.cwd(), config);
+      expect(process.exitCode ?? 0).toBe(0);
     } finally {
       vi.unstubAllEnvs();
       fs.rmSync(dir, { recursive: true, force: true });
@@ -1690,82 +1623,84 @@ describe('index timings command', () => {
     try {
       const probe = deps();
       probe.run.mockImplementationOnce(async () => ({ stdout: TIMINGS, stderr: '' }));
-      await runTimingsCommand(parseCliArgs(['timings']), probe);
+      await doctor([], probe);
       expect(output()).toContain(
         "(config: Starship's built-in default prompt, since $STARSHIP_CONFIG (/no/such/starship.toml) does not exist)"
       );
-      expect(probe.run).toHaveBeenCalledWith('timings', process.cwd(), '/no/such/starship.toml');
     } finally {
       vi.unstubAllEnvs();
     }
   });
 
-  it('times the file --config names, as JSON with --json', async () => {
+  it('times the file --config names, inside the doctor JSON with --json', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-timings-'));
     const config = path.join(dir, 'starship.toml');
     fs.writeFileSync(config, 'format = "$git_status$character"\n');
     try {
-      await runTimingsCommand(parseCliArgs(['timings', '--config', config, '--json']), deps());
-      expect(JSON.parse(output())).toMatchObject({ config, slowestMs: 320, slow: true });
+      await doctor(['--config', config, '--json']);
+      expect(JSON.parse(output())).toMatchObject({
+        ok: true,
+        timings: { config, slowestMs: 320, slow: true },
+      });
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
+  it('refuses a --config file it cannot read before running any check', async () => {
+    await expect(doctor(['--config', '/no/such/file'])).rejects.toThrow(
+      /Could not read '\/no\/such\/file'/
+    );
+    expect(mockRunDoctor).not.toHaveBeenCalled();
+  });
+
+  it('still prints the check, and fails, when Starship is not installed to time with', async () => {
+    await doctor([], deps(false));
+    expect(output()).toMatch(/^HEALTHY\n/);
+    expect(output()).toMatch(/Could not time the prompt: .*Starship is not installed/);
+    expect(process.exitCode).toBe(1);
+  });
+
   it.each([
-    [['--config', 'x', '--preset', 'pure-prompt'], /--config times an existing file, so --preset/],
-    [['--config', '/no/such/file'], /Could not read '\/no\/such\/file'/],
+    [['doctor', '--config', 'x'], '--config only applies to doctor --timings.'],
+    [['generate', '--timings'], '--timings only applies to doctor.'],
+    [['doctor', '--timings', '--fix'], '--timings cannot be used with --fix.'],
+    [
+      ['doctor', '--timings', '--state', 'card.json', '--preset', 'pure-prompt'],
+      '--timings times the config Starship loads here (or --config <file>), so --state, --preset cannot be used with it.',
+    ],
   ])('rejects %o', async (args, message) => {
-    await expect(runTimingsCommand(parseCliArgs(['timings', ...args]), deps())).rejects.toThrow(
-      message
+    await expect(runHeadlessCommand(parseCliArgs(args), '')).rejects.toThrow(message);
+  });
+
+  it('points the retired timings at doctor --timings', () => {
+    expect(() => parseCliArgs(['timings'])).toThrow(
+      'timings is gone: shell-configurator doctor --timings times the prompt in this folder.'
     );
   });
 
-  it.each([
-    [['--shells', 'zsh'], /--shells cannot be used with timings/],
-    [['--yes'], /--yes only applies to repair/],
-  ])('refuses %o before timing anything', async (args, message) => {
-    await expect(runHeadlessCommand(parseCliArgs(['timings', ...args]), '')).rejects.toThrow(
-      message
-    );
-  });
-
-  it('says Starship is needed when it is not installed', async () => {
-    await expect(
-      runTimingsCommand(parseCliArgs(['timings', '--preset', 'pure-prompt']), deps(false))
-    ).rejects.toThrow(/Starship is not installed/);
-  });
-
-  it('documents timings in the help text', () => {
+  it('documents --timings in the help text', () => {
     runGlobalFlags(parseCliArgs(['--help']));
-    expect(output()).toContain('shell-configurator timings');
+    expect(output()).toContain('--timings');
     expect(output()).toContain('--config <file>');
+    expect(output()).not.toContain('shell-configurator timings');
   });
 
-  it('refuses an adopt-mode card and points at the shared config instead', async () => {
+  it('refuses an adopt-mode card for --markdown and points at the shared config', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-adopt-'));
     const card = path.join(dir, 'card.json');
     fs.writeFileSync(card, serializeState({ ...DEFAULT_STATE, keepExistingConfig: true }));
     try {
-      await expect(
-        runTimingsCommand(parseCliArgs(['timings', '--state', card]), deps())
-      ).rejects.toThrow(/adopt-mode card keeps your own config.*--config .*starship\.toml/);
-      expect(() => runShareCommand(parseCliArgs(['share', '--state', card]))).toThrow(
-        /adopt-mode card keeps your own config, so there is no generated prompt to share/
-      );
+      expect(() =>
+        runMarkdownCommand(parseCliArgs(['generate', '--markdown', '--state', card]))
+      ).toThrow(/adopt-mode card keeps your own config, so there is no generated prompt to share/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
-
-  it('rejects --config outside timings', async () => {
-    await expect(
-      runHeadlessCommand(parseCliArgs(['generate', '--config', 'x']), '')
-    ).rejects.toThrow('--config only applies to timings.');
-  });
 });
 
-describe('index share command', () => {
+describe('index generate --markdown', () => {
   let stdoutWrite: ReturnType<typeof vi.spyOn>;
   const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
   beforeEach(() => {
@@ -1773,8 +1708,11 @@ describe('index share command', () => {
   });
   afterEach(() => stdoutWrite.mockRestore());
 
-  it('prints the prompt the flags build as Markdown', () => {
-    runShareCommand(parseCliArgs(['share', '--preset', 'pure-prompt']));
+  it('prints the prompt the flags build as Markdown', async () => {
+    await runHeadlessCommand(
+      parseCliArgs(['generate', '--markdown', '--preset', 'pure-prompt']),
+      ''
+    );
     expect(output()).toMatch(/^# Starship prompt: Pure Prompt\n/);
     expect(output()).toContain('```toml');
   });
@@ -1783,7 +1721,7 @@ describe('index share command', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-share-cli-'));
     const file = path.join(dir, 'prompt.md');
     try {
-      runShareCommand(parseCliArgs(['share', '-o', file]));
+      runMarkdownCommand(parseCliArgs(['generate', '--markdown', '-o', file]));
       expect(fs.readFileSync(file, 'utf8')).toContain('## starship.toml');
       expect(output()).toBe(`Wrote ${file}\n`);
     } finally {
@@ -1792,14 +1730,30 @@ describe('index share command', () => {
   });
 
   it.each([
-    [['--shells', 'zsh'], /--shells cannot be used with share/],
-    [['--json'], /--json cannot be used with share/],
+    [['--shells', 'zsh'], /--shells cannot be used with generate --markdown/],
+    [['--export', 'card.json'], /--export cannot be used with generate --markdown/],
+    [['--json'], /--json cannot be used with generate/],
   ])('rejects %o', async (args, message) => {
-    await expect(runHeadlessCommand(parseCliArgs(['share', ...args]), '')).rejects.toThrow(message);
+    await expect(
+      runHeadlessCommand(parseCliArgs(['generate', '--markdown', ...args]), '')
+    ).rejects.toThrow(message);
   });
 
-  it('documents share in the help text', () => {
+  it('rejects --markdown outside generate', async () => {
+    await expect(
+      runHeadlessCommand(parseCliArgs(['apply', '--markdown', '--shells', 'zsh']), '')
+    ).rejects.toThrow('--markdown cannot be used with apply.');
+  });
+
+  it('points the retired share at generate --markdown', () => {
+    expect(() => parseCliArgs(['share'])).toThrow(
+      'share is gone: shell-configurator generate --markdown prints the same Markdown.'
+    );
+  });
+
+  it('documents --markdown in the help text', () => {
     runGlobalFlags(parseCliArgs(['--help']));
-    expect(output()).toContain('shell-configurator share');
+    expect(output()).toContain('--markdown');
+    expect(output()).not.toContain('shell-configurator share');
   });
 });

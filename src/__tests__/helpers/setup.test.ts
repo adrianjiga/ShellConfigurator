@@ -17,6 +17,7 @@ describe('test setup', () => {
     await expect(captureRun(['/etc/passwd'], async () => 'ran')).resolves.toEqual({
       result: 'ran',
       runId: null,
+      uncaptured: false,
     });
   });
 

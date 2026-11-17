@@ -114,7 +114,7 @@ describe('the Bash login file on macOS', () => {
     expect(report.ok).toBe(true);
     expect(fs.existsSync(at('.bash_profile'))).toBe(false);
     expect(fs.readFileSync(at('.profile'), 'utf8')).toBe('export EDITOR=vim\n');
-    expect(fs.readdirSync(home).some((name) => name.startsWith('.profile.bak-'))).toBe(true);
+    expect(fs.readdirSync(home).some((name) => name.includes('.bak-'))).toBe(false);
   });
 
   it('is taken out by uninstall also when .bashrc has no ShellConfigurator block', async () => {

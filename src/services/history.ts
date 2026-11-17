@@ -134,7 +134,7 @@ function ensureTrailingNewline(file: string): void {
 /**
  * The per-run snapshot store: <stateDir>/snapshots/. Each snapshot is the
  * versioned state card the run applied, found again by `snapshotId` (as
- * `lastRunShells` does for `--restore`).
+ * `lastRunShells` does for the doctor).
  */
 export function snapshotDir(): string {
   return path.join(stateDir(), 'snapshots');

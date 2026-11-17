@@ -1,9 +1,8 @@
 import { MODULES } from '../config/modules.ts';
 import { PRESETS } from '../config/presets.ts';
 import { DEFAULT_STATE } from '../types.ts';
+import type { ListKind } from './cliSurface.ts';
 import { NERD_FONTS } from './installer.ts';
-
-export type ListKind = 'presets' | 'modules' | 'fonts';
 
 export interface ListEntry {
   id: string;

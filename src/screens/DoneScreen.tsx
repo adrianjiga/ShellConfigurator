@@ -5,11 +5,7 @@ import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { getShell, setupCommand } from '../config/shells.ts';
 import { type ReportedStatus, statusMark } from '../config/status.ts';
-import {
-  getShellConfigPath,
-  type RestoreOutcome,
-  restoreConfigBackups,
-} from '../generators/shellRc.ts';
+import { getShellConfigPath } from '../generators/shellRc.ts';
 import { errorMessage } from '../services/errors.ts';
 import { fontLabel, getFontFamily, MANUAL_STARSHIP_INSTALL } from '../services/installer.ts';
 import {
@@ -66,8 +62,6 @@ export function DoneScreen({ state }: DoneScreenProps) {
   const { exit } = useApp();
   const fontId = fontIdToInstall(state.nerdFontToInstall);
   const fontName = fontId ? fontLabel(fontId) : null;
-  // Null until the user presses r, so a single keypress runs the restore once.
-  const [outcome, setOutcome] = useState<RestoreOutcome | null>(null);
   const [shared, setShared] = useState<{ file: string } | { error: string } | null>(null);
   const canShare = !state.keepExistingConfig;
   const resetNote = sharedConfigNote(
@@ -77,8 +71,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
     true
   );
   const saved = useRef(false);
-  const restored = useRef(false);
-  const [pending, setPending] = useState<'share' | 'restore' | null>(null);
+  const [pending, setPending] = useState(false);
 
   const failures = state.installResults.filter((t) => t.status === 'failed');
   const hasFailures = failures.length > 0;
@@ -96,25 +89,10 @@ export function DoneScreen({ state }: DoneScreenProps) {
     }
   }
 
-  function restore(): void {
-    if (restored.current) return;
-    restored.current = true;
-    try {
-      setOutcome(restoreConfigBackups(state.selectedShells));
-    } catch (err) {
-      setOutcome({
-        restored: [],
-        failed: [{ what: 'shared', restoredFrom: 'the backups', error: errorMessage(err) }],
-      });
-    }
-  }
-
   useInput((char, key) => {
     if (pending) {
-      setPending(null);
-      if (char.toLowerCase() !== 'y') return;
-      if (pending === 'share') share();
-      else restore();
+      setPending(false);
+      if (char.toLowerCase() === 'y') share();
       return;
     }
     if (key.return || key.escape || char.toLowerCase() === 'q') {
@@ -122,12 +100,7 @@ export function DoneScreen({ state }: DoneScreenProps) {
       return;
     }
     if (char.toLowerCase() === 's' && canShare && !saved.current) {
-      setPending('share');
-      return;
-    }
-    // No backups were made in a dry run, so restoring would clobber real files.
-    if (char.toLowerCase() === 'r' && outcome === null && !state.dryRun) {
-      setPending('restore');
+      setPending(true);
     }
   });
 
@@ -394,12 +367,11 @@ export function DoneScreen({ state }: DoneScreenProps) {
         <Text color={uiColor('gray')}> to exit.</Text>
       </Box>
 
-      {!state.dryRun && (
+      {state.runId && (
         <Box marginTop={1}>
           <Text color={uiColor('gray')}>
-            Press <Text color={uiColor('cyan')}>r</Text> to put the Starship configs back from their
-            newest backups (the <Text color={uiColor('cyan')}>--restore</Text> CLI action). Shell rc
-            edits stay as they are.
+            To undo this run, rc lines included, run{' '}
+            <Text color={uiColor('cyan')}>shell-configurator rollback</Text>.
           </Text>
         </Box>
       )}
@@ -427,37 +399,12 @@ export function DoneScreen({ state }: DoneScreenProps) {
         </Box>
       )}
 
-      {pending !== null && (
+      {pending && (
         <Box marginTop={1}>
           <Text color={uiColor('yellow')}>
-            {pending === 'share'
-              ? 'Save starship-prompt.md in this folder?'
-              : 'Put the Starship configs back from their newest backups, over the ones this run wrote?'}{' '}
-            Press <Text color={uiColor('cyan')}>y</Text> to go ahead, any other key to cancel.
+            Save starship-prompt.md in this folder? Press <Text color={uiColor('cyan')}>y</Text> to
+            go ahead, any other key to cancel.
           </Text>
-        </Box>
-      )}
-
-      {outcome !== null && (
-        <Box flexDirection="column" marginTop={1} gap={0}>
-          <Text color={uiColor('cyan')}>
-            {outcome.restored.length > 0
-              ? 'Restored configs from their newest backups:'
-              : outcome.failed.length > 0
-                ? 'Could not restore any configs:'
-                : 'No ShellConfigurator backups found — nothing to restore.'}
-          </Text>
-          {outcome.restored.map((r) => (
-            <Text key={r.what} color={uiColor('gray')} dimColor>
-              {r.what}: {r.restoredTo} (from {r.restoredFrom}
-              {r.previousSavedTo ? `; previous saved to ${r.previousSavedTo}` : ''})
-            </Text>
-          ))}
-          {outcome.failed.map((f) => (
-            <Text key={`failed-${f.what}`} color={uiColor('red')} dimColor>
-              {f.what}: could not restore from {f.restoredFrom} ({f.error})
-            </Text>
-          ))}
         </Box>
       )}
     </WizardLayout>

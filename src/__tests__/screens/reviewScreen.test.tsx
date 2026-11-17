@@ -281,9 +281,10 @@ describe('ReviewScreen with an existing shared config', () => {
     fs.writeFileSync(path.join(home, '.config', 'starship.toml'), 'format = "$all"\n');
     const { instance } = setup();
     await flush();
-    expect((instance.lastFrame() ?? '').replace(/\s+/g, ' ')).toContain(
-      'apply --adopt --shells zsh.'
-    );
+    const frame = (instance.lastFrame() ?? '').replace(/\s+/g, ' ');
+    expect(frame).toContain('stays on disk, untouched');
+    expect(frame).not.toContain('backed up');
+    expect(frame).toContain('apply --adopt --shells zsh.');
   });
 });
 

@@ -262,7 +262,7 @@ so; nushell/PowerShell show their manual setup command:
 ```
 
 When a shared `~/.config/starship.toml` already exists, a warning says it stays on
-disk (backed up) but the chosen shells will read their own configs instead. The plan
+disk, untouched, but the chosen shells will read their own configs instead. The plan
 labels shells the package manager cannot auto-install as `Install <shell> (manual)`.
 With "Continue without Starship", the screen says no rc file changes until Starship
 is installed.
@@ -340,21 +340,18 @@ If the user chose "Continue without Starship", the Starship task is omitted enti
 - Default shell status (if set via chsh)
 - Post-install instructions (restart the terminal when the config was written, `starship print-config`, and `shell-configurator doctor` to check the setup)
 - Yellow reminder to set the installed font family in the terminal — shown only when the font install succeeded but the terminal-font wiring task did **not** complete (no terminal detected, or the terminal config needs a manual step like WezTerm), since otherwise the font is already selected
+- When the run was recorded (`state.runId`), a grey line: "To undo this run, rc lines included, run `shell-configurator rollback`."
 
 In `--dry-run` mode the header reads "Dry run — no changes were made" and the screen
 shows the same plan sections as Review (`TaskPlan` titled "Tasks that would run",
 plus `ConfigPlan`) and a hint to run without `--dry-run`.
 
-**Keys**: `Enter` / `Esc` / `Q` to exit; `r` runs an undo — it copies the
-newest `.bak-*` backups back over the shared and per-shell Starship configs (the
-same code path as the CLI's `--restore`) and prints what was restored. It does not
-undo rc-file edits or terminal font configs, runs at most once, and is disabled in
-dry-run mode (no backups were made). `s` saves the prompt as Markdown to share
+**Keys**: `Enter` / `Esc` / `Q` to exit; `s` saves the prompt as Markdown to share
 (`writeShareFile`: `starship-prompt.md` in the current folder, or a numbered name
 next to an existing one; an exclusive create, so it never overwrites, and it gives
 up after 100 names) and shows where; it works in
 dry-run mode too, where the hint says it still writes the file, saves
-once (after a failure `s` tries again), and is not offered in adopt mode. Both `r` and `s` first ask
+once (after a failure `s` tries again), and is not offered in adopt mode. `s` first asks
 for `y`; any other key cancels the question without exiting, so typing a
 command into the finished screen changes nothing.
 

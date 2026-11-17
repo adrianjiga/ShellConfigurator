@@ -5,6 +5,7 @@ import {
   bashLoginFiles,
   getSharedConfigPath,
   getShellConfigPath,
+  originalCopyPath,
   writeFileAtomic,
 } from '../generators/shellRc.ts';
 import type { WizardState } from '../types.ts';
@@ -60,15 +61,20 @@ export function runDir(runId: string): string {
   return path.join(runsDir(), runId);
 }
 
-/** Every file a wizard run, apply or uninstall may change. */
+/**
+ * Every file a wizard run, apply or uninstall may change, and the
+ * `.pre-shell-configurator` copy each may get, so rolling back the run that
+ * made a copy removes it again.
+ */
 export function trackedFiles(): string[] {
-  return [
+  const files = [
     ...SHELLS.flatMap((shell) => (shell.rcFile ? [shell.rcFile] : [])),
     ...bashLoginFiles(),
     ...SHELLS.map((shell) => getShellConfigPath(shell.id)),
     getSharedConfigPath(),
     ...terminalFontConfigFiles(),
   ];
+  return [...files, ...files.map(originalCopyPath)];
 }
 
 /** The file's bytes, null when it does not exist; other read errors propagate. */
@@ -348,9 +354,9 @@ export function recoverInterruptedRuns(isAlive: IsAlive = processAlive): string[
  */
 export async function captureRun<T>(
   files: string[],
-  run: () => Promise<T>,
+  run: (uncaptured: boolean) => Promise<T>,
   options: CaptureOptions = {}
-): Promise<{ result: T; runId: string | null }> {
+): Promise<{ result: T; runId: string | null; uncaptured: boolean }> {
   if (!options.recovered) recoverInterruptedRuns();
   let capture: RunCapture | null;
   try {
@@ -360,11 +366,12 @@ export async function captureRun<T>(
   }
   let result: T;
   try {
-    result = await run();
+    result = await run(capture === null);
   } catch (err) {
-    throw new CapturedRunError(capture ? finishSafely(capture, options, err) : null, err);
+    throw new CapturedRunError(capture ? finishSafely(capture, options, err).runId : null, err);
   }
-  return { result, runId: capture ? finishSafely(capture, options) : null };
+  const finished = capture ? finishSafely(capture, options) : { runId: null, failed: true };
+  return { result, runId: finished.runId, uncaptured: finished.failed };
 }
 
 /** A run that threw partway; `runId` still names the files it had changed by then. */
@@ -382,7 +389,7 @@ function finishSafely(
   capture: RunCapture,
   options: CaptureOptions,
   error?: unknown
-): string | null {
+): { runId: string | null; failed: boolean } {
   let runId: string | null;
   try {
     runId = finishRunCapture(capture, options, error)?.runId ?? null;
@@ -390,12 +397,12 @@ function finishSafely(
     try {
       fs.rmSync(capture.dir, { recursive: true, force: true });
     } catch {}
-    return null;
+    return { runId: null, failed: true };
   }
   try {
     pruneRuns();
   } catch {}
-  return runId;
+  return { runId, failed: false };
 }
 
 /** How many captured runs rollback keeps; older ones are deleted. */

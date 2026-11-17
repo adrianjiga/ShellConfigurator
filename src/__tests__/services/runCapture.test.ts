@@ -181,7 +181,13 @@ describe('captureRun', () => {
   });
 
   it('has no id when the run changed nothing', async () => {
-    expect((await captureRun([file('rc')], async () => 'x')).runId).toBeNull();
+    const { result, runId, uncaptured } = await captureRun(
+      [file('rc')],
+      async (notCapturing) => notCapturing
+    );
+    expect(result).toBe(false);
+    expect(runId).toBeNull();
+    expect(uncaptured).toBe(false);
   });
 
   it('rejects with the runId of what the run had changed when it threw', async () => {
@@ -198,13 +204,14 @@ describe('captureRun', () => {
   });
 
   it('leaves nothing to recover when the manifest cannot be written', async () => {
-    const { runId } = await captureRun([file('rc')], async () => {
+    const { runId, uncaptured } = await captureRun([file('rc')], async () => {
       fs.writeFileSync(file('rc'), 'wired');
       failWrites.after = 0;
     });
     failWrites.after = Number.POSITIVE_INFINITY;
 
     expect(runId).toBeNull();
+    expect(uncaptured).toBe(true);
     expect(fs.readdirSync(runsDir())).toEqual([]);
     expect(recoverInterruptedRuns(() => false)).toEqual([]);
     expect(readHistory()).toEqual([]);
@@ -214,10 +221,13 @@ describe('captureRun', () => {
     fs.mkdirSync(path.dirname(runsDir()), { recursive: true });
     fs.writeFileSync(runsDir(), 'not a folder');
 
-    const { result, runId } = await captureRun([file('rc')], async () => 'ran');
+    const { result, runId, uncaptured } = await captureRun([file('rc')], async (notCapturing) =>
+      notCapturing ? 'ran uncaptured' : 'ran'
+    );
 
-    expect(result).toBe('ran');
+    expect(result).toBe('ran uncaptured');
     expect(runId).toBeNull();
+    expect(uncaptured).toBe(true);
   });
 });
 
