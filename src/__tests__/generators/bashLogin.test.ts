@@ -3,12 +3,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  applyShellConfig,
-  bashLoginContent,
-  bashLoginFile,
-  LOGIN_MARKER,
-} from '../../generators/shellRc.ts';
+import { bashLoginContent, bashLoginFile, LOGIN_MARKER } from '../../generators/bashLogin.ts';
+import { applyShellConfig } from '../../generators/shellRc.ts';
 import { plannedFileChanges } from '../../services/fileDiff.ts';
 import { trackedFiles } from '../../services/runCapture.ts';
 import { planUninstall, runUninstall } from '../../services/uninstall.ts';

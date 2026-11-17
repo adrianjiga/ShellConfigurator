@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { render } from 'ink';
 import { App } from './app.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
-import { getSharedConfigPath, ORIGINAL_SUFFIX, writeFileAtomic } from './generators/shellRc.ts';
+import { getSharedConfigPath } from './generators/configPaths.ts';
+import { ORIGINAL_SUFFIX, writeFileAtomic } from './generators/fileWrite.ts';
 import type { CliFlags, Subcommand } from './services/args.ts';
 import { parseCliArgs, quoteArgv, SUBCOMMANDS } from './services/args.ts';
 import {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getShell } from '../../config/shells.ts';
-import { getShellConfigPath } from '../../generators/shellRc.ts';
+import { getShellConfigPath } from '../../generators/configPaths.ts';
 import { getNerdFontsDir } from '../../services/installer.ts';
 import {
   formatUninstallReport,

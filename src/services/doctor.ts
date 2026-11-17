@@ -2,21 +2,20 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getShell } from '../config/shells.ts';
 import { statusLine } from '../config/status.ts';
+import { bashLoginFile, bashNeedsLoginFile, loginLoadsBashrc } from '../generators/bashLogin.ts';
+import { getSharedConfigPath, getShellConfigPath } from '../generators/configPaths.ts';
 import {
-  bashLoginFile,
-  bashNeedsLoginFile,
   fishInitFile,
-  getSharedConfigPath,
-  getShellConfigPath,
-  hasManagedConfigExport,
   hasManagedRcBlock,
   initReachable,
-  loginLoadsBashrc,
   manualSetupAppliedWith,
+  startsStarship,
+} from '../generators/rcInit.ts';
+import {
+  hasManagedConfigExport,
   rcExportedConfigPath,
   rcStarshipConfig,
-  startsStarship,
-} from '../generators/shellRc.ts';
+} from '../generators/rcLines.ts';
 import { fontIdToInstall, type ShellId, type TerminalId, type WizardState } from '../types.ts';
 import { cachedStarshipVersion } from './cache.ts';
 import {

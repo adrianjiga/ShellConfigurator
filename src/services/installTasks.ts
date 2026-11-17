@@ -1,13 +1,11 @@
 import * as fs from 'node:fs';
 import { getShell } from '../config/shells.ts';
+import { getSharedConfigPath, getShellConfigPath } from '../generators/configPaths.ts';
+import { keepsOwnConfig, shellsWithStarshipInit } from '../generators/rcInit.ts';
+import type { ApplyShellConfigOptions } from '../generators/rcPlan.ts';
 import {
-  type ApplyShellConfigOptions,
   applyShellConfig,
-  getSharedConfigPath,
-  getShellConfigPath,
-  keepsOwnConfig,
   resetSharedShellConfig,
-  shellsWithStarshipInit,
   type WriteConfigResult,
   writeSharedConfig,
   writeShellConfig,

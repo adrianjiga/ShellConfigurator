@@ -331,7 +331,16 @@ function generateToml(state: WizardState): string;
 
 Takes full wizard state, returns a complete `starship.toml` file as a string.
 
-### shellRc.ts
+### shellRc.ts and the rc modules
+
+The functions below live in `src/generators/`: `getShellConfigPath`/`getSharedConfigPath`
+in `configPaths.ts`; `writeFileAtomic`, `keepOriginal` and `ORIGINAL_SUFFIX` in
+`fileWrite.ts`; the markers and `hasStarshipInit` in `rcLines.ts`; `initReachable`,
+`sourcedFiles`, `startsStarship`, `hasManagedRcBlock` and `keepsOwnConfig` in
+`rcInit.ts`; the Bash login file functions in `bashLogin.ts`; `appliedRcContent`,
+`resetRcContent` and `starshipConfigLine` in `rcPlan.ts`; the writers
+(`applyShellConfig`, `resetSharedShellConfig`, `removeManagedRcBlocks`,
+`removeShellConfigFile`, `writeShellConfig`, `writeSharedConfig`) in `shellRc.ts`.
 
 ```typescript
 function getShellConfigPath(shellId: ShellId): string;
@@ -1218,7 +1227,7 @@ new fixture(s) under `src/__tests__/golden/`.
    on DoneScreen
 3. **`src/services/installer.ts`** — add package name mappings to
    `SHELL_PACKAGES` (per package manager) for auto-install support
-4. **`src/generators/shellRc.ts`** — add the shell's `starship init` command to
+4. **`src/generators/rcLines.ts`** — add the shell's `starship init` command to
    `INIT_COMMAND`; an rc shell also needs a `configEnv` (export/unset syntax) in
    `SHELLS`
 5. **`src/index.tsx`** — add it to the hard-coded `--shells` list in the `--help` text

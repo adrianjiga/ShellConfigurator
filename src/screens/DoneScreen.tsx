@@ -5,7 +5,7 @@ import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { getShell, setupCommand } from '../config/shells.ts';
 import { type ReportedStatus, statusMark } from '../config/status.ts';
-import { getShellConfigPath } from '../generators/shellRc.ts';
+import { getShellConfigPath } from '../generators/configPaths.ts';
 import { errorMessage } from '../services/errors.ts';
 import { fontLabel, getFontFamily, MANUAL_STARSHIP_INSTALL } from '../services/installer.ts';
 import {
