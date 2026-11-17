@@ -12,7 +12,7 @@ Takes full wizard state, returns a complete `starship.toml` file as a string.
 
 The functions below live in `src/generators/`: `getShellConfigPath`/`getSharedConfigPath`
 in `configPaths.ts`; `writeFileAtomic`, `keepOriginal` and `ORIGINAL_SUFFIX` in
-`fileWrite.ts`; the markers and `hasStarshipInit` in `rcLines.ts`; `initReachable`,
+`fileWrite.ts`; the markers in `markers.ts`; `hasStarshipInit` in `rcLines.ts`; `initReachable`,
 `sourcedFiles`, `startsStarship`, `hasManagedRcBlock` and `keepsOwnConfig` in
 `rcInit.ts`; the Bash login file functions in `bashLogin.ts`; `appliedRcContent`,
 `resetRcContent` and `starshipConfigLine` in `rcPlan.ts`; the writers

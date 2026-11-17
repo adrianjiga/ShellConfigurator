@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { errorMessage } from '../services/errors.ts';
-import { BLOCK_MARKER, GENERATED_MARKER } from './rcLines.ts';
+import { BLOCK_MARKER, GENERATED_MARKER } from './markers.ts';
 
 /** Refuses a file that cannot be written before anything is changed for it. */
 export function assertWritable(filePath: string): void {
