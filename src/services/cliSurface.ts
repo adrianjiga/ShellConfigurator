@@ -33,10 +33,6 @@ export const FLAGS = {
   version: flag('--version', 'Print the version and exit', undefined, '-v'),
   dryRun: flag('--dry-run', 'Change nothing; print what would happen', undefined, '-d'),
   noInstall: flag('--no-install', 'Alias for --dry-run'),
-  listPresets: flag('--list-presets', 'List the presets (--json for data)'),
-  listModules: flag('--list-modules', 'List the prompt modules (--json for data)'),
-  listFonts: flag('--list-fonts', 'List the Nerd Fonts (--json for data)'),
-  listJson: flag('--json', 'With a --list-* flag, print the data as JSON'),
   preset: flag(
     '--preset',
     'Seed modules, palette and powerline from a preset',
@@ -75,14 +71,7 @@ export const FLAGS = {
 
 export const GLOBAL_FLAGS: readonly FlagInfo[] = [FLAGS.help, FLAGS.version];
 
-export const WIZARD_FLAGS: readonly FlagInfo[] = [
-  FLAGS.dryRun,
-  FLAGS.noInstall,
-  FLAGS.listPresets,
-  FLAGS.listModules,
-  FLAGS.listFonts,
-  FLAGS.listJson,
-];
+export const WIZARD_FLAGS: readonly FlagInfo[] = [FLAGS.dryRun, FLAGS.noInstall];
 
 const CONFIG_FLAGS = [
   FLAGS.preset,
@@ -113,14 +102,22 @@ const LOOK_FLAGS = [
   FLAGS.import,
 ];
 
+export interface SubcommandArgument {
+  values: readonly string[];
+  describe: (value: string) => string;
+}
+
 export interface SubcommandInfo {
   description: string;
   flags: readonly FlagInfo[];
-  argument?: readonly string[];
+  argument?: SubcommandArgument;
 }
 
 export const COMPLETION_SHELLS = ['bash', 'zsh', 'fish'] as const;
 export type CompletionShell = (typeof COMPLETION_SHELLS)[number];
+
+export const LIST_KINDS = ['presets', 'modules', 'fonts'] as const;
+export type ListKind = (typeof LIST_KINDS)[number];
 
 export const SUBCOMMAND_INFO: Record<Subcommand, SubcommandInfo> = {
   generate: {
@@ -158,7 +155,12 @@ export const SUBCOMMAND_INFO: Record<Subcommand, SubcommandInfo> = {
   completions: {
     description: 'Print a shell completion script',
     flags: [],
-    argument: COMPLETION_SHELLS,
+    argument: { values: COMPLETION_SHELLS, describe: (shell) => `completion script for ${shell}` },
+  },
+  list: {
+    description: 'List the presets, modules or fonts the flags accept',
+    flags: [{ ...FLAGS.json, description: 'Print the list as JSON' }],
+    argument: { values: LIST_KINDS, describe: (kind) => `list the ${kind}` },
   },
   timings: {
     description: 'Time each prompt module here and suggest fixes for slow ones',

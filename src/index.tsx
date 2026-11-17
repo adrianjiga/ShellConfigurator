@@ -9,7 +9,13 @@ import { getSharedConfigPath, ORIGINAL_SUFFIX, writeFileAtomic } from './generat
 import { generateToml } from './generators/starship.ts';
 import type { CliFlags, Subcommand } from './services/args.ts';
 import { parseCliArgs, quoteArgv, SUBCOMMANDS } from './services/args.ts';
-import { COMPLETION_SHELLS, type CompletionShell, SUBCOMMAND_INFO } from './services/cliSurface.ts';
+import {
+  COMPLETION_SHELLS,
+  type CompletionShell,
+  LIST_KINDS,
+  type ListKind,
+  SUBCOMMAND_INFO,
+} from './services/cliSurface.ts';
 import { completionScript } from './services/completions.ts';
 import {
   collectDebugInfo,
@@ -116,14 +122,13 @@ Usage:
   shell-configurator uninstall    remove what the wizard set up
   shell-configurator rollback     put back the files the last run changed
   shell-configurator debug-info   print a report of the setup to attach to a bug report
+  shell-configurator list <presets|modules|fonts>  list the ids the flags accept (--json for data)
   shell-configurator completions <bash|zsh|fish>   print a shell completion script
   shell-configurator timings      time each prompt module here and suggest fixes for slow ones
   shell-configurator share        print the prompt as Markdown to share, with the card that rebuilds it
   shell-configurator --help       show this help
   shell-configurator --version    print the version
   shell-configurator --dry-run    preview changes without installing
-  shell-configurator --list-presets | --list-modules | --list-fonts [--json]
-                                  list the ids those flags accept
 
 Options:
   -h, --help          Show this help and exit
@@ -223,31 +228,6 @@ export function runGlobalFlags(flags: CliFlags): boolean {
   }
   if (flags.version) {
     process.stdout.write(`${VERSION}\n`);
-    return true;
-  }
-  const lists = (
-    [
-      ['--list-presets', 'presets', flags.listPresets],
-      ['--list-modules', 'modules', flags.listModules],
-      ['--list-fonts', 'fonts', flags.listFonts],
-    ] as const
-  ).filter(([, , asked]) => asked);
-  if (lists.length > 0) {
-    const names = lists.map(([name]) => name).join(', ');
-    if (flags.subcommand) {
-      throw new CliUsageError(
-        `${names} cannot be combined with the ${flags.subcommand} subcommand.`
-      );
-    }
-    if (lists.length > 1) throw new CliUsageError(`Pass one of ${names} at a time.`);
-    const unused = presentFlags(flags).filter((name) => name !== '--json');
-    if (unused.length > 0) {
-      throw new CliUsageError(`${unused.join(', ')} cannot be used with ${names}.`);
-    }
-    const entries = listEntries(lists[0]![1]);
-    process.stdout.write(
-      flags.json ? `${JSON.stringify(entries, null, 2)}\n` : formatListing(entries)
-    );
     return true;
   }
   return false;
@@ -680,8 +660,23 @@ export function runShareCommand(flags: CliFlags): void {
   process.stdout.write(`Wrote ${flags.outputFile}\n`);
 }
 
+export function runListCommand(flags: CliFlags): void {
+  const kind = flags.argument;
+  if (!LIST_KINDS.includes(kind as ListKind)) {
+    throw new CliUsageError(
+      kind
+        ? `Cannot list '${kind}' (available: ${LIST_KINDS.join(', ')}).`
+        : `list needs what to list: ${LIST_KINDS.join(', ')}.`
+    );
+  }
+  const entries = listEntries(kind as ListKind);
+  process.stdout.write(
+    flags.json ? `${JSON.stringify(entries, null, 2)}\n` : formatListing(entries)
+  );
+}
+
 export function runCompletionsCommand(flags: CliFlags): void {
-  const shell = flags.completionShell;
+  const shell = flags.argument;
   if (!COMPLETION_SHELLS.includes(shell as CompletionShell)) {
     throw new CliUsageError(
       shell
@@ -743,6 +738,10 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   }
   if (flags.subcommand === 'completions') {
     runCompletionsCommand(flags);
+    return true;
+  }
+  if (flags.subcommand === 'list') {
+    runListCommand(flags);
     return true;
   }
   if (flags.subcommand === 'timings') {

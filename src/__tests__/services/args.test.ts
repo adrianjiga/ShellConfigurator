@@ -38,6 +38,15 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['rollback']).subcommand).toBe('rollback');
     });
 
+    it('takes what list prints as its one argument', () => {
+      const flags = parseCliArgs(['list', 'fonts', '--json']);
+      expect(flags.subcommand).toBe('list');
+      expect(flags.argument).toBe('fonts');
+      expect(() => parseCliArgs(['list', 'fonts', 'presets'])).toThrow(
+        /Unexpected argument 'presets'/
+      );
+    });
+
     it('recognises debug-info', () => {
       expect(parseCliArgs(['debug-info']).subcommand).toBe('debug-info');
     });
@@ -45,7 +54,7 @@ describe('parseCliArgs', () => {
     it('takes the shell completions writes a script for as its one argument', () => {
       const flags = parseCliArgs(['completions', 'zsh']);
       expect(flags.subcommand).toBe('completions');
-      expect(flags.completionShell).toBe('zsh');
+      expect(flags.argument).toBe('zsh');
       expect(() => parseCliArgs(['completions', 'zsh', 'fish'])).toThrow(
         /Unexpected argument 'fish'/
       );
@@ -94,9 +103,6 @@ describe('parseCliArgs', () => {
       ['-y', 'yes', true],
       ['--starship', 'starship', true],
       ['--list', 'list', true],
-      ['--list-presets', 'listPresets', true],
-      ['--list-modules', 'listModules', true],
-      ['--list-fonts', 'listFonts', true],
     ];
 
     it.each(cases)('%s sets %s to %s', (arg, key, expected) => {

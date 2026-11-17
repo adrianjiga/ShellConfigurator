@@ -18,6 +18,7 @@ export type Subcommand =
   | 'rollback'
   | 'debug-info'
   | 'completions'
+  | 'list'
   | 'timings'
   | 'share';
 
@@ -29,6 +30,7 @@ export const SUBCOMMANDS: readonly Subcommand[] = [
   'rollback',
   'debug-info',
   'completions',
+  'list',
   'timings',
   'share',
 ];
@@ -76,10 +78,8 @@ export interface CliFlags {
   list?: boolean;
   /** The run rollback undoes, instead of the newest (--run). */
   runId?: string;
-  completionShell?: string;
-  listPresets?: boolean;
-  listModules?: boolean;
-  listFonts?: boolean;
+  /** The positional argument of completions (a shell) or list (what to list). */
+  argument?: string;
   help: boolean;
   version: boolean;
 }
@@ -142,15 +142,6 @@ const BOOLEAN_FLAGS: Record<string, (result: CliFlags, value: boolean) => void> 
   '--list': (r, v) => {
     r.list = v;
   },
-  '--list-presets': (r, v) => {
-    r.listPresets = v;
-  },
-  '--list-modules': (r, v) => {
-    r.listModules = v;
-  },
-  '--list-fonts': (r, v) => {
-    r.listFonts = v;
-  },
 };
 
 /** Value flags; the handler stores the consumed value. */
@@ -204,6 +195,9 @@ const RETIRED_SUBCOMMANDS: Record<string, string> = {
 };
 
 const RETIRED_FLAGS: Record<string, string> = {
+  '--list-presets': '--list-presets is gone: run shell-configurator list presets.',
+  '--list-modules': '--list-modules is gone: run shell-configurator list modules.',
+  '--list-fonts': '--list-fonts is gone: run shell-configurator list fonts.',
   '--undo': '--undo is gone: shell-configurator rollback undoes the last run, rc lines included.',
   '--restore':
     '--restore is gone, and so are the .bak files it copied back: ' +
@@ -288,8 +282,11 @@ export function parseCliArgs(argv: string[]): CliFlags {
 
     if (!flag.startsWith('-')) {
       if (subcommandSeen) {
-        if (result.subcommand === 'completions' && result.completionShell === undefined) {
-          result.completionShell = arg;
+        if (
+          (result.subcommand === 'completions' || result.subcommand === 'list') &&
+          result.argument === undefined
+        ) {
+          result.argument = arg;
           continue;
         }
         throw new CliUsageError(`Unexpected argument '${arg}'`);

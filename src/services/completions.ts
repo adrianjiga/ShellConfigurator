@@ -46,7 +46,8 @@ function bash(): string {
   const wordCases = SUBCOMMANDS.map((sub) => {
     const info = SUBCOMMAND_INFO[sub];
     if (info.argument) {
-      return `    ${sub}) words=""; (( COMP_CWORD - i == 1 )) && words="${info.argument.join(' ')}" ;;`;
+      const flags = info.flags.flatMap(spellings).join(' ');
+      return `    ${sub}) words="${flags}"; (( COMP_CWORD - i == 1 )) && words="${info.argument.values.join(' ')}" ;;`;
     }
     return `    ${sub}) words="${flagsOf(sub).flatMap(spellings).join(' ')}" ;;`;
   });
@@ -94,8 +95,12 @@ function zsh(): string {
   const itemCases = SUBCOMMANDS.map((sub) => {
     const info = SUBCOMMAND_INFO[sub];
     if (info.argument) {
-      const items = info.argument.map((value) => zshItem(value, `completion script for ${value}`));
-      return `    (${sub}) (( CURRENT - i == 1 )) && items=(${items.join(' ')}) ;;`;
+      const { values, describe } = info.argument;
+      const items = values.map((value) => zshItem(value, describe(value)));
+      const flags = info.flags.flatMap((flag) =>
+        spellings(flag).map((s) => zshItem(s, flag.description))
+      );
+      return `    (${sub}) items=(${flags.join(' ')}); (( CURRENT - i == 1 )) && items=(${items.join(' ')}) ;;`;
     }
     const items = flagsOf(sub).flatMap((flag) =>
       spellings(flag).map((s) => zshItem(s, flag.description))
@@ -163,12 +168,13 @@ function fish(): string {
     ...SUBCOMMANDS.flatMap((sub) => {
       const info = SUBCOMMAND_INFO[sub];
       const seen = `__fish_seen_subcommand_from ${sub}`;
-      if (info.argument) {
-        return [
-          `complete -c ${COMMAND} -n ${fishQuote(`${seen}; and not __fish_seen_subcommand_from ${info.argument.join(' ')}`)} -a ${fishQuote(info.argument.join(' '))}`,
-        ];
-      }
-      return info.flags.map((flag) => fishFlag(flag, seen));
+      const flags = info.flags.map((flag) => fishFlag(flag, seen));
+      if (!info.argument) return flags;
+      const values = info.argument.values.join(' ');
+      return [
+        `complete -c ${COMMAND} -n ${fishQuote(`${seen}; and not __fish_seen_subcommand_from ${values}`)} -a ${fishQuote(values)}`,
+        ...flags,
+      ];
     }),
   ];
   return `${lines.join('\n')}\n`;

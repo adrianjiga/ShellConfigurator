@@ -1464,45 +1464,41 @@ describe('index list flags', () => {
 
   const output = () => stdoutWrite.mock.calls.map((c: unknown[]) => String(c[0])).join('');
 
-  it.each([
-    ['--list-presets', 'presets'],
-    ['--list-modules', 'modules'],
-    ['--list-fonts', 'fonts'],
-  ] as const)('%s prints the %s', (flag, kind) => {
-    expect(runGlobalFlags(parseCliArgs([flag]))).toBe(true);
+  it.each(['presets', 'modules', 'fonts'] as const)('list %s prints the %s', async (kind) => {
+    expect((await routeCli(['list', kind])).handled).toBe(true);
     expect(output()).toBe(formatListing(listEntries(kind)));
   });
 
-  it('prints the data as JSON with --json', () => {
-    runGlobalFlags(parseCliArgs(['--list-fonts', '--json']));
+  it('prints the data as JSON with --json', async () => {
+    await routeCli(['list', 'fonts', '--json']);
     expect(JSON.parse(output())).toEqual(listEntries('fonts'));
   });
 
-  it('runs before the subcommand check, so --json needs no subcommand', async () => {
-    expect((await routeCli(['--list-presets', '--json'])).handled).toBe(true);
-  });
-
-  it('rejects any other flag next to a list flag, except --json', () => {
-    expect(() =>
-      runGlobalFlags(
-        parseCliArgs(['--list-presets', '--shells', 'bash', '--dry-run', '--state', 'x'])
-      )
-    ).toThrow('--shells, --state, --dry-run cannot be used with --list-presets.');
-    expect(runGlobalFlags(parseCliArgs(['--list-presets', '--json']))).toBe(true);
-  });
-
-  it('rejects a list flag with a subcommand, or two at once', () => {
-    expect(() => runGlobalFlags(parseCliArgs(['apply', '--list-presets']))).toThrow(
-      '--list-presets cannot be combined with the apply subcommand.'
-    );
-    expect(() => runGlobalFlags(parseCliArgs(['--list-presets', '--list-fonts']))).toThrow(
-      'Pass one of --list-presets, --list-fonts at a time.'
+  it('rejects any other flag than --json', async () => {
+    await expect(routeCli(['list', 'presets', '--shells', 'bash', '--dry-run'])).rejects.toThrow(
+      '--shells, --dry-run cannot be used with list.'
     );
   });
 
-  it('documents the list flags in the help text', () => {
+  it('needs to know what to list, from a fixed set', async () => {
+    await expect(routeCli(['list'])).rejects.toThrow(
+      'list needs what to list: presets, modules, fonts.'
+    );
+    await expect(routeCli(['list', 'shells'])).rejects.toThrow(
+      "Cannot list 'shells' (available: presets, modules, fonts)."
+    );
+  });
+
+  it('points the retired list flags at list', () => {
+    expect(() => parseCliArgs(['--list-presets'])).toThrow(
+      '--list-presets is gone: run shell-configurator list presets.'
+    );
+  });
+
+  it('documents list in the help text', () => {
     runGlobalFlags(parseCliArgs(['--help']));
-    expect(output()).toContain('--list-presets | --list-modules | --list-fonts [--json]');
+    expect(output()).toContain('shell-configurator list <presets|modules|fonts>');
+    expect(output()).not.toContain('--list-presets');
   });
 });
 
