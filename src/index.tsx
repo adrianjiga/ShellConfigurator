@@ -734,6 +734,14 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   if (timesPrompt && flags.fix) {
     throw new CliUsageError('--timings cannot be used with --fix.');
   }
+  if (timesPrompt) {
+    const building = [...(flags.stateFile ? ['--state'] : []), ...presentConfigFlags(flags)];
+    if (building.length > 0) {
+      throw new CliUsageError(
+        `--timings times the config Starship loads here (or --config <file>), so ${building.join(', ')} cannot be used with it.`
+      );
+    }
+  }
   if ((flags.list || flags.runId) && flags.subcommand !== 'rollback') {
     throw new CliUsageError(`${flags.list ? '--list' : '--run'} only applies to rollback.`);
   }

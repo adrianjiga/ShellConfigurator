@@ -1598,6 +1598,10 @@ describe('index doctor --timings', () => {
     [['doctor', '--config', 'x'], '--config only applies to doctor --timings.'],
     [['generate', '--timings'], '--timings only applies to doctor.'],
     [['doctor', '--timings', '--fix'], '--timings cannot be used with --fix.'],
+    [
+      ['doctor', '--timings', '--state', 'card.json', '--preset', 'pure-prompt'],
+      '--timings times the config Starship loads here (or --config <file>), so --state, --preset cannot be used with it.',
+    ],
   ])('rejects %o', async (args, message) => {
     await expect(runHeadlessCommand(parseCliArgs(args), '')).rejects.toThrow(message);
   });
