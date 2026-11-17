@@ -14,7 +14,6 @@ export type Subcommand =
   | 'generate'
   | 'apply'
   | 'doctor'
-  | 'repair'
   | 'uninstall'
   | 'rollback'
   | 'debug-info'
@@ -26,7 +25,6 @@ export const SUBCOMMANDS: readonly Subcommand[] = [
   'generate',
   'apply',
   'doctor',
-  'repair',
   'uninstall',
   'rollback',
   'debug-info',
@@ -68,7 +66,7 @@ export interface CliFlags {
   json?: boolean;
   /** Apply the repairs the doctor can perform (--fix). */
   fix?: boolean;
-  /** Let repair also apply the fixes warnings carry (--include-warnings). */
+  /** Let doctor --fix also apply the fixes warnings carry (--include-warnings). */
   includeWarnings?: boolean;
   /** Let uninstall go ahead without asking (--yes). */
   yes?: boolean;
@@ -201,6 +199,10 @@ const VALUE_FLAGS: Record<string, (result: CliFlags, value: string) => void> = {
   },
 };
 
+const RETIRED_SUBCOMMANDS: Record<string, string> = {
+  repair: 'repair is gone: shell-configurator doctor --fix applies the same fixes.',
+};
+
 const RETIRED_FLAGS: Record<string, string> = {
   '--undo': '--undo is gone: shell-configurator rollback undoes the last run, rc lines included.',
   '--restore':
@@ -297,7 +299,10 @@ export function parseCliArgs(argv: string[]): CliFlags {
         subcommandSeen = true;
         continue;
       }
-      throw new CliUsageError(`Unknown command '${arg}' (available: ${SUBCOMMANDS.join(', ')})`);
+      throw new CliUsageError(
+        RETIRED_SUBCOMMANDS[arg] ??
+          `Unknown command '${arg}' (available: ${SUBCOMMANDS.join(', ')})`
+      );
     }
 
     if (token.inlineValue === undefined && /^-[^-]{2,}$/.test(token.name)) {

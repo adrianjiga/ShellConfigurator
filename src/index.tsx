@@ -112,8 +112,7 @@ Usage:
   shell-configurator              start the wizard
   shell-configurator generate     render a starship.toml from flags
   shell-configurator apply        run a full install headlessly
-  shell-configurator doctor       check an existing setup and report problems
-  shell-configurator repair       fix the problems doctor finds
+  shell-configurator doctor       check the setup; --fix repairs what it finds
   shell-configurator uninstall    remove what the wizard set up
   shell-configurator rollback     put back the files the last run changed
   shell-configurator debug-info   print a report of the setup to attach to a bug report
@@ -164,20 +163,14 @@ apply options (a headless install from a state card):
 doctor options (checks the setup; exits non-zero when a check fails):
   --state <file>       Check the setup described by a saved state card
   --json               Print the report as JSON instead of the text summary
-  --fix                Apply the repairs for failing checks, then re-check (like 'repair')
-  --include-warnings   With --fix, also apply the repairs warnings suggest
+  --fix                Apply the fixes for failing checks after asking, then re-check;
+                       exits non-zero when one still fails
+  --include-warnings   With --fix, also apply the fixes warnings suggest (e.g. the
+                       terminal font); a warning may describe a choice you made on purpose
   -y, --yes            With --fix, go ahead without asking (required off a terminal)
   --dry-run            With --fix, print the fixes it would apply; change nothing
   Without --state it checks the shells that were set up, not every installed one.
-
-repair options (fixes the failing checks; asks first; exits non-zero when one still fails):
-  --state <file>       Repair the setup described by a saved state card
-  -y, --yes            Go ahead without asking (required off a terminal)
-  --dry-run            Print the fixes it would apply; change nothing
-  --include-warnings   Also apply the fixes warnings suggest (e.g. the terminal font);
-                       a warning may describe a choice you made on purpose
-  --json               Print the report as JSON instead of the text summary
-  rollback puts back the files it changed (not a reinstalled Starship or font).
+  rollback puts back the files --fix changed (not a reinstalled Starship or font).
 
 uninstall options (removes the Starship setup; asks before changing anything):
   --shells <id,...>    Only these shells (default: every shell it set up)
@@ -309,7 +302,7 @@ const NOT_STATE_FLAGS = new Set(['--import-url', '--output', '--export']);
 function refuseUnusedFlags(flags: CliFlags, subcommand: Subcommand): void {
   const accepted = acceptedFlags(subcommand);
   const layered =
-    subcommand === 'doctor' || subcommand === 'repair'
+    subcommand === 'doctor'
       ? presentConfigFlags(flags).filter((flag) => !NOT_STATE_FLAGS.has(flag))
       : [];
   const unused = presentFlags(flags).filter(
@@ -334,7 +327,7 @@ function warnIgnoredFlags(flags: CliFlags, subcommand: string): void {
  * Runs the read-only health check. A failing check sets the process exit code
  * (so CI and scripts can gate on it) but never throws — the report is the
  * output. `--json` swaps the human summary for the report object, and `--fix`
- * upgrades the run into a repair.
+ * applies the fixes it finds.
  */
 export async function runDoctorCommand(
   flags: CliFlags,
@@ -362,7 +355,7 @@ export async function runRepairCommand(
   io: PromptIo = DEFAULT_PROMPT_IO,
   deps: RepairDeps = DEFAULT_REPAIR_DEPS
 ): Promise<void> {
-  warnIgnoredFlags(flags, 'repair');
+  warnIgnoredFlags(flags, 'doctor --fix');
   const state = flags.stateFile ? stateFromFlags(flags) : null;
   const options = { includeWarnings: flags.includeWarnings };
   const plan = await runRepair(state, deps, { ...options, dryRun: true });
@@ -371,7 +364,7 @@ export async function runRepairCommand(
     const proceed = await confirmChanges(
       flags,
       io,
-      'repair changes files and may install software',
+      'doctor --fix changes files and may install software',
       () => formatRepairReport(plan),
       '\nApply these fixes? [y/N] '
     );
@@ -503,7 +496,7 @@ export async function runUninstallCommand(
       process.stdout.write('\nUndo it with: shell-configurator rollback\n');
       if (deleted.length > 0) {
         process.stdout.write(
-          `Rollback only puts files back: reinstall ${deleted.join(' and ')} with shell-configurator apply or repair.\n`
+          `Rollback only puts files back: reinstall ${deleted.join(' and ')} with shell-configurator apply or doctor --fix.\n`
         );
       }
     } else if (changes) {
@@ -718,9 +711,9 @@ export async function runDebugInfoCommand(
  * reproducibility.
  */
 export async function runHeadlessCommand(flags: CliFlags, command: string): Promise<boolean> {
-  const repairs = flags.subcommand === 'repair' || (flags.subcommand === 'doctor' && flags.fix);
+  const repairs = flags.subcommand === 'doctor' && flags.fix;
   if (flags.includeWarnings && !repairs) {
-    throw new CliUsageError('--include-warnings only applies to repair (or doctor --fix).');
+    throw new CliUsageError('--include-warnings only applies to doctor --fix.');
   }
   if (
     flags.yes &&
@@ -728,7 +721,7 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
     flags.subcommand !== 'uninstall' &&
     flags.subcommand !== 'rollback'
   ) {
-    throw new CliUsageError('--yes only applies to repair, doctor --fix, uninstall and rollback.');
+    throw new CliUsageError('--yes only applies to doctor --fix, uninstall and rollback.');
   }
   if (flags.starship && flags.subcommand !== 'uninstall') {
     throw new CliUsageError('--starship only applies to uninstall.');
@@ -774,10 +767,6 @@ export async function runHeadlessCommand(flags: CliFlags, command: string): Prom
   }
   if (flags.subcommand === 'doctor') {
     await runDoctorCommand(flags, command);
-    return true;
-  }
-  if (flags.subcommand === 'repair') {
-    await runRepairCommand(flags, command);
     return true;
   }
   // No subcommand: the interactive wizard runs next — silently dropping

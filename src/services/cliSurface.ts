@@ -63,7 +63,7 @@ export const FLAGS = {
   adopt: flag('--adopt', 'Keep the existing shared starship.toml'),
   importUrl: flag('--import-url', 'Fetch a starship.toml over https and adopt it', 'text'),
   json: flag('--json', 'Print the report as JSON'),
-  fix: flag('--fix', 'Apply the repairs for failing checks'),
+  fix: flag('--fix', 'Apply the fixes for failing checks'),
   includeWarnings: flag('--include-warnings', 'Also apply the fixes warnings suggest'),
   yes: flag('--yes', 'Go ahead without asking', undefined, '-y'),
   starship: flag('--starship', 'Also remove Starship itself'),
@@ -142,10 +142,6 @@ export const SUBCOMMAND_INFO: Record<Subcommand, SubcommandInfo> = {
       FLAGS.yes,
       FLAGS.dryRun,
     ],
-  },
-  repair: {
-    description: 'Fix the problems doctor finds',
-    flags: [FLAGS.state, FLAGS.import, FLAGS.yes, FLAGS.dryRun, FLAGS.includeWarnings, FLAGS.json],
   },
   uninstall: {
     description: 'Remove what the wizard set up',

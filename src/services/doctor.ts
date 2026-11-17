@@ -44,7 +44,7 @@ import { readTerminalFontFamily, TERMINAL_LABELS } from './terminalFont.ts';
 
 export type DoctorStatus = 'pass' | 'warn' | 'fail';
 
-/** A repair that `repair` (and `doctor --fix`) knows how to apply. */
+/** A repair that `doctor --fix` knows how to apply. */
 export type DoctorFix =
   | { kind: 'reinstall-starship' }
   | { kind: 'configure-shell'; shellId: ShellId }

@@ -24,8 +24,10 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['doctor']).subcommand).toBe('doctor');
     });
 
-    it('recognises repair', () => {
-      expect(parseCliArgs(['repair']).subcommand).toBe('repair');
+    it('points the retired repair at doctor --fix', () => {
+      expect(() => parseCliArgs(['repair'])).toThrow(
+        'repair is gone: shell-configurator doctor --fix applies the same fixes.'
+      );
     });
 
     it('recognises uninstall', () => {
@@ -58,7 +60,7 @@ describe('parseCliArgs', () => {
 
     it('lists the available commands in the error', () => {
       expect(() => parseCliArgs(['deploy'])).toThrow(
-        /generate, apply, doctor, repair, uninstall, rollback, debug-info, completions/
+        /generate, apply, doctor, uninstall, rollback, debug-info, completions/
       );
     });
 

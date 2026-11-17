@@ -425,15 +425,15 @@ describe('index headless routing', () => {
     stderrWrite.mockRestore();
   });
 
-  it('warns when repair gets config flags without --state', async () => {
+  it('warns when doctor --fix gets config flags without --state', async () => {
     mockRunRepair.mockResolvedValue({ ok: true, actions: [] });
     mockFormatRepairReport.mockReturnValue('REPAIRED\n');
     const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true as never);
 
-    await route(['repair', '--font', 'none']);
+    await route(['doctor', '--fix', '--font', 'none']);
 
     expect(stderrWrite).toHaveBeenCalledWith(
-      expect.stringContaining('--font is ignored by repair without --state')
+      expect.stringContaining('--font is ignored by doctor --fix without --state')
     );
     stderrWrite.mockRestore();
   });
@@ -448,7 +448,7 @@ describe('index headless routing', () => {
     expect(mockFormatDoctorReport).not.toHaveBeenCalled();
   });
 
-  it('checks doctor and repair against a --state card', async () => {
+  it('checks and fixes against a --state card', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shellconf-index-'));
     try {
       const card = path.join(dir, 'card.json');
@@ -459,7 +459,7 @@ describe('index headless routing', () => {
       mockFormatRepairReport.mockReturnValue('REPAIRED\n');
 
       await route(['doctor', '--state', card]);
-      await route(['repair', '--state', card]);
+      await route(['doctor', '--fix', '--state', card]);
 
       expect(mockRunDoctor.mock.calls[0]![0]).toMatchObject({ selectedShells: ['fish'] });
       expect(mockRunRepair.mock.calls[0]![0]).toMatchObject({ selectedShells: ['fish'] });
@@ -472,7 +472,7 @@ describe('index headless routing', () => {
     const report = { ok: true, actions: [], dryRun: false };
     mockRunRepair.mockResolvedValue(report);
 
-    await route(['repair', '--json']);
+    await route(['doctor', '--fix', '--json']);
 
     expect(stdoutWrite).toHaveBeenCalledWith(`${JSON.stringify(report, null, 2)}\n`);
     expect(mockFormatRepairReport).not.toHaveBeenCalled();
@@ -488,11 +488,11 @@ describe('index headless routing', () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it('runs repair and prints the repair report', async () => {
+  it('runs doctor --fix and prints the repair report', async () => {
     mockRunRepair.mockResolvedValue({ ok: true, actions: [] });
     mockFormatRepairReport.mockReturnValue('REPAIRED\n');
 
-    const routed = await route(['repair']);
+    const routed = await route(['doctor', '--fix']);
 
     expect(routed).toBe(true);
     expect(mockRunRepair).toHaveBeenCalledOnce();
@@ -505,26 +505,11 @@ describe('index headless routing', () => {
     expect(mockRunDoctor).not.toHaveBeenCalled();
   });
 
-  it('upgrades doctor --fix into a repair', async () => {
-    mockRunRepair.mockResolvedValue({ ok: true, actions: [] });
-    mockFormatRepairReport.mockReturnValue('REPAIRED\n');
-
-    const routed = await route(['doctor', '--fix']);
-
-    expect(routed).toBe(true);
-    expect(mockRunRepair).toHaveBeenCalledWith(
-      null,
-      {},
-      { includeWarnings: undefined, dryRun: true }
-    );
-    expect(mockRunDoctor).not.toHaveBeenCalled();
-  });
-
   it('passes --dry-run through to repair so nothing is applied', async () => {
     mockRunRepair.mockResolvedValue({ ok: true, actions: [], dryRun: true });
     mockFormatRepairReport.mockReturnValue('PLANNED\n');
 
-    const routed = await route(['repair', '--dry-run']);
+    const routed = await route(['doctor', '--fix', '--dry-run']);
 
     expect(routed).toBe(true);
     expect(mockRunRepair).toHaveBeenCalledOnce();
@@ -536,22 +521,21 @@ describe('index headless routing', () => {
     expect(stdoutWrite).toHaveBeenCalledWith('PLANNED\n');
   });
 
-  it('passes --include-warnings through to repair and doctor --fix', async () => {
+  it('passes --include-warnings through to doctor --fix', async () => {
     mockRunRepair.mockResolvedValue({ ok: true, actions: [], dryRun: false });
     mockFormatRepairReport.mockReturnValue('');
 
-    await route(['repair', '--include-warnings']);
     await route(['doctor', '--fix', '--include-warnings']);
 
     for (const call of mockRunRepair.mock.calls) {
       expect(call[2]).toMatchObject({ includeWarnings: true });
     }
-    expect(mockRunRepair).toHaveBeenCalledTimes(2);
+    expect(mockRunRepair).toHaveBeenCalledOnce();
   });
 
-  it('rejects --include-warnings outside a repair', async () => {
+  it('rejects --include-warnings without --fix', async () => {
     await expect(route(['doctor', '--include-warnings'])).rejects.toThrow(
-      '--include-warnings only applies to repair'
+      '--include-warnings only applies to doctor --fix'
     );
   });
 
@@ -559,7 +543,7 @@ describe('index headless routing', () => {
     mockRunRepair.mockResolvedValue({ ok: true, actions: [], dryRun: true });
     mockFormatRepairReport.mockImplementation((report) => `REPORT ${report.dryRun}\n`);
 
-    await route(['repair']);
+    await route(['doctor', '--fix']);
 
     expect(stdoutWrite).toHaveBeenCalledWith('REPORT false\n');
   });
@@ -569,7 +553,7 @@ describe('index headless routing', () => {
     mockRunRepair.mockResolvedValue({ ok: false, actions: [] });
     mockFormatRepairReport.mockReturnValue('STILL BROKEN\n');
 
-    await route(['repair']);
+    await route(['doctor', '--fix']);
 
     expect(process.exitCode).toBe(1);
   });
@@ -599,7 +583,7 @@ describe('index headless routing', () => {
     it('shows the plan and changes nothing when the user says no', async () => {
       const ask = io({ confirm: vi.fn().mockResolvedValue(false) });
 
-      await runRepairCommand(parseCliArgs(['repair']), 'repair', ask);
+      await runRepairCommand(parseCliArgs(['doctor', '--fix']), 'doctor --fix', ask);
 
       expect(ask.confirm).toHaveBeenCalled();
       expect(output()).toContain('REPORT true');
@@ -610,8 +594,12 @@ describe('index headless routing', () => {
 
     it('refuses off a terminal without --yes', async () => {
       await expect(
-        runRepairCommand(parseCliArgs(['repair']), 'repair', io({ isTerminal: () => false }))
-      ).rejects.toThrow('repair changes files and may install software; pass --yes');
+        runRepairCommand(
+          parseCliArgs(['doctor', '--fix']),
+          'doctor --fix',
+          io({ isTerminal: () => false })
+        )
+      ).rejects.toThrow('doctor --fix changes files and may install software; pass --yes');
       expect(mockRunRepair).toHaveBeenCalledOnce();
     });
 
@@ -621,11 +609,11 @@ describe('index headless routing', () => {
       );
 
       await expect(
-        runRepairCommand(parseCliArgs(['repair', '--yes']), 'repair --yes', io())
+        runRepairCommand(parseCliArgs(['doctor', '--fix', '--yes']), 'doctor --fix --yes', io())
       ).rejects.toThrow('starship install broke');
       expect(mockRecordRun).toHaveBeenCalledWith({
         kind: 'repair',
-        command: 'repair --yes',
+        command: 'doctor --fix --yes',
         exitCode: 1,
         runId: 'run-3',
       });
@@ -638,7 +626,7 @@ describe('index headless routing', () => {
       }));
       const ask = io();
 
-      await runRepairCommand(parseCliArgs(['repair', '--yes']), 'repair --yes', ask);
+      await runRepairCommand(parseCliArgs(['doctor', '--fix', '--yes']), 'doctor --fix --yes', ask);
 
       expect(ask.confirm).not.toHaveBeenCalled();
       expect(captureRun).toHaveBeenCalled();
@@ -654,7 +642,7 @@ describe('index headless routing', () => {
       expect(output()).toContain('Undo it with: shell-configurator rollback');
       expect(mockRecordRun).toHaveBeenCalledWith({
         kind: 'repair',
-        command: 'repair --yes',
+        command: 'doctor --fix --yes',
         exitCode: 0,
         runId: 'run-7',
       });
@@ -879,7 +867,7 @@ describe('index uninstall command', () => {
     );
 
     expect(output()).toContain(
-      'Rollback only puts files back: reinstall Hack and Starship with shell-configurator apply or repair.'
+      'Rollback only puts files back: reinstall Hack and Starship with shell-configurator apply or doctor --fix.'
     );
   });
 
@@ -974,7 +962,7 @@ describe('index uninstall command', () => {
     [['--preset', 'pure-prompt'], /--preset cannot be used with uninstall/],
     [['--state', 'card.json'], /--state cannot be used with uninstall/],
     [['--fix'], /--fix cannot be used with uninstall/],
-    [['--include-warnings'], /--include-warnings only applies to repair/],
+    [['--include-warnings'], /--include-warnings only applies to doctor --fix/],
   ])('refuses %o before running', async (args, message) => {
     await expect(
       runHeadlessCommand(parseCliArgs(['uninstall', ...args]), 'uninstall')
@@ -1006,7 +994,7 @@ describe('index uninstall command', () => {
 
   it('rejects --yes and --starship outside uninstall', async () => {
     await expect(runHeadlessCommand(parseCliArgs(['doctor', '--yes']), '')).rejects.toThrow(
-      '--yes only applies to repair, doctor --fix, uninstall and rollback.'
+      '--yes only applies to doctor --fix, uninstall and rollback.'
     );
     await expect(runHeadlessCommand(parseCliArgs(['doctor', '--starship']), '')).rejects.toThrow(
       '--starship only applies to uninstall.'
@@ -1317,7 +1305,7 @@ describe('index rollback command', () => {
     [['--preset', 'pure-prompt'], /--preset cannot be used with rollback/],
     [['--state', 'card.json'], /--state cannot be used with rollback/],
     [['--fix'], /--fix cannot be used with rollback/],
-    [['--include-warnings'], /--include-warnings only applies to repair/],
+    [['--include-warnings'], /--include-warnings only applies to doctor --fix/],
   ])('rejects %o', async (args, message) => {
     await expect(
       runHeadlessCommand(parseCliArgs(['rollback', ...args]), 'rollback')
@@ -1450,7 +1438,7 @@ describe('index completions command', () => {
         '--starship',
         '--list',
       ],
-      /--include-warnings only applies to repair/,
+      /--include-warnings only applies to doctor --fix/,
     ],
   ])('rejects %o', async (args, message) => {
     await expect(runHeadlessCommand(parseCliArgs(args), '')).rejects.toThrow(message);
@@ -1603,7 +1591,7 @@ describe('index timings command', () => {
 
   it.each([
     [['--shells', 'zsh'], /--shells cannot be used with timings/],
-    [['--yes'], /--yes only applies to repair/],
+    [['--yes'], /--yes only applies to doctor --fix/],
   ])('refuses %o before timing anything', async (args, message) => {
     await expect(runHeadlessCommand(parseCliArgs(['timings', ...args]), '')).rejects.toThrow(
       message
