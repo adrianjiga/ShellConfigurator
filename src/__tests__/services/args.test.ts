@@ -24,6 +24,13 @@ describe('parseCliArgs', () => {
       expect(parseCliArgs(['doctor']).subcommand).toBe('doctor');
     });
 
+    it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])(
+      'treats the built-in name %s as an unknown command, not a crash',
+      (name) => {
+        expect(() => parseCliArgs([name])).toThrow(`Unknown command '${name}'`);
+      }
+    );
+
     it('points the retired repair at doctor --fix', () => {
       expect(() => parseCliArgs(['repair'])).toThrow(
         'repair is gone: shell-configurator doctor --fix applies the same fixes.'

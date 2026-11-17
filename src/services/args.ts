@@ -218,6 +218,11 @@ export const KNOWN_FLAGS = {
   short: { ...SHORT_FLAGS },
 } as const;
 
+/** A table entry under `key`, never an inherited property such as `constructor`. */
+function own<T>(table: Record<string, T>, key: string): T | undefined {
+  return Object.hasOwn(table, key) ? table[key] : undefined;
+}
+
 const SHORT_BOOLEAN_FLAGS = new Set(
   Object.entries(SHORT_FLAGS)
     .filter(([, long]) => BOOLEAN_FLAGS[long] !== undefined)
@@ -286,7 +291,7 @@ export function parseCliArgs(argv: string[]): CliFlags {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const token = splitToken(arg);
-    const flag = SHORT_FLAGS[token.name] ?? token.name;
+    const flag = own(SHORT_FLAGS, token.name) ?? token.name;
 
     if (!flag.startsWith('-')) {
       if (subcommandSeen) {
@@ -305,7 +310,7 @@ export function parseCliArgs(argv: string[]): CliFlags {
         continue;
       }
       throw new CliUsageError(
-        RETIRED_SUBCOMMANDS[arg] ??
+        own(RETIRED_SUBCOMMANDS, arg) ??
           `Unknown command '${arg}' (available: ${SUBCOMMANDS.join(', ')})`
       );
     }
@@ -320,7 +325,7 @@ export function parseCliArgs(argv: string[]): CliFlags {
       }
     }
 
-    const booleanFlag = BOOLEAN_FLAGS[flag];
+    const booleanFlag = own(BOOLEAN_FLAGS, flag);
     if (booleanFlag !== undefined) {
       if (token.inlineValue === undefined) {
         booleanFlag(result, true);
@@ -335,9 +340,9 @@ export function parseCliArgs(argv: string[]): CliFlags {
     }
 
     // Value flags — the inline `=` value, else the next token.
-    const valueFlag = VALUE_FLAGS[flag];
+    const valueFlag = own(VALUE_FLAGS, flag);
     if (valueFlag === undefined) {
-      throw new CliUsageError(RETIRED_FLAGS[flag] ?? `Unknown flag '${flag}'`);
+      throw new CliUsageError(own(RETIRED_FLAGS, flag) ?? `Unknown flag '${flag}'`);
     }
     const value = token.inlineValue ?? argv[i + 1];
 
