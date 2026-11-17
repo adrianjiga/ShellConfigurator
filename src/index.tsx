@@ -25,7 +25,7 @@ import {
 } from './services/debugInfo.ts';
 import { formatDoctorReport, runDoctor } from './services/doctor.ts';
 import { CliRunError, CliUsageError, errorMessage } from './services/errors.ts';
-import { runApply, runGenerate, stateFromFlags, validateFlagValues } from './services/headless.ts';
+import { runApply, runGenerate } from './services/headless.ts';
 import { recordRunSafely } from './services/history.ts';
 import { formatListing, listEntries } from './services/listings.ts';
 import { redactPersonal } from './services/redact.ts';
@@ -61,6 +61,7 @@ import {
   type TimingsReport,
   timePrompt,
 } from './services/starshipProbe.ts';
+import { stateFromFlags, validateFlagValues } from './services/stateFlags.ts';
 import { restoreTty } from './services/tty.ts';
 import {
   DEFAULT_UNINSTALL_DEPS,
