@@ -827,7 +827,7 @@ function runInstallTasks(
 
 ## Headless CLI & Run Data
 
-The public flag surface in `src/index.tsx`/`src/services/args.ts`, in eleven groups.
+The public flag surface in `src/cli/`/`src/services/args.ts`, in eleven groups.
 
 ### Interactive
 
@@ -1231,7 +1231,7 @@ new fixture(s) under `src/__tests__/golden/`.
 4. **`src/generators/rcLines.ts`** — add the shell's `starship init` command to
    `INIT_COMMAND`; an rc shell also needs a `configEnv` (export/unset syntax) in
    `SHELLS`
-5. **`src/index.tsx`** — add it to the hard-coded `--shells` list in the `--help` text
+5. **`src/cli/help.ts`** — add it to the hard-coded `--shells` list in the `--help` text
 6. **`src/services/detector.ts`** — no change needed: `detectInstalledShellsAsync`
    iterates `SHELLS` and checks each `binary`
 
@@ -1250,6 +1250,6 @@ new fixture(s) under `src/__tests__/golden/`.
 3. **`src/screens/StyleScreen.tsx`** — add to `CHAR_OPTIONS` array
 4. **`src/services/stateFlags.ts`** and **`src/services/state.ts`** — add to their
    accepted-symbol lists, and to the `--character` line in the `--help` text
-   (`src/index.tsx`)
+   (`src/cli/help.ts`)
 5. **`src/services/cliSurface.ts`** — add to the value list of `FLAGS.character`,
    which the shell completions offer
