@@ -284,7 +284,8 @@ src/
 │   ├── starship.ts            TOML config generation
 │   ├── shellRc.ts             Writes rc files (apply, reset, remove) and per-shell/shared configs
 │   ├── rcPlan.ts              Pure rc planners: appliedRcContent / resetRcContent
-│   ├── rcLines.ts             ShellConfigurator markers, managed-block and line rules (pure text)
+│   ├── markers.ts             The text ShellConfigurator stamps on what it writes (block, adopt, generated)
+│   ├── rcLines.ts             Managed-block and line rules (pure text)
 │   ├── rcInit.ts              Init detection: initReachable (follows `source`), startsStarship, keepsOwnConfig
 │   ├── bashLogin.ts           The macOS Bash login file that loads ~/.bashrc
 │   ├── fileWrite.ts           writeFileAtomic and keepOriginal (.pre-shell-configurator copies)

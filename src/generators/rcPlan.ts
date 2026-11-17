@@ -4,6 +4,7 @@ import { homeDir } from '../services/paths.ts';
 import type { ShellId } from '../types.ts';
 import { bashLoginFiles } from './bashLogin.ts';
 import { getShellConfigPath } from './configPaths.ts';
+import { ADOPT_MARKER, BLOCK_MARKER } from './markers.ts';
 import {
   FS_RC_IO,
   fishInitFile,
@@ -13,9 +14,7 @@ import {
   sourcedFiles,
 } from './rcInit.ts';
 import {
-  ADOPT_MARKER,
   appendManagedBlock,
-  BLOCK_MARKER,
   EVERY_BLOCK,
   hasLine,
   hasStarshipInit,

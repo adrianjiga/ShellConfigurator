@@ -162,7 +162,7 @@ retuned in one place.
 
 **Files**: `src/generators/` — `shellRc.ts` (the writers: apply, reset, remove,
 config files), `rcPlan.ts` (the pure planners `appliedRcContent`/`resetRcContent`),
-`rcLines.ts` (markers and line rules), `rcInit.ts` (init detection, `source`
+`markers.ts` (the markers), `rcLines.ts` (managed-block and line rules), `rcInit.ts` (init detection, `source`
 following), `bashLogin.ts` (the macOS Bash login file), `fileWrite.ts` (atomic
 writes and original copies) and `configPaths.ts`
 

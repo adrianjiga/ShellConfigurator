@@ -15,7 +15,7 @@ import {
   SEPARATOR_RIGHT,
 } from '../config/promptSymbols.ts';
 import type { WizardState } from '../types.ts';
-import { GENERATED_MARKER } from './rcLines.ts';
+import { GENERATED_MARKER } from './markers.ts';
 import { tomlBasic, tomlLiteral } from './toml.ts';
 
 /**
