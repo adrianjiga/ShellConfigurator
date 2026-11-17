@@ -160,7 +160,11 @@ retuned in one place.
 
 ## Shell RC Generator
 
-**File**: `src/generators/shellRc.ts`
+**Files**: `src/generators/` — `shellRc.ts` (the writers: apply, reset, remove,
+config files), `rcPlan.ts` (the pure planners `appliedRcContent`/`resetRcContent`),
+`rcLines.ts` (markers and line rules), `rcInit.ts` (init detection, `source`
+following), `bashLogin.ts` (the macOS Bash login file), `fileWrite.ts` (atomic
+writes and original copies) and `configPaths.ts`
 
 ### Per-Shell Config Writing
 
@@ -474,11 +478,11 @@ The `macos-smoke` job in `ci.yml` (`Distro smoke (macos)`) builds `dist/` and ru
 
 The app handles errors at different levels:
 
-| Layer                                      | Strategy                                                             |
-| ------------------------------------------ | -------------------------------------------------------------------- |
-| Detection (`detector.ts`)                  | Swallow errors, return safe defaults (`false`, `null`, empty arrays) |
-| Installation (`installer.ts`)              | Throw on failure — caught by `runTask`                               |
-| Task runner (`runTask`, `installTasks.ts`) | Catch per-task, record error, continue remaining tasks               |
-| Config writing (`shellRc.ts`)              | Throw on failure — caught by `runTask`                               |
+| Layer                                         | Strategy                                                             |
+| --------------------------------------------- | -------------------------------------------------------------------- |
+| Detection (`detector.ts`)                     | Swallow errors, return safe defaults (`false`, `null`, empty arrays) |
+| Installation (`installer.ts`)                 | Throw on failure — caught by `runTask`                               |
+| Task runner (`runTask`, `installTasks.ts`)    | Catch per-task, record error, continue remaining tasks               |
+| Config writing (`shellRc.ts`, `fileWrite.ts`) | Throw on failure — caught by `runTask`                               |
 
 This means a font download failure won't prevent config file writing, and a missing `chsh` binary won't block RC file updates.

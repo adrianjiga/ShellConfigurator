@@ -45,10 +45,22 @@ vi.mock('../generators/shellRc.ts', () => ({
   writeSharedConfig: vi.fn(() => ({ path: '/tmp/starship.toml' })),
   applyShellConfig: mockApplyShellConfig,
   resetSharedShellConfig: mockResetSharedConfig,
+}));
+
+vi.mock('../generators/rcInit.ts', () => ({
   shellsWithStarshipInit: () => [],
+}));
+
+vi.mock('../generators/configPaths.ts', () => ({
   getShellConfigPath: () => '/tmp/starship.toml',
-  bashLoginFiles: () => [],
   getSharedConfigPath: () => '/nonexistent/starship.toml',
+}));
+
+vi.mock('../generators/bashLogin.ts', () => ({
+  bashLoginFiles: () => [],
+}));
+
+vi.mock('../generators/fileWrite.ts', () => ({
   originalCopyPath: (file: string) => `${file}.pre-shell-configurator`,
 }));
 

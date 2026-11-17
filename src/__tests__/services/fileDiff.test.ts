@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getShell } from '../../config/shells.ts';
-import { getSharedConfigPath, getShellConfigPath } from '../../generators/shellRc.ts';
+import { getSharedConfigPath, getShellConfigPath } from '../../generators/configPaths.ts';
 import { generateToml } from '../../generators/starship.ts';
 import { plannedFileChanges, unifiedDiff } from '../../services/fileDiff.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';

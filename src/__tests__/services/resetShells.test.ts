@@ -3,14 +3,14 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getShell } from '../../config/shells.ts';
+import { getShellConfigPath } from '../../generators/configPaths.ts';
+import { writeFileAtomic } from '../../generators/fileWrite.ts';
+import { keepsOwnConfig } from '../../generators/rcInit.ts';
+import { resetRcContent } from '../../generators/rcPlan.ts';
 import {
   applyShellConfig,
-  getShellConfigPath,
-  keepsOwnConfig,
   removeManagedRcBlocks,
-  resetRcContent,
   resetSharedShellConfig,
-  writeFileAtomic,
   writeSharedConfig,
   writeShellConfig,
 } from '../../generators/shellRc.ts';

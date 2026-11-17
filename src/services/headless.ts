@@ -5,12 +5,8 @@ import { PALETTES } from '../config/palettes.ts';
 import { PRESETS, powerlineDroppedReason } from '../config/presets.ts';
 import { getShell, SHELLS, type ShellDef, setupCommand } from '../config/shells.ts';
 import { statusLine, statusMark } from '../config/status.ts';
-import {
-  getSharedConfigPath,
-  getShellConfigPath,
-  ORIGINAL_SUFFIX,
-  writeFileAtomic,
-} from '../generators/shellRc.ts';
+import { getSharedConfigPath, getShellConfigPath } from '../generators/configPaths.ts';
+import { ORIGINAL_SUFFIX, writeFileAtomic } from '../generators/fileWrite.ts';
 import { generateToml } from '../generators/starship.ts';
 import {
   type CharacterSymbol,

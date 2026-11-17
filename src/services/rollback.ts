@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { statusLine } from '../config/status.ts';
-import { ORIGINAL_SUFFIX, writeFileAtomic } from '../generators/shellRc.ts';
+import { ORIGINAL_SUFFIX, writeFileAtomic } from '../generators/fileWrite.ts';
 import { errorMessage } from './errors.ts';
 import { type HistoryKind, type HistoryRecord, readHistory } from './history.ts';
 import { redactUrls } from './redact.ts';

@@ -3,11 +3,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getShell } from '../../config/shells.ts';
-import {
-  getSharedConfigPath,
-  getShellConfigPath,
-  starshipConfigLine,
-} from '../../generators/shellRc.ts';
+import { getSharedConfigPath, getShellConfigPath } from '../../generators/configPaths.ts';
+import { starshipConfigLine } from '../../generators/rcPlan.ts';
 import {
   DEFAULT_DOCTOR_DEPS,
   type DoctorDeps,

@@ -279,7 +279,13 @@ src/
 │   └── DoneScreen.tsx         Summary, exit, `s` to save the prompt as Markdown, rollback hint
 ├── generators/
 │   ├── starship.ts            TOML config generation
-│   ├── shellRc.ts             RC file planning (appliedRcContent/resetRcContent) and writing + per-shell/shared config output, keepOriginal (.pre-shell-configurator copies) and removal
+│   ├── shellRc.ts             Writes rc files (apply, reset, remove) and per-shell/shared configs
+│   ├── rcPlan.ts              Pure rc planners: appliedRcContent / resetRcContent
+│   ├── rcLines.ts             ShellConfigurator markers, managed-block and line rules (pure text)
+│   ├── rcInit.ts              Init detection: initReachable (follows `source`), startsStarship, keepsOwnConfig
+│   ├── bashLogin.ts           The macOS Bash login file that loads ~/.bashrc
+│   ├── fileWrite.ts           writeFileAtomic and keepOriginal (.pre-shell-configurator copies)
+│   ├── configPaths.ts         Per-shell and shared config paths
 │   └── toml.ts                TOML escaping helpers
 └── services/
     ├── args.ts                Hand-rolled, dependency-free CLI flag parser

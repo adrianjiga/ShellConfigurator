@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('../../services/whatChanged.ts');
 
 import { getShell } from '../../config/shells.ts';
-import { getSharedConfigPath, getShellConfigPath } from '../../generators/shellRc.ts';
+import { getSharedConfigPath, getShellConfigPath } from '../../generators/configPaths.ts';
 import { planRollback, runRollback } from '../../services/rollback.ts';
 import { beginRunCapture, finishRunCapture, readRunManifest } from '../../services/runCapture.ts';
 import {

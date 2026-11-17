@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { keepOriginal, writeFileAtomic } from '../generators/shellRc.ts';
+import { keepOriginal, writeFileAtomic } from '../generators/fileWrite.ts';
 import { assertNever, type TerminalId } from '../types.ts';
 import { configHome, homeDir } from './paths.ts';
 
