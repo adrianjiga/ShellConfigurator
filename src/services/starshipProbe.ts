@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as nodePath from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
-import { getSharedConfigPath } from '../generators/shellRc.ts';
+import { getSharedConfigPath } from '../generators/configPaths.ts';
 import type { WizardState } from '../types.ts';
 import { findStarshipAsync } from './detector.ts';
 import { CAPTURE_TIMEOUT_MS, runCaptureBoth } from './exec.ts';

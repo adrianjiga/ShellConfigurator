@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { writeFileAtomic } from '../generators/shellRc.ts';
+import { writeFileAtomic } from '../generators/fileWrite.ts';
 import type { InstallTask, ShellId, WizardState } from '../types.ts';
 import { errorMessage, isMissingFile } from './errors.ts';
 import { stateDir } from './paths.ts';

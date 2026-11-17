@@ -1,15 +1,8 @@
 import { getShell } from '../config/shells.ts';
-import {
-  appliedRcContent,
-  bashLoginContent,
-  bashLoginFile,
-  bashNeedsLoginFile,
-  FS_RC_IO,
-  getSharedConfigPath,
-  getShellConfigPath,
-  type RcIo,
-  resetRcContent,
-} from '../generators/shellRc.ts';
+import { bashLoginContent, bashLoginFile, bashNeedsLoginFile } from '../generators/bashLogin.ts';
+import { getSharedConfigPath, getShellConfigPath } from '../generators/configPaths.ts';
+import { FS_RC_IO, type RcIo } from '../generators/rcInit.ts';
+import { appliedRcContent, resetRcContent } from '../generators/rcPlan.ts';
 import { generateToml } from '../generators/starship.ts';
 import type { ShellId, WizardState } from '../types.ts';
 import { errorMessage } from './errors.ts';

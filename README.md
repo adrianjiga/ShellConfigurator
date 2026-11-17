@@ -119,7 +119,7 @@ curl -fsSL https://raw.githubusercontent.com/adrianjiga/ShellConfigurator/master
 
 - [Troubleshooting](docs/troubleshooting.md): fonts not rendering, `chsh`
   failures, PATH problems and more.
-- [CLI reference](docs/API-Interface-Design.md): every flag, the state card and
+- [CLI reference](docs/api/cli.md): every flag, the state card and
   the run history.
 - [Architecture](docs/Architecture.md) and [design decisions](docs/decisions/).
 - [Releases](https://github.com/adrianjiga/ShellConfigurator/releases).

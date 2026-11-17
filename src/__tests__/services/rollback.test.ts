@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getShell } from '../../config/shells.ts';
-import { keepOriginal, originalCopyPath } from '../../generators/shellRc.ts';
+import { keepOriginal, originalCopyPath } from '../../generators/fileWrite.ts';
 import type { HistoryRecord } from '../../services/history.ts';
 import {
   defaultRollbackRun,

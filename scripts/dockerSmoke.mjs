@@ -17,15 +17,12 @@ if (!expectedPm) die('Set EXPECTED_PM to the package manager this image should d
 
 const { PRESETS } = await import('../dist/config/presets.js');
 const { getShell, getShellBinary } = await import('../dist/config/shells.js');
-const {
-  applyShellConfig,
-  getSharedConfigPath,
-  getShellConfigPath,
-  ORIGINAL_SUFFIX,
-  resetSharedShellConfig,
-  writeSharedConfig,
-  writeShellConfig,
-} = await import('../dist/generators/shellRc.js');
+const { applyShellConfig, resetSharedShellConfig, writeSharedConfig, writeShellConfig } =
+  await import('../dist/generators/shellRc.js');
+const { getSharedConfigPath, getShellConfigPath } = await import(
+  '../dist/generators/configPaths.js'
+);
+const { ORIGINAL_SUFFIX } = await import('../dist/generators/fileWrite.js');
 const { generateToml } = await import('../dist/generators/starship.js');
 const {
   detectCurrentShellAsync,
