@@ -2,12 +2,13 @@
 
 ## Entry Point
 
-`src/index.tsx` first parses the argv (`parseCliArgs` in `src/services/args.ts`).
+`src/index.tsx` first parses the argv (`parseCliArgs` in `src/services/args.ts`)
+through `routeCli` in `src/cli/route.ts`.
 Global flags (`--help`/`--version`) and the headless subcommands
 (`generate`/`apply`/`doctor`/`uninstall`/`rollback`/`list`/`debug-info`/`completions`, routed via `runHeadlessCommand`) exit
 before Ink ever renders. An unknown or malformed flag is a `CliUsageError` that
 stops the run, and so is a known flag the chosen subcommand does not take
-(`refuseUnusedFlags` in `src/index.tsx`), or a retired command or flag
+(`refuseUnusedFlags` in `src/cli/flagChecks.ts`), or a retired command or flag
 (`repair`, `share`, `timings`, `--restore`, `--list-*`), whose message names
 its replacement.
 Only when no subcommand consumed the args does the app render the root `App`
@@ -242,7 +243,9 @@ The `character` module is special — it is never shown as a toggle in SegmentsS
 
 ```
 src/
-├── index.tsx                  Entry point: parses CLI, routes headless commands, renders Ink
+├── index.tsx                  Entry point: routes the CLI, renders Ink, crash handling
+├── cli/                       route.ts, flagChecks.ts, prompt.ts, help.ts, version.ts
+│   └── commands/              doctor.ts, uninstall.ts, rollback.ts, generate.ts, info.ts
 ├── app.tsx                    Root component, state owner, step navigation wiring
 ├── stepMachine.ts             Pure getNextStep/getPrevStep step navigation
 ├── types.ts                   WizardState, discriminated unions, STEP_ORDER, DEFAULT_STATE
@@ -289,7 +292,7 @@ src/
 │   └── toml.ts                TOML escaping helpers
 └── services/
     ├── args.ts                Hand-rolled, dependency-free CLI flag parser
-    ├── headless.ts            generate/apply implementation (routing is runHeadlessCommand in index.tsx)
+    ├── headless.ts            generate/apply implementation (routing is runHeadlessCommand in cli/route.ts)
     ├── stateFlags.ts          Flags or a --state card → WizardState (stateFromFlags, validateFlagValues)
     ├── importConfig.ts        Bounded --import-url fetch (https only, size and time limits)
     ├── applyReport.ts         What apply prints: the dry-run plan (dryRunPlan), task lines, file diffs
