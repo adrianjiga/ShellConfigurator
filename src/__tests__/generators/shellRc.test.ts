@@ -22,16 +22,6 @@ vi.mock('fs', () => ({
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-function expectBefore(text: string, first: string, second: string): void {
-  expect(text.indexOf(first)).toBeGreaterThanOrEqual(0);
-  expect(text.indexOf(second)).toBeGreaterThan(text.indexOf(first));
-}
-
-/** The content of the module's last atomic write (the temp-file write). */
-function lastWrittenContent(): string {
-  return vi.mocked(fs.writeFileSync).mock.calls.at(-1)?.[1] as string;
-}
-
 import * as fs from 'node:fs';
 import { getShell, posixShellQuote } from '../../config/shells.ts';
 import { getShellConfigPath } from '../../generators/configPaths.ts';
@@ -44,6 +34,7 @@ import {
   writeShellConfig,
 } from '../../generators/shellRc.ts';
 import { restoreEnv } from '../helpers/env.ts';
+import { expectBefore, lastWrittenContent } from '../helpers/rcWrites.ts';
 
 const expectedConfigPath = path.join(os.homedir(), '.config', 'starship', 'zsh.toml');
 const expectedConfigDir = path.join(os.homedir(), '.config', 'starship');
