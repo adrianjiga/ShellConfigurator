@@ -64,7 +64,7 @@ vi.mock('../../services/history.ts', async () => {
 import type { CliFlags } from '../../services/args.ts';
 import { CliRunError, CliUsageError } from '../../services/errors.ts';
 import { runApply } from '../../services/headless.ts';
-import { fetchImportedConfig } from '../../services/importConfig.ts';
+import { customCommands, fetchImportedConfig } from '../../services/importConfig.ts';
 import { DEFAULT_INSTALL_TASK_DEPS } from '../../services/installTasks.ts';
 import { stubPlatform } from '../helpers/platform.ts';
 
@@ -422,5 +422,54 @@ describe('runApply --import-url', () => {
         flags({ subcommand: 'apply', shells: ['zsh'], importUrl: 'https://offline.test/raw' })
       )
     ).rejects.toThrow(/Could not fetch.*ENOTFOUND/);
+  });
+});
+
+describe('customCommands', () => {
+  it('lists every line that may set a command, in any TOML form', () => {
+    const toml = [
+      '[directory]',
+      'truncation_length = 3',
+      '[custom.git_email]',
+      'command = "git config user.email"',
+      'when = "git rev-parse"',
+      '[ custom . spaced ]',
+      '"command" = "quoted key"',
+      'custom.dotted.command = "dotted key"',
+      '[custom]',
+      'inline = { command = "inline table", when = true }',
+      'multi = { shell = ["bash"] }',
+      '[custom.long]',
+      'command = """',
+      'curl -s https://example.com',
+      '"""',
+      '# command = "a comment"',
+    ].join('\n');
+
+    expect(customCommands(toml)).toEqual([
+      '[custom.git_email]',
+      'command = "git config user.email"',
+      'when = "git rev-parse"',
+      '[ custom . spaced ]',
+      '"command" = "quoted key"',
+      'custom.dotted.command = "dotted key"',
+      '[custom]',
+      'inline = { command = "inline table", when = true }',
+      'multi = { shell = ["bash"] }',
+      '[custom.long]',
+      'command = """',
+      'curl -s https://example.com',
+      '"""',
+    ]);
+  });
+
+  it('lists a key or table spelled with escapes, which could hide a command', () => {
+    expect(
+      customCommands('["\\u0063ustom".x]\n"\\u0063ommand" = "id"\nformat = "\\u2192 $all"\n')
+    ).toEqual(['["\\u0063ustom".x]', '"\\u0063ommand" = "id"']);
+  });
+
+  it('finds nothing in a config without commands', () => {
+    expect(customCommands('[directory]\ntruncation_length = 3\n')).toEqual([]);
   });
 });

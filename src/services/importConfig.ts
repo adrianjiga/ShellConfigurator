@@ -130,3 +130,31 @@ export async function fetchImportedConfig(
   }
   return content;
 }
+
+/**
+ * Every line of `toml` that may set a command Starship runs on every prompt: a
+ * `command`, `when` or `shell` key in any form (dotted, quoted, inline table),
+ * a `custom` table header, and the rest of a multi-line string such a key
+ * starts.
+ */
+export function customCommands(toml: string): string[] {
+  const lines = toml.split(/\r?\n/);
+  const found: string[] = [];
+  const key = /(^|[\s.{,])["']?(command|when|shell)["']?\s*=/;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (line.trimStart().startsWith('#')) continue;
+    const header = /^\s*\[\[?[^\]]*\bcustom\b/.test(line);
+    const escapedKey = /^[^=]*\\[uU]/.test(line) || /^\s*\[[^\]]*\\[uU]/.test(line);
+    if (!header && !escapedKey && !key.test(line)) continue;
+    found.push(line.trim());
+    const quote = /("""|''')/.exec(line)?.[1];
+    if (quote && line.split(quote).length === 2) {
+      while (++i < lines.length) {
+        found.push(lines[i]!.trim());
+        if (lines[i]!.includes(quote)) break;
+      }
+    }
+  }
+  return found;
+}
