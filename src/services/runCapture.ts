@@ -356,7 +356,7 @@ export async function captureRun<T>(
   files: string[],
   run: (uncaptured: boolean) => Promise<T>,
   options: CaptureOptions = {}
-): Promise<{ result: T; runId: string | null }> {
+): Promise<{ result: T; runId: string | null; uncaptured: boolean }> {
   if (!options.recovered) recoverInterruptedRuns();
   let capture: RunCapture | null;
   try {
@@ -368,9 +368,10 @@ export async function captureRun<T>(
   try {
     result = await run(capture === null);
   } catch (err) {
-    throw new CapturedRunError(capture ? finishSafely(capture, options, err) : null, err);
+    throw new CapturedRunError(capture ? finishSafely(capture, options, err).runId : null, err);
   }
-  return { result, runId: capture ? finishSafely(capture, options) : null };
+  const finished = capture ? finishSafely(capture, options) : { runId: null, failed: true };
+  return { result, runId: finished.runId, uncaptured: finished.failed };
 }
 
 /** A run that threw partway; `runId` still names the files it had changed by then. */
@@ -388,7 +389,7 @@ function finishSafely(
   capture: RunCapture,
   options: CaptureOptions,
   error?: unknown
-): string | null {
+): { runId: string | null; failed: boolean } {
   let runId: string | null;
   try {
     runId = finishRunCapture(capture, options, error)?.runId ?? null;
@@ -396,12 +397,12 @@ function finishSafely(
     try {
       fs.rmSync(capture.dir, { recursive: true, force: true });
     } catch {}
-    return null;
+    return { runId: null, failed: true };
   }
   try {
     pruneRuns();
   } catch {}
-  return runId;
+  return { runId, failed: false };
 }
 
 /** How many captured runs rollback keeps; older ones are deleted. */

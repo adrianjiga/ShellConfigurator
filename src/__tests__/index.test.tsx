@@ -623,6 +623,7 @@ describe('index headless routing', () => {
       vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
         result: await run(false),
         runId: 'run-7',
+        uncaptured: false,
       }));
       const ask = io();
 
@@ -826,6 +827,7 @@ describe('index uninstall command', () => {
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
       result: await run(false),
       runId: 'run-9',
+      uncaptured: false,
     }));
     const io = fakeIo();
 
@@ -848,6 +850,7 @@ describe('index uninstall command', () => {
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
       result: await run(false),
       runId: 'run-9',
+      uncaptured: false,
     }));
     const io = fakeIo(
       {},
@@ -871,10 +874,25 @@ describe('index uninstall command', () => {
     );
   });
 
+  it('warns when the run could not be recorded after it ran, too', async () => {
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
+      result: await run(false),
+      runId: null,
+      uncaptured: true,
+    }));
+    const io = fakeIo();
+
+    await runUninstallCommand(parseCliArgs(['uninstall', '--yes']), 'uninstall --yes', io);
+
+    expect(io.deps.removeShellConfigFile).toHaveBeenCalledWith('zsh');
+    expect(output()).toContain('This run could not be recorded, so rollback cannot undo it.');
+  });
+
   it('does not claim the recording failed when the run changed no file it tracks', async () => {
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
       result: await run(false),
       runId: null,
+      uncaptured: false,
     }));
     const io = fakeIo(
       {},
@@ -902,6 +920,7 @@ describe('index uninstall command', () => {
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
       result: await run(true),
       runId: null,
+      uncaptured: true,
     }));
     const io = fakeIo();
 
@@ -916,6 +935,7 @@ describe('index uninstall command', () => {
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
       result: await run(true),
       runId: null,
+      uncaptured: true,
     }));
     const io = fakeIo();
 

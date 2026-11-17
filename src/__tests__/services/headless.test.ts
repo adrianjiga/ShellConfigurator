@@ -852,7 +852,7 @@ describe('runApply', () => {
       expect(options?.rewritable).toEqual([whatChangedPath()]);
       const result = await run(false);
       options?.onChanged?.('run-3', files, undefined);
-      return { result, runId: 'run-3' };
+      return { result, runId: 'run-3', uncaptured: false };
     });
     await runApply(flags({ subcommand: 'apply', shells: ['zsh'] }), 'apply --shells zsh');
 
@@ -900,7 +900,7 @@ describe('runApply', () => {
     );
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run, options) => {
       try {
-        return { result: await run(false), runId: 'run-4' };
+        return { result: await run(false), runId: 'run-4', uncaptured: false };
       } catch (err) {
         options?.onChanged?.('run-4', [], err);
         throw new CapturedRunError('run-4', err);
@@ -926,7 +926,7 @@ describe('runApply', () => {
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run, options) => {
       const result = await run(false);
       options?.onChanged?.('run-5', [], undefined);
-      return { result, runId: 'run-5' };
+      return { result, runId: 'run-5', uncaptured: false };
     });
     vi.mocked(writeWhatChangedSafely).mockReturnValueOnce('/h/.config/starship/WHAT-CHANGED.md');
 

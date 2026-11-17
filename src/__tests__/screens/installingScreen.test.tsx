@@ -169,7 +169,7 @@ describe('InstallingScreen', () => {
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run, options) => {
       const result = await run(false);
       options?.onChanged?.('run-1', [], undefined);
-      return { result, runId: 'run-1' };
+      return { result, runId: 'run-1', uncaptured: false };
     });
     mocks.buildTaskList.mockReturnValue(statusFixture());
     let resolveRun: (tasks: InstallTask[]) => void = () => {};
@@ -222,7 +222,7 @@ describe('InstallingScreen', () => {
       expect(options?.rewritable).toEqual([whatChangedPath()]);
       const result = await run(false);
       options?.onChanged?.('run-1', files, undefined);
-      return { result, runId: 'run-1' };
+      return { result, runId: 'run-1', uncaptured: false };
     });
     vi.mocked(writeWhatChangedSafely).mockReturnValueOnce('/h/.config/starship/WHAT-CHANGED.md');
     const { instance, onNext } = setup();

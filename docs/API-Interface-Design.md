@@ -542,7 +542,10 @@ function captureRun<T>(
     onChanged?: (runId: string, files: RunFile[], error?: unknown) => void;
     rewritable?: readonly string[];
   }
-): Promise<{ result: T; runId: string | null }>;
+): Promise<{ result: T; runId: string | null; uncaptured: boolean }>;
+// uncaptured is true when the run could not be recorded, whether the capture
+// failed to start or to write its manifest at the end; runId alone is also null
+// for a run that changed nothing.
 // Copies the files into <stateDir>/runs/<runId>/files before run(), then keeps
 // only those the run changed in manifest.json ({ version, runId, files: [{ path,
 // before: copy name | null, after: sha256 | null }] }). Best-effort: a capture

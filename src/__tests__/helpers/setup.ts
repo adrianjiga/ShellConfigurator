@@ -11,7 +11,7 @@ vi.mock('../../services/runCapture.ts', async (importOriginal) => {
     ...actual,
     captureRun: vi.fn(async (_files: string[], run: () => Promise<unknown>) => {
       try {
-        return { result: await run(), runId: null };
+        return { result: await run(), runId: null, uncaptured: false };
       } catch (err) {
         throw new actual.CapturedRunError(null, err);
       }
