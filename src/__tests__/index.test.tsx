@@ -871,6 +871,33 @@ describe('index uninstall command', () => {
     );
   });
 
+  it('does not claim the recording failed when the run changed no file it tracks', async () => {
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
+      result: await run(false),
+      runId: null,
+    }));
+    const io = fakeIo(
+      {},
+      {
+        hasManagedRcBlock: vi.fn(() => false),
+        hasShellConfig: vi.fn(() => false),
+        plannedStarshipRemoval: vi.fn(async () => ({
+          kind: 'script' as const,
+          path: '/h/.local/bin/starship',
+        })),
+      }
+    );
+
+    await runUninstallCommand(
+      parseCliArgs(['uninstall', '--starship', '--yes']),
+      'uninstall --starship --yes',
+      io
+    );
+
+    expect(io.deps.removeStarship).toHaveBeenCalled();
+    expect(output()).not.toContain('could not be recorded');
+  });
+
   it('keeps the per-shell configs when the run could not be captured', async () => {
     vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
       result: await run(true),
@@ -886,6 +913,10 @@ describe('index uninstall command', () => {
   });
 
   it('says rollback cannot undo a run that could not be captured, and where the originals are', async () => {
+    vi.mocked(captureRun).mockImplementationOnce(async (_files, run) => ({
+      result: await run(true),
+      runId: null,
+    }));
     const io = fakeIo();
 
     await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);

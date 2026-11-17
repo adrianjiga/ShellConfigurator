@@ -466,10 +466,14 @@ export async function runUninstallCommand(
     if (!proceed) return;
   }
 
+  let uncapturedRun = false;
   const { result: report, runId } = changes
     ? await captureRun(
         trackedFiles(),
-        (uncaptured) => runUninstall(steps, { keepConfigs: uncaptured }),
+        (uncaptured) => {
+          uncapturedRun = uncaptured === true;
+          return runUninstall(steps, { keepConfigs: uncapturedRun });
+        },
         { record: { kind: 'uninstall', command } }
       )
     : { result: await runUninstall(steps, { dryRun }), runId: null };
@@ -487,7 +491,7 @@ export async function runUninstallCommand(
           `Rollback only puts files back: reinstall ${deleted.join(' and ')} with shell-configurator apply or doctor --fix.\n`
         );
       }
-    } else if (changes) {
+    } else if (uncapturedRun) {
       process.stdout.write(
         `\nThis run could not be recorded, so rollback cannot undo it. A file ShellConfigurator first changed while it held none of its lines has its content from then beside it as <file>${ORIGINAL_SUFFIX}; that copy predates any later edit.\n`
       );
