@@ -268,7 +268,8 @@ to find the correct package.
 It strips every `# Added by ShellConfigurator` block from the bash, zsh and fish
 rc files and deletes the per-shell configs in `~/.config/starship/`. The first
 time ShellConfigurator changed one of your own files (an rc, the Bash login
-file, the shared `~/.config/starship.toml`, a terminal config), it kept a copy
+file, the shared `~/.config/starship.toml`, a terminal config, a per-shell
+config you wrote yourself), it kept a copy
 of it as `<file>.pre-shell-configurator`; that copy stays, and is never
 overwritten. Older versions left `.bak-*` copies instead; they are not touched, so
 delete them once you no longer need them. Add `--starship`
