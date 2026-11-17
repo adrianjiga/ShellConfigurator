@@ -2,6 +2,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getShell } from '../../config/shells.ts';
+import { keepOriginal, originalCopyPath } from '../../generators/shellRc.ts';
 import type { HistoryRecord } from '../../services/history.ts';
 import {
   defaultRollbackRun,
@@ -16,6 +18,7 @@ import {
   type RunManifest,
   readRunManifest,
   runDir,
+  trackedFiles,
 } from '../../services/runCapture.ts';
 import { restoreEnv } from '../helpers/env.ts';
 
@@ -59,6 +62,34 @@ describe('planRollback / runRollback', () => {
     ]);
     expect(read('rc')).toBe('mine\n');
     expect(fs.existsSync(file('config'))).toBe(false);
+  });
+
+  it('removes the original copy the run made, and leaves one an earlier run made', async () => {
+    fs.writeFileSync(file('rc'), 'mine\n');
+    const manifest = await capturedRun(['rc', `rc.pre-shell-configurator`], () => {
+      keepOriginal(file('rc'));
+      fs.appendFileSync(file('rc'), '# Added by ShellConfigurator\n');
+    });
+    expect(read('rc.pre-shell-configurator')).toBe('mine\n');
+
+    runRollback(manifest.runId, planRollback(manifest));
+
+    expect(read('rc')).toBe('mine\n');
+    expect(fs.existsSync(file('rc.pre-shell-configurator'))).toBe(false);
+
+    keepOriginal(file('rc'));
+    const later = await capturedRun(['rc', `rc.pre-shell-configurator`], () => {
+      keepOriginal(file('rc'));
+      fs.appendFileSync(file('rc'), '# Added by ShellConfigurator\n');
+    });
+    runRollback(later.runId, planRollback(later));
+    expect(read('rc.pre-shell-configurator')).toBe('mine\n');
+  });
+
+  it('captures the original copy of every file a run may change', () => {
+    const rc = getShell('zsh')!.rcFile!;
+    expect(trackedFiles()).toContain(rc);
+    expect(trackedFiles()).toContain(originalCopyPath(rc));
   });
 
   it('brings back a file the run removed, folder and all', async () => {

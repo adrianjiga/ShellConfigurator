@@ -5,6 +5,7 @@ import {
   bashLoginFiles,
   getSharedConfigPath,
   getShellConfigPath,
+  originalCopyPath,
   writeFileAtomic,
 } from '../generators/shellRc.ts';
 import type { WizardState } from '../types.ts';
@@ -60,15 +61,20 @@ export function runDir(runId: string): string {
   return path.join(runsDir(), runId);
 }
 
-/** Every file a wizard run, apply or uninstall may change. */
+/**
+ * Every file a wizard run, apply or uninstall may change, and the
+ * `.pre-shell-configurator` copy each may get, so rolling back the run that
+ * made a copy removes it again.
+ */
 export function trackedFiles(): string[] {
-  return [
+  const files = [
     ...SHELLS.flatMap((shell) => (shell.rcFile ? [shell.rcFile] : [])),
     ...bashLoginFiles(),
     ...SHELLS.map((shell) => getShellConfigPath(shell.id)),
     getSharedConfigPath(),
     ...terminalFontConfigFiles(),
   ];
+  return [...files, ...files.map(originalCopyPath)];
 }
 
 /** The file's bytes, null when it does not exist; other read errors propagate. */
