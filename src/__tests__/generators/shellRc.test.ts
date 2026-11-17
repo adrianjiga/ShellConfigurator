@@ -1228,6 +1228,28 @@ describe('keepOriginal', () => {
     expect(fs.renameSync).toHaveBeenCalledWith(expect.stringContaining('.tmp'), zshrc);
   });
 
+  it('says so when the Bash login file it changes on macOS cannot be copied first', () => {
+    const restore = stubPlatform('darwin');
+    try {
+      const bashrc = getShell('bash')!.rcFile!;
+      const profile = path.join(os.homedir(), '.bash_profile');
+      vi.mocked(fs.existsSync).mockImplementation((p) => p === bashrc || p === profile);
+      vi.mocked(fs.readFileSync).mockReturnValue('alias ll=ls\n');
+      vi.mocked(fs.copyFileSync).mockImplementation(() => {
+        throw new Error('ENOSPC: no space left on device');
+      });
+
+      const result = applyShellConfig('bash');
+
+      expect(result.applied).toBe(true);
+      expect(result.note).toContain(
+        '.bash_profile now loads .bashrc, but could not keep its original as .bash_profile.pre-shell-configurator'
+      );
+    } finally {
+      restore();
+    }
+  });
+
   it('treats a copy another run made first as kept', () => {
     vi.mocked(fs.existsSync).mockImplementation((p) => p === rc);
     vi.mocked(fs.readFileSync).mockReturnValue('alias ll=ls\n');

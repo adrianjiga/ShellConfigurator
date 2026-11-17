@@ -667,15 +667,15 @@ export function bashLoginContent(existing: string, io: RcIo = FS_RC_IO): string 
     : keepLineEndings(existing, appendManagedBlock(existing, LOGIN_MARKER, [LOGIN_LINE]));
 }
 
-function ensureBashLogin(): string | null {
+function ensureBashLogin(): { file: string; note: string | null } | null {
   if (!bashNeedsLoginFile()) return null;
   const file = bashLoginFile();
   const existing = fs.existsSync(file) ? readTextToRewrite(file) : '';
   const content = bashLoginContent(existing);
   if (content === existing) return null;
-  keepOriginal(file);
+  const note = keepOriginal(file);
   writeFileAtomic(file, content);
-  return file;
+  return { file, note };
 }
 
 export function applyShellConfig(
@@ -709,7 +709,8 @@ export function applyShellConfig(
   try {
     const login = ensureBashLogin();
     if (!login) return result;
-    loginNote = `${path.basename(login)} now loads .bashrc`;
+    loginNote = `${path.basename(login.file)} now loads .bashrc`;
+    if (login.note) loginNote = `${loginNote}, but ${login.note}`;
   } catch (err) {
     loginNote = `could not make ${path.basename(bashLoginFile())} load .bashrc (${errorMessage(err)}), so macOS terminals may not show the prompt`;
     if (!result.applied) return { applied: false, note: loginNote };
