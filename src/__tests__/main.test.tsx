@@ -1,13 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockRouteCli, mockRender, mockWaitUntilExit } = vi.hoisted(() => ({
+const { mockRouteCli, mockRender, mockWaitUntilExit, mockRestoreTty } = vi.hoisted(() => ({
   mockRouteCli: vi.fn(),
   mockRender: vi.fn(),
   mockWaitUntilExit: vi.fn(),
+  mockRestoreTty: vi.fn(),
 }));
 
 vi.mock('../cli/route.ts', () => ({ routeCli: mockRouteCli }));
 vi.mock('../app.tsx', () => ({ App: () => null }));
+vi.mock('../services/tty.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../services/tty.ts')>()),
+  restoreTty: mockRestoreTty,
+}));
 vi.mock('ink', async (importOriginal) => ({
   ...(await importOriginal<typeof import('ink')>()),
   render: mockRender,
@@ -48,6 +53,7 @@ describe('main', () => {
       interactive: true,
     });
     expect(mockWaitUntilExit).toHaveBeenCalled();
+    expect(mockRestoreTty).toHaveBeenCalled();
   });
 
   it('reports a render error and closes the wizard instead of waiting for Ctrl+C', async () => {
