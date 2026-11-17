@@ -71,6 +71,12 @@ export async function fetchImportedConfig(
           `Could not fetch '${shown}': redirected to a non-https URL ${redactUrl(next.href)}`
         );
       }
+      if (next.username || next.password) {
+        throw new CliRunError(
+          `Could not fetch '${shown}': redirected to a URL with a user name or password ` +
+            `(${redactUrl(next.href)}), which --import-url does not send.`
+        );
+      }
       current = next.href;
     }
   } catch (err) {
