@@ -877,7 +877,10 @@ describe('index uninstall command', () => {
     await runUninstallCommand(parseCliArgs(['uninstall']), 'uninstall', io);
 
     expect(output()).toContain('This run could not be recorded, so rollback cannot undo it.');
-    expect(output()).toContain('<file>.pre-shell-configurator');
+    expect(output()).toContain(
+      'has its content from then beside it as <file>.pre-shell-configurator'
+    );
+    expect(output()).toContain('that copy predates any later edit');
     expect(output()).not.toContain('Undo it with');
   });
 

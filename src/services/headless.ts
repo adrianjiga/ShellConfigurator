@@ -578,7 +578,7 @@ function printChanges(plan: DryRunPlan): void {
     }
   }
   process.stdout.write(
-    `\nA real run also keeps each file's content from before ShellConfigurator first changed it as <file>${ORIGINAL_SUFFIX}, and writes WHAT-CHANGED.md.\n${terminalNote}`
+    `\nA real run also keeps a copy of a file it changes for the first time as <file>${ORIGINAL_SUFFIX}, and writes WHAT-CHANGED.md.\n${terminalNote}`
   );
 }
 

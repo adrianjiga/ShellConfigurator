@@ -689,7 +689,9 @@ describe('runApply', () => {
         `create ${path.join(dir, '.config', 'starship', 'bash.toml')}: the config shown above`
       );
       expect(text).not.toContain('--- /dev/null');
-      expect(text).toContain('as <file>.pre-shell-configurator, and writes WHAT-CHANGED.md');
+      expect(text).toContain(
+        'for the first time as <file>.pre-shell-configurator, and writes WHAT-CHANGED.md'
+      );
       expect(text).toContain(`--- ${bashrc}\n+++ ${bashrc}\n@@ -1,1 +1,`);
       expect(text).toContain(' alias ll="ls -l"\n+\n+# Added by ShellConfigurator\n');
 

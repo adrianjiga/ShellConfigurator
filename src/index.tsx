@@ -492,7 +492,7 @@ export async function runUninstallCommand(
       }
     } else if (changes) {
       process.stdout.write(
-        `\nThis run could not be recorded, so rollback cannot undo it. Each file's content from before ShellConfigurator first changed it is kept beside it as <file>${ORIGINAL_SUFFIX}.\n`
+        `\nThis run could not be recorded, so rollback cannot undo it. A file ShellConfigurator first changed while it held none of its lines has its content from then beside it as <file>${ORIGINAL_SUFFIX}; that copy predates any later edit.\n`
       );
     }
   }
