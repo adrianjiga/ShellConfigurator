@@ -2,7 +2,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { SHELLS } from '../config/shells.ts';
-import { getShellConfigPath, hasManagedRcBlock, startsStarship } from '../generators/shellRc.ts';
+import { getShellConfigPath } from '../generators/configPaths.ts';
+import { hasManagedRcBlock, startsStarship } from '../generators/rcInit.ts';
 import type { PackageManager, ShellId, TerminalId } from '../types.ts';
 import { cachedStarshipVersion } from './cache.ts';
 import {
@@ -13,7 +14,8 @@ import {
   detectTerminalAsync,
   findStarshipAsync,
 } from './detector.ts';
-import { type DoctorReport, formatDoctorReport, runDoctor } from './doctor.ts';
+import type { DoctorReport } from './doctor/types.ts';
+import { formatDoctorReport, runDoctor } from './doctor.ts';
 import { commandPath } from './exec.ts';
 import { type HistoryRecord, readHistory } from './history.ts';
 import { redactPersonal, redactUrls } from './redact.ts';

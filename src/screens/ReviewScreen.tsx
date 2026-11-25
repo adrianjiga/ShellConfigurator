@@ -6,7 +6,7 @@ import { ConfigPlan, TaskPlan } from '../components/PlanSections.tsx';
 import { WizardLayout } from '../components/WizardLayout.tsx';
 import { uiColor } from '../config/colors.ts';
 import { getShell, setupCommand } from '../config/shells.ts';
-import { getSharedConfigPath } from '../generators/shellRc.ts';
+import { getSharedConfigPath } from '../generators/configPaths.ts';
 import { diffHunkLines, type FileChange, plannedFileChanges } from '../services/fileDiff.ts';
 import { fontLabel, plannedPathDir } from '../services/installer.ts';
 import {

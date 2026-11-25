@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.unmock('../../services/starshipProbe.ts');
 
-import { getSharedConfigPath, getShellConfigPath } from '../../generators/shellRc.ts';
+import { getSharedConfigPath, getShellConfigPath } from '../../generators/configPaths.ts';
 import { generateToml } from '../../generators/starship.ts';
 import {
   activeStarshipConfig,

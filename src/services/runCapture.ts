@@ -1,13 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { SHELLS } from '../config/shells.ts';
-import {
-  bashLoginFiles,
-  getSharedConfigPath,
-  getShellConfigPath,
-  originalCopyPath,
-  writeFileAtomic,
-} from '../generators/shellRc.ts';
+import { bashLoginFiles } from '../generators/bashLogin.ts';
+import { getSharedConfigPath, getShellConfigPath } from '../generators/configPaths.ts';
+import { originalCopyPath, writeFileAtomic } from '../generators/fileWrite.ts';
 import type { WizardState } from '../types.ts';
 import { sha256Digest } from './cache.ts';
 import { errorMessage, isMissingFile } from './errors.ts';

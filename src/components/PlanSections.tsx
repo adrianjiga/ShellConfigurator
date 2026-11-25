@@ -1,7 +1,7 @@
 import { Box, Text } from 'ink';
 import { uiColor } from '../config/colors.ts';
 import { getShell } from '../config/shells.ts';
-import { getSharedConfigPath, getShellConfigPath } from '../generators/shellRc.ts';
+import { getSharedConfigPath, getShellConfigPath } from '../generators/configPaths.ts';
 import { generateToml } from '../generators/starship.ts';
 import { TASK_IDS } from '../services/installTasks.ts';
 import type { InstallTask, WizardState } from '../types.ts';

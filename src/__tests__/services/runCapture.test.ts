@@ -19,7 +19,7 @@ vi.mock('node:fs', async (importOriginal) => {
 });
 
 import { getShell } from '../../config/shells.ts';
-import { getSharedConfigPath, getShellConfigPath } from '../../generators/shellRc.ts';
+import { getSharedConfigPath, getShellConfigPath } from '../../generators/configPaths.ts';
 import { sha256Digest } from '../../services/cache.ts';
 import { lastRunShells, readHistory } from '../../services/history.ts';
 import { listRollbackRuns } from '../../services/rollback.ts';

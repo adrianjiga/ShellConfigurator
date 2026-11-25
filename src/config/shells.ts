@@ -152,7 +152,7 @@ function zshenvSetting(file: string): string | null {
   }
 }
 
-/** The per-shell config the wizard writes; mirrors getShellConfigPath in shellRc.ts. */
+/** The per-shell config the wizard writes; mirrors getShellConfigPath in generators/configPaths.ts. */
 function perShellConfigPath(id: ShellId): string {
   return path.join(configHome(), 'starship', `${id}.toml`);
 }

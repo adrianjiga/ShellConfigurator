@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { DoctorFix, DoctorReport } from '../../services/doctor.ts';
+import type { DoctorFix, DoctorReport } from '../../services/doctor/types.ts';
 import { formatRepairReport, type RepairDeps, runRepair } from '../../services/repair.ts';
 import type { TerminalFontResult } from '../../services/terminalFont.ts';
 import { DEFAULT_STATE, type WizardState } from '../../types.ts';

@@ -1,7 +1,7 @@
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getShell } from '../../config/shells.ts';
-import { getShellConfigPath } from '../../generators/shellRc.ts';
+import { getShellConfigPath } from '../../generators/configPaths.ts';
 import { DoneScreen } from '../../screens/DoneScreen.tsx';
 import { type InstallTaskDeps, runInstallTasks } from '../../services/installTasks.ts';
 import { DEFAULT_STATE, type InstallTask, type WizardState } from '../../types.ts';
